@@ -6,7 +6,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { CopilotToken } from '../../../authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
@@ -135,10 +135,10 @@ describe('ExP Service Tests', () => {
 	let copilotTokenService: ICopilotTokenStore;
 	let extensionContext: IVSCodeExtensionContext;
 
-	const GitHubProToken = new CopilotToken({ token: 'token-gh-pro', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] });
-	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken({ token: 'token-gh-msft-enterprise', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] });
-	const MicrosoftEnterpriseToken = new CopilotToken({ token: 'token-msft-enterprise', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] });
-	const NoOrgFreeToken = new CopilotToken({ token: 'token-no-org-free', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, sku: 'free', copilot_plan: 'unknown' });
+	const GitHubProToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-pro', username: 'fake', chat_enabled: true, sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
+	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-msft-enterprise', username: 'fake', chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const MicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-msft-enterprise', username: 'fake', chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const NoOrgFreeToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-no-org-free', username: 'fake', chat_enabled: true, sku: 'free', copilot_plan: 'unknown' }));
 
 	beforeAll(() => {
 		const testingServiceCollection = createPlatformServices();
@@ -278,6 +278,9 @@ describe('ExP Service Tests', () => {
 	it('should not fire events when relevant user info does not change', async () => {
 		await expService.hasTreatments();
 
+		// Query a treatment to register it for change detection
+		expService.getTreatmentVariable<string>('testTreatment');
+
 		// Set initial token with promise BEFORE token change
 		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
 		copilotTokenService.copilotToken = GitHubProToken;
@@ -291,11 +294,11 @@ describe('ExP Service Tests', () => {
 		expService.onDidTreatmentsChange(eventHandler);
 
 		// We need a separate token just to make sure we get passed the copilot token change guard
-		const newGitHubProToken = new CopilotToken({
-			token: 'github-test', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false,
+		const newGitHubProToken = new CopilotToken(createTestExtendedTokenInfo({
+			token: 'github-test', username: 'fake',
 			chat_enabled: true, sku: 'pro', copilot_plan: 'unknown',
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a']
-		});
+		}));
 		copilotTokenService.copilotToken = newGitHubProToken; // Same token
 
 		// Wait a bit to see if event fires

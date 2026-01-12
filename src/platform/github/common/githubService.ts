@@ -11,7 +11,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 /**
  * Options for controlling authentication behavior in OctoKit service methods.
@@ -349,6 +349,16 @@ export interface IOctoKitService {
 	 * @returns An array of available models. The first model is always 'Auto' and should be the default.
 	 */
 	getCopilotAgentModels(authOptions: AuthOptions): Promise<CCAModel[]>;
+
+	/**
+	 * Gets the list of assignable actors (users/bots) for a repository.
+	 * This is used to check if partner agents like Copilot are available for assignment.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of assignable actors with their login names
+	 */
+	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;
 }
 
 /**
@@ -360,9 +370,9 @@ export interface IOctoKitService {
 export class BaseOctoKitService {
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
-		private readonly _fetcherService: IFetcherService,
+		protected readonly _fetcherService: IFetcherService,
 		protected readonly _logService: ILogService,
-		private readonly _telemetryService: ITelemetryService
+		protected readonly _telemetryService: ITelemetryService
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {

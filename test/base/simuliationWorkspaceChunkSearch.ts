@@ -139,4 +139,8 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 	triggerRemoteIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
 		throw new Error('Method not implemented.');
 	}
+
+	deleteExternalIngestWorkspaceIndex(): Promise<void> {
+		return Promise.resolve();
+	}
 }
