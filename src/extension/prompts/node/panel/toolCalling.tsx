@@ -217,7 +217,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
-						chatRequestId: props.requestId
+						chatRequestId: props.requestId,
+						chatStreamToolCallId: props.toolCall.id
 					};
 					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
 						invocationOptions.fromSubAgent = true;
