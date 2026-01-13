@@ -99,7 +99,7 @@ function filterLogByTopic(content: string, topic: string): string {
 	return result.join('\n');
 }
 
-async function main() {
+function main() {
 	const args = process.argv.slice(2);
 	const parsed = parseArgs(args);
 
