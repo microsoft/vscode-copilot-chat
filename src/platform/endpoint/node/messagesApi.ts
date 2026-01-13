@@ -398,7 +398,7 @@ export class AnthropicMessagesProcessor {
 								copilotToolCallStreamUpdates: [{
 									id: toolCall.id,
 									name: toolCall.name,
-									arguments: chunk.delta.partial_json,
+									arguments: toolCall.arguments,
 								}],
 							});
 						}

@@ -377,8 +377,8 @@ interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseText
 export class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
-	/** Maps output_index to { name, callId } for streaming tool call updates */
-	private readonly toolCallInfo = new Map<number, { name: string; callId: string }>();
+	/** Maps output_index to { name, callId, arguments } for streaming tool call updates */
+	private readonly toolCallInfo = new Map<number, { name: string; callId: string; arguments: string }>();
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -410,7 +410,7 @@ export class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.added':
 				if (chunk.item.type === 'function_call') {
-					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id });
+					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
 					onProgress({
 						text: '',
 						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
@@ -420,12 +420,13 @@ export class OpenAIResponsesProcessor {
 			case 'response.function_call_arguments.delta': {
 				const info = this.toolCallInfo.get(chunk.output_index);
 				if (info) {
+					info.arguments += chunk.delta;
 					onProgress({
 						text: '',
 						copilotToolCallStreamUpdates: [{
 							id: info.callId,
 							name: info.name,
-							arguments: chunk.delta,
+							arguments: info.arguments,
 						}],
 					});
 				}
