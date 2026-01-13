@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -12,7 +13,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, Range } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString, Range } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { SubagentToolCallingLoop } from '../../prompt/node/subagentLoop';
@@ -99,6 +100,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(hydratedResponse)]);
 		result.toolMetadata = toolMetadata;
+		result.toolResultMessage = new MarkdownString(l10n.t`Search complete: ${options.input.description}`);
 		return result;
 	}
 
