@@ -538,17 +538,18 @@ export class LanguageModelError extends Error {
  */
 export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
 	readonly uri: vscode.Uri;
-	readonly isEditable?: boolean;
 
-	constructor(uri: vscode.Uri, options?: vscode.CustomAgentOptions);
-	constructor(id: string, content: string, options?: vscode.CustomAgentOptions);
-	constructor(uriOrId: vscode.Uri | string, contentOrOptions?: string | vscode.CustomAgentOptions, maybeOptions?: vscode.CustomAgentOptions) {
-		if (typeof uriOrId === 'string') {
+	constructor(resource: vscode.ChatResourceDescriptor);
+	constructor(id: string, content: string);
+	constructor(resourceOrId: vscode.ChatResourceDescriptor | string, content?: string) {
+		if (typeof resourceOrId === 'string') {
 			// Virtual URI created from id and content
 			throw new Error('Virtual URI constructor not implemented in test shim');
+		} else if (typeof resourceOrId === 'object' && 'uri' in resourceOrId) {
+			this.uri = resourceOrId.uri;
 		} else {
-			this.uri = uriOrId;
-			this.isEditable = (contentOrOptions as vscode.CustomAgentOptions | undefined)?.isEditable;
+			// resourceOrId is a Uri directly
+			this.uri = resourceOrId as vscode.Uri;
 		}
 	}
 }
