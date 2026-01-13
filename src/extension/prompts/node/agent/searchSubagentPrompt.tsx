@@ -51,7 +51,7 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 				/>
 				{isLastTurn && (
 					<AssistantMessage priority={898}>
-						OK, now I'm ready to produce a final answer. &lt;final_answer&gt;
+						OK, my allotted iterations are finished -- I must produce a list of code references as the final answer. &lt;final_answer&gt;
 					</AssistantMessage>
 				)}
 			</>
