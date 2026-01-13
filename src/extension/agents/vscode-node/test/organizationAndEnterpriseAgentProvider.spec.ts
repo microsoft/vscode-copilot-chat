@@ -163,8 +163,8 @@ Test prompt content`;
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'test_agent');
-		assert.equal(agents[0].description, 'A test agent');
+		const agentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName, 'test_agent');
 	});
 
 	test('fetches and caches agents from API', async () => {
@@ -200,13 +200,14 @@ Test prompt content`;
 		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'api_agent');
-		assert.equal(agents2[0].description, 'An agent from API');
+		const agentName2 = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName2, 'api_agent');
 
 		// Third call should also return from memory cache without file I/O
 		const agents3 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents3.length, 1);
-		assert.equal(agents3[0].name, 'api_agent');
+		const agentName3 = agents3[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName3, 'api_agent');
 	});
 
 	test('generates correct markdown format for agents', async () => {
@@ -357,7 +358,7 @@ Detailed prompt content
 			return [];
 		};
 
-		const queryOptions: vscode.CustomAgentQueryOptions = {};
+		const queryOptions: vscode.CustomAgentContext = {};
 
 		await provider.provideCustomAgents(queryOptions, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -443,7 +444,8 @@ Agent 1 prompt`;
 		// So the existing file cache is returned with the one successful agent
 		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
-		assert.equal(cachedAgents[0].name, 'agent1');
+		const cachedAgentName = cachedAgents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(cachedAgentName, 'agent1');
 	});
 
 	test('caches agents in memory after first successful fetch', async () => {
@@ -473,7 +475,8 @@ Agent 1 prompt`;
 		// After successful fetch, subsequent calls return from memory
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents1.length, 1);
-		assert.equal(agents1[0].name, 'initial_agent');
+		const agentName1 = agents1[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName1, 'initial_agent');
 
 		// Even if API is updated, memory cache is used
 		const newAgent: CustomAgentListItem = {
@@ -496,7 +499,8 @@ Agent 1 prompt`;
 		// Memory cache returns old results without refetching
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'initial_agent');
+		const agentName2ForMemory = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName2ForMemory, 'initial_agent');
 	});
 
 	test('memory cache persists after first successful fetch', async () => {
@@ -544,8 +548,10 @@ Agent 1 prompt`;
 		// Memory cache still returns both agents (no refetch)
 		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents2.length, 2);
-		assert.equal(cachedAgents2[0].name, 'agent1');
-		assert.equal(cachedAgents2[1].name, 'agent2');
+		const cachedAgent2Name1 = cachedAgents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		const cachedAgent2Name2 = cachedAgents2[1].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(cachedAgent2Name1, 'agent1');
+		assert.equal(cachedAgent2Name2, 'agent2');
 	});
 
 	test('does not fire change event when content is identical', async () => {
@@ -618,7 +624,8 @@ Agent 1 prompt`;
 		// Memory cache still returns the agent (no refetch)
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'temporary_agent');
+		const temporaryAgentName = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(temporaryAgentName, 'temporary_agent');
 	});
 
 	test('generates markdown with only required fields', async () => {
@@ -725,10 +732,10 @@ Valid prompt`;
 
 		// Parser is lenient - both agents are returned, one with empty description
 		assert.equal(agents.length, 2);
-		assert.equal(agents[0].name, 'valid_agent');
-		assert.equal(agents[0].description, 'A valid agent');
-		assert.equal(agents[1].name, 'no_frontmatter');
-		assert.equal(agents[1].description, '');
+		const validAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(validAgentName, 'valid_agent');
+		const noFrontmatterAgentName = agents[1].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(noFrontmatterAgentName, 'no_frontmatter');
 	});
 
 	test('fetches agents from all user organizations', async () => {
@@ -948,7 +955,8 @@ Test prompt
 
 		// Should only have one agent, not two (deduped)
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'enterprise_agent');
+		const enterpriseAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(enterpriseAgentName, 'enterprise_agent');
 
 		// Verify it was only written to one org directory
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -1035,7 +1043,8 @@ Test prompt
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'versioned_agent');
+		const versionedAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(versionedAgentName, 'versioned_agent');
 	});
 
 	test('does not deduplicate org-specific agents with same name from different orgs', async () => {
@@ -1094,8 +1103,10 @@ Test prompt
 
 		// Should have 2 agents since they're from different repos (not duplicates)
 		assert.equal(agents.length, 2);
-		assert.equal(agents[0].name, 'org_agent');
-		assert.equal(agents[1].name, 'org_agent');
+		const orgAgentName1 = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		const orgAgentName2 = agents[1].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(orgAgentName1, 'org_agent');
+		assert.equal(orgAgentName2, 'org_agent');
 	});
 
 	test('deduplicates enterprise agents even when API returns them in different order', async () => {
@@ -1158,7 +1169,7 @@ Test prompt
 		assert.equal(agents.length, 2);
 
 		// Verify both agent names are present
-		const agentNames = agents.map(a => a.name).sort();
+		const agentNames = agents.map(a => a.uri.path.split('/').pop()?.replace('.agent.md', '')).sort();
 		assert.deepEqual(agentNames, ['enterprise_agent1', 'enterprise_agent2']);
 	});
 
@@ -1205,6 +1216,7 @@ Test prompt
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'multi_version_agent');
+		const multiVersionAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(multiVersionAgentName, 'multi_version_agent');
 	});
 });
