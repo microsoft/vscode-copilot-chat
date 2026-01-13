@@ -63,10 +63,14 @@ function stripTimestamp(line: string): string {
 	return line.replace(TIMESTAMP_PATTERN, '');
 }
 
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function filterLogByTopic(content: string, topic: string): string {
 	const lines = content.split('\n');
 	const result: string[] = [];
-	const topicPattern = new RegExp(`\\[${topic}\\]`, 'i');
+	const topicPattern = new RegExp(`\\[${escapeRegExp(topic)}\\]`, 'i');
 
 	let currentLogEntry: string[] = [];
 	let keepCurrentEntry = false;
