@@ -33,7 +33,7 @@ function getCode(diagnostic: Diagnostic): string | undefined {
 }
 
 function getRelativePath(tdm: ICompletionsTextDocumentManagerService, item: DiagnosticChunkWithId): string {
-	return tdm.getRelativePath({ uri: item.uri.toString() }) ?? item.uri.fsPath;
+	return tdm.getRelativePath({ uri: item.uri.toString() }) ?? item.uri.path;
 }
 
 type DiagnosticsProps = {
