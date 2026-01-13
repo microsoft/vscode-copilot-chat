@@ -223,14 +223,46 @@ export function reportCitations(delta: IResponseDelta, progress: ChatResponseStr
 	}
 }
 
+/**
+ * Attempts to parse partial JSON by trying to close incomplete structures.
+ * For streaming tool call arguments, the JSON arrives incrementally, so we try
+ * appending closing characters to make the JSON valid.
+ */
 function tryParsePartialToolInput(raw: string | undefined): unknown {
 	if (!raw) {
 		return raw;
 	}
 
+	// First, try parsing as-is (complete JSON)
 	try {
 		return JSON.parse(raw);
 	} catch {
-		return raw;
+		// ignored - try fixing the JSON
 	}
+
+	// Try progressively closing the JSON structure
+	// Common cases:
+	// 1. {"filePath": "/foo/bar"  -> needs }
+	// 2. {"filePath": "/foo/bar   -> needs "}
+	// 3. {"filePath": "/foo/bar", "content": "hello  -> needs "}}
+	const closingAttempts = [
+		'}',           // Just close object
+		'"}',          // Close unclosed string then object
+		'"}}',         // Close unclosed string, nested object, then outer object
+		']}',          // Close array then object
+		'"]}',         // Close unclosed string in array then object
+		'null}',       // Complete a null value
+		'""}'          // Complete an empty string value
+	];
+
+	for (const suffix of closingAttempts) {
+		try {
+			return JSON.parse(raw + suffix);
+		} catch {
+			// Try next suffix
+		}
+	}
+
+	// If nothing works, return the raw string as before
+	return raw;
 }

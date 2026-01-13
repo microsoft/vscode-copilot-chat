@@ -183,24 +183,23 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
 		let invocationMessage: MarkdownString;
 
-		if (options.rawInput && typeof options.rawInput === 'string') {
-			// Try to extract filePath from the raw JSON input
-			const filePathMatch = options.rawInput.match(/"filePath"\s*:\s*"([^"]+)"/);
-			const contentMatch = options.rawInput.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)/);
+		// rawInput is now a partial object (parsed via tryParsePartialToolInput)
+		const partialInput = options.rawInput as Partial<ICreateFileParams> | undefined;
 
-			if (filePathMatch) {
-				const filePath = filePathMatch[1];
+		if (partialInput && typeof partialInput === 'object') {
+			const filePath = partialInput.filePath;
+			const content = partialInput.content;
+
+			if (filePath) {
 				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
 
-				if (contentMatch) {
-					const content = contentMatch[1];
+				if (content !== undefined) {
 					const charCount = content.length;
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${charCount} characters)`);
 				} else {
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`);
 				}
-			} else if (contentMatch) {
-				const content = contentMatch[1];
+			} else if (content !== undefined) {
 				const charCount = content.length;
 				invocationMessage = new MarkdownString(l10n.t`Creating file (${charCount} characters)`);
 			} else {
