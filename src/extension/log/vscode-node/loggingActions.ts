@@ -20,6 +20,7 @@ import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { collectErrorMessages, ILogService } from '../../../platform/log/common/logService';
+import { outputChannel } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { getRequest, IFetcher } from '../../../platform/networking/common/networking';
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
@@ -66,7 +67,7 @@ export class LoggingActionsContrib {
 		@IFetcherService private readonly fetcherService: IFetcherService,
 		@ILogService private logService: ILogService,
 	) {
-		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
+		const collectDiagnostics = async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
 			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.TeamInternal.DebugExpUseElectronFetcher);
@@ -246,7 +247,11 @@ User Settings:
 ## Documentation
 
 In corporate networks: [Troubleshooting firewall settings for GitHub Copilot](https://docs.github.com/en/copilot/troubleshooting-github-copilot/troubleshooting-firewall-settings-for-github-copilot).`);
-		}));
+		};
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', collectDiagnostics));
+		// Internal command is not declared in package.json so it can be used from the welcome views while the extension is being activated.
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics.internal', collectDiagnostics));
+		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel.internal', () => outputChannel.show()));
 	}
 
 	private async getAuthHeaders(isGHEnterprise: boolean, url: string) {

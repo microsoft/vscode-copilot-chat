@@ -9,7 +9,6 @@ import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-n
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -48,7 +47,6 @@ export class ContextKeysContribution extends Disposable {
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService
@@ -142,7 +140,7 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.ContactSupport;
 		} else if (error instanceof ChatDisabledError) {
 			key = welcomeViewContextKeys.CopilotChatDisabled;
-		} else if (this._fetcherService.isFetcherError(error)) {
+		} else if (error) {
 			key = welcomeViewContextKeys.Offline;
 			this._scheduleOfflineCheck();
 		}
