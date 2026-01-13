@@ -4963,7 +4963,7 @@
 				"type": "copilotcli",
 				"name": "cli",
 				"displayName": "Background Agent",
-				"icon": "$(collection)",
+				"icon": "$(worktree)",
 				"welcomeTitle": "Background Agent",
 				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
