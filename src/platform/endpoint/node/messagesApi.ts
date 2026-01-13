@@ -393,6 +393,14 @@ export class AnthropicMessagesProcessor {
 						const toolCall = this.toolCallAccumulator.get(chunk.index);
 						if (toolCall) {
 							toolCall.arguments += chunk.delta.partial_json;
+							onProgress({
+								text: '',
+								copilotToolCallStreamUpdates: [{
+									id: toolCall.id,
+									name: toolCall.name,
+									arguments: chunk.delta.partial_json,
+								}],
+							});
 						}
 					}
 				}
