@@ -235,28 +235,38 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			tracer.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
-				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
-				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
+				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
+				(this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder)
+					?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)).then(r => ({ kind: 'diagnostics' as const, val: r }))
 			]);
 
-			let [llmSuggestion, diagnosticsSuggestion] = await first;
+			const [llmSuggestion, diagnosticsSuggestion] = await first;
 
-			const firstResolvedSuggestion = llmSuggestion ?? diagnosticsSuggestion;
-			if (!firstResolvedSuggestion) { throw new BugIndicatingError('Both LLM and Diagnostics suggestions are undefined'); }
+			let suggestion: {
+				kind: 'llm';
+				val: NextEditResult;
+			} | {
+				kind: 'diagnostics';
+				val: DiagnosticsNextEditResult | undefined;
+			};
 
-			if (firstResolvedSuggestion.result === undefined) {
-				// Give some more time to the diagnostics provider if the llm suggestion is empty
-				if (firstResolvedSuggestion === llmSuggestion && this.model.diagnosticsBasedProvider) {
+			if (llmSuggestion !== undefined) {
+				if (llmSuggestion.val.result !== undefined || this.model.diagnosticsBasedProvider === undefined) {
+					suggestion = llmSuggestion;
+				} else {
 					tracer.trace('giving some more time to diagnostics provider');
-					const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
+					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
 					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
-					[, diagnosticsSuggestion] = await all;
+					[, suggestion] = await all;
 				}
-				// Await LLM provider if diagnostics suggestion is empty
-				else if (firstResolvedSuggestion === diagnosticsSuggestion) {
-					tracer.trace('giving some more time to llm provider');
-					[llmSuggestion,] = await all;
+			} else if (diagnosticsSuggestion !== undefined) {
+				if (diagnosticsSuggestion.val !== undefined && diagnosticsSuggestion.val.result !== undefined) {
+					suggestion = diagnosticsSuggestion;
+				} else {
+					[suggestion] = await all;
 				}
+			} else {
+				throw new BugIndicatingError('At least one of LLM NES or Diagnostics NES must be defined');
 			}
 
 			// Cancel ongoing requests
@@ -272,10 +282,10 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			// Determine which suggestion to use
-			if (diagnosticsSuggestion?.result) {
-				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
-			} else if (llmSuggestion) {
-				suggestionInfo = new LlmCompletionInfo(llmSuggestion, doc.id, document, context.requestUuid);
+			if (suggestion.kind === 'diagnostics' && suggestion.val) {
+				suggestionInfo = new DiagnosticsCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
+			} else if (suggestion.kind === 'llm') {
+				suggestionInfo = new LlmCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
 				return emptyList;
@@ -355,8 +365,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			telemetryBuilder.setHadLlmNES(suggestionInfo.source === 'provider');
 			telemetryBuilder.setHadDiagnosticsNES(suggestionInfo.source === 'diagnostics');
 			all.then(([llmResult, diagnosticsResult]) => {
-				telemetryBuilder.setHadLlmNES(!!llmResult?.result);
-				telemetryBuilder.setHadDiagnosticsNES(!!diagnosticsResult?.result);
+				telemetryBuilder.setHadLlmNES(!!llmResult?.val);
+				telemetryBuilder.setHadDiagnosticsNES(!!diagnosticsResult?.val);
 			});
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
