@@ -114,11 +114,23 @@ function main() {
 		? filePath
 		: path.join(process.cwd(), filePath);
 
-	const content = fs.readFileSync(absolutePath, 'utf-8');
-	const filtered = filterLogByTopic(content, logTopic);
+	try {
+		const content = fs.readFileSync(absolutePath, 'utf-8');
+		const filtered = filterLogByTopic(content, logTopic);
 
-	fs.writeFileSync(absolutePath, filtered, 'utf-8');
-	console.log(`Filtered log file to only include [${logTopic}] entries: ${absolutePath}`);
+		fs.writeFileSync(absolutePath, filtered, 'utf-8');
+		console.log(`Filtered log file to only include [${logTopic}] entries: ${absolutePath}`);
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException;
+		if (err.code === 'ENOENT') {
+			console.error(`Failed to read log file "${absolutePath}": file does not exist.`);
+		} else if (err.code === 'EACCES' || err.code === 'EPERM') {
+			console.error(`Permission denied while accessing log file "${absolutePath}".`);
+		} else {
+			console.error(`Failed to process log file "${absolutePath}": ${err.message ?? err}`);
+		}
+		process.exitCode = 1;
+	}
 }
 
 main();
