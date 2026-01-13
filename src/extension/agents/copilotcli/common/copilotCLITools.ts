@@ -551,7 +551,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
 	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
-	'web_fetch': [l10n.t('Fetching web content'), emptyInvocation],
+	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
 	'web_search': [l10n.t('Web Search'), emptyInvocation],
 	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
 };
