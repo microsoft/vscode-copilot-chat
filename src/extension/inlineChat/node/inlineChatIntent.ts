@@ -437,7 +437,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 							const result = await this._toolsService.invokeTool(toolCall.name, {
 								input,
 								toolInvocationToken: request.toolInvocationToken,
-								chatStreamToolCallId: toolCall.id,
+								// Split on `__vscode` so it's the chat stream id
+								// TODO @lramos15 - This is a gross hack
+								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
 							}, token) as vscode.ExtendedLanguageModelToolResult;
 
 							if (result.hasError) {

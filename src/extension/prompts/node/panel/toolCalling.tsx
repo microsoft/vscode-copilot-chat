@@ -218,7 +218,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
 						chatRequestId: props.requestId,
-						chatStreamToolCallId: props.toolCall.id
+						// Split on `__vscode` so it's the chat stream id
+						// TODO @lramos15 - This is a gross hack
+						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
 					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
 						invocationOptions.fromSubAgent = true;
