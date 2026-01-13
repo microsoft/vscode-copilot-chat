@@ -28,6 +28,7 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
@@ -238,16 +239,24 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion] = await first;
+			let [llmSuggestion, diagnosticsSuggestion] = await first;
 
-			const hasNonEmptyLlmNes = !!providerSuggestion && providerSuggestion.result !== undefined;
+			const firstResolvedSuggestion = llmSuggestion ?? diagnosticsSuggestion;
+			if (!firstResolvedSuggestion) { throw new BugIndicatingError('Both LLM and Diagnostics suggestions are undefined'); }
 
-			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider && !diagnosticsSuggestion;
-			if (shouldGiveMoreTimeToDiagnostics) {
-				tracer.trace('giving some more time to diagnostics provider');
-				const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
-				timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
-				[, diagnosticsSuggestion] = await all;
+			if (firstResolvedSuggestion.result === undefined) {
+				// Give some more time to the diagnostics provider if the llm suggestion is empty
+				if (firstResolvedSuggestion === llmSuggestion && this.model.diagnosticsBasedProvider) {
+					tracer.trace('giving some more time to diagnostics provider');
+					const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
+					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
+					[, diagnosticsSuggestion] = await all;
+				}
+				// Await LLM provider if diagnostics suggestion is empty
+				else if (firstResolvedSuggestion === diagnosticsSuggestion) {
+					tracer.trace('giving some more time to llm provider');
+					[llmSuggestion,] = await all;
+				}
 			}
 
 			// Cancel ongoing requests
@@ -265,8 +274,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			// Determine which suggestion to use
 			if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
-			} else if (providerSuggestion) {
-				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
+			} else if (llmSuggestion) {
+				suggestionInfo = new LlmCompletionInfo(llmSuggestion, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
 				return emptyList;
