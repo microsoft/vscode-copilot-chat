@@ -532,3 +532,23 @@ export class LanguageModelError extends Error {
 		this.code = code ?? '';
 	}
 }
+
+/**
+ * Represents a custom agent resource file (e.g., .agent.md).
+ */
+export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
+	readonly uri: vscode.Uri;
+	readonly isEditable?: boolean;
+
+	constructor(uri: vscode.Uri, options?: vscode.CustomAgentOptions);
+	constructor(id: string, content: string, options?: vscode.CustomAgentOptions);
+	constructor(uriOrId: vscode.Uri | string, contentOrOptions?: string | vscode.CustomAgentOptions, maybeOptions?: vscode.CustomAgentOptions) {
+		if (typeof uriOrId === 'string') {
+			// Virtual URI created from id and content
+			throw new Error('Virtual URI constructor not implemented in test shim');
+		} else {
+			this.uri = uriOrId;
+			this.isEditable = (contentOrOptions as vscode.CustomAgentOptions | undefined)?.isEditable;
+		}
+	}
+}

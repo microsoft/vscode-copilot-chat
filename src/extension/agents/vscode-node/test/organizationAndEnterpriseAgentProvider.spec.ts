@@ -145,7 +145,9 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns cached agents on first call', async () => {
-		const provider = createProvider();
+		// Set up file system mocks BEFORE creating provider to avoid race with background fetch
+		// Also prevent background fetch from interfering by having no organizations
+		mockOctoKitService.setUserOrganizations([]);
 
 		// Pre-populate cache with org folder
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -160,6 +162,11 @@ description: A test agent
 Test prompt content`;
 		mockFileSystem.mockFile(agentFile, agentContent);
 
+		const provider = createProvider();
+
+		// Wait for background fetch to complete (it will return early due to no orgs)
+		await new Promise(resolve => setTimeout(resolve, 50));
+
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
@@ -168,9 +175,7 @@ Test prompt content`;
 	});
 
 	test('fetches and caches agents from API', async () => {
-		const provider = createProvider();
-
-		// Mock API response
+		// Mock API response BEFORE creating provider
 		const mockAgent: CustomAgentListItem = {
 			name: 'api_agent',
 			repo_owner_id: 1,
@@ -190,9 +195,7 @@ Test prompt content`;
 		};
 		mockOctoKitService.setAgentDetails('api_agent', mockDetails);
 
-		// First call returns cached (empty) results and triggers background fetch
-		const agents1 = await provider.provideCustomAgents({}, {} as any);
-		assert.deepEqual(agents1, []);
+		const provider = createProvider();
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -391,8 +394,6 @@ Detailed prompt content
 	});
 
 	test('handles partial agent detail fetch failures gracefully', async () => {
-		const provider = createProvider();
-
 		const agents: CustomAgentListItem[] = [
 			{
 				name: 'agent1',
@@ -437,7 +438,7 @@ description: First agent
 Agent 1 prompt`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// With error handling, partial failures skip cache update for that org
@@ -449,9 +450,7 @@ Agent 1 prompt`;
 	});
 
 	test('caches agents in memory after first successful fetch', async () => {
-		const provider = createProvider();
-
-		// Initial setup with one agent
+		// Initial setup with one agent BEFORE creating provider
 		const initialAgent: CustomAgentListItem = {
 			name: 'initial_agent',
 			repo_owner_id: 1,
@@ -469,7 +468,7 @@ Agent 1 prompt`;
 			prompt: 'Initial prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// After successful fetch, subsequent calls return from memory
@@ -504,9 +503,7 @@ Agent 1 prompt`;
 	});
 
 	test('memory cache persists after first successful fetch', async () => {
-		const provider = createProvider();
-
-		// Initial setup with two agents
+		// Initial setup with two agents BEFORE creating provider
 		const agents: CustomAgentListItem[] = [
 			{
 				name: 'agent1',
@@ -535,7 +532,7 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('agent1', { ...agents[0], prompt: 'Prompt 1' });
 		mockOctoKitService.setAgentDetails('agent2', { ...agents[1], prompt: 'Prompt 2' });
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify both agents are cached
@@ -591,9 +588,7 @@ Agent 1 prompt`;
 	});
 
 	test('memory cache persists even when API returns empty list', async () => {
-		const provider = createProvider();
-
-		// Setup with initial agents
+		// Setup with initial agents BEFORE creating provider
 		const mockAgent: CustomAgentListItem = {
 			name: 'temporary_agent',
 			repo_owner_id: 1,
@@ -611,7 +606,7 @@ Agent 1 prompt`;
 			prompt: 'Temporary prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify agent is cached
@@ -706,9 +701,10 @@ Agent 1 prompt`;
 	});
 
 	test('handles malformed frontmatter in cached files', async () => {
-		const provider = createProvider();
+		// Prevent background fetch from interfering
+		mockOctoKitService.setUserOrganizations([]);
 
-		// Pre-populate cache with mixed valid and malformed content
+		// Pre-populate cache with mixed valid and malformed content BEFORE creating provider
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
 		const orgDir = URI.joinPath(cacheDir, 'testorg');
 		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
@@ -727,6 +723,11 @@ Valid prompt`;
 		// File without frontmatter - parser extracts name from filename, description is empty
 		const noFrontmatterContent = `Just some content without any frontmatter`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
+
+		const provider = createProvider();
+
+		// Wait for background fetch to complete (returns early due to no orgs)
+		await new Promise(resolve => setTimeout(resolve, 50));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -919,9 +920,7 @@ Test prompt
 	});
 
 	test('deduplicates enterprise agents that appear in multiple organizations', async () => {
-		const provider = createProvider();
-
-		// Setup multiple organizations
+		// Setup multiple organizations BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create an enterprise agent that will appear in both organizations
@@ -948,7 +947,7 @@ Test prompt
 			prompt: 'Enterprise prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -986,8 +985,7 @@ Test prompt
 	});
 
 	test('deduplicates agents with same repo regardless of version', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create agents with same name but different versions
@@ -1036,7 +1034,7 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -1048,8 +1046,7 @@ Test prompt
 	});
 
 	test('does not deduplicate org-specific agents with same name from different orgs', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create agents with same name but from different org repos (not enterprise)
@@ -1096,7 +1093,7 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -1110,8 +1107,7 @@ Test prompt
 	});
 
 	test('deduplicates enterprise agents even when API returns them in different order', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
 
 		const enterpriseAgent1: CustomAgentListItem = {
@@ -1160,7 +1156,7 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -1174,8 +1170,7 @@ Test prompt
 	});
 
 	test('deduplication key does not include version so different versions are deduplicated', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA']);
 
 		// Same agent with two different versions
@@ -1209,7 +1204,7 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);

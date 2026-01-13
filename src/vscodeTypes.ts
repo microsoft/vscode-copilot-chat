@@ -99,6 +99,7 @@ export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
 export import ChatSessionStatus = vscode.ChatSessionStatus;
+export import CustomAgentChatResource = vscode.CustomAgentChatResource;
 
 export const l10n = {
 	/**
