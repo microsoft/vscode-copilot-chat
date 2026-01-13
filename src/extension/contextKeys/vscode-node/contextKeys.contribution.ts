@@ -14,6 +14,7 @@ import { TelemetryData } from '../../../platform/telemetry/common/telemetryData'
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { GHPR_EXTENSION_ID } from '../../chatSessions/vscode/chatSessionsUriHandler';
+import { EXTENSION_ID } from '../../common/constants';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -140,7 +141,7 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.ContactSupport;
 		} else if (error instanceof ChatDisabledError) {
 			key = welcomeViewContextKeys.CopilotChatDisabled;
-		} else if (error) {
+		} else if (error && !extensions.getExtension(EXTENSION_ID)?.isActive) {
 			key = welcomeViewContextKeys.Offline;
 			this._scheduleOfflineCheck();
 		}
