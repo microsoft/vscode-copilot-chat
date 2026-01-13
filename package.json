@@ -3915,7 +3915,7 @@
 					},
 					"github.copilot.chat.cli.autoCommit.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
 						"tags": [
 							"advanced",
