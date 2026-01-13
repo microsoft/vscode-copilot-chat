@@ -10,7 +10,6 @@ import * as vscode from 'vscode';
 import { Uri } from 'vscode';
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -196,7 +195,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -418,8 +416,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 
 			// Partner agents
-			const partnerAgentsEnabled = this._configurationService.getConfig(ConfigKey.Advanced.CCAPartnerAgents);
-			if (partnerAgentsEnabled && partnerAgents.length > 0) {
+			// Only show if repo provides a choice of agent (>1)
+			if (partnerAgents.length > 1) {
 				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.map(agent => ({
 					id: agent.id,
 					name: agent.name,
@@ -822,7 +820,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private createEmptySession(resource: Uri): vscode.ChatSession {
 		const sessionId = resource ? resource.path.slice(1) : undefined;
-		const partnerAgentsEnabled = this._configurationService.getConfig(ConfigKey.Advanced.CCAPartnerAgents);
 		return {
 			history: [],
 			...(sessionId && sessionId.startsWith('untitled-')
@@ -834,11 +831,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						[MODELS_OPTION_GROUP_ID]:
 							this.sessionModelMap.get(resource)
 							?? (this.sessionModelMap.set(resource, DEFAULT_MODEL_ID), DEFAULT_MODEL_ID),
-						...(partnerAgentsEnabled && {
-							[PARTNER_AGENTS_OPTION_GROUP_ID]:
-								this.sessionPartnerAgentMap.get(resource)
-								?? (this.sessionPartnerAgentMap.set(resource, DEFAULT_PARTNER_AGENT_ID), DEFAULT_PARTNER_AGENT_ID),
-						}),
+						[PARTNER_AGENTS_OPTION_GROUP_ID]:
+							this.sessionPartnerAgentMap.get(resource)
+							?? (this.sessionPartnerAgentMap.set(resource, DEFAULT_PARTNER_AGENT_ID), DEFAULT_PARTNER_AGENT_ID),
 					}
 				}
 				: {}),
