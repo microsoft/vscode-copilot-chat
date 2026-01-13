@@ -16,11 +16,13 @@ const AgentFileExtension = '.agent.md';
 
 export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentProvider {
 
+	label: string = vscode.l10n.t('GitHub Organization');
+
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
-	private memoryCache: vscode.CustomAgentResource[] | undefined;
+	private memoryCache: vscode.CustomAgentChatResource[] | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -42,9 +44,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	async provideCustomAgents(
-		_options: vscode.CustomAgentQueryOptions,
+		_options: vscode.CustomAgentContext,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.CustomAgentChatResource[]> {
 		try {
 			if (this.memoryCache !== undefined) {
 				return this.memoryCache;
@@ -58,7 +60,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
-	private async readFromCache(): Promise<vscode.CustomAgentResource[]> {
+	private async readFromCache(): Promise<vscode.CustomAgentChatResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -66,7 +68,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				return [];
 			}
 
-			const agents: vscode.CustomAgentResource[] = [];
+			const agents: vscode.CustomAgentChatResource[] = [];
 
 			// Check if cache directory exists
 			try {
@@ -91,14 +93,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					const metadata = this.parseAgentMetadata(text, filename);
 					if (metadata) {
 						const fileUri = vscode.Uri.joinPath(orgDir, filename);
-						agents.push({
-							name: metadata.name,
-							description: metadata.description,
-							uri: fileUri,
-							metadata: {
-								customSource: vscode.l10n.t('Organization'),
-							}
-						});
+						agents.push(new vscode.CustomAgentChatResource(fileUri));
 					}
 				}
 			}
