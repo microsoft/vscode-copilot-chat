@@ -52,6 +52,21 @@ function restoreEnvVariables() {
 	}
 }
 
+let testCounter = 0;
+function trackEnvVariablesBeforeTests() {
+	testCounter++;
+}
+
+/**
+ * Tests run in parallel, so only restore env variables after all tests have completed.
+ */
+function restoreEnvVariablesAfterTests() {
+	testCounter--;
+	if (testCounter === 0) {
+		restoreEnvVariables();
+	}
+}
+
 function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	const ITestSessionOptionsProvider = createServiceIdentifier<TestSessionOptionsProvider>('ITestSessionOptionsProvider');
 	class TestSessionOptionsProvider {
@@ -279,6 +294,7 @@ const sourcePath = path.join(__dirname, '..', 'test', 'scenarios', 'test-cli');
 let tmpDirCounter = 0;
 function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: URI) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
 	return async (testingServiceCollection: TestingServiceCollection) => {
+		trackEnvVariablesBeforeTests();
 		const disposables = new DisposableStore();
 		// Temp folder can be `/var/folders/....` in our code we use `realpath` to resolve any symlinks.
 		// That results in these temp folders being resolved as `/private/var/folders/...` on macOS.
@@ -293,7 +309,7 @@ function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; 
 			await cb(services, await fs.realpath(scenariosPath), stream, disposables);
 		} finally {
 			await fs.rm(scenariosPath, { recursive: true }).catch(() => { /* Ignore */ });
-			restoreEnvVariables();
+			restoreEnvVariablesAfterTests();
 			disposables.dispose();
 		}
 	};

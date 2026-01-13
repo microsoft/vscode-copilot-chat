@@ -69,6 +69,22 @@ export interface ContextManagementResponse {
 	applied_edits: AppliedContextEdit[];
 }
 
+/**
+ * Checks if Anthropic context editing is enabled.
+ * This requires both the Messages API to be enabled and context editing to be enabled.
+ * @param configurationService The configuration service
+ * @param experimentationService The experimentation service
+ * @returns true if Anthropic context editing is enabled
+ */
+export function isAnthropicContextEditingEnabled(
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService
+): boolean {
+	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
+	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
+	return !!(useMessagesApi && contextEditingEnabled);
+}
+
 export interface ContextEditingConfig {
 	triggerType: 'input_tokens' | 'tool_uses';
 	triggerValue: number;
@@ -136,19 +152,19 @@ export function getContextManagementFromConfig(
 	thinkingBudget: number | undefined,
 	modelMaxInputTokens: number
 ): ContextManagement | undefined {
-	const contextEditingEnabled = configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, experimentationService);
+	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
 	if (!contextEditingEnabled) {
 		return undefined;
 	}
 
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerType, experimentationService) as 'input_tokens' | 'tool_uses',
-		triggerValue: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultTriggerValue, experimentationService),
-		keepCount: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultKeepCount, experimentationService),
-		clearAtLeastTokens: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearAtLeastTokens, experimentationService),
-		excludeTools: configurationService.getConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultExcludeTools),
-		clearInputs: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingToolResultClearInputs, experimentationService),
-		thinkingKeepTurns: configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingThinkingKeepTurns, experimentationService),
+		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',
+		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 100000,
+		keepCount: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.keepCount') ?? 5,
+		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 30000,
+		excludeTools: [],
+		clearInputs: experimentationService.getTreatmentVariable<boolean>('copilotchat.anthropic.contextEditing.toolResult.clearInputs') ?? true,
+		thinkingKeepTurns: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.thinking.keepTurns') ?? 1,
 	};
 
 	return buildContextManagement(contextEditingConfig, thinkingBudget, modelMaxInputTokens);

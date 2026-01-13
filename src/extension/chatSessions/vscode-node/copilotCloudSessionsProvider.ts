@@ -798,17 +798,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
 
-		const selectedCustomAgent =
-			// Local cache of session -> custom agent
-			this.sessionCustomAgentMap.get(resource)
-			// Query for the sub-agent that the remote reports for this session
-			|| undefined; /* TODO: Needs API to support this. */
-
-		const selectedModel =
-			// Local cache of session -> model
-			this.sessionModelMap.get(resource)
-			// Query for the model that the remote reports for this session
-			|| undefined; /* TODO: Needs API to support this. */
+		// const selectedCustomAgent = undefined; /* TODO: Needs API to support this. */
+		// const selectedModel = undefined; /* TODO: Needs API to support this. */
 
 		const partnerAgent = resolvePartnerAgent(sortedSessions);
 		if (partnerAgent) {
@@ -817,11 +808,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		return {
 			history,
-			options: selectedCustomAgent || selectedModel || partnerAgent ? {
-				...(selectedCustomAgent && { [CUSTOM_AGENTS_OPTION_GROUP_ID]: { id: selectedCustomAgent, locked: true, name: selectedCustomAgent } }),
-				...(selectedModel && { [MODELS_OPTION_GROUP_ID]: { id: selectedModel, locked: true, name: selectedModel } }),
+			options: {
+				// ...(selectedCustomAgent && { [CUSTOM_AGENTS_OPTION_GROUP_ID]: { id: selectedCustomAgent, locked: true, name: selectedCustomAgent } }),
+				// ...(selectedModel && { [MODELS_OPTION_GROUP_ID]: { id: selectedModel, locked: true, name: selectedModel } }),
 				...(partnerAgent && { [PARTNER_AGENTS_OPTION_GROUP_ID]: { id: partnerAgent.id, locked: true, name: partnerAgent.name } }),
-			} : undefined,
+			},
 			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
@@ -1080,17 +1071,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			history = await this._chatDelegationSummaryService.summarize(context, token);
 		}
 
-		const chatResource = metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
+		// Get the chat resource from context or metadata
+		const chatResource = context.chatSessionContext?.chatSessionItem?.resource
+			?? metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
 
 		let customAgentName: string | undefined;
 		let modelName: string | undefined;
 		let partnerAgentName: string | undefined;
 		let selectedRepository: string | undefined;
 		if (chatResource) {
+			this.logService.trace(`[delegate] Looking up options for chatResource=${chatResource.toString()}, partnerAgentMap.size=${this.sessionPartnerAgentMap.size}`);
 			customAgentName = this.sessionCustomAgentMap.get(chatResource);
 			modelName = this.sessionModelMap.get(chatResource);
 			partnerAgentName = this.sessionPartnerAgentMap.get(chatResource);
 			selectedRepository = this.sessionRepositoryMap.get(chatResource);
+			this.logService.trace(`[delegate] Retrieved options for ${chatResource.toString()}: customAgent=${customAgentName}, model=${modelName}, partnerAgent=${partnerAgentName}`);
+		} else {
+			this.logService.trace(`[delegate] No chatResource available to retrieve session options`);
 		}
 
 		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
@@ -1925,6 +1922,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const resolvePartnerAgentName = (partnerAgentName?: string): { agent_id?: number } => {
+			this.logService.trace(`Resolving partner agent from: ${partnerAgentName}`);
 			if (!partnerAgentName || partnerAgentName === DEFAULT_PARTNER_AGENT_ID) {
 				return {};
 			}

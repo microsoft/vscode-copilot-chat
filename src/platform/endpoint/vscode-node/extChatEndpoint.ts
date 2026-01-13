@@ -22,11 +22,11 @@ import { ChatCompletion } from '../../networking/common/openai';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { EndpointEditToolName, IEndpointProvider, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
+import { ExtensionContributedChatTokenizer } from './extChatTokenizer';
 
 enum ChatImageMimeType {
 	PNG = 'image/png',
@@ -47,7 +47,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
-		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
@@ -130,8 +129,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	public acquireTokenizer(): ITokenizer {
-		// TODO @lramos15, this should be driven by the extension API.
-		return this._tokenizerProvider.acquireTokenizer(this);
+		// Use the extension-contributed tokenizer that leverages the VS Code language model API
+		return new ExtensionContributedChatTokenizer(this.languageModel);
 	}
 
 	async makeChatRequest(

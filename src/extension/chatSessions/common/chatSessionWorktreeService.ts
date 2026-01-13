@@ -34,7 +34,6 @@ export interface IChatSessionWorktreeService {
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
 
 	getWorktreePath(sessionId: string): vscode.Uri | undefined;
-	getWorktreeRelativePath(sessionId: string): string | undefined;
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
 	getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined>;
