@@ -22,6 +22,9 @@ export interface LintDiagnosticsContext {
 }
 
 export class LintErrors {
+
+	private _previousFormttedDiagnostics: readonly DiagnosticDataWithDistance[] | undefined;
+
 	constructor(
 		private readonly _lintOptions: LintOptions,
 		private readonly _documentId: DocumentId,
@@ -61,11 +64,36 @@ export class LintErrors {
 
 	public getFormattedLintErrors(): string {
 		const diagnostics = this._getRelevantDiagnostics();
+		this._previousFormttedDiagnostics = diagnostics;
 
 		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, this._lintOptions)).join('\n');
 
 		const lintTag = PromptTags.createLintTag(this._lintOptions.tagName);
 		return `${lintTag.start}\n${formattedDiagnostics}\n${lintTag.end}`;
+	}
+
+	public lineNumberInPreviousFormattedPrompt(lineNumber: number): boolean {
+		if (!this._previousFormttedDiagnostics) {
+			throw new BugIndicatingError('No previous formatted diagnostics available to check line number against.');
+		}
+
+		for (const diagnostic of this._previousFormttedDiagnostics) {
+			// Convert diagnostic position (1-based) to 0-based for comparison with formatted output
+			if (diagnostic.documentRange.getStartPosition().lineNumber - 1 === lineNumber) {
+				return true;
+			}
+
+			if (this._lintOptions.showCode === LintOptionShowCode.NO) {
+				continue;
+			}
+
+			const lineRange = diagnosticsToCodeLineRange(diagnostic.documentRange, this._lintOptions);
+			if (lineRange.contains(lineNumber)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 
@@ -96,18 +124,12 @@ function formatDiagnosticMessage(diagnostic: DiagnosticDataWithDistance, diagnos
 	}
 
 	const diagnosticStartPosition = diagnosticRange.getStartPosition();
-	const headerLine = `${diagnosticStartPosition.lineNumber}:${diagnosticStartPosition.column} - ${diagnostic.severity}${codeStr}: ${diagnostic.message}`;
+	const headerLine = `${diagnosticStartPosition.lineNumber - 1}:${diagnosticStartPosition.column - 1} - ${diagnostic.severity}${codeStr}: ${diagnostic.message}`;
 	return headerLine;
 }
 
 function formatCodeLines(diagnosticRange: Range, lintOptions: LintOptions, documentLines: readonly string[]): string[] {
-	const diagnosticStartLine = diagnosticRange.getStartPosition().lineNumber - 1; // 0-based for rendering and array access
-	const diagnosticEndLine = diagnosticRange.getEndPosition().lineNumber - 1; // 0-based for rendering and array access
-
-	let lineRangeToInclude = new OffsetRange(diagnosticStartLine, diagnosticEndLine + 1);
-	if (lintOptions.showCode === LintOptionShowCode.YES_WITH_SURROUNDING) {
-		lineRangeToInclude = lineRangeToInclude.deltaStart(-1).deltaEnd(1);
-	}
+	const lineRangeToInclude = diagnosticsToCodeLineRange(diagnosticRange, lintOptions);
 
 	const lineRange = lineRangeToInclude.intersect(new OffsetRange(0, documentLines.length));
 	if (!lineRange) {
@@ -119,6 +141,18 @@ function formatCodeLines(diagnosticRange: Range, lintOptions: LintOptions, docum
 		codeLines.push(formatCodeLine(i, documentLines[i] ?? ''));
 	}
 	return codeLines;
+}
+
+function diagnosticsToCodeLineRange(diagnosticRange: Range, lintOptions: LintOptions): OffsetRange {
+	const diagnosticStartLine = diagnosticRange.getStartPosition().lineNumber - 1; // 0-based for rendering and array access
+	const diagnosticEndLine = diagnosticRange.getEndPosition().lineNumber - 1; // 0-based for rendering and array access
+
+	let lineRangeToInclude = new OffsetRange(diagnosticStartLine, diagnosticEndLine + 1);
+	if (lintOptions.showCode === LintOptionShowCode.YES_WITH_SURROUNDING) {
+		lineRangeToInclude = lineRangeToInclude.deltaStart(-1).deltaEnd(1);
+	}
+
+	return lineRangeToInclude;
 }
 
 function formatCodeLine(lineNumber: number, lineContent: string): string {

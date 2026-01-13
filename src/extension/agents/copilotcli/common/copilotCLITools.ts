@@ -137,11 +137,32 @@ type ThinkTool = {
 	};
 };
 
+type UpdateTodoTool = {
+	toolName: 'update_todo';
+	arguments: {
+		todos: string;
+	};
+};
+
 type ReportProgressTool = {
 	toolName: 'report_progress';
 	arguments: {
 		commitMessage: string;
 		prDescription: string;
+	};
+};
+
+type WebFetchTool = {
+	toolName: 'web_fetch';
+	arguments: {
+		url: string;
+	};
+};
+
+type WebSearchTool = {
+	toolName: 'web_search';
+	arguments: {
+		query: string;
 	};
 };
 
@@ -199,7 +220,7 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
-	ReplyToCommentTool | CodeReviewTool;
+	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
 
 export type ToolCall = ToolInfo & { toolCallId: string };
 export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
@@ -530,6 +551,9 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
 	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
+	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
+	'web_search': [l10n.t('Web Search'), emptyInvocation],
+	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
 };
 
 

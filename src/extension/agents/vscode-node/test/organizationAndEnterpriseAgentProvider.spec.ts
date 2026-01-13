@@ -43,6 +43,8 @@ class MockOctoKitService implements IOctoKitService {
 	getFileContent = async () => '';
 	getUserOrganizations = async () => this.userOrganizations;
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
+	getUserRepositories = async () => [];
+	getRecentlyCommittedRepositories = async () => [];
 	getCopilotAgentModels = async () => [];
 	getAssignableActors = async () => [];
 

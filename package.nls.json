@@ -36,10 +36,12 @@
 	"github.copilot.viewsWelcome.individual.expired": "Your Copilot subscription has expired.\n\n[Review Copilot Settings](https://github.com/settings/copilot?editor=vscode)",
 	"github.copilot.viewsWelcome.enterprise": "Contact your GitHub organization administrator to enable Copilot.",
 	"github.copilot.viewsWelcome.offline": {
-		"message": "You are currently offline. Please connect to the internet to use GitHub Copilot.\n\n[Retry Connection](command:github.copilot.refreshToken)",
+		"message": "GitHub Copilot servers could not be reached. Please check your internet connection and try again.\n\n[Retry Connection](command:github.copilot.refreshToken)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
 		"comment": [
 			"{Locked='['}",
-			"{Locked='](command:github.copilot.refreshToken)'}"
+			"{Locked='](command:github.copilot.refreshToken)'}",
+			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
+			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.contactSupport": {
