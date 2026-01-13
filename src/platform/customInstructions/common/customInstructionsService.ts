@@ -286,7 +286,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			return true;
 		}
 		if (this._matchInstructionLocationsFromConfig.get()(uri)
-			// || this._matchInstructionLocationsFromExtensions.get()(uri)
+			|| this._matchInstructionLocationsFromExtensions.get()(uri)
 			|| this._matchInstructionLocationsFromSkills.get()(uri)) {
 			return true;
 		}
