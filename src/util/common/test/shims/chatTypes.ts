@@ -537,19 +537,9 @@ export class LanguageModelError extends Error {
  * Represents a custom agent resource file (e.g., .agent.md).
  */
 export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
-	readonly uri: vscode.Uri;
+	readonly resource: vscode.ChatResourceDescriptor;
 
-	constructor(resource: vscode.ChatResourceDescriptor);
-	constructor(id: string, content: string);
-	constructor(resourceOrId: vscode.ChatResourceDescriptor | string, content?: string) {
-		if (typeof resourceOrId === 'string') {
-			// Virtual URI created from id and content
-			throw new Error('Virtual URI constructor not implemented in test shim');
-		} else if (typeof resourceOrId === 'object' && 'uri' in resourceOrId) {
-			this.uri = resourceOrId.uri;
-		} else {
-			// resourceOrId is a Uri directly
-			this.uri = resourceOrId as vscode.Uri;
-		}
+	constructor(resource: vscode.ChatResourceDescriptor) {
+		this.resource = resource;
 	}
 }
