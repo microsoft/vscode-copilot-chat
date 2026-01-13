@@ -215,22 +215,6 @@ export class ChatResponseConfirmationPart {
 	}
 }
 
-export class ChatPrepareToolInvocationPart {
-	toolCallId: string;
-	toolName: string;
-	streamData?: { partialInput?: unknown };
-	/**
-	 * @param toolCallId Unique identifier for this tool call.
-	 * @param toolName The name of the tool being prepared for invocation.
-	 * @param streamData Partial arguments that have streamed in for the tool invocation.
-	 */
-	constructor(toolCallId: string, toolName: string, streamData?: { partialInput?: unknown }) {
-		this.toolCallId = toolCallId;
-		this.toolName = toolName;
-		this.streamData = streamData;
-	}
-}
-
 export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	constructor(
 		readonly prompt: string,

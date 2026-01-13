@@ -199,6 +199,10 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 				} else {
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`);
 				}
+			} else if (contentMatch) {
+				const content = contentMatch[1];
+				const charCount = content.length;
+				invocationMessage = new MarkdownString(l10n.t`Creating file (${charCount} characters)`);
 			} else {
 				invocationMessage = new MarkdownString(l10n.t`Creating file`);
 			}
