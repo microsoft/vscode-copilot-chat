@@ -29,6 +29,8 @@ import { SimilarFiles } from '../components/similarFiles';
 import { splitContextCompletionsPrompt } from '../components/splitContextPrompt';
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
+
+import { Diagnostics } from '../components/diagnostics';
 import {
 	ContextProviderTelemetry,
 	matchContextItems,
@@ -41,7 +43,9 @@ import {
 	CodeSnippetWithId,
 	SupportedContextItemWithId,
 	TraitWithId,
+	type DiagnosticChunkWithId,
 } from '../contextProviders/contextItemSchemas';
+import { getDiagnosticsFromContextItems } from '../contextProviders/diagnostics';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
 import { componentStatisticsToPromptMatcher, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import {
@@ -73,6 +77,7 @@ export type CompletionRequestData = {
 	// Context provider items
 	traits?: TraitWithId[];
 	codeSnippets?: CodeSnippetWithId[];
+	diagnostics?: DiagnosticChunkWithId[];
 	turnOffSimilarFiles?: boolean;
 	suffixMatchThreshold?: number;
 	maxPromptTokens: number;
@@ -132,6 +137,7 @@ function defaultCompletionsPrompt(accessor: ServicesAccessor) {
 			<CompletionsContext>
 				<DocumentMarker tdms={tdms} weight={0.7} />
 				<Traits weight={0.6} />
+				<Diagnostics tdms={tdms} weight={0.65} />
 				<CodeSnippets tdms={tdms} weight={0.9} />
 				<SimilarFiles tdms={tdms} instantiationService={instantiationService} weight={0.8} />
 				<RecentEdits tdms={tdms} recentEditsProvider={recentEditsProvider} weight={0.99} />
@@ -198,7 +204,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 
 		const start = performance.now();
 
-		const { traits, codeSnippets, turnOffSimilarFiles, resolvedContextItems } = await this.resolveContext(
+		const { traits, codeSnippets, diagnostics, turnOffSimilarFiles, resolvedContextItems } = await this.resolveContext(
 			completionId,
 			completionState,
 			telemetryData,
@@ -211,6 +217,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			completionState.position,
 			traits,
 			codeSnippets,
+			diagnostics,
 			telemetryData,
 			turnOffSimilarFiles,
 			maxPromptLength,
@@ -273,6 +280,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		position: Position,
 		traits: TraitWithId[] | undefined,
 		codeSnippets: CodeSnippetWithId[] | undefined,
+		diagnostics: DiagnosticChunkWithId[] | undefined,
 		telemetryData: TelemetryWithExp,
 		turnOffSimilarFiles: boolean,
 		maxPromptLength: number,
@@ -290,6 +298,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			maxPromptLength,
 			traits,
 			codeSnippets,
+			diagnostics,
 			turnOffSimilarFiles,
 			suffixMatchThreshold,
 			tokenizer
@@ -306,12 +315,14 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	): Promise<{
 		traits: TraitWithId[] | undefined;
 		codeSnippets: CodeSnippetWithId[] | undefined;
+		diagnostics: DiagnosticChunkWithId[] | undefined;
 		turnOffSimilarFiles: boolean;
 		resolvedContextItems: ResolvedContextItem[];
 	}> {
 		let resolvedContextItems: ResolvedContextItem[] = [];
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
+		let diagnostics: DiagnosticChunkWithId[] | undefined;
 		let turnOffSimilarFiles = false;
 		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
 			resolvedContextItems = await this.contextProviderBridge.resolution(completionId);
@@ -338,8 +349,13 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 				matchedContextItems,
 				textDocument.detectedLanguageId
 			);
+
+			diagnostics = await this.instantiationService.invokeFunction(getDiagnosticsFromContextItems,
+				completionId,
+				matchedContextItems
+			);
 		}
-		return { traits, codeSnippets, turnOffSimilarFiles, resolvedContextItems };
+		return { traits, codeSnippets, diagnostics, turnOffSimilarFiles, resolvedContextItems };
 	}
 
 	private async failFastPrompt(
@@ -371,6 +387,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		maxPromptLength: number,
 		traits?: TraitWithId[],
 		codeSnippets?: CodeSnippetWithId[],
+		diagnostics?: DiagnosticChunkWithId[],
 		turnOffSimilarFiles?: boolean,
 		suffixMatchThreshold?: number,
 		tokenizer?: TokenizerName
@@ -383,6 +400,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			data: opts.data,
 			traits,
 			codeSnippets,
+			diagnostics,
 			turnOffSimilarFiles,
 			suffixMatchThreshold,
 			maxPromptTokens: maxPromptLength,

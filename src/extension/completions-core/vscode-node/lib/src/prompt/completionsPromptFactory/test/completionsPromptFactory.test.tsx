@@ -8,6 +8,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import dedent from 'ts-dedent';
+import { Diagnostic, DiagnosticSeverity, Range, Uri } from 'vscode';
 import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
 import { MutableObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
 import { TestingServiceCollection } from '../../../../../../../../platform/test/node/services';
@@ -17,7 +18,7 @@ import { Dispatch, StateUpdater } from '../../../../../prompt/src/components/hoo
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt';
 import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
-import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
+import { CodeSnippet, ContextProvider, SupportedContextItem, Trait, type DiagnosticChunk } from '../../../../../types/src';
 import { ICompletionsObservableWorkspace } from '../../../completionsObservableWorkspace';
 import { createCompletionState } from '../../../completionState';
 import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../../config';
@@ -551,14 +552,21 @@ suite('Completions Prompt Factory', function () {
 		assert.ok(result.prompt.prefix.includes('Consider this related information:') === false);
 	});
 
-	test('prompt should include traits and code snippets if the context provider API is enabled', async function () {
-		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,codeSnippetsProvider';
+	test('prompt should include traits, diagnostics and code snippets if the context provider API is enabled', async function () {
+		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,diagnosticsProvider,codeSnippetsProvider';
 
 		const traitsProvider: ContextProvider<Trait> = {
 			id: 'traitsProvider',
 			selector: [{ language: 'typescript' }],
 			resolver: {
 				resolve: () => Promise.resolve([{ name: 'test_trait', value: 'test_value' }]),
+			},
+		};
+		const diagnosticsProvider: ContextProvider<DiagnosticChunk> = {
+			id: 'diagnosticsProvider',
+			selector: [{ language: 'typescript' }],
+			resolver: {
+				resolve: () => Promise.resolve([{ uri: Uri.file('test_trait'), values: [new Diagnostic(new Range(0, 10, 0, 20), 'type exists', DiagnosticSeverity.Error)] }]),
 			},
 		};
 		const codeSnippetsProvider: ContextProvider<CodeSnippet> = {
@@ -570,6 +578,7 @@ suite('Completions Prompt Factory', function () {
 		};
 		const contextProviderRegistry = accessor.get(ICompletionsContextProviderRegistryService);
 		contextProviderRegistry.registerContextProvider(traitsProvider);
+		contextProviderRegistry.registerContextProvider(diagnosticsProvider);
 		contextProviderRegistry.registerContextProvider(codeSnippetsProvider);
 
 		// Register the documents for content exclusion
@@ -731,15 +740,19 @@ suite('Completions Prompt Factory', function () {
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[2].CodeSnippets',
+				componentPath: '$.f[0].CompletionsContext[2].Diagnostics',
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[3].SimilarFiles',
+				componentPath: '$.f[0].CompletionsContext[3].CodeSnippets',
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[4].RecentEdits',
+				componentPath: '$.f[0].CompletionsContext[4].SimilarFiles',
+				updateDataTimeMs: 42,
+			},
+			{
+				componentPath: '$.f[0].CompletionsContext[5].RecentEdits',
 				updateDataTimeMs: 42,
 			},
 			{
