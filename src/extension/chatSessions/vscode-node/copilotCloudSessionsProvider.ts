@@ -425,7 +425,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				optionGroups.push({
 					id: PARTNER_AGENTS_OPTION_GROUP_ID,
 					name: vscode.l10n.t('Partner Agents'),
-					description: vscode.l10n.t('(Experimental) Select which partner agent to use'),
+					description: vscode.l10n.t('Select which partner agent to use'),
 					items: partnerAgentItems,
 				});
 			}
