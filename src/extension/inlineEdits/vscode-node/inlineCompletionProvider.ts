@@ -240,19 +240,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			let [llmSuggestion, diagnosticsSuggestion] = await first;
 
-			const firstResolvedSuggestion = llmSuggestion ?? diagnosticsSuggestion;
-			if (firstResolvedSuggestion === undefined || firstResolvedSuggestion.result === undefined) {
-				// Await LLM provider if diagnostics suggestion is empty
-				if (firstResolvedSuggestion !== llmSuggestion) {
-					tracer.trace('awaiting llm provider');
-					[llmSuggestion,] = await all;
-				}
-				// Give some more time to the diagnostics provider if the llm suggestion is empty
-				else {
+			const hasLlmSuggestion = llmSuggestion?.result !== undefined;
+			const hasDiagnosticsSuggestion = diagnosticsSuggestion?.result !== undefined;
+
+			if (!hasLlmSuggestion && !hasDiagnosticsSuggestion) {
+				if (llmSuggestion !== undefined) {
+					// Give some more time to the diagnostics provider if the llm suggestion is empty
 					tracer.trace('giving some more time to diagnostics provider');
 					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
 					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 					[, diagnosticsSuggestion] = await all;
+				} else {
+					// Await LLM provider if diagnostics suggestion is empty
+					tracer.trace('awaiting llm provider');
+					[llmSuggestion,] = await all;
 				}
 			}
 
