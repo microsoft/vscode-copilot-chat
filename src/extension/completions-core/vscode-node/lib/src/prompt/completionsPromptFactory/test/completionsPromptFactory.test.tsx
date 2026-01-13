@@ -566,7 +566,14 @@ suite('Completions Prompt Factory', function () {
 			id: 'diagnosticsProvider',
 			selector: [{ language: 'typescript' }],
 			resolver: {
-				resolve: () => Promise.resolve([{ uri: Uri.file('test_trait'), values: [new Diagnostic(new Range(0, 10, 0, 20), 'type exists', DiagnosticSeverity.Error)] }]),
+				resolve: () => {
+					const diag1 = new Diagnostic(new Range(0, 10, 0, 20), 'type exists', DiagnosticSeverity.Error);
+					diag1.code = 1017;
+					diag1.source = 'ts';
+					const diag2 = new Diagnostic(new Range(0, 20, 0, 25), 'unknown type', DiagnosticSeverity.Warning);
+					diag2.code = 2017;
+					return Promise.resolve([{ uri: Uri.file('something.ts'), values: [diag1, diag2] }]);
+				},
 			},
 		};
 		const codeSnippetsProvider: ContextProvider<CodeSnippet> = {
@@ -593,6 +600,9 @@ suite('Completions Prompt Factory', function () {
 				// Path: basename
 				// Consider this related information:
 				// test_trait: test_value
+				// Consider the following typescript diagnostics from something.ts:
+				// 1:11 - error TS1017: type exists
+				// 1:21 - warning 2017: unknown type
 				// Compare this snippet from something.ts:
 				// function foo() { return 1; }
 			` + `\n${longPrefix}\nfunction f`

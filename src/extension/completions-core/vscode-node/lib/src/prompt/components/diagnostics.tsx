@@ -5,7 +5,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
-import type { Diagnostic } from 'vscode';
+import { DiagnosticSeverity, type Diagnostic } from 'vscode';
 import { Chunk, ComponentContext, PromptElementProps, Text } from '../../../../prompt/src/components/components';
 import { normalizeLanguageId } from '../../../../prompt/src/prompt';
 import type { ICompletionsTextDocumentManagerService } from '../../textDocumentManager';
@@ -74,7 +74,7 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 		const elements = [];
 		elements.push(
 			<Text key={diagnosticChunk.id} source={diagnosticChunk}>
-				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticChunk)}:\n`}
+				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticChunk)}:`}
 			</Text>
 		);
 		diagnosticChunk.values.forEach(diagnostic => {
@@ -82,12 +82,12 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 			const code = getCode(diagnostic);
 			if (code !== undefined) {
 				const source = diagnostic.source ? diagnostic.source.toUpperCase() : '';
-				codeStr = `${source} ${code}`;
+				codeStr = ` ${source}${code}`;
 			}
 			const start = diagnostic.range.start;
 			elements.push(
 				<Text>
-					{`${start.line + 1}:${start.character + 1} - ${diagnostic.severity} ${codeStr}: ${diagnostic.message}`}
+					{`${start.line + 1}:${start.character + 1} - ${DiagnosticSeverity[diagnostic.severity].toLowerCase()}${codeStr}: ${diagnostic.message}`}
 				</Text>
 			);
 		});
