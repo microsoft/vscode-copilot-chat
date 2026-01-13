@@ -28,7 +28,6 @@ import { findCell, findNotebook, isNotebookCell } from '../../../util/common/not
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
@@ -242,20 +241,18 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			let [llmSuggestion, diagnosticsSuggestion] = await first;
 
 			const firstResolvedSuggestion = llmSuggestion ?? diagnosticsSuggestion;
-			if (!firstResolvedSuggestion) { throw new BugIndicatingError('Both LLM and Diagnostics suggestions are undefined'); }
-
-			if (firstResolvedSuggestion.result === undefined) {
+			if (firstResolvedSuggestion === undefined || firstResolvedSuggestion.result === undefined) {
+				// Await LLM provider if diagnostics suggestion is empty
+				if (firstResolvedSuggestion !== llmSuggestion) {
+					tracer.trace('awaiting llm provider');
+					[llmSuggestion,] = await all;
+				}
 				// Give some more time to the diagnostics provider if the llm suggestion is empty
-				if (firstResolvedSuggestion === llmSuggestion && this.model.diagnosticsBasedProvider) {
+				else {
 					tracer.trace('giving some more time to diagnostics provider');
-					const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
+					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
 					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 					[, diagnosticsSuggestion] = await all;
-				}
-				// Await LLM provider if diagnostics suggestion is empty
-				else if (firstResolvedSuggestion === diagnosticsSuggestion) {
-					tracer.trace('giving some more time to llm provider');
-					[llmSuggestion,] = await all;
 				}
 			}
 
