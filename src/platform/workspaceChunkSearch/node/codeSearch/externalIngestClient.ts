@@ -20,6 +20,7 @@ import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ApiClient } from './externalIngestApi';
 
+
 export interface ExternalIngestFile {
 	readonly uri: URI;
 	readonly relativePath: string;
@@ -36,7 +37,8 @@ export interface IExternalIngestClient {
 		filesetName: string,
 		currentCheckpoint: string | undefined,
 		allFiles: AsyncIterable<ExternalIngestFile>,
-		token: CancellationToken
+		token: CancellationToken,
+		onProgress?: (message: string) => void
 	): Promise<Result<{ checkpoint: string }, Error>>;
 
 	listFilesets(token: CancellationToken): Promise<string[]>;
@@ -109,7 +111,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 	}
 
-	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
 		const authToken = await this.getAuthToken();
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
@@ -122,6 +124,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
 
+		onProgress?.('Scanning files...');
 		this.logService.trace(`ExternalIngestClient::updateIndex(). Checking for ingestable files...`);
 		const ingestableCheckStart = performance.now();
 
@@ -156,6 +159,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			return Result.ok({ checkpoint: newCheckpoint });
 		}
 
+		onProgress?.('Creating snapshot...');
 		// Create snapshot - this endpoint could return 429 if you already have too many filesets
 		let createIngestResponse: Response;
 		try {
@@ -188,6 +192,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 		this.logService.debug(`Got ingest ID: ${ingestId}`);
 
+		onProgress?.('Reconciling with server...');
 		this.logService.debug('Starting set reconciliation...');
 
 		// Create snapshot
@@ -221,6 +226,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		// Document upload
+		onProgress?.('Uploading documents...');
 		this.logService.debug('Starting document upload...');
 
 		let pageToken = undefined;
@@ -230,6 +236,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Tracking for performance reporting.
 		let uploaded = 0;
+		let totalToUpload = 0;
 		const uploadStart = performance.now();
 
 		do {
@@ -255,6 +262,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			if (docIds) {
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
+				totalToUpload += toUpload.size;
 				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
@@ -282,6 +290,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						uploading.delete(p);
 						uploaded += 1;
 						if (uploaded % 10 === 0) {
+							const remaining = totalToUpload - uploaded;
+							onProgress?.(`Uploading documents... (${remaining} remaining)`);
 							const elapsed = Math.round(performance.now() - uploadStart);
 							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
 							this.logService.info(
@@ -313,6 +323,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		this.logService.info(
 			`ExternalIngestClient::updateIndex(): Uploaded ${uploaded} ingestable files in ${Math.round(performance.now() - uploadStart)}ms`,
 		);
+		onProgress?.('Finalizing index...');
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
 		}, token);
