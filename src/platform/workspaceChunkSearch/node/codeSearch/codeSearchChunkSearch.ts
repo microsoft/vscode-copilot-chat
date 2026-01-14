@@ -721,8 +721,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		};
 	}
 
-	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		const triggerResult = await this.doTriggerRemoteIndexing(triggerReason, telemetryInfo);
+	public async triggerRemoteIndexing(onProgress: (message: string) => void, triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+		const triggerResult = await this.doTriggerRemoteIndexing(onProgress, triggerReason, telemetryInfo);
 		if (triggerResult.isOk()) {
 			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
 		} else {
@@ -823,7 +823,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._codeSearchRepos.delete(repo.rootUri);
 	}
 
-	private async doTriggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+	private async doTriggerRemoteIndexing(onProgress: (message: string) => void, triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
@@ -831,7 +831,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		// Update external ingest index if enabled
 		const externalIndexEnabled = this.isExternalIngestEnabled();
 		if (externalIndexEnabled) {
-			await this._externalIngestIndex.value.doIngest(CancellationToken.None);
+			await this._externalIngestIndex.value.doIngest(onProgress, CancellationToken.None);
 
 			// If we are forcing external ingest only, we don't want to update the code search repos
 			if (externalIndexEnabled === 'force') {

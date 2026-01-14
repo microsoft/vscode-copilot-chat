@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0",
+		"vscode": "^1.109.0-20260114",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -3950,7 +3950,7 @@
 					},
 					"github.copilot.chat.cli.autoCommit.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
 						"tags": [
 							"advanced",
@@ -4969,13 +4969,13 @@
 			{
 				"type": "claude-code",
 				"name": "claude",
-				"displayName": "Claude Code CLI Agent",
+				"displayName": "Claude Agent",
 				"icon": "$(sparkle)",
-				"welcomeTitle": "Claude Code Agent",
-				"welcomeMessage": "Run local background tasks",
-				"inputPlaceholder": "Run local tasks with Claude Code, type `#` for adding context",
+				"welcomeTitle": "Claude Agent",
+				"welcomeMessage": "Powered by the same agent as Claude Code",
+				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
-				"description": "The Claude Code Agent works on your local machine",
+				"description": "The Claude Agent works on your local machine",
 				"when": "config.github.copilot.chat.claudeCode.enabled",
 				"canDelegate": true,
 				"capabilities": {
@@ -5242,8 +5242,8 @@
 		"yargs": "^17.7.2"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.1.55",
-		"@anthropic-ai/sdk": "^0.68.0",
+		"@anthropic-ai/claude-agent-sdk": "0.2.5",
+		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
 		"@github/copilot": "^0.0.366",
 		"@google/genai": "^1.22.0",
@@ -5274,6 +5274,7 @@
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
 		"string_decoder": "npm:string_decoder@1.2.0",
-		"node-gyp": "npm:node-gyp@10.3.1"
+		"node-gyp": "npm:node-gyp@10.3.1",
+		"zod": "3.25.76"
 	}
 }

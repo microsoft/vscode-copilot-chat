@@ -123,6 +123,22 @@ declare module 'vscode' {
 			 */
 			deletions: number;
 		};
+
+		/**
+		 * Optional repository information for the chat session.
+		 * Used to identify which repository the session is associated with.
+		 */
+		repository?: {
+			/**
+			 * The owner of the repository (e.g., organization or username).
+			 */
+			owner: string;
+
+			/**
+			 * The name of the repository.
+			 */
+			name: string;
+		};
 	}
 
 	export class ChatSessionChangedFile {
@@ -252,7 +268,7 @@ declare module 'vscode' {
 		 * Called as soon as you register (call me once)
 		 * @param token
 		 */
-		provideChatSessionProviderOptions?(token: CancellationToken): Thenable<ChatSessionProviderOptions> | ChatSessionProviderOptions;
+		provideChatSessionProviderOptions?(token: CancellationToken): Thenable<ChatSessionProviderOptions | ChatSessionProviderOptions>;
 	}
 
 	export interface ChatSessionOptionUpdate {
@@ -337,6 +353,12 @@ declare module 'vscode' {
 		 * An icon for the option item shown in UI.
 		 */
 		readonly icon?: ThemeIcon;
+
+		/**
+		 * Indicates if this option should be selected by default.
+		 * Only one item per option group should be marked as default.
+		 */
+		readonly default?: boolean;
 	}
 
 	/**
@@ -372,6 +394,27 @@ declare module 'vscode' {
 		 * the 'models' option group has 'gpt-4' selected.
 		 */
 		readonly when?: string;
+
+		/**
+		 * When true, displays a searchable QuickPick with a "See more..." option.
+		 * Recommended for option groups with additional async items (e.g., repositories).
+		 */
+		readonly searchable?: boolean;
+
+		/**
+		 * An icon for the option group shown in UI.
+		 */
+		readonly icon?: ThemeIcon;
+
+		/**
+		 * Handler for dynamic search when `searchable` is true.
+		 * Called when the user types in the searchable QuickPick or clicks "See more..." to load additional items.
+		 *
+		 * @param query The search query entered by the user. Empty string for initial load.
+		 * @param token A cancellation token.
+		 * @returns Additional items to display in the searchable QuickPick.
+		 */
+		readonly onSearch?: (query: string, token: CancellationToken) => Thenable<ChatSessionProviderOptionItem[]>;
 	}
 
 	export interface ChatSessionProviderOptions {
