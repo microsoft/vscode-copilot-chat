@@ -199,6 +199,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
+					assistantMessageChunks.push(event.data.deltaContent);
 					this._stream?.markdown(event.data.deltaContent);
 				}
 			})));
