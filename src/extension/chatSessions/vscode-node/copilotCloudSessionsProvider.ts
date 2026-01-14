@@ -1115,10 +1115,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const repoId = repoIds?.[0];
 		let repoOwner = repoId?.org;
 		let repoName = repoId?.repo;
-		const isValidSelectedRepository = selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID;
-		const [selectedRepoOwner, selectedRepoName] = isValidSelectedRepository ? selectedRepository.split('/') : [];
+		const [selectedRepoOwner, selectedRepoName] = (selectedRepository && selectedRepository !== DEFAULT_REPOSITORY_ID) ? selectedRepository.split('/') : [];
 		if (!base_ref || repoOwner !== selectedRepoOwner || repoName !== selectedRepoName) {
-			if (isValidSelectedRepository) {
+			if (selectedRepoOwner && selectedRepoName) {
 				repoOwner = selectedRepoOwner;
 				repoName = selectedRepoName;
 			} else {
