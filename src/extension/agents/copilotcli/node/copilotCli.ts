@@ -88,7 +88,7 @@ export class CopilotCLISessionOptions {
 		if (this.customAgents) {
 			allOptions.customAgents = this.customAgents;
 		}
-		allOptions.enableStreaming = true;
+		// allOptions.enableStreaming = true;
 		return allOptions as Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }>;
 	}
 }

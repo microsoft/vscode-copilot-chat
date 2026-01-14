@@ -118,7 +118,6 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			// mutableOptions.disableHttpLogging = true;
 			return options;
 		}
 	}
