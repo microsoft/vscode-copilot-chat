@@ -17,7 +17,7 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
@@ -412,6 +412,8 @@ export class ClaudeCodeSession extends Disposable {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
 				stream.markdown(item.text);
+			} else if (item.type === 'thinking') {
+				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
 				unprocessedToolCalls.set(item.id, item);
 			}
