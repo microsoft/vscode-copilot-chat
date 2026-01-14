@@ -12,6 +12,7 @@ import type { ICompletionsTextDocumentManagerService } from '../../textDocumentM
 import {
 	CompletionRequestData,
 	isCompletionRequestData,
+	type CompletionRequestDocument,
 } from '../completionsPromptFactory/componentsCompletionsPromptFactory';
 import { type DiagnosticBagWithId } from '../contextProviders/contextItemSchemas';
 
@@ -44,6 +45,9 @@ type DiagnosticsProps = {
 export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) => {
 	const [diagnostics, setDiagnostics] = context.useState<DiagnosticBagWithId[]>();
 	const [languageId, setLanguageId] = context.useState<string>();
+	const [position, setPosition] = context.useState<{ line: number; character: number }>();
+	const [document, setDocument] = context.useState<CompletionRequestDocument>();
+
 
 	context.useData(isCompletionRequestData, (data: CompletionRequestData) => {
 		if (data.diagnostics !== diagnostics) {
@@ -53,6 +57,14 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 		const normalizedLanguageId = normalizeLanguageId(data.document.detectedLanguageId);
 		if (normalizedLanguageId !== languageId) {
 			setLanguageId(normalizedLanguageId);
+		}
+
+		if (data.position !== position) {
+			setPosition(data.position);
+		}
+
+		if (data.document.uri !== document?.uri) {
+			setDocument(data.document);
 		}
 	});
 
@@ -77,7 +89,15 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticBag)}:`}
 			</Text>
 		);
-		diagnosticBag.values.forEach(diagnostic => {
+		const values: Diagnostic[] = diagnosticBag.values;
+		if (document !== undefined && document.uri.toString() === diagnosticBag.uri.toString() && position !== undefined) {
+			values.sort((a, b) => {
+				const aDist = Math.abs(a.range.start.line - position.line);
+				const bDist = Math.abs(b.range.start.line - position.line);
+				return aDist - bDist;
+			});
+		}
+		values.forEach(diagnostic => {
 			let codeStr = '';
 			const code = getCode(diagnostic);
 			if (code !== undefined) {
@@ -91,7 +111,6 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 				</Text>
 			);
 		});
-		// TODO: use a `KeepTogether` elision that removes the header if no traits are present
 		return <Chunk>{elements}</Chunk>;
 	});
 };
