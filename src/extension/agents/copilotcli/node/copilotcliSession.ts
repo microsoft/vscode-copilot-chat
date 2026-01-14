@@ -196,7 +196,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				sdkRequestId = event.id;
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
-				// Support for streaming streaming delta messages.
+				// Support for streaming delta messages.
 				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
 					this._stream?.markdown(event.data.deltaContent);
