@@ -5192,6 +5192,7 @@
 		"@anthropic-ai/sdk": "^0.68.0",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
 		"@github/copilot": "^0.0.366",
+		"@github/copilot-sdk": "^0.1.9",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
