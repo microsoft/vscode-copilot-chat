@@ -24,6 +24,13 @@ export class ToolsService extends BaseToolsService {
 	// Extensions to override definitions for existing tools.
 	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<unknown>>>;
 
+	private _connectedModelSpecificTools = false;
+
+	override get modelSpecificTools() {
+		this.getModelSpecificTools();
+		return super.modelSpecificTools;
+	}
+
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
 		output: readonly vscode.LanguageModelToolInformation[];
@@ -73,30 +80,37 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService logService: ILogService
 	) {
 		super(logService);
-		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
-		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
+		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
+	}
 
-		this._register(autorunIterableDelta(
-			reader => ToolRegistry.modelSpecificTools.read(reader),
-			({ addedValues, removedValues }) => {
-				for (const { definition } of removedValues) {
-					const prev = this._modelSpecificTools.get(definition.name);
-					if (isDisposable(prev)) {
-						prev.dispose();
+	private getModelSpecificTools() {
+		if (!this._connectedModelSpecificTools) {
+			this._register(autorunIterableDelta(
+				reader => ToolRegistry.modelSpecificTools.read(reader),
+				({ addedValues, removedValues }) => {
+					for (const { definition } of removedValues) {
+						const prev = this._modelSpecificTools.get(definition.name);
+						if (isDisposable(prev)) {
+							prev.dispose();
+						}
+						this._modelSpecificTools.delete(definition.name);
 					}
-					this._modelSpecificTools.delete(definition.name);
-				}
-				for (const { definition, tool } of addedValues) {
-					const instance = instantiationService.createInstance(tool);
-					this._modelSpecificTools.set(definition.name, { definition, tool: instance });
-				}
-			},
-			v => v.definition,
-		));
+					for (const { definition, tool } of addedValues) {
+						const instance = this._instantiationService.createInstance(tool);
+						this._modelSpecificTools.set(definition.name, { definition, tool: instance });
+					}
+				},
+				v => v.definition,
+			));
+			this._connectedModelSpecificTools = true;
+		}
+
+		return this._modelSpecificTools;
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
@@ -105,7 +119,7 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
-		return this._copilotTools.value.get(name as ToolName) || this._modelSpecificTools.get(name)?.tool;
+		return this._copilotTools.value.get(name as ToolName) || this.getModelSpecificTools().get(name)?.tool;
 	}
 
 	getTool(name: string | ToolName): vscode.LanguageModelToolInformation | undefined {
