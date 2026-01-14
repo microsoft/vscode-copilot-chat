@@ -72,6 +72,13 @@ export interface ICopilotTool<T> extends ICopilotToolExtension<T> {
 	prepareInvocation?: vscode.LanguageModelTool<T>['prepareInvocation'];
 }
 
+export interface ICopilotModelSpecificTool<T> extends ICopilotTool<T> {
+	/**
+	 * If present, this tool should be used instead of the base tool for the given tool name.
+	 */
+	overridesTool?: ToolName;
+}
+
 export function isVscodeLanguageModelTool(tool: ICopilotTool<unknown>): tool is vscode.LanguageModelTool<unknown> {
 	return typeof tool.invoke === 'function';
 }
@@ -81,12 +88,11 @@ export interface ICopilotToolCtor {
 	new(...args: never[]): ICopilotTool<unknown>;
 }
 
-/** A constructor for a copilot extension tool. */
-export interface IUnnamedCopilotToolCtor {
-	new(...args: never[]): ICopilotTool<unknown>;
+export interface IModelSpecificToolCtor {
+	new(...args: never[]): ICopilotModelSpecificTool<unknown>;
 }
 
-export interface ICopilotToolExtensionCtor extends IUnnamedCopilotToolCtor {
+export interface ICopilotToolExtensionCtor extends IModelSpecificToolCtor {
 	readonly toolName: ToolName;
 	new(...args: never[]): ICopilotToolExtension<unknown>;
 }
@@ -94,7 +100,7 @@ export interface ICopilotToolExtensionCtor extends IUnnamedCopilotToolCtor {
 export const ToolRegistry = new class {
 	private _tools: Array<ICopilotToolCtor> = [];
 	private _toolExtensions: Array<ICopilotToolExtensionCtor> = [];
-	private _modelSpecificTools = new ObservableMap<string, { definition: vscode.LanguageModelToolDefinition; tool: IUnnamedCopilotToolCtor }>();
+	private _modelSpecificTools = new ObservableMap<string, { definition: vscode.LanguageModelToolDefinition; tool: IModelSpecificToolCtor }>();
 
 	public get modelSpecificTools() {
 		return this._modelSpecificTools.observable.map(v => [...v.values()]);
@@ -112,7 +118,7 @@ export const ToolRegistry = new class {
 		this._toolExtensions.push(tool);
 	}
 
-	public registerModelSpecificTool(definition: vscode.LanguageModelToolDefinition, tool: IUnnamedCopilotToolCtor): IDisposable {
+	public registerModelSpecificTool(definition: vscode.LanguageModelToolDefinition, tool: IModelSpecificToolCtor): IDisposable {
 		if (this._modelSpecificTools.has(definition.name)) {
 			throw new Error(`Model specific tool for ${definition.name} is already registered`);
 		}
@@ -130,3 +136,25 @@ export const ToolRegistry = new class {
 		return this._toolExtensions;
 	}
 }();
+
+export function modelSpecificToolApplies(tool: vscode.LanguageModelToolDefinition, endpoint: IChatEndpoint) {
+	if (!tool.models) {
+		return true;
+	}
+
+	return tool.models.some(m => {
+		if (m.id !== undefined && m.id === endpoint.model) {
+			return true;
+		}
+		if (m.version !== undefined && m.version === endpoint.version) {
+			return true;
+		}
+		if (m.family !== undefined && m.family === endpoint.family) {
+			return true;
+		}
+
+		if (m.vendor !== undefined && m.vendor === endpoint.version) {
+			return true;
+		}
+	});
+}

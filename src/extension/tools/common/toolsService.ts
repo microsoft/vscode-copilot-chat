@@ -13,7 +13,7 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservable, ObservableMap } from '../../../util/vs/base/common/observable';
 import { ToolName } from './toolNames';
-import { ICopilotTool } from './toolsRegistry';
+import { ICopilotModelSpecificTool, ICopilotTool } from './toolsRegistry';
 
 export const IToolsService = createServiceIdentifier<IToolsService>('IToolsService');
 
@@ -173,7 +173,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
 
-	protected readonly _modelSpecificTools = new ObservableMap</* tool name */string, { definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }>();
+	protected readonly _modelSpecificTools = new ObservableMap</* tool name */string, { definition: vscode.LanguageModelToolDefinition; tool: ICopilotModelSpecificTool<unknown> }>();
 	public get modelSpecificTools() {
 		return this._modelSpecificTools.observable.map(v => [...v.values()]);
 	}

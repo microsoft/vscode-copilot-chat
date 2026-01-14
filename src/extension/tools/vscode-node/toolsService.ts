@@ -13,7 +13,7 @@ import { isDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
-import { ICopilotTool, ICopilotToolExtension, ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotModelSpecificTool, ICopilotTool, ICopilotToolExtension, modelSpecificToolApplies, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
@@ -135,21 +135,25 @@ export class ToolsService extends BaseToolsService {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
 
+		const moreSpecificTools = new Map<ToolName, { info: vscode.LanguageModelToolInformation; tool: ICopilotModelSpecificTool<unknown> }>();
+
 		return this.tools
-			.map(tool => {
-				// Apply model-specific alternative if available via alternativeDefinition
-				const owned = this.getCopilotTool(getToolName(tool.name));
-				let resultTool = tool;
-				if (owned?.alternativeDefinition) {
-					resultTool = owned.alternativeDefinition(resultTool, endpoint);
+			.filter(tool => {
+				// Filter out irrelevant model-specific tools and get a map of those that can override those in the request
+				const modelSpecificTool = this.getModelSpecificTools().get(tool.name);
+				if (!modelSpecificTool) {
+					return true;
+				}
+				if (!modelSpecificToolApplies(modelSpecificTool.definition, endpoint)) {
+					return false;
 				}
 
-				const extension = this._toolExtensions.value.get(getToolName(tool.name) as ToolName);
-				if (extension?.alternativeDefinition) {
-					resultTool = extension.alternativeDefinition(resultTool, endpoint);
+				if (modelSpecificTool.tool.overridesTool) {
+					moreSpecificTools.set(modelSpecificTool.tool.overridesTool, { info: tool, tool: modelSpecificTool.tool });
+					return false; // only present in the output if the base tool is given
 				}
 
-				return resultTool;
+				return true;
 			})
 			.filter(tool => {
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
@@ -184,6 +188,24 @@ export class ToolsService extends BaseToolsService {
 				}
 
 				return false;
+			})
+			.map(tool => {
+				// Apply model-specific alternative if available via alternativeDefinition
+				const toolName = getToolName(tool.name) as ToolName;
+				const override = moreSpecificTools.get(toolName);
+				const owned = override?.tool || this.getCopilotTool(toolName);
+
+				let resultTool = override?.info || tool;
+				if (owned?.alternativeDefinition) {
+					resultTool = owned.alternativeDefinition(resultTool, endpoint);
+				}
+
+				const extension = this._toolExtensions.value.get(toolName);
+				if (extension?.alternativeDefinition) {
+					resultTool = extension.alternativeDefinition(resultTool, endpoint);
+				}
+
+				return resultTool;
 			});
 	}
 }
