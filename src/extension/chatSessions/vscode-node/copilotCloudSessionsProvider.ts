@@ -597,7 +597,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!this.isGitHubRepo(repoIds)) {
+			if (!this.isGitHubRepoOrEmpty(repoIds)) {
 				return [];
 			}
 			let sessions = [];
@@ -721,10 +721,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return this.chatSessionItemsPromise;
 	}
 
-	private isGitHubRepo(repoIds: GithubRepoId[] | undefined) {
+	private isGitHubRepoOrEmpty(repoIds: GithubRepoId[] | undefined) {
 		const hasOpenedFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
+		if (!hasOpenedFolder) {
+			return true;
+		}
 		const hasGitHubRepo = repoIds && repoIds.length > 0;
-		return hasOpenedFolder && hasGitHubRepo;
+		return hasGitHubRepo;
 	}
 
 	private shouldPushSession(sessionItem: SessionInfo, existing: SessionInfo | undefined): boolean {

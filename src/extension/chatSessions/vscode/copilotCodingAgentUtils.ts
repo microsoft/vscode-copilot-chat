@@ -96,6 +96,7 @@ export async function getRepoId(gitService: IGitService): Promise<GithubRepoId[]
 			return [id];
 		}
 	}
+	return [];
 }
 
 export namespace SessionIdForPr {
