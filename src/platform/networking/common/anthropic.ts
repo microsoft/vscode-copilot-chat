@@ -159,9 +159,9 @@ export function getContextManagementFromConfig(
 
 	const contextEditingConfig: ContextEditingConfig = {
 		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',
-		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 100000,
+		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 75000,
 		keepCount: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.keepCount') ?? 5,
-		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 30000,
+		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 5000,
 		excludeTools: [],
 		clearInputs: experimentationService.getTreatmentVariable<boolean>('copilotchat.anthropic.contextEditing.toolResult.clearInputs') ?? true,
 		thinkingKeepTurns: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.thinking.keepTurns') ?? 1,
