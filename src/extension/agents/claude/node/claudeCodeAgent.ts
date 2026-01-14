@@ -22,19 +22,19 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
+import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
-	private _langModelServer: LanguageModelServer | undefined;
+	private _langModelServer: ClaudeLanguageModelServer | undefined;
 	private _sessions = this._register(new DisposableMap<string, ClaudeCodeSession>());
 
-	private async getLangModelServer(): Promise<LanguageModelServer> {
+	private async getLangModelServer(): Promise<ClaudeLanguageModelServer> {
 		if (!this._langModelServer) {
-			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
+			this._langModelServer = this.instantiationService.createInstance(ClaudeLanguageModelServer);
 			await this._langModelServer.start();
 		}
 
@@ -157,7 +157,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _editTracker = new ExternalEditTracker();
 
 	constructor(
-		private readonly serverConfig: ILanguageModelServerConfig,
+		private readonly serverConfig: IClaudeLanguageModelServerConfig,
 		public sessionId: string | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configService: IConfigurationService,

@@ -4,11 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
+import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
 import fs from 'fs';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -112,7 +115,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
-		const authToken = await this.getAuthToken();
+		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
 			return Result.error(new Error('No auth token available'));
@@ -124,12 +127,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
 
-		onProgress?.('Scanning files...');
+		onProgress?.(l10n.t('Scanning files...'));
 		this.logService.trace(`ExternalIngestClient::updateIndex(). Checking for ingestable files...`);
 		const ingestableCheckStart = performance.now();
 
 		const allDocShas: Uint8Array[] = [];
 		for await (const file of allFiles) {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			const relativePath = file.relativePath;
 			const full = file.uri.fsPath;
 
@@ -159,7 +166,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			return Result.ok({ checkpoint: newCheckpoint });
 		}
 
-		onProgress?.('Creating snapshot...');
+		onProgress?.(l10n.t('Creating snapshot...'));
 		// Create snapshot - this endpoint could return 429 if you already have too many filesets
 		let createIngestResponse: Response;
 		try {
@@ -178,7 +185,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			readonly end: number;
 		}
 
-		const res = await createIngestResponse.json() as { ingest_id: string; coded_symbol_range: CodedSymbolRange };
+		const res = await raceCancellationError(createIngestResponse.json(), token) as { ingest_id: string; coded_symbol_range: CodedSymbolRange };
 		const ingestId = res.ingest_id;
 		let codedSymbolRange: CodedSymbolRange | undefined = res.coded_symbol_range;
 
@@ -192,11 +199,15 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 		this.logService.debug(`Got ingest ID: ${ingestId}`);
 
-		onProgress?.('Reconciling with server...');
+		onProgress?.(l10n.t('Reconciling with server...'));
 		this.logService.debug('Starting set reconciliation...');
 
 		// Create snapshot
 		while (codedSymbolRange) {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			this.logService.debug(
 				`Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`,
 			);
@@ -217,7 +228,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					},
 					token
 				);
-				const body = await pushCodedSymbolsResponse.json() as { next_coded_symbol_range?: CodedSymbolRange };
+				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
 			} catch (e) {
 				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
@@ -226,7 +237,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		// Document upload
-		onProgress?.('Uploading documents...');
+		onProgress?.(l10n.t('Uploading documents...'));
 		this.logService.debug('Starting document upload...');
 
 		let pageToken = undefined;
@@ -240,8 +251,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const uploadStart = performance.now();
 
 		do {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			try {
-				await Promise.all(uploading);
+				await raceCancellationError(Promise.all(uploading), token);
 			} catch (e) {
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
@@ -254,7 +269,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await getBatchResponse.json() as { doc_ids: string[]; next_page_token: string | undefined };
+				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[]; next_page_token: string | undefined };
 
 			// Need to check that there are some docIds to process. It can be the case where you get a page
 			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
@@ -266,6 +281,10 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
+
 					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
 						const paths = mappings.get(requestedDocSha);
@@ -291,7 +310,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						uploaded += 1;
 						if (uploaded % 10 === 0) {
 							const remaining = totalToUpload - uploaded;
-							onProgress?.(`Uploading documents... (${remaining} remaining)`);
+							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
 							const elapsed = Math.round(performance.now() - uploadStart);
 							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
 							this.logService.info(
@@ -316,14 +335,14 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			pageToken = nextPageToken;
 		} while (pageToken);
 
-		await Promise.all(uploading);
+		await raceCancellationError(Promise.all(uploading), token);
 
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!
 		this.logService.info(
 			`ExternalIngestClient::updateIndex(): Uploaded ${uploaded} ingestable files in ${Math.round(performance.now() - uploadStart)}ms`,
 		);
-		onProgress?.('Finalizing index...');
+		onProgress?.(l10n.t('Finalizing index...'));
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
 		}, token);

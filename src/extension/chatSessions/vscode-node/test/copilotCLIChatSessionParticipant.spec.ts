@@ -15,6 +15,7 @@ import { MockFileSystemService } from '../../../../platform/filesystem/node/test
 import { IGitService } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
+import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -198,7 +199,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService);
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger());
 				cliSessions.push(session);
 				return disposables.add(session);
 			}
