@@ -410,14 +410,10 @@ export class ClaudeCodeSession extends Disposable {
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
 	): void {
 		for (const item of message.message.content) {
-			if (item.type === 'text' && item.text) {
+			if (item.type === 'text') {
 				stream.markdown(item.text);
 			} else if (item.type === 'tool_use') {
-				// Don't show progress message for TodoWrite tool
-				if (item.name !== ClaudeToolNames.TodoWrite) {
-					stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
-				}
-				unprocessedToolCalls.set(item.id!, item as Anthropic.ToolUseBlock);
+				unprocessedToolCalls.set(item.id, item);
 			}
 		}
 	}
@@ -457,9 +453,12 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
-		const invocation = createFormattedToolInvocation(toolUse, toolResult);
-		if (toolResult?.content === ClaudeCodeSession.DenyToolMessage && invocation) {
-			invocation.isConfirmed = false;
+		const invocation = createFormattedToolInvocation(toolUse);
+		if (invocation) {
+			invocation.isError = toolResult.is_error;
+			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
+				invocation.isConfirmed = false;
+			}
 		}
 
 		if (toolUse.name === ClaudeToolNames.TodoWrite) {

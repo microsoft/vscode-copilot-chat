@@ -115,7 +115,8 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 					toolContext.unprocessedToolCalls.delete(toolResultBlock.tool_use_id);
 					const pendingInvocation = toolContext.pendingToolInvocations.get(toolResultBlock.tool_use_id);
 					if (pendingInvocation) {
-						createFormattedToolInvocation(toolUse, toolResultBlock, pendingInvocation);
+						pendingInvocation.isConfirmed = true;
+						pendingInvocation.isError = toolResultBlock.is_error;
 						toolContext.pendingToolInvocations.delete(toolResultBlock.tool_use_id);
 					}
 				}
