@@ -689,7 +689,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					fullDatabaseId: pr.fullDatabaseId.toString(),
 					pullRequestDetails: pr,
 					repository: {
-						owner: pr.author?.login ?? '',
+						owner: pr.repository?.owner?.login ?? '',
 						name: pr.repository?.name ?? ''
 					}
 				} satisfies vscode.ChatSessionItem & {
