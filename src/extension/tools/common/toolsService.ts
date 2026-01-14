@@ -11,6 +11,7 @@ import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IObservable, ObservableMap } from '../../../util/vs/base/common/observable';
 import { ToolName } from './toolNames';
 import { ICopilotTool } from './toolsRegistry';
 
@@ -58,6 +59,13 @@ export interface IToolsService {
 	 * Tool implementations from tools in this extension
 	 */
 	copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
+
+	/**
+	 * Model-specific tool instances. These are NOT included in the
+	 * {@link copilotTools} map, and may update at runtime.
+	 */
+	modelSpecificTools: IObservable<{ definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]>;
+
 	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
@@ -164,6 +172,11 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	private readonly ajv = new Ajv({ coerceTypes: true });
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
+
+	protected readonly _modelSpecificTools = new ObservableMap</* tool name */string, { definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }>();
+	public get modelSpecificTools() {
+		return this._modelSpecificTools.observable.map(v => [...v.values()]);
+	}
 
 	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;

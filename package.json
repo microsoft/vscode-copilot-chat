@@ -101,6 +101,7 @@
 		"embeddings",
 		"findTextInFiles",
 		"findTextInFiles2",
+		"languageModelToolSupportsModel",
 		"findFiles2@2",
 		"textSearchProvider",
 		"terminalDataWriteEvent",

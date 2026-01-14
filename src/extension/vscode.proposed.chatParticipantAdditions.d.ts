@@ -316,7 +316,7 @@ declare module 'vscode' {
 		 * tracked as agent edits. This can be used to track edits made from
 		 * external tools that don't generate simple {@link textEdit textEdits}.
 		 */
-		externalEdit(target: Uri | Uri[], callback: () => Thenable<void>): Thenable<string>;
+		externalEdit(target: Uri | Uri[], callback: () => Thenable<unknown>): Thenable<string>;
 
 		markdownWithVulnerabilities(value: string | MarkdownString, vulnerabilities: ChatVulnerability[]): void;
 		codeblockUri(uri: Uri, isEdit?: boolean): void;
@@ -404,7 +404,7 @@ declare module 'vscode' {
 		/**
 		 * A map of all tools that should (`true`) and should not (`false`) be used in this request.
 		 */
-		readonly tools: Map<string, boolean>;
+		readonly tools: Map<LanguageModelToolInformation, boolean>;
 	}
 
 	export namespace lm {

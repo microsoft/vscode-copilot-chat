@@ -94,7 +94,7 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	}
 
 	allowTools[ToolName.EditFilesPlaceholder] = false;
-	if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+	if (!Iterable.some(request.tools.keys(), t => t.name === ContributedToolName.EditFilesPlaceholder)) {
 		allowTools[ToolName.ApplyPatch] = false;
 		allowTools[ToolName.EditFile] = false;
 		allowTools[ToolName.ReplaceString] = false;

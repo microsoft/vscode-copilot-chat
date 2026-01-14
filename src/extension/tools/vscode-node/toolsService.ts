@@ -7,7 +7,10 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
+import { isDisposable } from '../../../util/vs/base/common/lifecycle';
+import { autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
 import { ICopilotTool, ICopilotToolExtension, ToolRegistry } from '../common/toolsRegistry';
@@ -46,7 +49,7 @@ export class ToolsService extends BaseToolsService {
 				return aIsBuiltin ? -1 : 1;
 			})
 			.map(tool => {
-				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
+				const owned = this.getCopilotTool(getToolName(tool.name));
 				return owned?.alternativeDefinition?.(tool) ?? tool;
 			});
 
@@ -76,6 +79,24 @@ export class ToolsService extends BaseToolsService {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
 		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+
+		this._register(autorunIterableDelta(
+			reader => ToolRegistry.modelSpecificTools.read(reader),
+			({ addedValues, removedValues }) => {
+				for (const { definition } of removedValues) {
+					const prev = this._modelSpecificTools.get(definition.name);
+					if (isDisposable(prev)) {
+						prev.dispose();
+					}
+					this._modelSpecificTools.delete(definition.name);
+				}
+				for (const { definition, tool } of addedValues) {
+					const instance = instantiationService.createInstance(tool);
+					this._modelSpecificTools.set(definition.name, { definition, tool: instance });
+				}
+			},
+			v => v.definition,
+		));
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
@@ -84,8 +105,7 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
-		const tool = this._copilotTools.value.get(name as ToolName);
-		return tool;
+		return this._copilotTools.value.get(name as ToolName) || this._modelSpecificTools.get(name)?.tool;
 	}
 
 	getTool(name: string | ToolName): vscode.LanguageModelToolInformation | undefined {
@@ -99,11 +119,12 @@ export class ToolsService extends BaseToolsService {
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
+		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
 
 		return this.tools
 			.map(tool => {
 				// Apply model-specific alternative if available via alternativeDefinition
-				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
+				const owned = this.getCopilotTool(getToolName(tool.name));
 				let resultTool = tool;
 				if (owned?.alternativeDefinition) {
 					resultTool = owned.alternativeDefinition(resultTool, endpoint);
@@ -118,7 +139,7 @@ export class ToolsService extends BaseToolsService {
 			})
 			.filter(tool => {
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
-				const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
 				if (toolPickerSelection === false) {
 					return false;
 				}

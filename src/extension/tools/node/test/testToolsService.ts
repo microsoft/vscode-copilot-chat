@@ -150,6 +150,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
+		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
 
 		const packageJsonTools = getPackagejsonToolsForTest();
 		return this.tools
@@ -166,7 +167,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 			})
 			.filter(tool => {
 				// 0. Check if the tool was enabled or disabled via the tool picker
-				const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
 				if (typeof toolPickerSelection === 'boolean') {
 					return toolPickerSelection;
 				}

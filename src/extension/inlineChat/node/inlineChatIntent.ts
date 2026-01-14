@@ -28,7 +28,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -480,7 +480,12 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
 			...request,
-			tools: new Map(Array.from(enabledTools).map(toolName => [toolName, true] as const))
+			tools: new Map(
+				Array.from(enabledTools)
+					.map(t => this._toolsService.getTool(t))
+					.filter(isDefined)
+					.map(tool => [tool, true])
+			),
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
