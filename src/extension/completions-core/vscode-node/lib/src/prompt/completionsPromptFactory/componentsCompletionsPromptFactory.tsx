@@ -43,7 +43,7 @@ import {
 	CodeSnippetWithId,
 	SupportedContextItemWithId,
 	TraitWithId,
-	type DiagnosticChunkWithId,
+	type DiagnosticBagWithId,
 } from '../contextProviders/contextItemSchemas';
 import { getDiagnosticsFromContextItems } from '../contextProviders/diagnostics';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
@@ -77,7 +77,7 @@ export type CompletionRequestData = {
 	// Context provider items
 	traits?: TraitWithId[];
 	codeSnippets?: CodeSnippetWithId[];
-	diagnostics?: DiagnosticChunkWithId[];
+	diagnostics?: DiagnosticBagWithId[];
 	turnOffSimilarFiles?: boolean;
 	suffixMatchThreshold?: number;
 	maxPromptTokens: number;
@@ -280,7 +280,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		position: Position,
 		traits: TraitWithId[] | undefined,
 		codeSnippets: CodeSnippetWithId[] | undefined,
-		diagnostics: DiagnosticChunkWithId[] | undefined,
+		diagnostics: DiagnosticBagWithId[] | undefined,
 		telemetryData: TelemetryWithExp,
 		turnOffSimilarFiles: boolean,
 		maxPromptLength: number,
@@ -315,14 +315,14 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 	): Promise<{
 		traits: TraitWithId[] | undefined;
 		codeSnippets: CodeSnippetWithId[] | undefined;
-		diagnostics: DiagnosticChunkWithId[] | undefined;
+		diagnostics: DiagnosticBagWithId[] | undefined;
 		turnOffSimilarFiles: boolean;
 		resolvedContextItems: ResolvedContextItem[];
 	}> {
 		let resolvedContextItems: ResolvedContextItem[] = [];
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
-		let diagnostics: DiagnosticChunkWithId[] | undefined;
+		let diagnostics: DiagnosticBagWithId[] | undefined;
 		let turnOffSimilarFiles = false;
 		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
 			resolvedContextItems = await this.contextProviderBridge.resolution(completionId);
@@ -387,7 +387,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		maxPromptLength: number,
 		traits?: TraitWithId[],
 		codeSnippets?: CodeSnippetWithId[],
-		diagnostics?: DiagnosticChunkWithId[],
+		diagnostics?: DiagnosticBagWithId[],
 		turnOffSimilarFiles?: boolean,
 		suffixMatchThreshold?: number,
 		tokenizer?: TokenizerName

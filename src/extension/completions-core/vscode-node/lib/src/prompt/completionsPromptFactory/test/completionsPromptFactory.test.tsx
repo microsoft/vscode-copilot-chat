@@ -18,7 +18,7 @@ import { Dispatch, StateUpdater } from '../../../../../prompt/src/components/hoo
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt';
 import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
-import { CodeSnippet, ContextProvider, SupportedContextItem, Trait, type DiagnosticChunk } from '../../../../../types/src';
+import { CodeSnippet, ContextProvider, SupportedContextItem, Trait, type DiagnosticBag } from '../../../../../types/src';
 import { ICompletionsObservableWorkspace } from '../../../completionsObservableWorkspace';
 import { createCompletionState } from '../../../completionState';
 import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../../config';
@@ -562,7 +562,7 @@ suite('Completions Prompt Factory', function () {
 				resolve: () => Promise.resolve([{ name: 'test_trait', value: 'test_value' }]),
 			},
 		};
-		const diagnosticsProvider: ContextProvider<DiagnosticChunk> = {
+		const diagnosticsProvider: ContextProvider<DiagnosticBag> = {
 			id: 'diagnosticsProvider',
 			selector: [{ language: 'typescript' }],
 			resolver: {

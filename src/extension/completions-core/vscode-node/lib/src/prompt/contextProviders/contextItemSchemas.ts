@@ -10,7 +10,7 @@ import { ServicesAccessor } from '../../../../../../../util/vs/platform/instanti
 import {
 	CodeSnippet,
 	ContextItemOrigin,
-	DiagnosticChunk,
+	DiagnosticBag,
 	SupportedContextItem,
 	SupportedContextItemType,
 	Trait,
@@ -73,12 +73,12 @@ namespace CodeSnippetSchema {
 	}
 }
 
-namespace DiagnosticChunkSchema {
-	export function is(item: SupportedContextItem): item is DiagnosticChunk {
+namespace DiagnosticBagSchema {
+	export function is(item: SupportedContextItem): item is DiagnosticBag {
 		if (!ContextItemSchema.is(item)) {
 			return false;
 		}
-		const candidate = item as DiagnosticChunk;
+		const candidate = item as DiagnosticBag;
 		if (!(URI.isUri(candidate.uri))) {
 			return false;
 		}
@@ -100,8 +100,8 @@ namespace SupportedContextItemSchema {
 			return 'Trait';
 		} else if (CodeSnippetSchema.is(item)) {
 			return 'CodeSnippet';
-		} else if (DiagnosticChunkSchema.is(item)) {
-			return 'DiagnosticChunk';
+		} else if (DiagnosticBagSchema.is(item)) {
+			return 'DiagnosticBag';
 		}
 		return undefined;
 	}
@@ -118,8 +118,8 @@ namespace SupportedContextItemSchema {
 
 export type TraitWithId = Trait & { id: string; type: 'Trait' };
 export type CodeSnippetWithId = CodeSnippet & { id: string; type: 'CodeSnippet' };
-export type DiagnosticChunkWithId = DiagnosticChunk & { id: string; type: 'DiagnosticChunk' };
-export type SupportedContextItemWithId = TraitWithId | CodeSnippetWithId | DiagnosticChunkWithId;
+export type DiagnosticBagWithId = DiagnosticBag & { id: string; type: 'DiagnosticBag' };
+export type SupportedContextItemWithId = TraitWithId | CodeSnippetWithId | DiagnosticBagWithId;
 
 export function filterContextItemsByType<S extends SupportedContextItemType>(
 	resolvedContextItems: ResolvedContextItem[],

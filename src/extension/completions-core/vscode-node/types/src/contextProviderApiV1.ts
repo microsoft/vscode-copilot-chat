@@ -197,13 +197,13 @@ export interface CodeSnippet extends ContextItem {
 }
 
 // Relevant diagnostic from a given resource. The URI is used for content exclusion.
-export interface DiagnosticChunk extends ContextItem {
+export interface DiagnosticBag extends ContextItem {
 	uri: Uri;
 	values: Diagnostic[];
 }
 
-export type SupportedContextItem = Trait | CodeSnippet | DiagnosticChunk;
-export type SupportedContextItemType = 'Trait' | 'CodeSnippet' | 'DiagnosticChunk';
+export type SupportedContextItem = Trait | CodeSnippet | DiagnosticBag;
+export type SupportedContextItemType = 'Trait' | 'CodeSnippet' | 'DiagnosticBag';
 export type ContextItemOrigin = 'request' | 'update';
 export namespace ContextItemOrigin {
 	export function is(value: string): value is ContextItemOrigin {

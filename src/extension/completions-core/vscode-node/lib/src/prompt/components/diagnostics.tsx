@@ -13,7 +13,7 @@ import {
 	CompletionRequestData,
 	isCompletionRequestData,
 } from '../completionsPromptFactory/componentsCompletionsPromptFactory';
-import { type DiagnosticChunkWithId } from '../contextProviders/contextItemSchemas';
+import { type DiagnosticBagWithId } from '../contextProviders/contextItemSchemas';
 
 
 function getCode(diagnostic: Diagnostic): string | undefined {
@@ -32,7 +32,7 @@ function getCode(diagnostic: Diagnostic): string | undefined {
 	return undefined;
 }
 
-function getRelativePath(tdm: ICompletionsTextDocumentManagerService, item: DiagnosticChunkWithId): string {
+function getRelativePath(tdm: ICompletionsTextDocumentManagerService, item: DiagnosticBagWithId): string {
 	return tdm.getRelativePath({ uri: item.uri.toString() }) ?? item.uri.path;
 }
 
@@ -42,7 +42,7 @@ type DiagnosticsProps = {
 
 
 export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) => {
-	const [diagnostics, setDiagnostics] = context.useState<DiagnosticChunkWithId[]>();
+	const [diagnostics, setDiagnostics] = context.useState<DiagnosticBagWithId[]>();
 	const [languageId, setLanguageId] = context.useState<string>();
 
 	context.useData(isCompletionRequestData, (data: CompletionRequestData) => {
@@ -70,14 +70,14 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 	// sort in ascending order to handle importance 0 correctly.
 	validChunks.reverse();
 
-	return validChunks.map(diagnosticChunk => {
+	return validChunks.map(diagnosticBag => {
 		const elements = [];
 		elements.push(
-			<Text key={diagnosticChunk.id} source={diagnosticChunk}>
-				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticChunk)}:`}
+			<Text key={diagnosticBag.id} source={diagnosticBag}>
+				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticBag)}:`}
 			</Text>
 		);
-		diagnosticChunk.values.forEach(diagnostic => {
+		diagnosticBag.values.forEach(diagnostic => {
 			let codeStr = '';
 			const code = getCode(diagnostic);
 			if (code !== undefined) {

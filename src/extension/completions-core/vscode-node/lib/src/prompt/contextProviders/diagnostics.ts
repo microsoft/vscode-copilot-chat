@@ -6,14 +6,14 @@
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ResolvedContextItem } from '../contextProviderRegistry';
 import { ICompletionsContextProviderService } from '../contextProviderStatistics';
-import { filterContextItemsByType, type DiagnosticChunkWithId } from './contextItemSchemas';
+import { filterContextItemsByType, type DiagnosticBagWithId } from './contextItemSchemas';
 
 export function getDiagnosticsFromContextItems(
 	accessor: ServicesAccessor,
 	completionId: string,
 	resolvedContextItems: ResolvedContextItem[]
-): DiagnosticChunkWithId[] {
-	const diagnosticsContextItems = filterContextItemsByType(resolvedContextItems, 'DiagnosticChunk');
+): DiagnosticBagWithId[] {
+	const diagnosticsContextItems = filterContextItemsByType(resolvedContextItems, 'DiagnosticBag');
 
 	// Set expectations for the diagnostics provided.
 	for (const item of diagnosticsContextItems) {
@@ -22,11 +22,11 @@ export function getDiagnosticsFromContextItems(
 
 	// Flatten and sort the traits by importance.
 	// TODO: once we deprecate the old API, importance should also dictate elision.
-	const diagnostics: DiagnosticChunkWithId[] = diagnosticsContextItems.flatMap(p => p.data);
+	const diagnostics: DiagnosticBagWithId[] = diagnosticsContextItems.flatMap(p => p.data);
 	return diagnostics.sort((a, b) => (a.importance ?? 0) - (b.importance ?? 0));
 }
 
-function setupExpectationsForDiagnostics(accessor: ServicesAccessor, completionId: string, diagnostics: DiagnosticChunkWithId[], providerId: string) {
+function setupExpectationsForDiagnostics(accessor: ServicesAccessor, completionId: string, diagnostics: DiagnosticBagWithId[], providerId: string) {
 	const statistics = accessor.get(ICompletionsContextProviderService).getStatisticsForCompletion(completionId);
 
 	diagnostics.forEach(t => {
