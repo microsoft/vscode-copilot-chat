@@ -189,17 +189,20 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
 			}
 
-			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
+			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
+				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
 			})));
-			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
-				// Support for streaming chunked messages.
-				if (typeof event.data.chunkContent === 'string' && event.data.chunkContent.length) {
+			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
+				// Support for streaming streaming delta messages.
+				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
-					assistantMessageChunks.push(event.data.chunkContent);
-					this._stream?.markdown(event.data.chunkContent);
+					this._stream?.markdown(event.data.deltaContent);
 				}
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
 				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
 					assistantMessageChunks.push(event.data.content);
 					this._stream?.markdown(event.data.content);
