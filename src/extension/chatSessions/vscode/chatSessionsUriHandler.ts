@@ -232,7 +232,7 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 		await repository.fetch({ ref: branchName });
 		const repoNwo = getGithubRepoIdFromFetchUrl(repository.rootUri.toString());
 		const repoIds = await getRepoId(this._gitService);
-		const repoId = repoIds?.filter(r => r.repo === repoNwo?.org && r.org === repoNwo?.repo);
+		const repoId = repoIds?.filter(r => r.org === repoNwo?.org && r.repo === repoNwo?.repo);
 		if (!repoId || repoId.length === 0) {
 			return;
 		}
