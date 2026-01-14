@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IExperimentationService } from '../../../../../../lib/node/chatLibMain';
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 import { createSha256Hash } from '../../../../../../util/common/crypto';
@@ -28,7 +29,6 @@ import {
 	PostOptions
 } from '../openai/fetch';
 import { APIChoice, getTemperatureForSamples } from '../openai/openai';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 import { ICompletionsStatusReporter } from '../progress';
 import { ICompletionsContextProviderBridgeService } from '../prompt/components/contextProviderBridge';
 import { ICompletionsContextProviderService } from '../prompt/contextProviderStatistics';

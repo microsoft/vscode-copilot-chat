@@ -5,6 +5,7 @@
 
 import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
+import { CopilotAnnotations } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
 import { Completions, ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
 import { ResponseStream } from '../../../../../../platform/nesFetch/common/responseStream';
@@ -46,7 +47,7 @@ import {
 	getTemperatureForSamples,
 	getTopP,
 } from './openai';
-import { CopilotAnnotations, SSEProcessor, prepareSolutionForReturn } from './stream';
+import { SSEProcessor, prepareSolutionForReturn } from './stream';
 
 const logger = new Logger('fetchCompletions');
 

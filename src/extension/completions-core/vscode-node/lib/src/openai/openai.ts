@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { RequestId } from '../../../../../../platform/networking/common/fetch';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -10,7 +11,6 @@ import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
 import { logger } from '../logger';
 import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
 import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
-import { CopilotNamedAnnotationList } from './stream';
 
 export { FinishedCallback } from './fetch';
 

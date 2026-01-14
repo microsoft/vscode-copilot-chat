@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CopilotNamedAnnotationList } from '../../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { RequestId } from '../../../../../../../platform/networking/common/fetch';
-import { CopilotNamedAnnotationList } from '../../../../lib/src/openai/stream';
 import { TelemetryWithExp } from '../../../../lib/src/telemetry';
 import { IRange } from '../../../../lib/src/textDocument';
 
