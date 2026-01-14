@@ -20,6 +20,7 @@ export class ToolsService extends BaseToolsService {
 
 	// Extensions to override definitions for existing tools.
 	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<unknown>>>;
+
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
 		output: readonly vscode.LanguageModelToolInformation[];
@@ -70,7 +71,7 @@ export class ToolsService extends BaseToolsService {
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@ILogService logService: ILogService,
+		@ILogService logService: ILogService
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
