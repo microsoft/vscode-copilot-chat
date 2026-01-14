@@ -3966,15 +3966,6 @@
 							"experimental",
 							"onExp"
 						]
-					},
-					"github.copilot.chat.CCAPartnerAgents.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Enable partner agents for Copilot Coding Agent (CCA) sessions. Reload VS Code to apply.",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
 					}
 				}
 			}
