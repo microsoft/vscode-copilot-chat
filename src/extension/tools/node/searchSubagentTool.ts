@@ -12,6 +12,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString, Range } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
@@ -49,10 +50,11 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		].join('\n');
 
 		const request = this._inputContext!.request!;
+		const parentSessionId = this._inputContext?.conversation?.sessionId ?? generateUuid();
 
 		const loop = this.instantiationService.createInstance(SearchSubagentToolCallingLoop, {
 			toolCallLimit: 4,
-			conversation: new Conversation('', [new Turn('', { type: 'user', message: searchInstruction })]),
+			conversation: new Conversation(parentSessionId, [new Turn(generateUuid(), { type: 'user', message: searchInstruction })]),
 			request: request,
 			location: request.location,
 			promptText: options.input.query,

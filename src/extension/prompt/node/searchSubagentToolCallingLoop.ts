@@ -19,7 +19,6 @@ import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions }
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
-import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
@@ -85,7 +84,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
 		const endpoint = await this.getEndpoint(this.options.request);
-		const allTools = await this.toolsService.getEnabledTools(this.options.request, endpoint);
+		const allTools = this.toolsService.getEnabledTools(this.options.request, endpoint);
 
 		// Only include tools relevant for search operations.
 		// We include semantic_search (Codebase) and the basic search primitives.
@@ -108,15 +107,8 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			finishedCb,
 			location: this.options.location,
 			requestOptions: {
-				...(requestOptions ?? {}),
-				temperature: 0,
-				tools: normalizeToolSchema(
-					endpoint.family,
-					requestOptions?.tools,
-					(tool, rule) => {
-						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
-					},
-				),
+				...requestOptions,
+				temperature: 0
 			},
 			// This loop is inside a tool called from another request, so never user initiated
 			userInitiatedRequest: false,
