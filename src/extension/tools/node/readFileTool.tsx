@@ -178,8 +178,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				const { skillName } = skillInfo;
 				if (this.customInstructionsService.isSkillMdFile(uri)) {
 					return {
-						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
-						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(uri, { fileName: skillName })}`),
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(uri, { vscodeLinkType: 'skill', linkText: skillName })}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(uri, { vscodeLinkType: 'skill', linkText: skillName })}`),
 					};
 				} else {
 					return {
@@ -201,8 +201,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				const { skillName } = skillInfo;
 				if (this.customInstructionsService.isSkillMdFile(uri)) {
 					return {
-						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
-						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { fileName: skillName })}, lines ${start} to ${end}`),
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { vscodeLinkType: 'skill', linkText: skillName })}, lines ${start} to ${end}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { vscodeLinkType: 'skill', linkText: skillName })}, lines ${start} to ${end}`),
 					};
 				} else {
 					return {
