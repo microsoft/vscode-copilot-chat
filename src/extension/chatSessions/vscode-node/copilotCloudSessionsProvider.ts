@@ -57,6 +57,7 @@ const REPOSITORIES_OPTION_GROUP_ID = 'repositories';
 const DEFAULT_CUSTOM_AGENT_ID = '___vscode_default___';
 const DEFAULT_MODEL_ID = 'auto';
 const DEFAULT_PARTNER_AGENT_ID = '___vscode_partner_agent_default___';
+const DEFAULT_REPOSITORY_ID = '___vscode_repository_default___';
 
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
@@ -201,7 +202,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		super();
 
 		// Background refresh
-		getRepoId(this._gitService).then(async repoId => {
+		getRepoId(this._gitService).then(async repoIds => {
 			const telemetryObj: {
 				intervalMs?: number;
 				hasHistoricalSessions?: boolean;
@@ -210,12 +211,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			} = {
 				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
 			};
-			if (repoId) {
+			if (repoIds && repoIds.length > 0) {
 				let intervalMs: number;
 				let hasHistoricalSessions: boolean;
 				try {
-					const sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false, { createIfNone: false });
-					hasHistoricalSessions = sessions.length > 0;
+					const sessions = await Promise.all(repoIds.map(repoId => this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, false, { createIfNone: false })));
+					hasHistoricalSessions = sessions.some(s => s.length > 0);
 					intervalMs = this.getRefreshIntervalTime(hasHistoricalSessions);
 				} catch (e) {
 					this.logService.error(`Error during background refresh setup: ${e instanceof Error ? e.message : String(e)}`);
@@ -228,7 +229,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const schedulerCallback = async () => {
 					let sessions = [];
 					try {
-						sessions = await this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, true, { createIfNone: false });
+						sessions = await Promise.all(repoIds.map(repoId => this._octoKitService.getAllSessions(`${repoId.org}/${repoId.repo}`, true, { createIfNone: false })));
+						sessions = sessions.flat();
 						if (this.cachedSessionsSize !== sessions.length) {
 							this.refresh();
 						}
@@ -406,7 +408,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
 
 		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
-		const repoId = await getRepoId(this._gitService);
+		const repoIds = await getRepoId(this._gitService);
+		const repoId = repoIds?.[0];
 
 		try {
 			// Fetch agents (requires repo), models (global), and partner agents in parallel
@@ -467,17 +470,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 
 			try {
-				const items = await this.getRepositoriesOptionItems(repoId);
-				optionGroups.push({
-					id: REPOSITORIES_OPTION_GROUP_ID,
-					name: vscode.l10n.t('Repository'),
-					icon: new vscode.ThemeIcon('source-control'),
-					items,
-					onSearch: async (query, token) => {
-						return await this.fetchAllRepositoriesFromGitHub(query);
-					},
-					searchable: true
-				});
+				const items = await this.getRepositoriesOptionItems(repoIds);
+				if (items.length > 0) {
+					optionGroups.push({
+						id: REPOSITORIES_OPTION_GROUP_ID,
+						name: vscode.l10n.t('Repository'),
+						icon: new vscode.ThemeIcon('source-control'),
+						items,
+						onSearch: async (query, token) => {
+							return await this.fetchAllRepositoriesFromGitHub(query);
+						},
+						searchable: true
+					});
+				}
 
 			} catch (error) {
 				this.logService.error(`Error fetching repositories: ${error}`);
@@ -491,36 +496,38 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private async getRepositoriesOptionItems(repoId?: GithubRepoId, fetchAll: boolean = false): Promise<vscode.ChatSessionProviderOptionItem[]> {
+	private async getRepositoriesOptionItems(repoIds?: GithubRepoId[], fetchAll: boolean = false): Promise<vscode.ChatSessionProviderOptionItem[]> {
 		const items: vscode.ChatSessionProviderOptionItem[] = [];
-		if (!fetchAll) {
-			if (repoId) {
-				items.push({
-					id: `${repoId.org}/${repoId.repo}`,
-					name: `${repoId.org}/${repoId.repo}`,
-					default: true,
-				});
-			}
-			// Fetch repos from recent push events (repos user has recently committed to)
-			try {
-				const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
-				for (const repo of recentlyCommittedRepos) {
-					const nwo = `${repo.owner}/${repo.name}`;
-					// Skip if this is already the current repo (added as default above)
-					if (repoId && nwo === `${repoId.org}/${repoId.repo}`) {
-						continue;
-					}
-					items.push({
-						id: nwo,
-						name: nwo,
+		// Only get options for empty workspace or multi-root workspaces
+		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0 || vscode.workspace.workspaceFolders.length > 1) {
+			if (!fetchAll) {
+				if (repoIds && repoIds.length > 0) {
+					repoIds.forEach((repoId, index) => {
+						items.push({
+							id: `${repoId.org}/${repoId.repo}`,
+							name: `${repoId.org}/${repoId.repo}`,
+							default: index === 0,
+						});
 					});
+				} else {
+					// Fetch repos from recent push events (repos user has recently committed to)
+					try {
+						const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
+						for (const repo of recentlyCommittedRepos) {
+							const nwo = `${repo.owner}/${repo.name}`;
+							items.push({
+								id: nwo,
+								name: nwo,
+							});
+						}
+					} catch (error) {
+						this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
+					}
 				}
-			} catch (error) {
-				this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
+			} else {
+				const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
+				items.push(...fetchedItems);
 			}
-		} else {
-			const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
-			items.push(...fetchedItems);
 		}
 		return items;
 	}
@@ -588,13 +595,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return this.chatSessionItemsPromise;
 		}
 		this.chatSessionItemsPromise = (async () => {
-			const repoId = await getRepoId(this._gitService);
-
+			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!repoId && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+			if (!this.isGitHubRepo(repoIds)) {
 				return [];
 			}
-			const sessions = await this._octoKitService.getAllSessions(repoId ? `${repoId.org}/${repoId.repo}` : undefined, true, { createIfNone: false });
+			let sessions = [];
+			if (repoIds && repoIds.length > 0) {
+				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
+			} else {
+				sessions = await this._octoKitService.getAllSessions(undefined, true, { createIfNone: false });
+			}
 			this.cachedSessionsSize = sessions.length;
 
 			// Group sessions by resource_id and keep only the latest per resource_id
@@ -677,6 +688,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					changes,
 					fullDatabaseId: pr.fullDatabaseId.toString(),
 					pullRequestDetails: pr,
+					repository: {
+						owner: pr.author?.login ?? '',
+						name: pr.repository?.name ?? ''
+					}
 				} satisfies vscode.ChatSessionItem & {
 					fullDatabaseId: string;
 					pullRequestDetails: PullRequestSearchItem;
@@ -706,6 +721,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		return this.chatSessionItemsPromise;
 	}
 
+	private isGitHubRepo(repoIds: GithubRepoId[] | undefined) {
+		const hasOpenedFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
+		const hasGitHubRepo = repoIds && repoIds.length > 0;
+		return hasOpenedFolder && hasGitHubRepo;
+	}
+
 	private shouldPushSession(sessionItem: SessionInfo, existing: SessionInfo | undefined): boolean {
 		if (!existing) {
 			return true;
@@ -731,17 +752,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const pr = await this.findPR(pullRequestNumber);
 		const summaryReference = new DeferredPromise<vscode.ChatPromptReference | undefined>();
-		const getProblemStatement = async (sessions: SessionInfo[]) => {
+		const getProblemStatement = async (repoOwner: string, repoName: string, sessions: SessionInfo[]) => {
 			if (sessions.length === 0) {
 				summaryReference.complete(undefined);
 				return undefined;
 			}
-			const repoId = await getRepoId(this._gitService);
-			if (!repoId) {
+			if (!repoOwner || !repoName) {
 				summaryReference.complete(undefined);
 				return undefined;
 			}
-			const jobInfo = await this._octoKitService.getJobBySessionId(repoId.org, repoId.repo, sessions[0].id, 'vscode-copilot-chat', { createIfNone: true });
+			const jobInfo = await this._octoKitService.getJobBySessionId(repoOwner, repoName, sessions[0].id, 'vscode-copilot-chat', { createIfNone: true });
 			let prompt = jobInfo?.problem_statement || 'Initial Implementation';
 			// When delegating, we append the summary to the prompt, & that can be very large and doesn't look great.
 			// Turn the summary into a reference instead.
@@ -794,7 +814,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		});
 
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
+		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(pr.repository.owner.login, pr.repository.name, sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
 
 		// const selectedCustomAgent = undefined; /* TODO: Needs API to support this. */
 		// const selectedModel = undefined; /* TODO: Needs API to support this. */
@@ -910,6 +930,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						[PARTNER_AGENTS_OPTION_GROUP_ID]:
 							this.sessionPartnerAgentMap.get(resource)
 							?? (this.sessionPartnerAgentMap.set(resource, DEFAULT_PARTNER_AGENT_ID), DEFAULT_PARTNER_AGENT_ID),
+						[REPOSITORIES_OPTION_GROUP_ID]:
+							this.sessionRepositoryMap.get(resource)
+							?? (this.sessionRepositoryMap.set(resource, DEFAULT_REPOSITORY_ID), DEFAULT_REPOSITORY_ID)
 					}
 				}
 				: {}),
@@ -930,7 +953,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			repoOwner = owner;
 			repoName = name;
 		} else {
-			const repoId = await getRepoId(this._gitService);
+			const repoIds = await getRepoId(this._gitService);
+			const repoId = repoIds?.[0];
 			if (!repoId) {
 				this.logService.warn('Failed to determine GitHub repo from workspace');
 				return undefined;
@@ -1087,7 +1111,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		const { result, processedReferences } = await this.extractReferences(metadata.references, !!head_ref);
 
-		const repoId = await getRepoId(this._gitService);
+		const repoIds = await getRepoId(this._gitService);
+		const repoId = repoIds?.[0];
 		let repoOwner = repoId?.org;
 		let repoName = repoId?.repo;
 		const [selectedRepoOwner, selectedRepoName] = selectedRepository?.split('/') || [];
@@ -1222,8 +1247,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		}
 
+		// Get the selected repository from the chat context for multiroot workspace support
+		const chatResource = metadata.chatContext.chatSessionContext?.chatSessionItem?.resource;
+		const selectedRepository = chatResource ? this.sessionRepositoryMap.get(chatResource) : undefined;
+
 		const base_ref: string = await (async () => {
-			const res = await this.checkBaseBranchPresentOnRemote();
+			const res = await this.checkBaseBranchPresentOnRemote(selectedRepository);
 			if (!res) {
 				// Unexpected
 				throw new Error(vscode.l10n.t('Repo base branch is not detected on remote. Push your branch and try again.'));
@@ -1275,13 +1304,27 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	/**
 	 * Checks if the current base branch exists on the remote repository.
 	 * Returns branch information including whether it's missing from remote, the base ref name, and the repository's default branch.
+	 * @param selectedRepository - Optional repository in `org/repo` format. If provided, uses this specific repository
+	 *                             instead of defaulting to the first one. This enables multiroot workspace support.
 	 */
-	private async checkBaseBranchPresentOnRemote(): Promise<{ missingOnRemote: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
+	private async checkBaseBranchPresentOnRemote(selectedRepository?: string): Promise<{ missingOnRemote: boolean; baseRef: string; repoDefaultBranch: string } | undefined> {
 		try {
-			const repoId = await getRepoId(this._gitService);
-			if (!repoId) {
+			const repoIds = await getRepoId(this._gitService);
+			if (!repoIds || repoIds.length === 0) {
 				return undefined;
 			}
+
+			// In multiroot workspaces, use the selected repository if provided
+			let repoId = repoIds[0];
+			if (selectedRepository) {
+				const [selectedOrg, selectedRepo] = selectedRepository.split('/');
+				repoId = {
+					org: selectedOrg,
+					repo: selectedRepo,
+					type: 'github'
+				};
+			}
+
 			const { baseRef, repository, remoteName } = await this.gitOperationsManager.repoInfo();
 			const remoteRepoInfo = await this._githubRepositoryService.getRepositoryInfo(repoId.org, repoId.repo);
 			const remoteHasRef = await this.gitOperationsManager.checkIfRemoteHasRef(repository, remoteName, baseRef);
@@ -1305,9 +1348,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const buttons: string[] = [this.CANCEL];
 		let message: string = this.BASE_MESSAGE;
 
+		// Get the selected repository from the chat context for multiroot workspace support
+		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
+		const selectedRepository = chatResource ? this.sessionRepositoryMap.get(chatResource) : undefined;
+
 		const needsPermissiveAuth = !this._authenticationService.permissiveGitHubSession;
 		const hasUncommittedChanges = await this.detectedUncommittedChanges();
-		const baseBranchInfo = await this.checkBaseBranchPresentOnRemote();
+		const baseBranchInfo = await this.checkBaseBranchPresentOnRemote(selectedRepository);
 
 		if (needsPermissiveAuth && hasUncommittedChanges) {
 			message += '\n\n' + this.AUTHORIZE_MESSAGE;
@@ -1890,7 +1937,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			repoOwner = owner;
 			repoName = repo;
 		} else {
-			const repoId = await getRepoId(this._gitService);
+			const repoIds = await getRepoId(this._gitService);
+			const repoId = repoIds?.[0];
 			if (!repoId) {
 				throw new Error(vscode.l10n.t('Unable to determine repository information. Please ensure you are working within a Git repository.'));
 			}
