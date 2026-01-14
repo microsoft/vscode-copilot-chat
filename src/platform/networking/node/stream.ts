@@ -320,7 +320,7 @@ export class SSEProcessor {
 				return;
 			}
 
-			this.logService.debug(chunk.toString());
+			// this.logService.debug(chunk.toString());
 			const [dataLines, remainder] = splitChunk(extraData + chunk.toString());
 			extraData = remainder;
 
