@@ -213,15 +213,14 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
 					}
 
+					const subAgentInvocationId = props.promptContext.request?.subAgentInvocationId;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
-						chatRequestId: props.requestId
+						chatRequestId: props.requestId,
+						subAgentInvocationId,
 					};
-					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
-						invocationOptions.fromSubAgent = true;
-					}
 
 					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
@@ -245,7 +244,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource) {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
