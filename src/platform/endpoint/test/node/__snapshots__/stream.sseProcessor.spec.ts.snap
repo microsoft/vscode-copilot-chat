@@ -109,7 +109,1800 @@ exports[`SSEProcessor > real world snapshots > multiple tool calls > finishedCal
 			"text": " ",
 			"beginToolCalls": [
 				{
-					"name": "edit_file"
+					"name": "edit_file",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/de",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/te",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanati",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Addi",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding mu",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multipl",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\"",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\"",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing cod",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code.",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfu",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunctio",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunction mult",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunction multiply(a, b)",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunction multiply(a, b) {\\\\n    re",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunction multiply(a, b) {\\\\n    return a * b;",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "{\\"filePath\\":\\"/Users/roblou/code/debugtest/test.js\\",\\"explanation\\":\\"Adding multiply function\\",\\"code\\":\\"// ...existing code...\\\\n\\nfunction multiply(a, b) {\\\\n    return a * b;\\\\\\"}",
+					"id": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\"",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Use",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/c",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/de",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/serv",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explana",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Addin",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jok",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functi",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\"",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const ht",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = requ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http'",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes =",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tel",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? Th",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d c",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d cra",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'W",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'Wha",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What d",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fak",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noo",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? A",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An im",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    '",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why di",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the s",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow w",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Beca",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstandi",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his f",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n]",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server =",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.creat",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createS",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer(",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, r",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) =>",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    c",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    consol",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${r",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${r",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    c",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const random",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJok",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floo",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * d",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.len",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statu",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 2",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    ",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setH",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHea",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeade",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader(",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'tex",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plai",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain')",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ r",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ random",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJo",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n})",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ..",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ...ex",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ...existing code",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ...existing code...",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
+				}
+			]
+		}
+	},
+	{
+		"text": "I'll make two changes:\\n1. Add a multiply function to test.js\\n2. Modify server.js to return a random dad joke from a small collection ",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "edit_file",
+					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ...existing code...\\"}",
+					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
 				}
 			]
 		}
@@ -482,7 +2275,92 @@ exports[`SSEProcessor > real world snapshots > single tool call > finishedCallba
 			"text": "",
 			"beginToolCalls": [
 				{
-					"name": "copilot_searchCodebase"
+					"name": "copilot_searchCodebase",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"query",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"query\\":\\"",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"query\\":\\"linked",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"query\\":\\"linkedlist",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "copilot_searchCodebase",
+					"arguments": "{\\"query\\":\\"linkedlist\\"}",
+					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
 				}
 			]
 		}
@@ -539,7 +2417,666 @@ exports[`SSEProcessor > real world snapshots > single tool call with annotations
 			"text": "",
 			"beginToolCalls": [
 				{
-					"name": "insert_edit_into_file"
+					"name": "insert_edit_into_file",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"file",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/l",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<Url",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"ex",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integr",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the Url",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and manage",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and manage URLs",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and manage URLs.\\"",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"copilotToolCallStreamUpdates": [
+				{
+					"name": "insert_edit_into_file",
+					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and manage URLs.\\"}",
+					"id": "call_YEMsUraDh71gogljRLa7vyGP"
 				}
 			]
 		}

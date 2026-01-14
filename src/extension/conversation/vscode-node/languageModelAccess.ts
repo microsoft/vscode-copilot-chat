@@ -32,7 +32,7 @@ import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isBoolean, isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtensionMode } from '../../../vscodeTypes';
+import { ChatLocation as ApiChatLocation, ExtensionMode } from '../../../vscodeTypes';
 import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -186,6 +186,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
+			const isDefault = endpoint === defaultChatEndpoint;
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
@@ -199,7 +200,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,
 				requiresAuthorization: session && { label: session.account.label },
-				isDefault: endpoint === defaultChatEndpoint,
+				isDefault: {
+					[ApiChatLocation.Panel]: isDefault,
+					[ApiChatLocation.Terminal]: isDefault,
+					[ApiChatLocation.Notebook]: isDefault,
+					[ApiChatLocation.Editor]: endpoint instanceof AutoChatEndpoint, // inline chat gets 'Auto' by default
+				},
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
 					imageInput: endpoint.supportsVision,

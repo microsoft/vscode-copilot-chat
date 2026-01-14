@@ -1225,5 +1225,7 @@ export function locationToIntent(location: ChatLocation): string {
 			return 'conversation-agent';
 		case ChatLocation.ResponsesProxy:
 			return 'responses-proxy';
+		case ChatLocation.MessagesProxy:
+			return 'messages-proxy';
 	}
 }

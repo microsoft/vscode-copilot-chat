@@ -123,6 +123,22 @@ declare module 'vscode' {
 			 */
 			deletions: number;
 		};
+
+		/**
+		 * Optional repository information for the chat session.
+		 * Used to identify which repository the session is associated with.
+		 */
+		repository?: {
+			/**
+			 * The owner of the repository (e.g., organization or username).
+			 */
+			owner: string;
+
+			/**
+			 * The name of the repository.
+			 */
+			name: string;
+		};
 	}
 
 	export class ChatSessionChangedFile {
