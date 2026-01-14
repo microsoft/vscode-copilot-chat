@@ -180,7 +180,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		};
 	}
 
-	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<ICreateFileParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
 		let invocationMessage: MarkdownString;
 
 		// rawInput is now a partial object (parsed via tryParsePartialToolInput)
@@ -194,14 +194,14 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
 
 				if (content !== undefined) {
-					const charCount = content.length;
-					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${charCount} characters)`);
+					const lineCount = content.split('\n').length;
+					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${lineCount} lines)`);
 				} else {
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`);
 				}
 			} else if (content !== undefined) {
-				const charCount = content.length;
-				invocationMessage = new MarkdownString(l10n.t`Creating file (${charCount} characters)`);
+				const lineCount = content.split('\n').length;
+				invocationMessage = new MarkdownString(l10n.t`Creating file (${lineCount} lines)`);
 			} else {
 				invocationMessage = new MarkdownString(l10n.t`Creating file`);
 			}
