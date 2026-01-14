@@ -475,6 +475,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					optionGroups.push({
 						id: REPOSITORIES_OPTION_GROUP_ID,
 						name: vscode.l10n.t('Repository'),
+						icon: new vscode.ThemeIcon('repo'),
 						items,
 						onSearch: async (query, token) => {
 							return await this.fetchAllRepositoriesFromGitHub(query);
