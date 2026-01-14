@@ -15,6 +15,7 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
+import { Event } from '../../../../../util/vs/base/common/event';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -65,6 +66,7 @@ export class MockCliSdkSessionManager {
 
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	_serviceBrand: undefined;
+	readonly onDidChangeAgents: Event<void> = Event.None;
 	async getAgents(): Promise<SweCustomAgent[]> {
 		return [];
 	}
