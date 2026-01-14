@@ -154,7 +154,7 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	}
 
 	beginToolInvocation(toolCallId: string, toolName: string): ChatResponseStream {
-		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName), false);
+		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName), true);
 		return this;
 	}
 
