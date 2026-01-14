@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
+import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatToolInvocationStreamData, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -153,8 +153,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
-	beginToolInvocation(toolCallId: string, toolName: string): ChatResponseStream {
-		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName), false);
+	beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): ChatResponseStream {
+		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName, streamData), false);
 		return this;
 	}
 
