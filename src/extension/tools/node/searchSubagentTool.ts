@@ -14,7 +14,7 @@ import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamI
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString, Range } from '../../../vscodeTypes';
+import { ChatResponseNotebookEditPart, ChatResponseTextEditPart, ChatToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString, Range } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { SearchSubagentToolCallingLoop } from '../../prompt/node/searchSubagentToolCallingLoop';
@@ -62,7 +62,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
 			this._inputContext.stream,
-			part => part instanceof ChatPrepareToolInvocationPart || part instanceof ChatResponseTextEditPart || part instanceof ChatResponseNotebookEditPart
+			part => part instanceof ChatToolInvocationPart || part instanceof ChatResponseTextEditPart || part instanceof ChatResponseNotebookEditPart
 		);
 
 		// Create a new capturing token to group this search subagent and all its nested tool calls
