@@ -2665,6 +2665,14 @@
 						],
 						"markdownDescription": "%github.copilot.config.imageUpload.enabled%"
 					},
+					"github.copilot.chat.contextCounter.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.contextCounter.enabled%"
+					},
 					"github.copilot.chat.edits.suggestRelatedFilesFromGitHistory": {
 						"type": "boolean",
 						"default": true,

@@ -49,6 +49,7 @@ import { ILanguageModelServer } from '../../agents/node/langModelServer';
 import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
+import { IChatContextCounterStatus } from '../../prompt/common/chatContextCounterStatus';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
@@ -61,6 +62,18 @@ import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupin
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
 import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
+
+class NoopChatContextCounterStatus implements IChatContextCounterStatus {
+	declare readonly _serviceBrand: undefined;
+
+	update(_usage: number, _limit: number | undefined): void {
+		// no-op
+	}
+
+	clear(): void {
+		// no-op
+	}
+}
 
 export interface ISimulationModelConfig {
 	chatModel?: string;
@@ -91,6 +104,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
 	testingServiceCollection.define(IPromptVariablesService, new SyncDescriptor(NullPromptVariablesService));
+	testingServiceCollection.define(IChatContextCounterStatus, new SyncDescriptor(NoopChatContextCounterStatus));
 	testingServiceCollection.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	testingServiceCollection.define(ICommandService, new SyncDescriptor(CommandServiceImpl));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));

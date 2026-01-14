@@ -85,6 +85,7 @@ export interface IToolCallingResponseEvent {
 export interface IToolCallingBuiltPromptEvent {
 	result: IBuildPromptResult;
 	tools: LanguageModelToolInformation[];
+	promptTokenLength: number;
 }
 
 export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
@@ -101,7 +102,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
 
-	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number }>());
+	private readonly _onDidBuildPrompt = this._register(new Emitter<IToolCallingBuiltPromptEvent>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
 
 	private readonly _onDidReceiveResponse = this._register(new Emitter<IToolCallingResponseEvent>());
@@ -361,7 +362,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
-		const promptTokenLength = await (await this._endpointProvider.getChatEndpoint(this.options.request)).acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
+		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		const tokenizer = endpoint.acquireTokenizer();
+		const promptTokenLength =
+			(await tokenizer.countMessagesTokens(buildPromptResult.messages)) +
+			(await tokenizer.countToolTokens(availableTools));
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
 		this._logService.trace('Built prompt');
@@ -440,7 +445,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),

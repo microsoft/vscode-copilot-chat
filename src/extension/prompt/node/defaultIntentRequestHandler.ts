@@ -43,6 +43,7 @@ import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { IChatContextCounterStatus } from '../common/chatContextCounterStatus';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
@@ -95,6 +96,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IChatContextCounterStatus private readonly _contextCounterStatus: IChatContextCounterStatus,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -288,6 +290,7 @@ export class DefaultIntentRequestHandler {
 
 	private async runWithToolCalling(intentInvocation: IIntentInvocation): Promise<IInternalRequestResult> {
 		const store = new DisposableStore();
+		this._contextCounterStatus.clear();
 		const loop = this._loop = store.add(this._instantiationService.createInstance(
 			DefaultToolCallingLoop,
 			{
@@ -310,6 +313,9 @@ export class DefaultIntentRequestHandler {
 		));
 
 		store.add(Event.once(loop.onDidBuildPrompt)(this._sendInitialChatReferences, this));
+		store.add(loop.onDidBuildPrompt(e => {
+			this._contextCounterStatus.update(e.promptTokenLength, intentInvocation.endpoint.modelMaxPromptTokens);
+		}));
 
 		// We need to wait for all response handlers to finish before
 		// we can dispose the store. This is because the telemetry machine
