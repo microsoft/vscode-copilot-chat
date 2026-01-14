@@ -36,9 +36,13 @@ export function register(accessor: ServicesAccessor): IDisposable {
 	disposableStore.add(vscode.commands.registerCommand(buildRemoteIndexCommandId, onlyRunOneAtATime(async () => {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Building remote workspace index...`,
-		}, async () => {
-			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing('manual', new TelemetryCorrelationId('BuildRemoteIndexCommand'));
+			title: t`Building remote workspace index`,
+		}, async (progress) => {
+			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing(
+				(message) => progress.report({ message }),
+				'manual',
+				new TelemetryCorrelationId('BuildRemoteIndexCommand')
+			);
 			if (triggerResult.isError()) {
 				if (triggerResult.err.id === TriggerRemoteIndexingError.alreadyIndexed.id) {
 					vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);

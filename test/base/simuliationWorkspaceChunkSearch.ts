@@ -136,7 +136,7 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 		throw new Error('Method not implemented.');
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
+	triggerRemoteIndexing(_onProgress: (message: string) => void, trigger: BuildIndexTriggerReason): Promise<Result<true, TriggerIndexingError>> {
 		throw new Error('Method not implemented.');
 	}
 

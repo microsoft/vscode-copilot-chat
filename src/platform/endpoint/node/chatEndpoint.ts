@@ -180,7 +180,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			}
 
 			// Add context management beta if enabled
-			const contextEditingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AnthropicContextEditingEnabled, this._expService);
+			const contextEditingEnabled = this._configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
 			if (contextEditingEnabled) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
@@ -316,6 +316,20 @@ export class ChatEndpoint implements IChatEndpoint {
 				body.thinking_budget = thinkingBudget;
 			}
 		}
+
+		// Apply Gemini function calling mode if configured
+		const hasTools = !!options.requestOptions?.tools?.length;
+		if (hasTools && this.family.toLowerCase().includes('gemini-3')) {
+			const geminiFunctionCallingMode = this._configurationService.getExperimentBasedConfig(
+				ConfigKey.TeamInternal.GeminiFunctionCallingMode,
+				this._expService
+			);
+			// Only override tool_choice if experiment provides a value and user hasn't specified a function call
+			if (geminiFunctionCallingMode && typeof body.tool_choice !== 'object') {
+				body.tool_choice = geminiFunctionCallingMode;
+			}
+		}
+
 		return body;
 	}
 
@@ -331,7 +345,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, response, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

@@ -93,7 +93,7 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 
 	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
+	triggerRemoteIndexing(onProgress: (message: string) => void, trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void>;
 }
@@ -205,12 +205,12 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		return impl.triggerLocalIndexing(trigger, telemetryInfo);
 	}
 
-	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+	async triggerRemoteIndexing(onProgress: (message: string) => void, trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
 		const impl = await this.tryInit(false);
 		if (!impl) {
 			throw new Error('Workspace chunk search service not available');
 		}
-		return impl.triggerRemoteIndexing(trigger, telemetryInfo);
+		return impl.triggerRemoteIndexing(onProgress, trigger, telemetryInfo);
 	}
 
 	async deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -293,7 +293,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
 			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
-				void this.triggerRemoteIndexing('auto', new TelemetryCorrelationId('onDidGrantAuthUpgrade')).catch(e => {
+				void this.triggerRemoteIndexing(() => { }, 'auto', new TelemetryCorrelationId('onDidGrantAuthUpgrade')).catch(e => {
 					// noop
 				});
 			}
@@ -344,8 +344,8 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, telemetryInfo);
+	triggerRemoteIndexing(onProgress: (message: string) => void, trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+		return this._codeSearchChunkSearch.triggerRemoteIndexing(onProgress, trigger, telemetryInfo);
 	}
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -871,7 +871,7 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
 		return Result.ok(true);
 	}
-	triggerRemoteIndexing(): Promise<Result<true, TriggerIndexingError>> {
+	triggerRemoteIndexing(_onProgress: (message: string) => void): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
 	}
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {

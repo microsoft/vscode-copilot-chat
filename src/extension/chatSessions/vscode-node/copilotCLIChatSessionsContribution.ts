@@ -242,6 +242,10 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
 		}));
+
+		this._register(this.copilotCLIAgents.onDidChangeAgents(() => {
+			this._onDidChangeChatSessionProviderOptions.fire();
+		}));
 	}
 
 	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
