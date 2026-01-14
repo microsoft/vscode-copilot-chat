@@ -72,16 +72,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			const jsonlStream = streamToLines(fetchResponse.val.body);
 			const completionsStream = jsonlStreamToCompletions(jsonlStream);
 
-			const completions = completionsStream.map(completion => {
-				return {
-					...completion,
-					choices: completion.choices.filter(choice => choice.index === 0),
-				};
-			}).filter(c => {
-				return c.choices.length > 0;
-			}); // we only support `n=1`, so we only get choice.index = 0
-
-			const response = new ResponseStream(fetchResponse.val.response, completions, fetchResponse.val.requestId, fetchResponse.val.headers);
+			const response = new ResponseStream(fetchResponse.val.response, completionsStream, fetchResponse.val.requestId, fetchResponse.val.headers);
 
 			return Result.ok(response);
 
