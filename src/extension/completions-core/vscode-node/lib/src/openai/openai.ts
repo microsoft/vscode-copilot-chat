@@ -20,7 +20,7 @@ export interface APIChoice {
 	meanAlternativeLogProb: number | undefined;
 	choiceIndex: number;
 	requestId: RequestId;
-	tokens: string[];
+	tokens: readonly string[];
 	numTokens: number;
 	blockFinished: boolean; // Whether the block completion was determined to be finished
 	telemetryData: TelemetryWithExp; // optional telemetry data providing background
@@ -41,7 +41,7 @@ export interface APILogprobs {
 export interface APIJsonData {
 	text: string;
 	/* Joining this together produces `text`, due to the way the proxy works. */
-	tokens: string[];
+	tokens: readonly string[];
 	/* These are only generated in certain situations. */
 	logprobs?: APILogprobs;
 	/* Copilot-specific annotations returned by the proxy. */

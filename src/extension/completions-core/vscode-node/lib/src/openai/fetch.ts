@@ -5,8 +5,9 @@
 
 import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
-import { CopilotAnnotations } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
+import { CopilotAnnotations, StreamCopilotAnnotations } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
+import { Completion } from '../../../../../../platform/nesFetch/common/completionsAPI';
 import { Completions, ICompletionsFetchService } from '../../../../../../platform/nesFetch/common/completionsFetchService';
 import { ResponseStream } from '../../../../../../platform/nesFetch/common/responseStream';
 import { RequestId, getRequestId } from '../../../../../../platform/networking/common/fetch';
@@ -744,7 +745,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				return { type: 'canceled', reason: 'after fetch request' };
 			}
 
-			const choices = this.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData);
+			const choices = LiveOpenAIFetcher.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData);
 
 			return {
 				type: 'success',
@@ -823,7 +824,10 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		return response;
 	}
 
-	private async *convertStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp): AsyncIterable<APIChoice> {
+	/**
+	 * @remarks exposed only for testing.
+	 */
+	public static async *convertStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp): AsyncIterable<APIChoice> {
 
 		const createAPIChoice = (
 			choiceIndex: number,
@@ -858,10 +862,8 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					// already finished, skip
 					continue;
 				}
-				const chunkText = chunk.choices[i].text;
-				if (chunkText) {
-					completion.accumulator.append(chunkText);
-				}
+				const choice = chunk.choices[i];
+				completion.accumulator.append(choice);
 
 				// finish_reason determines whether the completion is finished by the LLM
 				const hasFinishReason = !!(chunk.choices[i].finish_reason);
@@ -873,10 +875,12 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					finished: hasFinishReason,
 					requestId: resp.requestId,
 					telemetryData: baseTelemetryData,
+					annotations: completion.accumulator.annotations,
 					getAPIJsonData: () => ({
 						text: completion.accumulator.responseSoFar,
 						tokens: completion.accumulator.chunks,
 						finish_reason: completion.accumulator.finishReason ?? 'stop', // @ulugbekna: logic to determine if last completion was accepted uses finish reason, so changing this `?? 'stop'` will change behavior of multiline completions
+						copilot_annotations: completion.accumulator.annotations.current,
 					} satisfies APIJsonData),
 				} satisfies RequestDelta);
 
@@ -1003,15 +1007,20 @@ function isClientError(response: { status: number }): boolean {
 }
 
 class CompletionAccumulator {
+
 	private _chunks: string[] = [];
+	/** concatenated version of {_chunks} */
 	private _responseSoFar: string = '';
+
 	private _finishReason: string | null = null;
 
-	public get responseSoFar() {
+	public readonly annotations: CopilotAnnotations = new StreamCopilotAnnotations();
+
+	public get responseSoFar(): string {
 		return this._responseSoFar;
 	}
 
-	public get chunks() {
+	public get chunks(): readonly string[] {
 		return this._chunks;
 	}
 
@@ -1022,8 +1031,15 @@ class CompletionAccumulator {
 		return this._finishReason;
 	}
 
-	public append(chunk: string) {
-		this._chunks.push(chunk);
-		this._responseSoFar = this._chunks.join('');
+	public append(choice: Completion.Choice): void {
+		const chunk = choice.text;
+		if (chunk) {
+			this._chunks.push(chunk);
+			this._responseSoFar = this._chunks.join('');
+		}
+
+		if (choice.copilot_annotations) {
+			this.annotations.update(choice.copilot_annotations);
+		}
 	}
 }
