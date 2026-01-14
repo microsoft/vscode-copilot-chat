@@ -4,11 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isHiddenModelF } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { ToolName } from '../../../tools/common/toolNames';
+import { ToolRegistry } from '../../../tools/common/toolsRegistry';
+import { ReplaceStringTool } from '../../../tools/node/replaceStringTool';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
@@ -17,6 +21,73 @@ import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, getEditingReminder, McpToolInstructions, NotebookInstructions, ReminderInstructionsProps } from './defaultAgentInstructions';
 import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
+import { applyEdit } from '../../../tools/node/editFileToolUtils';
+
+
+export interface IGeminiReplaceStringToolParams {
+	explanation: string;
+	filePath: string;
+	oldString: string;
+	newString: string;
+	replaceAll?: boolean;
+}
+
+
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'copilot_replace_string_gemini',
+		inputSchema: {
+			"type": "object",
+			"properties": {
+				"filePath": {
+					"type": "string",
+					"description": "An absolute path to the file to edit."
+				},
+				"oldString": {
+					"type": "string",
+					"description": "The exact literal text to replace, preferably unescaped. For single replacements (default), include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. For multiple replacements, specify expected_replacements parameter. If this string is not the exact literal text (i.e. you escaped it) or does not match exactly, the tool will fail."
+				},
+				"newString": {
+					"type": "string",
+					"description": "The exact literal text to replace `old_string` with, preferably unescaped. Provide the EXACT text. Ensure the resulting code is correct and idiomatic."
+				},
+				// NEW: for gemini
+				"replaceAll": {
+					"type": "boolean",
+					"description": "If true, replaces all occurrences of oldString in the file. If false or omitted, replaces only the first occurrence."
+				}
+			},
+			"required": [
+				"filePath",
+				"oldString",
+				"newString"
+			]
+		},
+		description: "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use 'Lines 123-456 omitted' from summarized documents or ...existing code... comments in the oldString or newString.",
+		displayName: 'Replace String',
+		toolReferenceName: 'replaceString',
+		source: undefined,
+		tags: [],
+		models: [{ family: 'gemini' }],
+	},
+	class extends ReplaceStringTool<IGeminiReplaceStringToolParams> {
+
+		public readonly modelToolName = ToolName.ReplaceString;
+
+		protected override doGenerateEdit(uri: URI, oldString: string, newString: string, options: LanguageModelToolInvocationOptions<IGeminiReplaceStringToolParams> | LanguageModelToolInvocationPrepareOptions<IGeminiReplaceStringToolParams>) {
+			return applyEdit(
+				uri,
+				oldString,
+				newString,
+				this.workspaceService,
+				this.notebookService,
+				this.alternativeNotebookContent,
+				this._promptContext?.request?.model,
+				{ replaceAll: options.input.replaceAll }
+			);
+		}
+	}
+);
 
 /**
  * Base system prompt for agent mode

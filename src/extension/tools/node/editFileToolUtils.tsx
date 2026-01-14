@@ -564,8 +564,8 @@ export async function applyEdit(
 	workspaceService: IWorkspaceService,
 	notebookService: INotebookService,
 	alternativeNotebookContent: IAlternativeNotebookContentService,
-	languageModel: LanguageModelChat | undefined
-
+	languageModel: LanguageModelChat | undefined,
+	opts?: { replaceAll?: boolean },
 ): Promise<{ patch: Hunk[]; updatedFile: string; edits: TextEdit[] }> {
 	let originalFile: string;
 	let updatedFile: string;
@@ -616,7 +616,7 @@ export async function applyEdit(
 							filePath
 						);
 					}
-				} else if (result.type === 'multiple') {
+				} else if (result.type === 'multiple' && !opts?.replaceAll) {
 					const suggestion = result?.suggestion || 'Please provide a more specific string.';
 					throw new MultipleMatchesError(
 						`Multiple matches found for the text to replace. ${suggestion}`,
@@ -625,8 +625,7 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const { start, end } = result.editPosition[0];
+					for (const { start, end } of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.delete(range));
 					}
@@ -641,7 +640,7 @@ export async function applyEdit(
 						`Could not find matching text to replace. ${suggestion}`,
 						filePath
 					);
-				} else if (result.type === 'multiple') {
+				} else if (result.type === 'multiple' && !opts?.replaceAll) {
 					const suggestion = result?.suggestion || 'Please provide a more specific string.';
 					throw new MultipleMatchesError(
 						`Multiple matches found for the text to replace. ${suggestion}`,
@@ -650,8 +649,7 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const { start, end, text } = result.editPosition[0];
+					for (const { start, end, text } of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.replace(range, text));
 					}
