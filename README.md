@@ -9,7 +9,9 @@ GitHub Copilot adapts to your unique needs allowing you to select the best model
 ![Working with GitHub Copilot agent mode to make edits to code in your workspace](https://github.com/microsoft/vscode-copilot-release/blob/main/images/hero-dark.png?raw=true)
 
 When you install Copilot in Visual Studio Code, you get two extensions:
-* **[GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot)** - Provides inline coding suggestions as you type.
+* **[GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot)** - Provides inline coding suggestions as you type (automatically disabled and can be switched to the pre-release version).
+  * All GitHub Copilot functionality is now being served from the GitHub Copilot Chat extension (below). To temporarily opt out of this extension unification, the `chat.extensionUnification.enabled` setting can be toggled in VS Code.
+
 * **[GitHub Copilot Chat](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat)** (this extension) - A companion extension that provides conversational AI assistance.
 
 ## Getting access to GitHub Copilot
