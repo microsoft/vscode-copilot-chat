@@ -12,6 +12,7 @@ import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
@@ -265,6 +266,7 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
+	logService: ILogService,
 	response: Response,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
@@ -276,6 +278,7 @@ export async function processResponseFromMessagesEndpoint(
 		const processor = instantiationService.createInstance(AnthropicMessagesProcessor, telemetryData, requestId, ghRequestId);
 		const parser = new SSEParser((ev) => {
 			try {
+				logService.trace(`[messagesAPI]SSE: ${ev.data}`);
 				const trimmed = ev.data?.trim();
 				if (!trimmed || trimmed === '[DONE]') {
 					return;
@@ -320,6 +323,7 @@ export class AnthropicMessagesProcessor {
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
 		private readonly ghRequestId: string,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	public push(chunk: AnthropicStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
@@ -341,14 +345,15 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'content_block_start':
 				if (chunk.content_block?.type === 'tool_use' && chunk.index !== undefined) {
+					const toolCallId = chunk.content_block.id || generateUuid();
 					this.toolCallAccumulator.set(chunk.index, {
-						id: chunk.content_block.id || generateUuid(),
+						id: toolCallId,
 						name: chunk.content_block.name || '',
 						arguments: '',
 					});
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.content_block.name || '' }]
+						beginToolCalls: [{ name: chunk.content_block.name || '', id: toolCallId }]
 					});
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
 					this.thinkingAccumulator.set(chunk.index, {
@@ -392,6 +397,14 @@ export class AnthropicMessagesProcessor {
 						const toolCall = this.toolCallAccumulator.get(chunk.index);
 						if (toolCall) {
 							toolCall.arguments += chunk.delta.partial_json;
+							onProgress({
+								text: '',
+								copilotToolCallStreamUpdates: [{
+									id: toolCall.id,
+									name: toolCall.name,
+									arguments: toolCall.arguments,
+								}],
+							});
 						}
 					}
 				}
@@ -448,6 +461,7 @@ export class AnthropicMessagesProcessor {
 						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
 						0
 					);
+					this.logService.trace(`[messagesAPI] Anthropic context editing applied: cleared ${totalClearedTokens} tokens.`);
 					this.telemetryData.extendedBy({
 						contextEditingApplied: 'true',
 						contextEditingClearedTokens: totalClearedTokens.toString(),
