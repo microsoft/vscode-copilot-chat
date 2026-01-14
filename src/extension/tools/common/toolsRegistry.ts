@@ -75,6 +75,11 @@ export interface ICopilotTool<T> extends ICopilotToolExtension<T> {
 export interface ICopilotModelSpecificTool<T> extends ICopilotTool<T> {
 	/**
 	 * If present, this tool should be used instead of the base tool for the given tool name.
+	 * Note that this will require the base tool be registered and enabled in the request,
+	 * effectively 'overlaying' it.
+	 *
+	 * Defining `overridesTool` makes the model-specific tool behave substantially different from
+	 * normal model specific tools, since it is not individually selectable in the UI.
 	 */
 	overridesTool?: ToolName;
 }

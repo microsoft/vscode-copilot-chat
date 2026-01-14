@@ -13,7 +13,7 @@ import { isDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
-import { ICopilotModelSpecificTool, ICopilotTool, ICopilotToolExtension, modelSpecificToolApplies, ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotTool, ICopilotToolExtension, modelSpecificToolApplies, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
@@ -118,6 +118,19 @@ export class ToolsService extends BaseToolsService {
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token);
 	}
 
+	override invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		if (endpoint) {
+			const toolName = getToolName(name);
+			for (const [overridesTool] of this.getToolOverridesForEndpoint(endpoint)) {
+				if (overridesTool === toolName) {
+					return this.invokeTool(toolName, options, token);
+				}
+			}
+		}
+
+		return this.invokeTool(name, options, token);
+	}
+
 	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		return this._copilotTools.value.get(name as ToolName) || this.getModelSpecificTools().get(name)?.tool;
 	}
@@ -135,27 +148,16 @@ export class ToolsService extends BaseToolsService {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
 
-		const moreSpecificTools = new Map<ToolName, { info: vscode.LanguageModelToolInformation; tool: ICopilotModelSpecificTool<unknown> }>();
+		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint));
+		const modelSpecificTools = this.getModelSpecificTools();
 
 		return this.tools
 			.filter(tool => {
-				// Filter out irrelevant model-specific tools and get a map of those that can override those in the request
-				const modelSpecificTool = this.getModelSpecificTools().get(tool.name);
-				if (!modelSpecificTool) {
-					return true;
-				}
-				if (!modelSpecificToolApplies(modelSpecificTool.definition, endpoint)) {
+				// 0. If the tool was a model specific tool with an override, it'll be mixed in in the 'map' later.
+				if (modelSpecificTools.get(tool.name)?.tool.overridesTool) {
 					return false;
 				}
 
-				if (modelSpecificTool.tool.overridesTool) {
-					moreSpecificTools.set(modelSpecificTool.tool.overridesTool, { info: tool, tool: modelSpecificTool.tool });
-					return false; // only present in the output if the base tool is given
-				}
-
-				return true;
-			})
-			.filter(tool => {
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
 				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
 				if (toolPickerSelection === false) {
@@ -192,10 +194,13 @@ export class ToolsService extends BaseToolsService {
 			.map(tool => {
 				// Apply model-specific alternative if available via alternativeDefinition
 				const toolName = getToolName(tool.name) as ToolName;
-				const override = moreSpecificTools.get(toolName);
-				const owned = override?.tool || this.getCopilotTool(toolName);
+				const override = modelSpecificOverrides.get(toolName);
+				let resultTool = tool;
+				if (override?.tool) {
+					resultTool = { ...override.info, name: resultTool.name };
+				}
 
-				let resultTool = override?.info || tool;
+				const owned = override?.tool || this.getCopilotTool(toolName);
 				if (owned?.alternativeDefinition) {
 					resultTool = owned.alternativeDefinition(resultTool, endpoint);
 				}
@@ -207,5 +212,21 @@ export class ToolsService extends BaseToolsService {
 
 				return resultTool;
 			});
+	}
+
+	private *getToolOverridesForEndpoint(endpoint: IChatEndpoint) {
+		for (const tool of this.tools) {
+			const modelSpecificTool = this.getModelSpecificTools().get(tool.name);
+			if (!modelSpecificTool) {
+				continue;
+			}
+			if (!modelSpecificToolApplies(modelSpecificTool.definition, endpoint)) {
+				continue;
+			}
+
+			if (modelSpecificTool.tool.overridesTool) {
+				yield [modelSpecificTool.tool.overridesTool, { info: tool, tool: modelSpecificTool.tool }] as const;
+			}
+		}
 	}
 }

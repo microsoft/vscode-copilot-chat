@@ -68,7 +68,19 @@ export interface IToolsService {
 
 	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 
+	/**
+	 * Invokes a tool by name with the given options.
+	 * Note that `invokeToolWithEndpoint` should be preferred for most usages.
+	 */
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	/**
+	 * Invokes a tool by name with the given options. Uses any endpoint-specific tool
+	 * overrides as appropriate.
+	 */
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
 
@@ -180,6 +192,11 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 
 	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		return this.invokeTool(name, options, token);
+	}
+
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];

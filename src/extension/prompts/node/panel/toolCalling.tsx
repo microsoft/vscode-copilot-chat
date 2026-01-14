@@ -226,7 +226,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						invocationOptions.fromSubAgent = true;
 					}
 
-					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
