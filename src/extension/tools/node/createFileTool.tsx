@@ -18,6 +18,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { getLanguageForResource } from '../../../util/common/languages';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { extname } from '../../../util/vs/base/common/resources';
+import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
@@ -194,13 +195,13 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
 
 				if (content !== undefined) {
-					const lineCount = content.split('\n').length;
+					const lineCount = count(content, '\n') + 1;
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${lineCount} lines)`);
 				} else {
 					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`);
 				}
 			} else if (content !== undefined) {
-				const lineCount = content.split('\n').length;
+				const lineCount = count(content, '\n') + 1;
 				invocationMessage = new MarkdownString(l10n.t`Creating file (${lineCount} lines)`);
 			} else {
 				invocationMessage = new MarkdownString(l10n.t`Creating file`);

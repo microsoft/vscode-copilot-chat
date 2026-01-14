@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import { disableErrorLogging, parse as parsePartialJson } from 'best-effort-json-parser';
 import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
@@ -14,6 +15,8 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { ChatResponseClearToPreviousToolInvocationReason } from '../../../vscodeTypes';
 import { getContributedToolName } from '../../tools/common/toolNames';
 import { IResponseProcessor, IResponseProcessorContext } from './intents';
+
+disableErrorLogging();
 
 export interface StartStopMapping {
 	readonly stop: string;
@@ -224,45 +227,13 @@ export function reportCitations(delta: IResponseDelta, progress: ChatResponseStr
 }
 
 /**
- * Attempts to parse partial JSON by trying to close incomplete structures.
- * For streaming tool call arguments, the JSON arrives incrementally, so we try
- * appending closing characters to make the JSON valid.
+ * Attempts to parse partial JSON using best-effort parsing.
+ * For streaming tool call arguments, the JSON arrives incrementally.
  */
 function tryParsePartialToolInput(raw: string | undefined): unknown {
 	if (!raw) {
 		return raw;
 	}
 
-	// First, try parsing as-is (complete JSON)
-	try {
-		return JSON.parse(raw);
-	} catch {
-		// ignored - try fixing the JSON
-	}
-
-	// Try progressively closing the JSON structure
-	// Common cases:
-	// 1. {"filePath": "/foo/bar"  -> needs }
-	// 2. {"filePath": "/foo/bar   -> needs "}
-	// 3. {"filePath": "/foo/bar", "content": "hello  -> needs "}}
-	const closingAttempts = [
-		'}',           // Just close object
-		'"}',          // Close unclosed string then object
-		'"}}',         // Close unclosed string, nested object, then outer object
-		']}',          // Close array then object
-		'"]}',         // Close unclosed string in array then object
-		'null}',       // Complete a null value
-		'""}'          // Complete an empty string value
-	];
-
-	for (const suffix of closingAttempts) {
-		try {
-			return JSON.parse(raw + suffix);
-		} catch {
-			// Try next suffix
-		}
-	}
-
-	// If nothing works, return the raw string as before
-	return raw;
+	return parsePartialJson(raw);
 }
