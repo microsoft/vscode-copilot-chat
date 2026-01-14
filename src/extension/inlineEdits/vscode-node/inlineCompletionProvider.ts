@@ -49,6 +49,7 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
+import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -234,20 +235,38 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			tracer.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
-				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
-				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
+				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
+				(this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder)
+					?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)).then(r => ({ kind: 'diagnostics' as const, val: r }))
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion] = await first;
+			const [llmSuggestion, diagnosticsSuggestion] = await first;
 
-			const hasNonEmptyLlmNes = !!providerSuggestion && providerSuggestion.result !== undefined;
+			let suggestion: {
+				kind: 'llm';
+				val: NextEditResult;
+			} | {
+				kind: 'diagnostics';
+				val: DiagnosticsNextEditResult | undefined;
+			};
 
-			const shouldGiveMoreTimeToDiagnostics = !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider && !diagnosticsSuggestion;
-			if (shouldGiveMoreTimeToDiagnostics) {
-				tracer.trace('giving some more time to diagnostics provider');
-				const remainingTime = clamp(0, 1250 - (Date.now() - context.requestIssuedDateTime), 1250);
-				timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
-				[, diagnosticsSuggestion] = await all;
+			if (llmSuggestion !== undefined) {
+				if (llmSuggestion.val.result !== undefined || this.model.diagnosticsBasedProvider === undefined) {
+					suggestion = llmSuggestion;
+				} else {
+					tracer.trace('giving some more time to diagnostics provider');
+					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
+					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
+					[, suggestion] = await all;
+				}
+			} else if (diagnosticsSuggestion !== undefined) {
+				if (diagnosticsSuggestion.val !== undefined && diagnosticsSuggestion.val.result !== undefined) {
+					suggestion = diagnosticsSuggestion;
+				} else {
+					[suggestion] = await all;
+				}
+			} else {
+				throw new BugIndicatingError('At least one of LLM NES or Diagnostics NES must be defined');
 			}
 
 			// Cancel ongoing requests
@@ -263,10 +282,10 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			// Determine which suggestion to use
-			if (diagnosticsSuggestion?.result) {
-				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
-			} else if (providerSuggestion) {
-				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
+			if (suggestion.kind === 'diagnostics' && suggestion.val) {
+				suggestionInfo = new DiagnosticsCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
+			} else if (suggestion.kind === 'llm') {
+				suggestionInfo = new LlmCompletionInfo(suggestion.val, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
 				return emptyList;
@@ -346,8 +365,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			telemetryBuilder.setHadLlmNES(suggestionInfo.source === 'provider');
 			telemetryBuilder.setHadDiagnosticsNES(suggestionInfo.source === 'diagnostics');
 			all.then(([llmResult, diagnosticsResult]) => {
-				telemetryBuilder.setHadLlmNES(!!llmResult?.result);
-				telemetryBuilder.setHadDiagnosticsNES(!!diagnosticsResult?.result);
+				telemetryBuilder.setHadLlmNES(!!llmResult?.val);
+				telemetryBuilder.setHadDiagnosticsNES(!!diagnosticsResult?.val);
 			});
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
