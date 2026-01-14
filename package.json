@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260114",
+		"vscode": "^1.109.0-20260115",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -5205,6 +5205,7 @@
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
+		"best-effort-json-parser": "^1.2.1",
 		"diff": "^8.0.2",
 		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",

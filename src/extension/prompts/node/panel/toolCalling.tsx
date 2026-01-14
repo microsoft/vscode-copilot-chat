@@ -220,6 +220,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						tokenizationOptions,
 						chatRequestId: props.requestId,
 						subAgentInvocationId,
+						// Split on `__vscode` so it's the chat stream id
+						// TODO @lramos15 - This is a gross hack
+						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
 
 					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
