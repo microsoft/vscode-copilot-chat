@@ -16,9 +16,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString, Range } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { SubagentToolCallingLoop } from '../../prompt/node/subagentLoop';
-import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
-import { PromptElementCtor } from '../../prompts/node/base/promptElement';
+import { SearchSubagentToolCallingLoop } from '../../prompt/node/searchSubagentToolCallingLoop';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
@@ -52,14 +50,12 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 		const request = this._inputContext!.request!;
 
-		const loop = this.instantiationService.createInstance(SubagentToolCallingLoop, {
+		const loop = this.instantiationService.createInstance(SearchSubagentToolCallingLoop, {
 			toolCallLimit: 4,
 			conversation: new Conversation('', [new Turn('', { type: 'user', message: searchInstruction })]),
 			request: request,
 			location: request.location,
 			promptText: options.input.query,
-			allowedTools: new Set([ToolName.Codebase, ToolName.FindFiles, ToolName.FindTextInFiles, ToolName.ReadFile]),
-			customPromptClass: SearchSubagentPrompt as typeof SearchSubagentPrompt & PromptElementCtor,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
