@@ -144,19 +144,24 @@ export class CopilotCLIChatSessionItemProvider extends Disposable {
 	}
 
 	private async refresh(): Promise<void> {
-		const token = new vscode.CancellationTokenSource().token;
-		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const items: vscode.ChatSessionItem[] = [];
+		const ctx = new vscode.CancellationTokenSource();
+		try {
+			const sessions = await this.copilotcliSessionService.getAllSessions(ctx.token);
+			const items: vscode.ChatSessionItem[] = [];
 
-		for (const session of sessions) {
-			const item = await this._toChatSessionItem(session);
-			items.push(item);
+			for (const session of sessions) {
+				const item = await this._toChatSessionItem(session);
+				items.push(item);
+			}
+
+			this.controller.items.replace(items);
+
+			const count = items.length;
+			this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
 		}
-
-		this.controller.items.replace(items);
-
-		const count = items.length;
-		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
+		finally {
+			ctx.dispose();
+		}
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
