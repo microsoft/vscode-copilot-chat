@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -160,17 +160,35 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		onProgress?.('Creating snapshot...');
+
 		// Create snapshot - this endpoint could return 429 if you already have too many filesets
-		let createIngestResponse: Response;
-		try {
-			createIngestResponse = await this.post(authToken, '/external/code/ingest', {
+		const createIngest = async (): Promise<Response> => {
+			return this.post(authToken, '/external/code/ingest', {
 				fileset_name: filesetName,
 				new_checkpoint: newCheckpoint,
 				geo_filter: Buffer.from(geoFilter.toBytes()).toString('base64'),
 				coded_symbols: codedSymbols,
 			}, token);
+		};
+
+		let createIngestResponse: Response;
+		try {
+			createIngestResponse = await createIngest();
 		} catch (err) {
 			throw new Error('Exception during create ingest', err);
+		}
+
+		// Handle 429 by cleaning up old filesets and retrying
+		if (createIngestResponse.status === 429) {
+			this.logService.info('ExternalIngestClient::updateIndex(): Got 429, cleaning up old filesets...');
+			onProgress?.('Too many filesets, cleaning up old ones...');
+
+			await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, token), token);
+
+			// Retry the create ingest
+			this.logService.info('ExternalIngestClient::updateIndex(): Retrying create ingest after cleanup...');
+			onProgress?.('Retrying snapshot creation...');
+			createIngestResponse = await createIngest();
 		}
 
 		interface CodedSymbolRange {
@@ -343,6 +361,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			return [];
 		}
 
+		const filesets = await this.listFilesetsWithDetails(authToken, token);
+		return filesets.map(x => x.name);
+	}
+
+	private async listFilesetsWithDetails(authToken: string, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
 		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
@@ -352,7 +375,20 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		);
 
 		const body = await resp.json() as { filesets?: Array<{ name: string; checkpoint: string; status: string }>; max_filesets: number };
-		return coalesce((body.filesets ?? []).map(x => x.name));
+		return body.filesets ?? [];
+	}
+
+	/**
+	 * Cleans up old filesets to make room for new ones.
+	 */
+	private async cleanupOldFilesets(authToken: string, currentFilesetName: string, token: CancellationToken): Promise<void> {
+		const filesets = await this.listFilesetsWithDetails(authToken, token);
+
+		const candidates = filesets.filter(f => f.name !== currentFilesetName);
+		const toDelete = candidates.at(-1);
+		if (toDelete) {
+			await this.deleteFilesetByName(authToken, toDelete.name, token);
+		}
 	}
 
 	async deleteFileset(filesetName: string, token: CancellationToken): Promise<void> {
