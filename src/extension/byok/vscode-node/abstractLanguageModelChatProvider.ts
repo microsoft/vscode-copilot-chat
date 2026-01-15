@@ -47,7 +47,7 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 	}
 
 	protected async configureDefaultGroupIfExists(name: string, configuration: C): Promise<void> {
-		await commands.executeCommand('lm.addLanguageModelsProviderGroup', { vendor: this._id, name, ...configuration });
+		await commands.executeCommand('lm.migrateLanguageModelsProviderGroup', { vendor: this._id, name, ...configuration });
 	}
 
 	async provideLanguageModelChatInformation({ silent, configuration }: PrepareLanguageModelChatModelOptions, token: CancellationToken): Promise<T[]> {
