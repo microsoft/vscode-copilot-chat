@@ -191,7 +191,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		context: NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const tracer = this._logger.createSubLogger(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
+		const logger = this._logger.createSubLogger(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -202,20 +202,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const serveAsCompletionsProvider = unification && isCompletionsEnabled && !isInlineEditsEnabled;
 
 		if (!isInlineEditsEnabled && !serveAsCompletionsProvider) {
-			tracer.trace('Return: inline edits disabled');
+			logger.trace('Return: inline edits disabled');
 			return undefined;
 		}
 
 		const ignoreWhenSuggestVisible = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsIgnoreWhenSuggestVisible, this._expService);
 
 		if (ignoreWhenSuggestVisible && context.selectedCompletionInfo && !unification) {
-			tracer.trace('Return: suggest widget is showing, not providing NES');
+			logger.trace('Return: suggest widget is showing, not providing NES');
 			return undefined;
 		}
 
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {
-			tracer.trace('Return: document not found in workspace');
+			logger.trace('Return: document not found in workspace');
 			return undefined;
 		}
 
@@ -231,7 +231,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
-			tracer.trace('invoking next edit provider');
+			logger.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
@@ -253,7 +253,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				if (llmSuggestion.val.result !== undefined || this.model.diagnosticsBasedProvider === undefined) {
 					suggestion = llmSuggestion;
 				} else {
-					tracer.trace('giving some more time to diagnostics provider');
+					logger.trace('giving some more time to diagnostics provider');
 					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
 					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 					[, suggestion] = await all;
@@ -275,7 +275,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			const correlationId = createCorrelationId('nes');
 
 			if (token.isCancellationRequested) {
-				tracer.trace('Return: lost race to cancellation');
+				logger.trace('Return: lost race to cancellation');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
 				return emptyList;
 			}
@@ -291,7 +291,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			if (suggestionInfo.source === 'provider' && suggestionInfo.suggestion.result?.jumpToPosition !== undefined) {
-				tracer.trace('next edit suggestion only has jumpToPosition');
+				logger.trace('next edit suggestion only has jumpToPosition');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
 				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
@@ -309,12 +309,12 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			// Return and send telemetry if there is no result
 			const result = suggestionInfo.suggestion.result;
 			if (!result || !result.edit) {
-				tracer.trace('no next edit suggestion');
+				logger.trace('no next edit suggestion');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
 			}
 
-			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
+			logger.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
@@ -325,9 +325,9 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
 
 			if (!targetDocument) {
-				tracer.trace('no next edit suggestion');
+				logger.trace('no next edit suggestion');
 			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
-				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
+				logger.trace('no next edit suggestion, edits contain Notebook Cell Markers');
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
@@ -386,7 +386,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
 		} catch (e) {
-			tracer.trace(`error: ${e}`);
+			logger.trace(`error: ${e}`);
 			logContext.setError(e);
 
 			try {
