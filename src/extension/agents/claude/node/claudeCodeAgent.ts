@@ -306,6 +306,10 @@ export class ClaudeCodeSession extends Disposable {
 					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
 					{ behavior: 'deny', message: 'No active request' };
 			},
+			systemPrompt: {
+				type: 'preset',
+				preset: 'claude_code'
+			},
 			settingSources: ['user', 'project', 'local'],
 			...(isDebugEnabled && {
 				stderr: data => {
