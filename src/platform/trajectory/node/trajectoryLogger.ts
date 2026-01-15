@@ -62,7 +62,10 @@ export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 		}
 		const context = this.currentTrajectory.beginAgentStep(message, modelName, reasoningContent, timestamp);
 		return {
-			...context,
+			addToolCalls: (toolCalls) => context.addToolCalls(toolCalls),
+			addObservation: (results) => context.addObservation(results),
+			addSubagentReference: (toolCallId, subagentRef) => context.addSubagentReference(toolCallId, subagentRef),
+			setMetrics: (metrics) => context.setMetrics(metrics),
 			complete: () => {
 				context.complete();
 				this._onDidUpdateTrajectory.fire();
