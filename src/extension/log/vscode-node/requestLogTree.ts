@@ -743,10 +743,8 @@ class ChatPromptItem extends vscode.TreeItem {
 		const item = new ChatPromptItem(this.token, this.hasSeen, this.mainEntryId);
 		item.children = this.children.filter(filter);
 		item.id = this.id;
-		if (this.mainEntryId) {
-			item.iconPath = this.iconPath;
-			item.command = this.command;
-		}
+		item.iconPath = this.iconPath;
+		item.command = this.command;
 		return item;
 	}
 }
