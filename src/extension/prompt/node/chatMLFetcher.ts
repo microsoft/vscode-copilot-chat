@@ -1047,8 +1047,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		requestId: string,
 		telemetryProperties?: TelemetryProperties
 	): void {
-		// Reconstruct the text content from deltas (filter out undefined/null text)
-		const textContent = deltas.filter(delta => delta.text).map(delta => delta.text).join('');
+		// Reconstruct the text content from deltas (filter out null, undefined, and empty text values)
+		const textContent = deltas.filter(delta => delta.text != null && delta.text !== '').map(delta => delta.text).join('');
 		
 		// Early exit if no content
 		if (!textContent || textContent.trim().length === 0) {
@@ -1069,8 +1069,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (hasRepetition) {
 			const telemetryData = TelemetryData.createAndMarkAsIssued();
 			const extended = telemetryData.extendedBy(telemetryProperties);
-			// Add requestId for consistency with completed requests
-			extended.properties.requestId = requestId;
+			// Note: For cancelled requests, we don't have a full RequestId object,
+			// so we can't use extendWithRequestId like the non-cancelled path does
 			this._telemetryService.sendEnhancedGHTelemetryEvent('conversation.repetition.detected', extended.properties, extended.measurements);
 		}
 		
