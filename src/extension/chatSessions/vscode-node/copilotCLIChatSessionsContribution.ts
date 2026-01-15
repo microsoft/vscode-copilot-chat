@@ -358,8 +358,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 }
 
 function stripCopilotSuffix(modelId: string) {
-	if (modelId.endsWith('(copilot)')) {
-		return modelId.substring(0, modelId.length - '(copilot)'.length).trim();
+	if (modelId.includes('(')) {
+		return modelId.substring(0, modelId.indexOf('(')).trim();
 	}
 	return modelId;
 }
