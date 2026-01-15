@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AggressivenessLevel } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DelaySession } from './delay';
 
@@ -85,13 +85,32 @@ export class UserInteractionMonitor {
 			return configuredAggressivenessLevel;
 		}
 
-		const userHappinessScore = this._getUserHappinessScore();
-		if (userHappinessScore >= 0.7) {
+		const config = this._getUserHappinessScoreConfiguration();
+		const userHappinessScore = this._getUserHappinessScore(config);
+		if (userHappinessScore >= config.highThreshold) {
 			return AggressivenessLevel.High;
-		} else if (userHappinessScore >= 0.4) {
+		} else if (userHappinessScore >= config.mediumThreshold) {
 			return AggressivenessLevel.Medium;
 		} else {
 			return AggressivenessLevel.Low;
+		}
+	}
+
+	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+		const configString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString, this._experimentationService);
+		if (configString === undefined) {
+			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
+		}
+
+		try {
+			const parsed = JSON.parse(configString);
+			const validation = USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR.validate(parsed);
+			if (validation.error) {
+				return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
+			}
+			return validation.content;
+		} catch {
+			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
 
@@ -99,7 +118,7 @@ export class UserInteractionMonitor {
 	 * Value between 0 and 1 indicating user happiness.
 	 * 1 means very happy, 0 means very unhappy.
 	 */
-	private _getUserHappinessScore(): number {
+	private _getUserHappinessScore(config: UserHappinessScoreConfiguration): number {
 		if (this._recentUserActions.length === 0) {
 			return 0.5; // neutral score when no data
 		}
@@ -113,8 +132,8 @@ export class UserInteractionMonitor {
 			// Position 0 (oldest) has lowest weight, last position has highest weight
 			const weight = i + 1;
 
-			// Accepted = 1, Rejected = 0
-			const score = action.kind === 'accepted' ? 1 : 0;
+			// Accepted = acceptedScore, Rejected = rejectedScore
+			const score = action.kind === 'accepted' ? config.acceptedScore : config.rejectedScore;
 
 			weightedScore += score * weight;
 			totalWeight += weight;

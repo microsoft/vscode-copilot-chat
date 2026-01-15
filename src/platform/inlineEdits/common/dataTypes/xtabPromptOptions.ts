@@ -179,6 +179,31 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
 });
 
+export interface UserHappinessScoreConfiguration {
+	/** Score for accepted actions (0-1, default: 1) */
+	acceptedScore: number;
+	/** Score for rejected actions (0-1, default: 0) */
+	rejectedScore: number;
+	/** Threshold for high aggressiveness level (default: 0.7) */
+	highThreshold: number;
+	/** Threshold for medium aggressiveness level (default: 0.4) */
+	mediumThreshold: number;
+}
+
+export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
+	'acceptedScore': vRequired(vNumber()),
+	'rejectedScore': vRequired(vNumber()),
+	'highThreshold': vRequired(vNumber()),
+	'mediumThreshold': vRequired(vNumber()),
+});
+
+export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
+	acceptedScore: 1,
+	rejectedScore: 0,
+	highThreshold: 0.7,
+	mediumThreshold: 0.4,
+};
+
 export function parseLintOptionString(optionString: string): LintOptions | undefined {
 	try {
 		const parsed = JSON.parse(optionString);
