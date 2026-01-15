@@ -230,6 +230,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (session) {
 					this.logService.trace(`[CopilotCLISession] Reusing CopilotCLI session ${sessionId}.`);
 					session.acquire();
+					if (!readonly) {
+						if (agent) {
+							await session.object.sdkSession.selectCustomAgent(agent.name);
+						} else {
+							session.object.sdkSession.clearCustomAgent();
+						}
+					}
 					return session;
 				}
 			}
@@ -431,7 +438,8 @@ export class Mutex {
 
 	private _release(): void {
 		if (!this._locked) {
-			throw new Error('Mutex: release called while not locked');
+			// already unlocked
+			return;
 		}
 		this._locked = false;
 		const next = this._acquireQueue.shift();
