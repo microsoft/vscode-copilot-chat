@@ -194,9 +194,22 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			// Retry the create ingest
 			this.logService.info('ExternalIngestClient::updateIndex(): Retrying create ingest after cleanup...');
 			onProgress?.(l10n.t("Retrying snapshot creation..."));
-			createIngestResponse = await createIngest();
+			try {
+				createIngestResponse = await createIngest();
+			} catch (err) {
+				throw new Error('Exception during create ingest retry', err);
+			}
+
+			// If we still get 429 after cleanup and retry, fail with a clear error
+			if (createIngestResponse.status === 429) {
+				throw new Error('Create ingest failed with 429 Too Many Requests even after cleanup.');
+			}
 		}
 
+		// Fail fast on non-OK responses before attempting to parse JSON
+		if (!createIngestResponse.ok) {
+			throw new Error(`Create ingest failed with status ${createIngestResponse.status}`);
+		}
 		interface CodedSymbolRange {
 			readonly start: number;
 			readonly end: number;
