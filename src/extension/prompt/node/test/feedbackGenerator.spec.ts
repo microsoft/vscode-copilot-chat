@@ -69,6 +69,24 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].severity, 'unknown');
 			assert.strictEqual(matches[0].content, 'Minimal comment.');
 		});
+
+		test('parses comment with extra text before "in" keyword', function () {
+			const response = '1. Line 10 (modified) in `file.ts`, bug: Issue with extra text.';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			assert.strictEqual(matches[0].from, 9);
+			assert.strictEqual(matches[0].relativeDocumentPath, 'file.ts');
+			assert.strictEqual(matches[0].content, 'Issue with extra text.');
+		});
+
+		test('parses comment with trasiling backtick after path', function () {
+			const response = '1. Line 10 in `src/file.ts`, bug: Issue.\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			assert.ok(matches[0].relativeDocumentPath?.includes('file.ts'));
+		});
 	});
 
 	describe('multiple comments', function () {
@@ -190,6 +208,16 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content, 'The variable `foo` should be renamed.');
 		});
 
+		test('keeps trailing ``` when no opening marker exists', function () {
+			const response = '1. Line 10 in `file.ts`, bug: Some text ending with ```\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			// When there's no matching opening ```, the content is kept as-is (minus trailing ```)
+			// but the code can't find a valid block to remove, so it falls through to broken block handling
+			assert.strictEqual(matches[0].content, 'Some text ending with');
+		});
+
 		test('preserves complete code block in middle of content', function () {
 			const response = `1. Line 10 in \`file.ts\`, bug: Use this pattern:
 \`\`\`typescript
@@ -203,6 +231,45 @@ instead of the current approach.
 			assert.strictEqual(matches.length, 1);
 			assert.ok(matches[0].content.includes('```typescript'));
 			assert.ok(matches[0].content.includes('const x = 1;'));
+		});
+
+		test('handles multiple complete code blocks in middle', function () {
+			const response = `1. Line 10 in \`file.ts\`, bug: Bad:
+\`\`\`typescript
+const x = 1;
+\`\`\`
+Good:
+\`\`\`typescript
+const y = 2;
+\`\`\`
+Use the second pattern.
+
+`;
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			assert.ok(matches[0].content.includes('Bad:'));
+			assert.ok(matches[0].content.includes('Good:'));
+			assert.ok(matches[0].content.includes('const x = 1;'));
+			assert.ok(matches[0].content.includes('const y = 2;'));
+		});
+
+		test('removes trailing code block but keeps middle code blocks', function () {
+			const response = `1. Line 10 in \`file.ts\`, bug: Example:
+\`\`\`typescript
+const x = 1;
+\`\`\`
+Fix:
+\`\`\`typescript
+const y = 2;
+\`\`\``;
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			// Should keep the first code block but remove the trailing one
+			assert.ok(matches[0].content.includes('Example:'));
+			assert.ok(matches[0].content.includes('const x = 1;'));
+			assert.strictEqual(matches[0].content.includes('const y = 2;'), false);
 		});
 	});
 
@@ -249,6 +316,21 @@ instead of the current approach.
 
 			assert.strictEqual(matches.length, 1);
 			assert.ok(matches[0].relativeDocumentPath?.includes('file.ts'));
+		});
+
+		test('normalizes forward slashes in paths (Windows path separator normalization)', function () {
+			const response = '1. Line 10 in `src/utils/helpers.ts`, bug: Issue.\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			// On Windows, forward slashes should be converted to backslashes
+			// On Unix, this test would behave differently
+			const pathSep = require('path').sep;
+			if (pathSep === '\\') {
+				assert.strictEqual(matches[0].relativeDocumentPath, 'src\\utils\\helpers.ts');
+			} else {
+				assert.strictEqual(matches[0].relativeDocumentPath, 'src/utils/helpers.ts');
+			}
 		});
 	});
 
@@ -301,6 +383,65 @@ multiple lines.
 				assert.strictEqual(matches.length, 1, `Failed for kind: ${kind}`);
 				assert.strictEqual(matches[0].kind, kind);
 			}
+		});
+
+		test('handles multi-digit item numbers for linkOffset calculation', function () {
+			const response = '10. Line 5 in `file.ts`, bug: Issue.\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			// linkOffset = match.index + num.length + 2 = 0 + 2 + 2 = 4
+			assert.strictEqual(matches[0].linkOffset, 4);
+		});
+
+		test('handles three-digit item numbers', function () {
+			const response = '100. Line 999 in `file.ts`, bug: Issue.\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			// linkOffset = match.index + num.length + 2 = 0 + 3 + 2 = 5
+			assert.strictEqual(matches[0].linkOffset, 5);
+			// linkLength = 5 + from.length (3 for "999") = 8
+			assert.strictEqual(matches[0].linkLength, 8);
+		});
+
+		test('content terminated by double newline', function () {
+			const response = '1. Line 10 in `file.ts`, bug: First issue.\n\nSome other text here.';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			assert.strictEqual(matches[0].content, 'First issue.');
+		});
+
+		test('content terminated by next numbered item on same line', function () {
+			// This tests the regex lookahead for \n\d+\.
+			const response = '1. Line 10 in `file.ts`, bug: First.\n2. Line 20 in `other.ts`, bug: Second.';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 2);
+			assert.strictEqual(matches[0].content, 'First.');
+			assert.strictEqual(matches[1].content, 'Second.');
+		});
+
+		test('handles all known severity levels', function () {
+			const severities = ['low', 'medium', 'high', 'critical'];
+			for (const severity of severities) {
+				const response = `1. Line 10 in \`file.ts\`, bug, ${severity} severity: Issue.\n\n`;
+				const matches = parseFeedbackResponse(response);
+				assert.strictEqual(matches.length, 1, `Failed for severity: ${severity}`);
+				assert.strictEqual(matches[0].severity, severity);
+			}
+		});
+
+		test('handles large line ranges', function () {
+			const response = '1. Line 1000-2000 in `file.ts`, bug: Large range.\n\n';
+			const matches = parseFeedbackResponse(response);
+
+			assert.strictEqual(matches.length, 1);
+			assert.strictEqual(matches[0].from, 999);
+			assert.strictEqual(matches[0].to, 2000);
+			// linkLength = 5 + 4 (1000) + 4 (2000) + 1 (-) = 14
+			assert.strictEqual(matches[0].linkLength, 14);
 		});
 	});
 });
