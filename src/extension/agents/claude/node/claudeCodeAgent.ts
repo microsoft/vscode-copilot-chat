@@ -308,8 +308,7 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			systemPrompt: {
 				type: 'preset',
-				preset: 'claude_code',
-				append: 'Your responses will be rendered as markdown, so please reply with properly formatted markdown when appropriate. When replying with code or the name of a symbol, wrap it in backticks.'
+				preset: 'claude_code'
 			},
 			settingSources: ['user', 'project', 'local'],
 			...(isDebugEnabled && {
