@@ -14,7 +14,6 @@ import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { isNotebookCell } from '../../../util/common/notebooks';
-import { createTracer } from '../../../util/common/tracing';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { join } from '../../../util/vs/base/common/path';
@@ -43,14 +42,14 @@ export class InlineEditProviderFeatureContribution extends Disposable implements
 	) {
 		super();
 
-		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
+		const logger = this._logService.createSubLogger(['NES', 'Feature']);
 
 		const inlineEditProviderFeature = this._instantiationService.createInstance(InlineEditProviderFeature);
 		this._register(inlineEditProviderFeature.rolloutFeature());
 		this._register(inlineEditProviderFeature.registerProvider());
 		inlineEditProviderFeature.setContext();
 
-		tracer.returns();
+		logger.trace('Return: void');
 	}
 }
 
