@@ -89,8 +89,10 @@ export const Diagnostics = (props: DiagnosticsProps, context: ComponentContext) 
 				{`Consider the following ${languageId} diagnostics from ${getRelativePath(props.tdms, diagnosticBag)}:`}
 			</Text>
 		);
-		const values: Diagnostic[] = diagnosticBag.values;
+		let values: Diagnostic[] = diagnosticBag.values;
 		if (document !== undefined && document.uri.toString() === diagnosticBag.uri.toString() && position !== undefined) {
+			// Create a copy of the diagnostics to avoid mutating the original array in the context item in case it is used elsewhere.
+			values = diagnosticBag.values.slice();
 			values.sort((a, b) => {
 				const aDist = Math.abs(a.range.start.line - position.line);
 				const bDist = Math.abs(b.range.start.line - position.line);
