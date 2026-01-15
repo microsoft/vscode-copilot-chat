@@ -5,34 +5,126 @@
 
 import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
+import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
+import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
+import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
+
+const MODELS_OPTION_ID = 'model';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
 	pendingToolInvocations: Map<string, vscode.ChatToolInvocationPart>;
 }
 
-export class ClaudeChatSessionContentProvider implements vscode.ChatSessionContentProvider {
+export class ClaudeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
+	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
+	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
+
+	/**
+	 * Track session models - when we start new sessions, we don't have the real session id yet.
+	 * We also need this when we open a session and later run it.
+	 * Instance-level to allow cleanup on dispose.
+	 */
+	private readonly _sessionModels = new Map<string, string | undefined>();
 
 	constructor(
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
-	) { }
+		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
+	) {
+		super();
+	}
+
+	public override dispose(): void {
+		this._sessionModels.clear();
+		super.dispose();
+	}
+
+	/**
+	 * Gets the model ID for a session, checking in-memory cache first, then stored preference
+	 */
+	public async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+		// Check in-memory cache first
+		if (this._sessionModels.has(sessionId)) {
+			return this._sessionModels.get(sessionId);
+		}
+
+		// Fall back to default model
+		return this.claudeCodeModels.getDefaultModel();
+	}
+
+	/**
+	 * Sets the model ID for a session
+	 */
+	public setModelIdForSession(sessionId: string, modelId: string | undefined): void {
+		this._sessionModels.set(sessionId, modelId);
+	}
+
+	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
+		this._onDidChangeChatSessionOptions.fire({ resource, updates });
+	}
+
+	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
+		const models = await this.claudeCodeModels.getModels();
+		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
+			id: model.id,
+			name: model.name
+		}));
+
+		return {
+			optionGroups: [
+				{
+					id: MODELS_OPTION_ID,
+					name: l10n.t('Model'),
+					description: l10n.t('Pick Model'),
+					items: modelItems,
+				}
+			]
+		};
+	}
+
+	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
+		const sessionId = ClaudeSessionUri.getId(resource);
+		for (const update of updates) {
+			if (update.optionId === MODELS_OPTION_ID) {
+				void this.claudeCodeModels.setDefaultModel(update.value);
+				this._sessionModels.set(sessionId, update.value);
+			}
+		}
+	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const sessionId = ClaudeSessionUri.getId(sessionResource);
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const toolContext = this._createToolContext();
 		const history = existingSession ?
 			this._buildChatHistory(existingSession, toolContext) :
 			[];
 
+		// Get model for session
+		const [defaultModel, model] = await Promise.all([
+			this.claudeCodeModels.getDefaultModel(),
+			this.getModelIdForSession(sessionId)
+		]);
+
+		const options: Record<string, string> = {};
+		if (model || defaultModel) {
+			options[MODELS_OPTION_ID] = model || defaultModel!;
+			// Keep track of model in memory
+			this._sessionModels.set(sessionId, model || defaultModel);
+		}
+
 		return {
 			history,
 			activeResponseCallback: undefined,
 			requestHandler: undefined,
+			options,
 		};
 	}
 
