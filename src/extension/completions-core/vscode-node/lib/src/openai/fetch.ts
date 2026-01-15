@@ -1035,7 +1035,7 @@ class CompletionAccumulator {
 		const chunk = choice.text;
 		if (chunk) {
 			this._chunks.push(chunk);
-			this._responseSoFar = this._chunks.join('');
+			this._responseSoFar = this._responseSoFar + chunk;
 		}
 
 		if (choice.copilot_annotations) {
