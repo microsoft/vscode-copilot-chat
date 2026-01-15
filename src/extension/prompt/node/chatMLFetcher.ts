@@ -1047,17 +1047,16 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		requestId: string,
 		telemetryProperties?: TelemetryProperties
 	): void {
-		// Reconstruct the text content from deltas
-		const textContent = deltas.map(delta => delta.text).join('');
+		// Reconstruct the text content from deltas (filter out undefined/null text)
+		const textContent = deltas.filter(delta => delta.text).map(delta => delta.text).join('');
 		
 		// Early exit if no content
 		if (!textContent || textContent.trim().length === 0) {
 			return;
 		}
 		
-		// Reconstruct tokens from deltas (tokens are in the delta.text)
 		// For cancelled requests, we don't have the actual token array,
-		// so we'll use the text split by whitespace as an approximation
+		// so we'll approximate by splitting text content on whitespace
 		const tokens = textContent.split(/\s+/).filter(t => t.length > 0);
 
 		// Check for line repetition
@@ -1069,8 +1068,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		// Send telemetry if repetition is detected
 		if (hasRepetition) {
 			const telemetryData = TelemetryData.createAndMarkAsIssued();
-			// For cancelled requests, we don't have a full RequestId object, just the string
 			const extended = telemetryData.extendedBy(telemetryProperties);
+			// Add requestId for consistency with completed requests
+			extended.properties.requestId = requestId;
 			this._telemetryService.sendEnhancedGHTelemetryEvent('conversation.repetition.detected', extended.properties, extended.measurements);
 		}
 		
