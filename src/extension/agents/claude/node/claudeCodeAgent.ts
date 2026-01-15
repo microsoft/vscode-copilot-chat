@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -26,6 +26,7 @@ import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlan
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { buildHooksFromRegistry } from './hooks/index';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -287,20 +288,7 @@ export class ClaudeCodeSession extends Disposable {
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
 			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
-			hooks: {
-				PreToolUse: [
-					{
-						matcher: claudeEditTools.join('|'),
-						hooks: [(input, toolID) => this._onWillEditTool(input, toolID, token)]
-					}
-				],
-				PostToolUse: [
-					{
-						matcher: claudeEditTools.join('|'),
-						hooks: [(input, toolID) => this._onDidEditTool(input, toolID)]
-					}
-				],
-			},
+			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
 				return this._currentRequest ?
 					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
@@ -326,6 +314,32 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Start the message processing loop
 		this._processMessages();
+	}
+
+	/**
+	 * Builds the hooks configuration by combining registry-based hooks with edit tool hooks.
+	 */
+	private _buildHooks(token: CancellationToken): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+		const hooks = buildHooksFromRegistry(this.instantiationService);
+
+		// Add edit tool hooks to PreToolUse and PostToolUse
+		if (!hooks.PreToolUse) {
+			hooks.PreToolUse = [];
+		}
+		hooks.PreToolUse.push({
+			matcher: claudeEditTools.join('|'),
+			hooks: [(input, toolID) => this._onWillEditTool(input, toolID, token)]
+		});
+
+		if (!hooks.PostToolUse) {
+			hooks.PostToolUse = [];
+		}
+		hooks.PostToolUse.push({
+			matcher: claudeEditTools.join('|'),
+			hooks: [(input, toolID) => this._onDidEditTool(input, toolID)]
+		});
+
+		return hooks;
 	}
 
 	private async _onWillEditTool(input: HookInput, toolUseID: string | undefined, token: CancellationToken): Promise<HookJSONOutput> {
