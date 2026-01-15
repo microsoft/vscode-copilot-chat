@@ -288,7 +288,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
-		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
+		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
+
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness prompting strategy
+		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness) {
+			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
+			if (userHappinessScore !== undefined) {
+				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
+			}
+		}
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
