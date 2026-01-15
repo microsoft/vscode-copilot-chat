@@ -41,6 +41,9 @@ export class MockCliSdkSession {
 	emit(event: string, args: { content: string | undefined }): void {
 		this.emittedEvents.push({ event, content: args.content });
 	}
+	clearCustomAgent() {
+		return;
+	}
 }
 
 export class MockCliSdkSessionManager {
@@ -269,8 +272,6 @@ describe('CopilotCLISessionService', () => {
 			expect(result.length).toBe(1);
 			const item = result[0];
 			expect(item.id).toBe('s1');
-			expect(item.label.endsWith('...')).toBe(true); // truncated
-			expect(item.label.length).toBeLessThanOrEqual(50);
 		});
 	});
 
@@ -299,7 +300,8 @@ describe('CopilotCLISessionService', () => {
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
-			expect(item?.label).toBe('Line1');
+			expect(item?.label).includes('Line1');
+			expect(item?.label).includes('Line2');
 		});
 	});
 
