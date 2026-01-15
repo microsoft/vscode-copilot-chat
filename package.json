@@ -3268,7 +3268,7 @@
 					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
 						"tags": [
 							"experimental",
