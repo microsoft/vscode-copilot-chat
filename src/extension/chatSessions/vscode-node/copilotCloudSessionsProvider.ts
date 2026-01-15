@@ -475,7 +475,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					optionGroups.push({
 						id: REPOSITORIES_OPTION_GROUP_ID,
 						name: vscode.l10n.t('Repository'),
-						icon: new vscode.ThemeIcon('source-control'),
+						icon: new vscode.ThemeIcon('repo'),
 						items,
 						onSearch: async (query, token) => {
 							return await this.fetchAllRepositoriesFromGitHub(query);
@@ -681,6 +681,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
+							created: createdAt,
 							startTime: createdAt,
 							endTime: validateISOTimestamp(sessionItem.completed_at),
 						}

@@ -35,6 +35,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
 		private readonly processNonReportedDelta: ((deltas: IResponseDelta[]) => string[]) | undefined,
+		private readonly options?: { subagentInvocationId?: string }
 	) { }
 
 	async processResponse(_context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
@@ -73,7 +74,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 
 		if (delta.beginToolCalls?.length) {
 			for (const beginCall of delta.beginToolCalls) {
-				progress.beginToolInvocation(beginCall.id ?? '', getContributedToolName(beginCall.name), {});
+				progress.beginToolInvocation(beginCall.id ?? '', getContributedToolName(beginCall.name), { subagentInvocationId: this.options?.subagentInvocationId });
 			}
 		}
 

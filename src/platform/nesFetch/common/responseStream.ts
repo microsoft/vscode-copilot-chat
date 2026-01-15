@@ -3,10 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ClientHttp2Stream } from 'node:http2';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
 import { assertType } from '../../../util/vs/base/common/types';
+import { RequestId } from '../../networking/common/fetch';
+import { IHeaders, Response } from '../../networking/common/fetcherService';
 import { Completion } from './completionsAPI';
 
 export class ResponseStream {
@@ -31,7 +34,7 @@ export class ResponseStream {
 	 */
 	public readonly stream: AsyncIterableObject<Completion>;
 
-	constructor(stream: AsyncIterable<Completion>) {
+	constructor(private readonly fetcherResponse: Response, stream: AsyncIterable<Completion>, public readonly requestId: RequestId, public readonly headers: IHeaders) {
 		const tokensDeferredPromise = new DeferredPromise<Result<Completion[], Error>>();
 		this.aggregatedStream = tokensDeferredPromise.p;
 		this.response = this.aggregatedStream.then((completions) => {
@@ -62,6 +65,20 @@ export class ResponseStream {
 				);
 			}
 		});
+	}
+
+	/**
+	 * @throws client of the method should handle the error
+	 */
+	public async destroy(): Promise<void> {
+		const body = await this.fetcherResponse.body();
+		// Destroy the stream so that the server is hopefully notified we don't want any more data
+		// and can cancel/forget about the request itself.
+		if (body && typeof (body as ClientHttp2Stream).destroy === 'function') {
+			(body as ClientHttp2Stream).destroy();
+		} else if (body instanceof ReadableStream) {
+			void body.cancel();
+		}
 	}
 
 	private static aggregateCompletionsStream(stream: Completion[]): Completion {

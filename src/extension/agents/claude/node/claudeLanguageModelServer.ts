@@ -604,7 +604,13 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 	public createRequestBody(
 		options: ICreateEndpointBodyOptions
 	): IEndpointBody {
-		return this.requestBody;
+		const base = this.base.createRequestBody(options);
+		// Merge with original request body to preserve any additional properties
+		// i.e. default thinking budget.
+		return {
+			...base,
+			...this.requestBody
+		};
 	}
 
 	public cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

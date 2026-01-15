@@ -98,7 +98,7 @@ export class GhostTextProvider {
 		if (typeof info === 'number') {
 			return; // deprecated API
 		}
-		this.instantiationService.invokeFunction(handlePartialGhostTextPostInsert, item.copilotCompletion, info.acceptedLength, info.kind);
+		this.instantiationService.invokeFunction(handlePartialGhostTextPostInsert, item.copilotCompletion, info.acceptedLength);
 	}
 
 	async handleEndOfLifetime(completionItem: GhostTextCompletionItem, reason: InlineCompletionEndOfLifeReason) {

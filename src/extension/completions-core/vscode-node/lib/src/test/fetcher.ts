@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Readable } from 'stream';
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { FetchOptions, IAbortController, ICompletionsFetcherService, IHeaders, Response } from '../networking';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 
 type HeadersParameter = { [key: string]: string };
 
