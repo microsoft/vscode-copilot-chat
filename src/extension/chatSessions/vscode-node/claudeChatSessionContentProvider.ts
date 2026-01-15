@@ -8,7 +8,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
-import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 
@@ -53,11 +52,9 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 		const responseParts = coalesce(message.content.map(block => {
 			if (block.type === 'text') {
 				return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(block.text));
+			} else if (block.type === 'thinking') {
+				return new vscode.ChatResponseThinkingProgressPart(block.thinking);
 			} else if (block.type === 'tool_use') {
-				if (block.name === ClaudeToolNames.ExitPlanMode) {
-					return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(`\`\`\`\`\n${(block.input as IExitPlanModeInput).plan}\`\`\`\n\n`));
-				}
-
 				toolContext.unprocessedToolCalls.set(block.id, block);
 				const toolInvocation = createFormattedToolInvocation(block);
 				if (toolInvocation) {
@@ -115,7 +112,8 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 					toolContext.unprocessedToolCalls.delete(toolResultBlock.tool_use_id);
 					const pendingInvocation = toolContext.pendingToolInvocations.get(toolResultBlock.tool_use_id);
 					if (pendingInvocation) {
-						createFormattedToolInvocation(toolUse, toolResultBlock, pendingInvocation);
+						pendingInvocation.isConfirmed = true;
+						pendingInvocation.isError = toolResultBlock.is_error;
 						toolContext.pendingToolInvocations.delete(toolResultBlock.tool_use_id);
 					}
 				}
