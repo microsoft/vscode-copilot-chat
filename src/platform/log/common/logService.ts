@@ -219,7 +219,7 @@ class SubLogger implements ILogger {
 	}
 
 	error(error: string | Error, message?: string): void {
-		const prefixedMessage = message ? this._prefixMessage(message) : this._prefix.trim();
+		const prefixedMessage = message ? this._prefixMessage(message) : this._prefix;
 		this._parent.error(error, prefixedMessage);
 	}
 

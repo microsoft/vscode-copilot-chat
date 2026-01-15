@@ -212,7 +212,7 @@ describe('Notebook Prompt Rendering', function () {
 			show(preserveFocus?: boolean): void {
 				//
 			}
-			createSubLogger(): ILogService {
+			createSubLogger(): ILogger {
 				return this;
 			}
 		}(), new NullTelemetryService()));

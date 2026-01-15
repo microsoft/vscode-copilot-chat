@@ -67,7 +67,7 @@ describe('Alternative Content for Notebooks', () => {
 				show(preserveFocus?: boolean): void {
 					//
 				}
-				createSubLogger(): ILogService {
+				createSubLogger(): ILogger {
 					return this;
 				}
 			}(), new NullTelemetryService());

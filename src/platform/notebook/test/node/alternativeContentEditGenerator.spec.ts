@@ -55,7 +55,7 @@ describe('Alternative Content Edit Generator', () => {
 				show(preserveFocus?: boolean): void {
 					//
 				}
-				createSubLogger(): ILogService {
+				createSubLogger(): ILogger {
 					return this;
 				}
 			}(), new NullTelemetryService());
