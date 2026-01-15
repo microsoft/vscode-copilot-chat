@@ -184,6 +184,8 @@ export interface UserHappinessScoreConfiguration {
 	acceptedScore: number;
 	/** Score for rejected actions (0-1, default: 0) */
 	rejectedScore: number;
+	/** Score for ignored actions (0-1, default: 0.9) */
+	ignoredScore: number;
 	/** Threshold for high aggressiveness level (default: 0.7) */
 	highThreshold: number;
 	/** Threshold for medium aggressiveness level (default: 0.4) */
@@ -193,6 +195,7 @@ export interface UserHappinessScoreConfiguration {
 export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
 	'acceptedScore': vRequired(vNumber()),
 	'rejectedScore': vRequired(vNumber()),
+	'ignoredScore': vRequired(vNumber()),
 	'highThreshold': vRequired(vNumber()),
 	'mediumThreshold': vRequired(vNumber()),
 });
@@ -200,6 +203,7 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
 	acceptedScore: 1,
 	rejectedScore: 0,
+	ignoredScore: 0.9,
 	highThreshold: 0.7,
 	mediumThreshold: 0.4,
 };

@@ -109,6 +109,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		this.userInteractionMonitor.handleRejection();
 	}
 
+	public handleIgnored(): void {
+		this.userInteractionMonitor.handleIgnored();
+	}
+
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 		const filteringPushEdit: PushEdit = (result) => {
 			if (result.isError()) {

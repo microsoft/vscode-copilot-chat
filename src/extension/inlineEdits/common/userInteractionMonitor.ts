@@ -12,7 +12,7 @@ export class UserInteractionMonitor {
 
 	private static readonly MAX_INTERACTIONS_CONSIDERED = 10;
 
-	private _recentUserActions: { time: number; kind: 'accepted' | 'rejected' }[] = [];
+	private _recentUserActions: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -29,7 +29,11 @@ export class UserInteractionMonitor {
 		this._recordUserAction('rejected');
 	}
 
-	private _recordUserAction(kind: 'accepted' | 'rejected') {
+	public handleIgnored(): void {
+		this._recordUserAction('ignored');
+	}
+
+	private _recordUserAction(kind: 'accepted' | 'rejected' | 'ignored') {
 		this._recentUserActions.push({ time: Date.now(), kind });
 		// keep at most 10 user actions
 		this._recentUserActions = this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
@@ -57,6 +61,9 @@ export class UserInteractionMonitor {
 
 		// Calculate impact of each action with time decay
 		for (const action of this._recentUserActions) {
+			if (action.kind === 'ignored') {
+				continue; // Ignore 'ignored' actions for debounce calculation
+			}
 			const timeSinceAction = now - action.time;
 			if (timeSinceAction > DEBOUNCE_DECAY_TIME_MS) {
 				continue;
@@ -132,8 +139,19 @@ export class UserInteractionMonitor {
 			// Position 0 (oldest) has lowest weight, last position has highest weight
 			const weight = i + 1;
 
-			// Accepted = acceptedScore, Rejected = rejectedScore
-			const score = action.kind === 'accepted' ? config.acceptedScore : config.rejectedScore;
+			// Get score based on action kind from configuration
+			let score: number;
+			switch (action.kind) {
+				case 'accepted':
+					score = config.acceptedScore;
+					break;
+				case 'rejected':
+					score = config.rejectedScore;
+					break;
+				case 'ignored':
+					score = config.ignoredScore;
+					break;
+			}
 
 			weightedScore += score * weight;
 			totalWeight += weight;
