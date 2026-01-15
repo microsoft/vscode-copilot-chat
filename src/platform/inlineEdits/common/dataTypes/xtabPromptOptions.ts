@@ -182,14 +182,22 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 export interface UserHappinessScoreConfiguration {
 	/** Score for accepted actions (0-1, default: 1) */
 	acceptedScore: number;
-	/** Score for rejected actions (0-1, default: 0) */
+	/** Score for rejected actions (0-1, default: 0.2) */
 	rejectedScore: number;
-	/** Score for ignored actions (0-1, default: 0.9) */
+	/** Score for ignored/notAccepted actions (0-1, default: 0.5) */
 	ignoredScore: number;
-	/** Threshold for high aggressiveness level (default: 0.7) */
+	/** Threshold for high aggressiveness level (default: 0.6) */
 	highThreshold: number;
 	/** Threshold for medium aggressiveness level (default: 0.4) */
 	mediumThreshold: number;
+	/** Whether to include ignored/notAccepted actions in score calculation (default: false) */
+	includeIgnored: boolean;
+	/** Maximum number of ignored/notAccepted actions to consider (default: 5) */
+	ignoredLimit: number;
+	/** Whether to limit consecutive ignored actions (default: false) */
+	limitConsecutiveIgnored: boolean;
+	/** Whether to limit total ignored actions (default: true) */
+	limitTotalIgnored: boolean;
 }
 
 export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
@@ -198,14 +206,22 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 	'ignoredScore': vRequired(vNumber()),
 	'highThreshold': vRequired(vNumber()),
 	'mediumThreshold': vRequired(vNumber()),
+	'includeIgnored': vRequired(vBoolean()),
+	'ignoredLimit': vRequired(vNumber()),
+	'limitConsecutiveIgnored': vRequired(vBoolean()),
+	'limitTotalIgnored': vRequired(vBoolean()),
 });
 
 export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
-	acceptedScore: 1,
-	rejectedScore: 0,
-	ignoredScore: 0.9,
-	highThreshold: 0.7,
+	acceptedScore: 1.0,
+	rejectedScore: 0.2,
+	ignoredScore: 0.5,
+	highThreshold: 0.6,
 	mediumThreshold: 0.4,
+	includeIgnored: false,
+	ignoredLimit: 5,
+	limitConsecutiveIgnored: false,
+	limitTotalIgnored: true,
 };
 
 export function parseLintOptionString(optionString: string): LintOptions | undefined {

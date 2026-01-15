@@ -124,17 +124,36 @@ export class UserInteractionMonitor {
 	/**
 	 * Value between 0 and 1 indicating user happiness.
 	 * 1 means very happy, 0 means very unhappy.
+	 *
+	 * Uses position-weighted scoring with ignored action limiting:
+	 * - More recent actions have higher weight
+	 * - Ignored actions can be limited (consecutive or total) to prevent score dilution
+	 * - Score is adjusted towards neutral (0.5) based on data confidence
 	 */
 	private _getUserHappinessScore(config: UserHappinessScoreConfiguration): number {
 		if (this._recentUserActions.length === 0) {
 			return 0.5; // neutral score when no data
 		}
 
+		// Get window of actions with ignored limiting
+		const window = this._getWindowWithIgnoredLimit(config);
+
+		if (window.length === 0) {
+			return 0.5; // neutral score when no data after filtering
+		}
+
+		// Calculate weighted score
 		let weightedScore = 0;
 		let totalWeight = 0;
 
-		for (let i = 0; i < this._recentUserActions.length; i++) {
-			const action = this._recentUserActions[i];
+		for (let i = 0; i < window.length; i++) {
+			const action = window[i];
+
+			// Skip ignored actions if not included in score calculation
+			if (action.kind === 'ignored' && !config.includeIgnored) {
+				continue;
+			}
+
 			// Calculate weight based on position (more recent = higher weight)
 			// Position 0 (oldest) has lowest weight, last position has highest weight
 			const weight = i + 1;
@@ -153,7 +172,10 @@ export class UserInteractionMonitor {
 					break;
 			}
 
-			weightedScore += score * weight;
+			// Normalize score to 0-1 range based on accept/reject weights
+			const normalized = (score - config.rejectedScore) / (config.acceptedScore - config.rejectedScore);
+
+			weightedScore += normalized * weight;
 			totalWeight += weight;
 		}
 
@@ -161,7 +183,56 @@ export class UserInteractionMonitor {
 
 		// Adjust score towards neutral (0.5) when we have fewer data points
 		// This prevents extreme scores with limited data
-		const dataConfidence = this._recentUserActions.length / UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED;
+		const dataConfidence = window.length / UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED;
 		return 0.5 + (rawScore - 0.5) * dataConfidence;
+	}
+
+	/**
+	 * Get window of actions with ignored action limiting via window expansion.
+	 *
+	 * When ignored limit is reached, skip excess ignored actions but expand window
+	 * further back to still get MAX_INTERACTIONS_CONSIDERED items.
+	 */
+	private _getWindowWithIgnoredLimit(config: UserHappinessScoreConfiguration): { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] {
+		const { limitConsecutiveIgnored, limitTotalIgnored, ignoredLimit } = config;
+
+		if (!limitConsecutiveIgnored && !limitTotalIgnored) {
+			// No limiting - just take last MAX_INTERACTIONS_CONSIDERED
+			return this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
+		}
+
+		const result: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
+		let consecutiveIgnored = 0;
+		let totalIgnored = 0;
+
+		// Walk backwards through history
+		for (let i = this._recentUserActions.length - 1; i >= 0 && result.length < UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED; i--) {
+			const action = this._recentUserActions[i];
+
+			if (action.kind === 'ignored') {
+				let skip = false;
+				if (limitConsecutiveIgnored && consecutiveIgnored >= ignoredLimit) {
+					skip = true;
+				}
+				if (limitTotalIgnored && totalIgnored >= ignoredLimit) {
+					skip = true;
+				}
+
+				if (skip) {
+					continue;
+				}
+
+				consecutiveIgnored++;
+				totalIgnored++;
+			} else {
+				consecutiveIgnored = 0; // Reset consecutive count on accept/reject
+			}
+
+			result.push(action);
+		}
+
+		// Reverse to get chronological order
+		result.reverse();
+		return result;
 	}
 }
