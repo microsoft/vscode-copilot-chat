@@ -21,7 +21,7 @@ import { TerminalPrompt } from '../../prompts/node/panel/terminal';
 
 export class TerminalIntent implements IIntent {
 	static readonly ID = Intent.Terminal;
-	readonly locations = [ChatLocation.Panel, ChatLocation.Terminal];
+	readonly locations = [ChatLocation.Terminal];
 	readonly id = TerminalIntent.ID;
 	readonly description = l10n.t('Ask how to do something in the terminal');
 	readonly commandInfo: IIntentSlashCommandInfo = {
