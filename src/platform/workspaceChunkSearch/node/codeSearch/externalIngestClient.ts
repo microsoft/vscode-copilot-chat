@@ -187,13 +187,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		// Handle 429 by cleaning up old filesets and retrying
 		if (createIngestResponse.status === 429) {
 			this.logService.info('ExternalIngestClient::updateIndex(): Got 429, cleaning up old filesets...');
-			onProgress?.('Too many filesets, cleaning up old ones...');
+			onProgress?.(l10n.t("Too many filesets, cleaning up old ones..."));
 
 			await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, token), token);
 
 			// Retry the create ingest
 			this.logService.info('ExternalIngestClient::updateIndex(): Retrying create ingest after cleanup...');
-			onProgress?.('Retrying snapshot creation...');
+			onProgress?.(l10n.t("Retrying snapshot creation..."));
 			createIngestResponse = await createIngest();
 		}
 
