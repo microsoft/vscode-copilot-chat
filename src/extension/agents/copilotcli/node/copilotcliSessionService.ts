@@ -396,7 +396,7 @@ export class CopilotCLISessionWorkspaceTracker {
 }
 
 function labelFromPrompt(prompt: string): string {
-	// Strip system reminders and return first line or first 50 characters, whichever is shorter
+	// Strip system reminders from the prompt
 	return stripReminders(prompt);
 }
 
