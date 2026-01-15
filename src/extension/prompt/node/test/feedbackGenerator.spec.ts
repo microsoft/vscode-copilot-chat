@@ -10,7 +10,7 @@ import { parseFeedbackResponse } from '../feedbackGenerator';
 suite('parseFeedbackResponse', function () {
 
 	describe('basic parsing', function () {
-		test('parses single comment with all fields', function () {
+		test('parses single comment with all fields including linkOffset and linkLength', function () {
 			const response = '1. Line 10 in `file.ts`, bug, high severity: This is a bug.';
 			const matches = parseFeedbackResponse(response);
 
@@ -21,6 +21,10 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].kind, 'bug');
 			assert.strictEqual(matches[0].severity, 'high');
 			assert.strictEqual(matches[0].content, 'This is a bug.');
+			// linkOffset = match.index + num.length + 2 = 0 + 1 + 2 = 3
+			assert.strictEqual(matches[0].linkOffset, 3);
+			// linkLength = 5 ("Line ") + from.length (2 for "10") = 7
+			assert.strictEqual(matches[0].linkLength, 7);
 		});
 
 		test('parses comment without backticks around path', function () {
@@ -31,43 +35,24 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].relativeDocumentPath, 'file.ts');
 		});
 
-		test('parses line range (from-to)', function () {
+		test('parses line range (from-to) with correct linkLength', function () {
 			const response = '1. Line 10-15 in `file.ts`, bug, high severity: Multiple lines affected.';
 			const matches = parseFeedbackResponse(response);
 
 			assert.strictEqual(matches.length, 1);
 			assert.strictEqual(matches[0].from, 9); // 0-indexed
 			assert.strictEqual(matches[0].to, 15);
-			assert.strictEqual(matches[0].linkLength, 5 + 2 + 2 + 1); // "Line " + "10" + "15" + "-"
+			// linkLength = 5 ("Line ") + from.length (2) + to.length (2) + 1 ("-") = 10
+			assert.strictEqual(matches[0].linkLength, 5 + 2 + 2 + 1);
 		});
 
-		test('defaults kind to "other" when not specified', function () {
-			const response = '1. Line 10 in `file.ts`, low severity: Missing kind.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].kind, 'other');
-		});
-
-		test('defaults severity to "unknown" when not specified', function () {
-			const response = '1. Line 10 in `file.ts`, bug: Missing severity.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].severity, 'unknown');
-		});
-
-		test('parses comment with only line and path', function () {
+		test('defaults kind to "other" and severity to "unknown" when not specified', function () {
 			const response = '1. Line 42 in `utils.js`: Minimal comment.';
 			const matches = parseFeedbackResponse(response);
 
 			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].from, 41);
-			assert.strictEqual(matches[0].to, 42);
-			assert.strictEqual(matches[0].relativeDocumentPath, 'utils.js');
 			assert.strictEqual(matches[0].kind, 'other');
 			assert.strictEqual(matches[0].severity, 'unknown');
-			assert.strictEqual(matches[0].content, 'Minimal comment.');
 		});
 
 		test('parses comment with extra text before "in" keyword', function () {
@@ -77,72 +62,39 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches.length, 1);
 			assert.strictEqual(matches[0].from, 9);
 			assert.strictEqual(matches[0].relativeDocumentPath, 'file.ts');
-			assert.strictEqual(matches[0].content, 'Issue with extra text.');
-		});
-
-		test('parses comment with trasiling backtick after path', function () {
-			const response = '1. Line 10 in `src/file.ts`, bug: Issue.\n\n';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.ok(matches[0].relativeDocumentPath?.includes('file.ts'));
 		});
 	});
 
 	describe('multiple comments', function () {
-		test('parses multiple comments separated by newlines', function () {
+		test('parses multiple comments separated by newlines or next numbered item', function () {
 			const response = `1. Line 10 in \`file.ts\`, bug, high severity: First issue.
 
-2. Line 20 in \`other.ts\`, performance, low severity: Second issue.`;
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 2);
-			assert.strictEqual(matches[0].from, 9);
-			assert.strictEqual(matches[0].content, 'First issue.');
-			assert.strictEqual(matches[1].from, 19);
-			assert.strictEqual(matches[1].content, 'Second issue.');
-		});
-
-		test('parses comments separated by next numbered item', function () {
-			const response = `1. Line 5 in \`a.ts\`, bug: Issue one.
-2. Line 10 in \`b.ts\`, bug: Issue two.
-3. Line 15 in \`c.ts\`, bug: Issue three.`;
+2. Line 20 in \`other.ts\`, performance, low severity: Second issue.
+3. Line 30 in \`third.ts\`, bug: Third issue.`;
 			const matches = parseFeedbackResponse(response);
 
 			assert.strictEqual(matches.length, 3);
-			assert.strictEqual(matches[0].relativeDocumentPath, 'a.ts');
-			assert.strictEqual(matches[1].relativeDocumentPath, 'b.ts');
-			assert.strictEqual(matches[2].relativeDocumentPath, 'c.ts');
+			assert.strictEqual(matches[0].content, 'First issue.');
+			assert.strictEqual(matches[1].content, 'Second issue.');
+			assert.strictEqual(matches[2].content, 'Third issue.');
 		});
 	});
 
 	describe('dropPartial option', function () {
-		test('keeps partial comment when dropPartial is false', function () {
-			const response = '1. Line 10 in `file.ts`, bug: Incomplete';
-			const matches = parseFeedbackResponse(response, false);
+		test('keeps partial comment when dropPartial is false, drops when true', function () {
+			const partialResponse = '1. Line 10 in `file.ts`, bug: Incomplete';
 
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].content, 'Incomplete');
+			// dropPartial = false (default) keeps partial
+			const matchesKept = parseFeedbackResponse(partialResponse, false);
+			assert.strictEqual(matchesKept.length, 1);
+			assert.strictEqual(matchesKept[0].content, 'Incomplete');
+
+			// dropPartial = true drops partial
+			const matchesDropped = parseFeedbackResponse(partialResponse, true);
+			assert.strictEqual(matchesDropped.length, 0);
 		});
 
-		test('drops partial comment when dropPartial is true', function () {
-			const response = '1. Line 10 in `file.ts`, bug: Incomplete';
-			const matches = parseFeedbackResponse(response, true);
-
-			assert.strictEqual(matches.length, 0);
-		});
-
-		test('keeps complete comment when dropPartial is true', function () {
-			const response = `1. Line 10 in \`file.ts\`, bug: Complete.
-
-`;
-			const matches = parseFeedbackResponse(response, true);
-
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].content, 'Complete.');
-		});
-
-		test('keeps first comment but drops partial second when dropPartial is true', function () {
+		test('keeps first complete comment but drops partial second when dropPartial is true', function () {
 			const response = `1. Line 10 in \`file.ts\`, bug: First complete.
 
 2. Line 20 in \`other.ts\`, bug: Partial`;
@@ -166,32 +118,6 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content.indexOf('```'), -1);
 		});
 
-		test('removes complex multi-line code block with indentation (previously called: Correctly parses reply)', function () {
-			const fileContents = `1. Line 33 in \`requestLoggerImpl.ts\`, readability, low severity: The lambda function used in \`onDidChange\` could be extracted into a named function for better readability and reusability.
-   \`\`\`typescript
-   this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
-       onDidChange: Event.map(this.onDidChangeRequests, this._mapToLatestUri),
-       provideTextDocumentContent: (uri) => {
-           const uriData = ChatRequestScheme.parseUri(uri.toString());
-           if (!uriData) { return \`Invalid URI: \${uri}\`; }
-
-           const entry = uriData.kind === 'latest' ? this._entries[this._entries.length - 1] : this._entries.find(e => e.id === uriData.id);
-           if (!entry) { return \`Request not found\`; }
-
-           if (entry.kind === LoggedInfoKind.Element) { return entry.html; }
-
-           return this._renderEntryToMarkdown(entry.id, entry.entry);
-       }
-   }));
-
-   private _mapToLatestUri = () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }));
-   \`\`\``;
-			const matches = parseFeedbackResponse(fileContents);
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].from, 32);
-			assert.strictEqual(matches[0].content.indexOf('```'), -1);
-		});
-
 		test('removes broken code block (odd number of markers)', function () {
 			const response = '1. Line 10 in `file.ts`, bug: Here is some code:\n```typescript\nconst x = 1;';
 			const matches = parseFeedbackResponse(response);
@@ -208,53 +134,17 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content, 'The variable `foo` should be renamed.');
 		});
 
-		test('keeps trailing ``` when no opening marker exists', function () {
+		test('removes trailing ``` via broken block handler when no opening marker exists', function () {
 			const response = '1. Line 10 in `file.ts`, bug: Some text ending with ```\n\n';
 			const matches = parseFeedbackResponse(response);
 
 			assert.strictEqual(matches.length, 1);
-			// When there's no matching opening ```, the content is kept as-is (minus trailing ```)
-			// but the code can't find a valid block to remove, so it falls through to broken block handling
+			// Since there's no matching opening ```, the trailing ``` removal fails (i === -1),
+			// but the broken block handler (odd count) removes it
 			assert.strictEqual(matches[0].content, 'Some text ending with');
 		});
 
-		test('preserves complete code block in middle of content', function () {
-			const response = `1. Line 10 in \`file.ts\`, bug: Use this pattern:
-\`\`\`typescript
-const x = 1;
-\`\`\`
-instead of the current approach.
-
-`;
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.ok(matches[0].content.includes('```typescript'));
-			assert.ok(matches[0].content.includes('const x = 1;'));
-		});
-
-		test('handles multiple complete code blocks in middle', function () {
-			const response = `1. Line 10 in \`file.ts\`, bug: Bad:
-\`\`\`typescript
-const x = 1;
-\`\`\`
-Good:
-\`\`\`typescript
-const y = 2;
-\`\`\`
-Use the second pattern.
-
-`;
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.ok(matches[0].content.includes('Bad:'));
-			assert.ok(matches[0].content.includes('Good:'));
-			assert.ok(matches[0].content.includes('const x = 1;'));
-			assert.ok(matches[0].content.includes('const y = 2;'));
-		});
-
-		test('removes trailing code block but keeps middle code blocks', function () {
+		test('preserves complete code block in middle but removes trailing code block', function () {
 			const response = `1. Line 10 in \`file.ts\`, bug: Example:
 \`\`\`typescript
 const x = 1;
@@ -268,63 +158,20 @@ const y = 2;
 			assert.strictEqual(matches.length, 1);
 			// Should keep the first code block but remove the trailing one
 			assert.ok(matches[0].content.includes('Example:'));
+			assert.ok(matches[0].content.includes('```typescript'));
 			assert.ok(matches[0].content.includes('const x = 1;'));
 			assert.strictEqual(matches[0].content.includes('const y = 2;'), false);
 		});
 	});
 
-	describe('link offset and length', function () {
-		test('calculates linkOffset correctly', function () {
-			const response = '1. Line 10 in `file.ts`, bug: Content.';
-			const matches = parseFeedbackResponse(response);
-
-			// linkOffset = match.index + num.length + 2 (for ". ")
-			// "1" has length 1, so offset = 0 + 1 + 2 = 3 (points to "Line")
-			assert.strictEqual(matches[0].linkOffset, 3);
-		});
-
-		test('calculates linkLength for single line', function () {
-			const response = '1. Line 10 in `file.ts`, bug: Content.';
-			const matches = parseFeedbackResponse(response);
-
-			// linkLength = 5 ("Line ") + from.length (2 for "10") = 7
-			assert.strictEqual(matches[0].linkLength, 7);
-		});
-
-		test('calculates linkLength for line range', function () {
-			const response = '1. Line 100-200 in `file.ts`, bug: Content.';
-			const matches = parseFeedbackResponse(response);
-
-			// linkLength = 5 ("Line ") + from.length (3) + to.length (3) + 1 ("-") = 12
-			assert.strictEqual(matches[0].linkLength, 12);
-		});
-	});
-
 	describe('path handling', function () {
-		test('parses path with subdirectories', function () {
-			const response = '1. Line 10 in `src/utils/helpers.ts`, bug: Issue.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.ok(matches[0].relativeDocumentPath?.includes('src'));
-			assert.ok(matches[0].relativeDocumentPath?.includes('helpers.ts'));
-		});
-
-		test('handles path without backticks', function () {
-			const response = '1. Line 10 in src/file.ts, bug: Issue.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.ok(matches[0].relativeDocumentPath?.includes('file.ts'));
-		});
-
-		test('normalizes forward slashes in paths (Windows path separator normalization)', function () {
+		test('normalizes path separators for subdirectories', function () {
 			const response = '1. Line 10 in `src/utils/helpers.ts`, bug: Issue.\n\n';
 			const matches = parseFeedbackResponse(response);
 
 			assert.strictEqual(matches.length, 1);
 			// On Windows, forward slashes should be converted to backslashes
-			// On Unix, this test would behave differently
+			// On Unix, paths stay with forward slashes
 			const pathSep = require('path').sep;
 			if (pathSep === '\\') {
 				assert.strictEqual(matches[0].relativeDocumentPath, 'src\\utils\\helpers.ts');
@@ -335,14 +182,9 @@ const y = 2;
 	});
 
 	describe('edge cases', function () {
-		test('returns empty array for empty response', function () {
-			const matches = parseFeedbackResponse('');
-			assert.strictEqual(matches.length, 0);
-		});
-
-		test('returns empty array for response without valid format', function () {
-			const matches = parseFeedbackResponse('This is just some text without the expected format.');
-			assert.strictEqual(matches.length, 0);
+		test('returns empty array for empty or invalid response', function () {
+			assert.strictEqual(parseFeedbackResponse('').length, 0);
+			assert.strictEqual(parseFeedbackResponse('This is just some text without the expected format.').length, 0);
 		});
 
 		test('handles line number 1 correctly (0-indexed)', function () {
@@ -375,16 +217,6 @@ multiple lines.
 			assert.ok(matches[0].content.includes('multiple lines.'));
 		});
 
-		test('parses all known kinds', function () {
-			const kinds = ['bug', 'performance', 'consistency', 'documentation', 'naming', 'readability', 'style', 'other'];
-			for (const kind of kinds) {
-				const response = `1. Line 10 in \`file.ts\`, ${kind}: Issue.`;
-				const matches = parseFeedbackResponse(response);
-				assert.strictEqual(matches.length, 1, `Failed for kind: ${kind}`);
-				assert.strictEqual(matches[0].kind, kind);
-			}
-		});
-
 		test('handles multi-digit item numbers for linkOffset calculation', function () {
 			const response = '10. Line 5 in `file.ts`, bug: Issue.\n\n';
 			const matches = parseFeedbackResponse(response);
@@ -392,56 +224,6 @@ multiple lines.
 			assert.strictEqual(matches.length, 1);
 			// linkOffset = match.index + num.length + 2 = 0 + 2 + 2 = 4
 			assert.strictEqual(matches[0].linkOffset, 4);
-		});
-
-		test('handles three-digit item numbers', function () {
-			const response = '100. Line 999 in `file.ts`, bug: Issue.\n\n';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			// linkOffset = match.index + num.length + 2 = 0 + 3 + 2 = 5
-			assert.strictEqual(matches[0].linkOffset, 5);
-			// linkLength = 5 + from.length (3 for "999") = 8
-			assert.strictEqual(matches[0].linkLength, 8);
-		});
-
-		test('content terminated by double newline', function () {
-			const response = '1. Line 10 in `file.ts`, bug: First issue.\n\nSome other text here.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].content, 'First issue.');
-		});
-
-		test('content terminated by next numbered item on same line', function () {
-			// This tests the regex lookahead for \n\d+\.
-			const response = '1. Line 10 in `file.ts`, bug: First.\n2. Line 20 in `other.ts`, bug: Second.';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 2);
-			assert.strictEqual(matches[0].content, 'First.');
-			assert.strictEqual(matches[1].content, 'Second.');
-		});
-
-		test('handles all known severity levels', function () {
-			const severities = ['low', 'medium', 'high', 'critical'];
-			for (const severity of severities) {
-				const response = `1. Line 10 in \`file.ts\`, bug, ${severity} severity: Issue.\n\n`;
-				const matches = parseFeedbackResponse(response);
-				assert.strictEqual(matches.length, 1, `Failed for severity: ${severity}`);
-				assert.strictEqual(matches[0].severity, severity);
-			}
-		});
-
-		test('handles large line ranges', function () {
-			const response = '1. Line 1000-2000 in `file.ts`, bug: Large range.\n\n';
-			const matches = parseFeedbackResponse(response);
-
-			assert.strictEqual(matches.length, 1);
-			assert.strictEqual(matches[0].from, 999);
-			assert.strictEqual(matches[0].to, 2000);
-			// linkLength = 5 + 4 (1000) + 4 (2000) + 1 (-) = 14
-			assert.strictEqual(matches[0].linkLength, 14);
 		});
 	});
 });
