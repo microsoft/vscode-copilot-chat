@@ -148,7 +148,7 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content.indexOf('```'), -1);
 		});
 
-		test('removes complex multi-line code block with indentation', function () {
+		test('removes complex multi-line code block with indentation (previously called: Correctly parses reply)', function () {
 			const fileContents = `1. Line 33 in \`requestLoggerImpl.ts\`, readability, low severity: The lambda function used in \`onDidChange\` could be extracted into a named function for better readability and reusability.
    \`\`\`typescript
    this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
