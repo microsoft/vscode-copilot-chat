@@ -136,7 +136,8 @@
 		"languageModelThinkingPart",
 		"chatSessionsProvider@3",
 		"devDeviceId",
-		"contribEditorContentMenu"
+		"contribEditorContentMenu",
+		"chatPromptFiles"
 	],
 	"contributes": {
 		"languageModelTools": [
