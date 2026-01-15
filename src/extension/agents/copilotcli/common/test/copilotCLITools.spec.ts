@@ -191,6 +191,17 @@ describe('CopilotCLITools', () => {
 			expect(completed.isConfirmed).toBe(false);
 			expect(getInvocationMessageText(completed)).toContain('Denied');
 		});
+		it('populates resultDetails with tool output on success', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const startEvent: any = { type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-3', arguments: { command: 'echo hello' } } };
+			processToolExecutionStart(startEvent, pending);
+			const completeEvent: any = { type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-3', success: true, result: { content: 'hello\n' } } };
+			const [completed,] = processToolExecutionComplete(completeEvent, pending)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.resultDetails).toBeDefined();
+			expect(completed.resultDetails?.output.mimeType).toBe('text/plain');
+			const decoder = new TextDecoder();
+			expect(decoder.decode(Buffer.from(completed.resultDetails!.output.base64Data, 'base64'))).toBe('hello\n');
+		});
 	});
 
 	describe('integration edge cases', () => {

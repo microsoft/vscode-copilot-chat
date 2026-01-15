@@ -487,6 +487,16 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		} else {
 			invocation[0].isConfirmed = true;
 		}
+
+		// Add result details if available
+		if (event.data.success && event.data.result?.content) {
+			invocation[0].resultDetails = {
+				output: {
+					mimeType: 'text/plain',
+					base64Data: Buffer.from(event.data.result.content).toString('base64')
+				}
+			};
+		}
 	}
 
 	return invocation;

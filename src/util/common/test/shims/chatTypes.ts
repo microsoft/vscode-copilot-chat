@@ -462,6 +462,13 @@ export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage
 	}
 }
 
+export interface ChatToolResultOutputDetails {
+	output: {
+		mimeType: string;
+		base64Data: string;
+	};
+}
+
 export class ChatToolInvocationPart {
 	toolName: string;
 	toolCallId: string;
@@ -472,6 +479,7 @@ export class ChatToolInvocationPart {
 	isConfirmed?: boolean;
 	isComplete?: boolean;
 	toolSpecificData?: vscode.ChatTerminalToolInvocationData;
+	resultDetails?: vscode.ChatToolResultOutputDetails;
 
 	constructor(toolName: string,
 		toolCallId: string,

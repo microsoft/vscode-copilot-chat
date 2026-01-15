@@ -99,6 +99,13 @@ declare module 'vscode' {
 		language: string;
 	}
 
+	export interface ChatToolResultOutputDetails {
+		output: {
+			mimeType: string;
+			base64Data: string;
+		};
+	}
+
 	export class ChatToolInvocationPart {
 		toolName: string;
 		toolCallId: string;
@@ -111,6 +118,7 @@ declare module 'vscode' {
 		toolSpecificData?: ChatTerminalToolInvocationData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
+		resultDetails?: ChatToolResultOutputDetails;
 
 		constructor(toolName: string, toolCallId: string, isError?: boolean);
 	}
