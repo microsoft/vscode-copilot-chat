@@ -10,7 +10,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
 import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
-import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
+import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, ICopilotToolCallStreamUpdate, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
 import { Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
 
@@ -69,7 +69,9 @@ class StreamingToolCall {
 
 	constructor() { }
 
-	update(toolCall: IToolCall) {
+	update(toolCall: IToolCall): boolean {
+		let argumentsChanged = false;
+
 		if (toolCall.id) {
 			this.id = toolCall.id;
 		}
@@ -80,7 +82,10 @@ class StreamingToolCall {
 
 		if (toolCall.function?.arguments) {
 			this.arguments += toolCall.function.arguments;
+			argumentsChanged = true;
 		}
+
+		return argumentsChanged;
 	}
 }
 
@@ -103,16 +108,31 @@ class StreamingToolCalls {
 		return this.toolCalls.length > 0;
 	}
 
-	update(choice: ExtendedChoiceJSON) {
+	update(choice: ExtendedChoiceJSON): ICopilotToolCallStreamUpdate[] {
+		const updates: ICopilotToolCallStreamUpdate[] = [];
 		choice.delta?.tool_calls?.forEach(toolCall => {
-			let currentCall = this.toolCalls.at(-1);
-			if (!currentCall || (toolCall.id && currentCall.id !== toolCall.id)) {
+			let currentCall: StreamingToolCall | undefined;
+			if (toolCall.id) {
+				currentCall = this.toolCalls.find(call => call.id === toolCall.id);
+			}
+			if (!currentCall) {
+				currentCall = this.toolCalls.at(-1);
+			}
+			if (!currentCall || (toolCall.id && currentCall.id && currentCall.id !== toolCall.id)) {
 				currentCall = new StreamingToolCall();
 				this.toolCalls.push(currentCall);
 			}
 
-			currentCall.update(toolCall);
+			const argumentsChanged = currentCall.update(toolCall);
+			if (argumentsChanged && currentCall.name) {
+				updates.push({
+					name: currentCall.name,
+					arguments: currentCall.arguments,
+					id: currentCall.id,
+				});
+			}
 		});
+		return updates;
 	}
 }
 
@@ -300,7 +320,7 @@ export class SSEProcessor {
 				return;
 			}
 
-			// this.logService.public.debug(chunk.toString());
+			// this.logService.debug(chunk.toString());
 			const [dataLines, remainder] = splitChunk(extraData + chunk.toString());
 			extraData = remainder;
 
@@ -418,7 +438,7 @@ export class SSEProcessor {
 
 					let finishOffset: number | undefined;
 
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingDelta }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; toolCallStreamUpdates?: ICopilotToolCallStreamUpdate[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingDelta }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -435,6 +455,7 @@ export class SSEProcessor {
 							ipCitations: delta?.ipCodeCitations,
 							copilotReferences: delta?.references,
 							copilotToolCalls: delta?.toolCalls,
+							copilotToolCallStreamUpdates: delta?.toolCallStreamUpdates,
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
 							copilotErrors: delta?.errors,
@@ -448,17 +469,26 @@ export class SSEProcessor {
 
 					let handled = true;
 					if (choice.delta?.tool_calls) {
-						if (!this.toolCalls.hasToolCalls()) {
-							const firstToolName = choice.delta.tool_calls.at(0)?.function?.name;
+						const hadExistingToolCalls = this.toolCalls.hasToolCalls();
+						if (!hadExistingToolCalls) {
+							const firstToolCall = choice.delta.tool_calls.at(0);
+							const firstToolName = firstToolCall?.function?.name;
 							if (firstToolName) {
 								if (solution.text.length) {
 									// Flush the linkifier stream. See #16465
 									solution.append({ index: 0, delta: { content: ' ' } });
 								}
-								await emitSolution({ beginToolCalls: [{ name: firstToolName }] });
+								if (await emitSolution({ beginToolCalls: [{ name: firstToolName, id: firstToolCall?.id }] })) {
+									continue;
+								}
 							}
 						}
-						this.toolCalls.update(choice);
+						const toolCallStreamUpdates = this.toolCalls.update(choice);
+						if (toolCallStreamUpdates.length) {
+							if (await emitSolution({ toolCallStreamUpdates })) {
+								continue;
+							}
+						}
 					} else if (choice.delta?.copilot_annotations?.CodeVulnerability || choice.delta?.copilot_annotations?.IPCodeCitations) {
 						if (await emitSolution()) {
 							continue;

@@ -139,17 +139,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	getWorktreeRelativePath(sessionId: string): string | undefined {
-		const worktreePath = this.getWorktreePath(sessionId);
-		if (!worktreePath) {
-			return undefined;
-		}
-
-		// TODO@rebornix, @osortega: read the workingtree name from git extension
-		const lastIndex = worktreePath.fsPath.lastIndexOf('/');
-		return worktreePath.fsPath.substring(lastIndex + 1);
-	}
-
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
 

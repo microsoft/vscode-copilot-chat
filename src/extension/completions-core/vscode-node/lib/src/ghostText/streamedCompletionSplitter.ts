@@ -182,9 +182,9 @@ export class StreamedCompletionSplitter {
 		}
 		const apiChoice = this.instantiationService.invokeFunction(convertToAPIChoice,
 			trimmed.effectiveText.trimEnd(),
-			delta.getAPIJsonData!(),
+			delta.getAPIJsonData!(), // FIXME@ulugbekna
 			trimmed.index,
-			delta.requestId!,
+			delta.requestId!, // FIXME@ulugbekna
 			offset !== undefined,
 			delta.telemetryData!
 		);

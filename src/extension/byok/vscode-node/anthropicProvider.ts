@@ -181,7 +181,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		// Check if web search is enabled and append web_search tool if not already present.
 		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
-		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
+		if (webSearchEnabled && !tools.some(tool => 'name' in tool && tool.name === 'web_search')) {
 			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
 			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
 			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
@@ -243,7 +243,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				type: 'enabled',
 				budget_tokens: thinkingBudget
 			} : undefined,
-			context_management: contextManagement as any,
+			context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 		};
 
 		const wrappedProgress = new RecordedProgress(progress);
@@ -533,6 +533,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					completion_tokens: -1,
 					prompt_tokens: chunk.message.usage.input_tokens + (chunk.message.usage.cache_creation_input_tokens ?? 0) + (chunk.message.usage.cache_read_input_tokens ?? 0),
 					total_tokens: -1,
+					// Cast needed: Anthropic returns cache_creation_input_tokens which APIUsage.prompt_tokens_details doesn't define
 					prompt_tokens_details: {
 						cached_tokens: chunk.message.usage.cache_read_input_tokens ?? 0,
 						cache_creation_input_tokens: chunk.message.usage.cache_creation_input_tokens

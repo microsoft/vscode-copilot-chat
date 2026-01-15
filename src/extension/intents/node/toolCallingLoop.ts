@@ -9,14 +9,16 @@ import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResp
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
+import { isAnthropicContextEditingEnabled } from '../../../platform/networking/common/anthropic';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
@@ -29,7 +31,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { ContextEditingMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
 import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
@@ -117,6 +119,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 	}
@@ -375,7 +379,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (that.options.responseProcessor) {
 					chatResult = await that.options.responseProcessor.processResponse(this.context, inputStream, responseStream, token);
 				} else {
-					const responseProcessor = that._instantiationService.createInstance(PseudoStopStartResponseProcessor, [], undefined);
+					const responseProcessor = that._instantiationService.createInstance(PseudoStopStartResponseProcessor, [], undefined, { subagentInvocationId: that.options.request.subAgentInvocationId });
 					await responseProcessor.processResponse(this.context, inputStream, responseStream, token);
 				}
 				return chatResult;
@@ -436,7 +440,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		let contextManagementResponse: ContextManagementResponse | undefined;
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
@@ -456,10 +459,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (delta.thinking) {
 					thinkingItem = ThinkingDataItem.createOrUpdate(thinkingItem, delta.thinking);
 				}
-				if (delta.contextManagement) {
-					contextManagementResponse = delta.contextManagement;
-				}
-
 				return stopEarly ? text.length : undefined;
 			},
 			requestOptions: {
@@ -472,7 +471,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent,
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId,
 			disableThinking,
 		}, token);
 
@@ -494,21 +493,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 
-		// Store context editing metadata if context management cleared tokens
-		if (contextManagementResponse && contextManagementResponse.applied_edits.length > 0) {
-			const totalClearedTokens = contextManagementResponse.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
-				0
-			);
-			if (totalClearedTokens > 0) {
-				this.turn.setMetadata(new ContextEditingMetadata(
-					totalClearedTokens,
-					contextManagementResponse.applied_edits.length
-				));
-			}
-		}
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
+			// Store token usage metadata for Anthropic models using Messages API with context editing
+			if (fetchResult.usage && isAnthropicFamily(endpoint) && isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService)) {
+				this.turn.setMetadata(new AnthropicTokenUsageMetadata(
+					fetchResult.usage.prompt_tokens,
+					fetchResult.usage.completion_tokens
+				));
+			}
+
 			thinkingItem?.updateWithFetchResult(fetchResult);
 			return {
 				response: fetchResult,

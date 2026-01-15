@@ -457,12 +457,12 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			return { type: 'canceled', reason: 'before fetch request' };
 		}
 		if (cancel?.isCancellationRequested) {
-			const body = response.body();
+			const body = await response.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
 				// and can cancel/forget about the request itself.
-				if (body && 'destroy' in body && typeof body.destroy === 'function') {
-					(body as unknown as ClientHttp2Stream).destroy();
+				if (body && typeof (body as ClientHttp2Stream).destroy === 'function') {
+					(body as ClientHttp2Stream).destroy();
 				} else if (body instanceof ReadableStream) {
 					void body.cancel();
 				}

@@ -640,7 +640,7 @@ export class SSEProcessor {
 				requestId: this.requestId,
 				annotations: solution.copilot_annotations,
 				copilotReferences: solution.copilot_references,
-				getAPIJsonData: () => convertToAPIJsonData(solution),
+				getAPIJsonData: () => convertToAPIJsonData(solution), // observation from @ulugbekna: this conversion will make `finishReason` for this object 'stop' while we're yielding with 'DONE' below
 				finished: true,
 				telemetryData: this.telemetryData,
 			});

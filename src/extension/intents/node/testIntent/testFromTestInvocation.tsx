@@ -24,7 +24,7 @@ import { InstructionMessage } from '../../../prompts/node/base/instructionMessag
 import { PromptRenderer } from '../../../prompts/node/base/promptRenderer';
 import { SafetyRules } from '../../../prompts/node/base/safetyRules';
 import { Tag } from '../../../prompts/node/base/tag';
-import { ChatToolReferences, ChatVariables } from '../../../prompts/node/panel/chatVariables';
+import { ChatToolReferences, ChatVariables, UserQuery } from '../../../prompts/node/panel/chatVariables';
 import { HistoryWithInstructions } from '../../../prompts/node/panel/conversationHistory';
 import { CustomInstructions } from '../../../prompts/node/panel/customInstructions';
 import { CodeBlock } from '../../../prompts/node/panel/safeElements';
@@ -206,7 +206,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 							<CodeBlock uri={testGenInfo.uri} languageId={context.language.languageId} code={testedDeclarationExcerpt} />
 						</Tag>}
 					<Tag name='userPrompt' priority={900}>
-						{requestAndUserQuery}
+						<UserQuery chatVariables={filteredChatVariables} query={requestAndUserQuery} />
 					</Tag>
 				</UserMessage>
 			</>

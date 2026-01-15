@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 
-import type { ContextItem, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { ContextKind, type ContextItem, type SnippetContext, type TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import * as protocol from '../common/serverProtocol';
 import { type ContextItemSummary, type IInternalLanguageContextService, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent, type ResolvedRunnableResult } from './types';
 
@@ -348,9 +348,9 @@ class TreeYielded {
 	public children(): TreeYieldedContextItem[] {
 		const children: TreeYieldedContextItem[] = [];
 		for (const item of this.items) {
-			if (item.kind === protocol.ContextKind.Snippet) {
+			if (item.kind === ContextKind.Snippet) {
 				children.push(new TreeYieldedSnippet(item as SnippetContext));
-			} else if (item.kind === protocol.ContextKind.Trait) {
+			} else if (item.kind === ContextKind.Trait) {
 				children.push(new TreeYieldedTrait(item as TraitContext));
 			}
 		}
@@ -478,9 +478,9 @@ class TreeYieldContextRequest extends TreeContextRequest {
 	public override children(): TreeYieldedContextItem[] {
 		const children: TreeYieldedContextItem[] = [];
 		for (const item of this.items) {
-			if (item.kind === protocol.ContextKind.Snippet) {
+			if (item.kind === ContextKind.Snippet) {
 				children.push(new TreeYieldedSnippet(item as SnippetContext));
-			} else if (item.kind === protocol.ContextKind.Trait) {
+			} else if (item.kind === ContextKind.Trait) {
 				children.push(new TreeYieldedTrait(item as TraitContext));
 			}
 		}
