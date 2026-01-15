@@ -1040,7 +1040,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	/**
-	 * Check for repetition in partial response deltas from a cancelled request
+	 * Check for repetition in partial response deltas from a cancelled request.
+	 * 
+	 * This method performs the same repetition detection as the `isRepetitive` method,
+	 * but operates on partial response data collected before the request was cancelled.
+	 * 
+	 * Key differences from completed requests:
+	 * - Text is reconstructed from delta.text values instead of message.content
+	 * - Tokens are approximated by splitting text on whitespace instead of using
+	 *   the actual token array (which is only available in completed responses)
+	 * - Enhanced telemetry won't include RequestId fields since we only have the
+	 *   headerRequestId string, not the full RequestId object
+	 * - The finishReason is marked as 'canceled' to distinguish from server-generated
+	 *   finish reasons
 	 */
 	private checkRepetitionInDeltas(
 		deltas: IResponseDelta[],
@@ -1055,8 +1067,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return;
 		}
 		
-		// For cancelled requests, we don't have the actual token array,
-		// so we'll approximate by splitting text content on whitespace
+		// For cancelled requests, we don't have the actual token array (only available in ChatCompletion),
+		// so we approximate by splitting text content on whitespace. This is less precise than actual
+		// tokenization but sufficient for detecting obvious repetition patterns.
 		const tokens = textContent.split(/\s+/).filter(t => t.length > 0);
 
 		// Check for line repetition
@@ -1070,14 +1083,16 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			const telemetryData = TelemetryData.createAndMarkAsIssued();
 			const extended = telemetryData.extendedBy(telemetryProperties);
 			// Note: For cancelled requests, we don't have a full RequestId object,
-			// so we can't use extendWithRequestId like the non-cancelled path does
+			// so we can't use extendWithRequestId like the non-cancelled path does.
+			// This means enhanced telemetry for cancelled requests won't include
+			// completionId, created, deploymentId, or serverExperiments fields.
 			this._telemetryService.sendEnhancedGHTelemetryEvent('conversation.repetition.detected', extended.properties, extended.measurements);
 		}
 		
 		if (lineRepetitionStats.numberOfRepetitions >= 10) {
 			this._telemetryService.sendMSFTTelemetryEvent('conversation.repetition.detected', {
 				requestId: requestId,
-				finishReason: 'canceled', // Mark as canceled to distinguish from completed requests
+				finishReason: 'canceled', // Client-side finish reason to distinguish from server-generated reasons
 			}, {
 				numberOfRepetitions: lineRepetitionStats.numberOfRepetitions,
 				lengthOfLine: lineRepetitionStats.mostRepeatedLine.length,
