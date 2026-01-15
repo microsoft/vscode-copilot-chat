@@ -297,7 +297,8 @@ describe('CopilotCLISessionService', () => {
 
 			const sessions = await service.getAllSessions(CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
-			expect(item?.label).toBe('Line1');
+			expect(item?.label).includes('Line1');
+			expect(item?.label).includes('Line2');
 		});
 	});
 
