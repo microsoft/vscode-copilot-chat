@@ -6,6 +6,7 @@
 		"jsxFragmentFactory": "vscppf",
 		"rootDir": ".",
 		"types": [
+			"adm-zip",
 			"minimist",
 			"mocha",
 			"node",
