@@ -39,7 +39,6 @@ export class CopilotCLISessionOptions {
 	private readonly agent?: SweCustomAgent;
 	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
-	private readonly logger: ReturnType<typeof getCopilotLogger>;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
 	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
@@ -49,7 +48,6 @@ export class CopilotCLISessionOptions {
 		this.mcpServers = options.mcpServers;
 		this.agent = options.agent;
 		this.customAgents = options.customAgents;
-		this.logger = getCopilotLogger(logger);
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
@@ -70,7 +68,6 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
-			logger: this.logger,
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
 			}
@@ -148,7 +145,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.model, name: model.label }));
+			return models.map(model => ({ id: model.id, name: model.name }));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];

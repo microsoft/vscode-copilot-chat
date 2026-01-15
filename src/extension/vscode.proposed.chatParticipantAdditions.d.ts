@@ -86,6 +86,8 @@ declare module 'vscode' {
 		 * Tools may use this to render interim UI while the full invocation input is collected.
 		 */
 		readonly partialInput?: unknown;
+
+		readonly subagentInvocationId?: string;
 	}
 
 	export interface ChatTerminalToolInvocationData {
@@ -107,7 +109,7 @@ declare module 'vscode' {
 		isConfirmed?: boolean;
 		isComplete?: boolean;
 		toolSpecificData?: ChatTerminalToolInvocationData;
-		fromSubAgent?: boolean;
+		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 
 		constructor(toolName: string, toolCallId: string, isError?: boolean);

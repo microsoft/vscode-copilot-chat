@@ -57,7 +57,7 @@ export interface IBuildPromptContext {
 		readonly toolReferences: readonly InternalToolReference[];
 		readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 		readonly availableTools: readonly vscode.LanguageModelToolInformation[];
-		readonly inSubAgent?: boolean;
+		readonly subAgentInvocationId?: string;
 	};
 	readonly modeInstructions?: vscode.ChatRequestModeInstructions;
 

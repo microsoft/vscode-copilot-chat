@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 export class ClaudeChatSessionParticipant {
@@ -13,6 +14,7 @@ export class ClaudeChatSessionParticipant {
 		private readonly sessionType: string,
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		private readonly sessionItemProvider: ClaudeChatSessionItemProvider,
+		private readonly contentProvider: ClaudeChatSessionContentProvider,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -20,8 +22,8 @@ export class ClaudeChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const create = async () => {
-			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token);
+		const create = async (modelId?: string) => {
+			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId);
 			if (!claudeSessionId) {
 				stream.warning(vscode.l10n.t("Failed to create a new Claude Code session."));
 				return undefined;
@@ -30,10 +32,15 @@ export class ClaudeChatSessionParticipant {
 		};
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
+			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const modelId = await this.contentProvider.getModelIdForSession(sessionId);
+
 			if (chatSessionContext.isUntitled) {
 				/* New, empty session */
-				const claudeSessionId = await create();
+				const claudeSessionId = await create(modelId);
 				if (claudeSessionId) {
+					// Track the model for the new session
+					this.contentProvider.setModelIdForSession(claudeSessionId, modelId);
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
 						resource: ClaudeSessionUri.forSessionId(claudeSessionId),
@@ -44,8 +51,7 @@ export class ClaudeChatSessionParticipant {
 			}
 
 			/* Existing session */
-			const id = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
-			await this.claudeAgentManager.handleRequest(id, request, context, stream, token);
+			await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId);
 			return {};
 		}
 		/* Via @claude */
