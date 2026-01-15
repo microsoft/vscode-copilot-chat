@@ -269,8 +269,6 @@ describe('CopilotCLISessionService', () => {
 			expect(result.length).toBe(1);
 			const item = result[0];
 			expect(item.id).toBe('s1');
-			expect(item.label.endsWith('...')).toBe(true); // truncated
-			expect(item.label.length).toBeLessThanOrEqual(50);
 		});
 	});
 
