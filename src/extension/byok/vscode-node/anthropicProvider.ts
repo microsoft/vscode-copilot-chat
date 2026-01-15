@@ -237,7 +237,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		// Check if web search is enabled and append web_search tool if not already present.
 		// We need to do this because there is no local web_search tool definition we can replace.
 		const webSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicWebSearchToolEnabled, this._experimentationService);
-		if (webSearchEnabled && !tools.some(tool => tool.name === 'web_search')) {
+		if (webSearchEnabled && !tools.some(tool => 'name' in tool && tool.name === 'web_search')) {
 			const maxUses = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchMaxUses);
 			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
 			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);

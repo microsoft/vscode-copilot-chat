@@ -17,24 +17,24 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
+import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
-	private _langModelServer: LanguageModelServer | undefined;
+	private _langModelServer: ClaudeLanguageModelServer | undefined;
 	private _sessions = this._register(new DisposableMap<string, ClaudeCodeSession>());
 
-	private async getLangModelServer(): Promise<LanguageModelServer> {
+	private async getLangModelServer(): Promise<ClaudeLanguageModelServer> {
 		if (!this._langModelServer) {
-			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
+			this._langModelServer = this.instantiationService.createInstance(ClaudeLanguageModelServer);
 			await this._langModelServer.start();
 		}
 
@@ -48,20 +48,20 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
-			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}.`);
 			let session: ClaudeCodeSession;
 			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
 				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -72,7 +72,8 @@ export class ClaudeAgentManager extends Disposable {
 				this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
-				token
+				token,
+				modelId
 			);
 
 			// Store the session if sessionId was assigned during invoke
@@ -85,6 +86,18 @@ export class ClaudeAgentManager extends Disposable {
 				claudeSessionId: session.sessionId
 			};
 		} catch (invokeError) {
+			// Check if this is an abort/cancellation error - don't show these as errors to the user
+			const isAbortError = invokeError instanceof Error && (
+				invokeError.name === 'AbortError' ||
+				invokeError.message?.includes('aborted') ||
+				invokeError.message?.includes('cancelled') ||
+				invokeError.message?.includes('canceled')
+			);
+			if (isAbortError) {
+				this.logService.trace('[ClaudeAgentManager] Request was aborted/cancelled');
+				return { claudeSessionId };
+			}
+
 			this.logService.error(invokeError as Error);
 			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : `Claude CLI Error: ${invokeError.message}`;
 			stream.markdown('❌ Error: ' + errorMessage);
@@ -155,10 +168,13 @@ export class ClaudeCodeSession extends Disposable {
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
 	private _editTracker = new ExternalEditTracker();
+	private _currentModelId: string | undefined;
+	private _sessionVersion = 0; // Used to detect stale abort handlers
 
 	constructor(
-		private readonly serverConfig: ILanguageModelServerConfig,
+		private readonly serverConfig: IClaudeLanguageModelServerConfig,
 		public sessionId: string | undefined,
+		initialModelId: string | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -166,9 +182,9 @@ export class ClaudeCodeSession extends Disposable {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
-		@ILogService private readonly _log: ILogService,
 	) {
 		super();
+		this._currentModelId = initialModelId;
 	}
 
 	public override dispose(): void {
@@ -186,15 +202,31 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
+	 * @param modelId Optional model ID to use for this request
 	 */
 	public async invoke(
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
+		token: vscode.CancellationToken,
+		modelId?: string
 	): Promise<void> {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
+		}
+
+		// Check if model changed - if so, restart the session with new model
+		const modelChanged = modelId !== undefined && modelId !== this._currentModelId;
+		if (modelChanged) {
+			this.logService.trace(`[ClaudeCodeSession] Model changed from ${this._currentModelId} to ${modelId}, restarting session`);
+			this._currentModelId = modelId;
+			// Abort current query and restart with new model
+			if (this._queryGenerator) {
+				this._sessionVersion++; // Increment so old catch handlers know to ignore
+				this._abortController.abort();
+				this._abortController = new AbortController();
+				this._queryGenerator = undefined;
+			}
 		}
 
 		if (!this._queryGenerator) {
@@ -253,6 +285,8 @@ export class ClaudeCodeSession extends Disposable {
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
 			resume: this.sessionId,
+			// Pass the model selection to the SDK
+			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
 			hooks: {
 				PreToolUse: [
 					{
@@ -300,7 +334,7 @@ export class ClaudeCodeSession extends Disposable {
 		try {
 			uris = getAffectedUrisForEditTool(input as PreToolUseHookInput);
 		} catch (error) {
-			this._log.error('Error getting affected URIs for edit tool', error);
+			this.logService.error('Error getting affected URIs for edit tool', error);
 		}
 		if (!this._currentRequest) {
 			return {};
@@ -365,6 +399,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
+		const mySessionVersion = this._sessionVersion;
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -393,11 +428,16 @@ export class ClaudeCodeSession extends Disposable {
 				}
 			}
 		} catch (error) {
-			// Reject all pending requests
-			this._promptQueue.forEach(req => req.deferred.error(error as Error));
-			this._promptQueue = [];
-			this._pendingPrompt?.error(error as Error);
-			this._pendingPrompt = undefined;
+			// Only clean up if this is still the active session (not stale from model change)
+			if (mySessionVersion === this._sessionVersion) {
+				// Reject all pending requests
+				this._promptQueue.forEach(req => req.deferred.error(error as Error));
+				this._promptQueue = [];
+				this._pendingPrompt?.error(error as Error);
+				this._pendingPrompt = undefined;
+			} else {
+				this.logService.trace('[ClaudeCodeSession] Ignoring stale session error after model change');
+			}
 		}
 	}
 
@@ -410,14 +450,12 @@ export class ClaudeCodeSession extends Disposable {
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
 	): void {
 		for (const item of message.message.content) {
-			if (item.type === 'text' && item.text) {
+			if (item.type === 'text') {
 				stream.markdown(item.text);
+			} else if (item.type === 'thinking') {
+				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
-				// Don't show progress message for TodoWrite tool
-				if (item.name !== ClaudeToolNames.TodoWrite) {
-					stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
-				}
-				unprocessedToolCalls.set(item.id!, item as Anthropic.ToolUseBlock);
+				unprocessedToolCalls.set(item.id, item);
 			}
 		}
 	}
@@ -457,9 +495,12 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
-		const invocation = createFormattedToolInvocation(toolUse, toolResult);
-		if (toolResult?.content === ClaudeCodeSession.DenyToolMessage && invocation) {
-			invocation.isConfirmed = false;
+		const invocation = createFormattedToolInvocation(toolUse);
+		if (invocation) {
+			invocation.isError = toolResult.is_error;
+			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
+				invocation.isConfirmed = false;
+			}
 		}
 
 		if (toolUse.name === ClaudeToolNames.TodoWrite) {

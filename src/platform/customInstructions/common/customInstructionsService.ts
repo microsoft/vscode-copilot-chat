@@ -57,6 +57,8 @@ export interface ICustomInstructionsService {
 	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
 	isSkillFile(uri: URI): boolean;
+	isSkillMdFile(uri: URI): boolean;
+	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -91,7 +93,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 	readonly _matchInstructionLocationsFromConfig: IObservable<(uri: URI) => boolean>;
 	readonly _matchInstructionLocationsFromExtensions: IObservable<(uri: URI) => boolean>;
-	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => boolean>;
+	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => { skillName: string; skillFolderUri: URI } | undefined>;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -167,23 +169,45 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		);
 
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
-			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
-					handleChange(e);
-				}
-			})),
+			(handleChange) => {
+				const configurationDisposable = configurationService.onDidChangeConfiguration(e => {
+					if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
+						handleChange(e);
+					}
+				});
+				const workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(handleChange);
+				return {
+					dispose: () => {
+						configurationDisposable.dispose();
+						workspaceDisposable.dispose();
+					}
+				};
+			},
 			() => {
 				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
 					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
 					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
 						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
 					);
-					const skillFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
+					// List of **/skills folder URIs
+					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
 					return ((uri: URI) => {
-						return skillFolderUris.some(skillFolderUri => extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri));
+						for (const topLevelSkillFolderUri of topLevelSkillsFolderUris) {
+							if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, topLevelSkillFolderUri)) {
+								// Get the path segments relative to the skill folder
+								const relativePath = extUriBiasedIgnorePathCase.relativePath(topLevelSkillFolderUri, uri);
+								if (relativePath) {
+									// The skill directory is the first path segment under the skill folder
+									const skillName = relativePath.split('/')[0];
+									const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(topLevelSkillFolderUri, skillName);
+									return { skillName, skillFolderUri };
+								}
+							}
+						}
+						return undefined;
 					});
 				}
-				return (() => false);
+				return (() => undefined);
 			}
 		);
 	}
@@ -307,10 +331,34 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 	public isExternalInstructionsFolder(uri: URI): boolean {
 		return this._matchInstructionLocationsFromExtensions.get()(uri)
-			|| this._matchInstructionLocationsFromSkills.get()(uri);
+			|| this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
 	}
 
 	public isSkillFile(uri: URI): boolean {
+		return this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
+	}
+
+	public isSkillMdFile(uri: URI): boolean {
+		return this.isSkillFile(uri) && extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md';
+	}
+
+	public getSkillDirectory(uri: URI): URI | undefined {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		if (!skillInfo) {
+			return undefined;
+		}
+		return skillInfo.skillFolderUri;
+	}
+
+	public getSkillName(uri: URI): string | undefined {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		if (!skillInfo) {
+			return undefined;
+		}
+		return skillInfo.skillName;
+	}
+
+	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
 		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 }

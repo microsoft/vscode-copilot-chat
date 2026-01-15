@@ -44,7 +44,6 @@ export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart
 export import ChatResponseTextEditPart = vscode.ChatResponseTextEditPart;
 export import ChatResponseNotebookEditPart = vscode.ChatResponseNotebookEditPart;
 export import ChatResponseConfirmationPart = vscode.ChatResponseConfirmationPart;
-export import ChatPrepareToolInvocationPart = vscode.ChatPrepareToolInvocationPart;
 export import ChatRequest = vscode.ChatRequest;
 export import ChatRequestTurn = vscode.ChatRequestTurn;
 export import ChatResponseTurn = vscode.ChatResponseTurn;
