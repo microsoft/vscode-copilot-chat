@@ -41,6 +41,9 @@ export class MockCliSdkSession {
 	emit(event: string, args: { content: string | undefined }): void {
 		this.emittedEvents.push({ event, content: args.content });
 	}
+	clearCustomAgent() {
+		return;
+	}
 }
 
 export class MockCliSdkSessionManager {
