@@ -286,7 +286,7 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
-			...(this._currentModelId && { model: this._currentModelId as Options['model'] }),
+			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
 			hooks: {
 				PreToolUse: [
 					{

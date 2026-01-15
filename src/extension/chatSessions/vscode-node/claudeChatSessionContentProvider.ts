@@ -114,10 +114,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		]);
 
 		const options: Record<string, string> = {};
-		if (model || defaultModel) {
-			options[MODELS_OPTION_ID] = model || defaultModel!;
+		const selectedModel = model ?? defaultModel;
+		if (selectedModel) {
+			options[MODELS_OPTION_ID] = selectedModel;
 			// Keep track of model in memory
-			this._sessionModels.set(sessionId, model || defaultModel);
+			this._sessionModels.set(sessionId, selectedModel);
 		}
 
 		return {
