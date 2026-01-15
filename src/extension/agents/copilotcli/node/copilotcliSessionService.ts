@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import type { CancellationToken, ChatRequest, Uri } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatSessionItem, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -32,7 +32,7 @@ const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSession
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
-	readonly timing: { startTime: number; endTime?: number };
+	readonly timing: ChatSessionItem['timing'];
 	readonly status?: ChatSessionStatus;
 }
 
@@ -124,7 +124,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			await this._sessionTracker.initialize(sessionMetadataList.map(s => s.sessionId));
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
-				sessionMetadataList.map(async (metadata) => {
+				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
 					if (!this._sessionTracker.shouldShowSession(metadata.sessionId)) {
 						return;
 					}
@@ -139,8 +139,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							timing: { startTime, endTime },
-						} satisfies ICopilotCLISessionItem;
+							timing: { created: startTime, startTime, endTime },
+						};
 					}
 					try {
 						// Get the full session to access chat messages
@@ -156,8 +156,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							timing: { startTime, endTime },
-						} satisfies ICopilotCLISessionItem;
+							timing: { created: startTime, startTime, endTime },
+						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
 					}
@@ -170,27 +170,28 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const newSessions = coalesce(Array.from(this._sessionWrappers.values())
 				.filter(session => !diskSessionIds.has(session.object.sessionId))
 				.filter(session => session.object.status === ChatSessionStatus.InProgress)
-				.map(session => {
+				.map((session): ICopilotCLISessionItem | undefined => {
 					const label = labelFromPrompt(session.object.pendingPrompt ?? '');
 					if (!label) {
 						return;
 					}
 
+					const createTime = Date.now();
 					return {
 						id: session.object.sessionId,
 						label,
 						status: session.object.status,
-						timing: { startTime: Date.now() },
-					} satisfies ICopilotCLISessionItem;
+						timing: { created: createTime, startTime: createTime },
+					};
 				}));
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const allSessions = diskSessions
-				.map(session => {
+				.map((session): ICopilotCLISessionItem => {
 					return {
 						...session,
 						status: this._sessionWrappers.get(session.id)?.object?.status
-					} satisfies ICopilotCLISessionItem;
+					};
 				}).concat(newSessions);
 
 			return allSessions;

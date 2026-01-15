@@ -670,6 +670,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
+							created: createdAt,
 							startTime: createdAt,
 							endTime: validateISOTimestamp(sessionItem.completed_at),
 						}
