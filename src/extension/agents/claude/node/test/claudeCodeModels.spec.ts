@@ -19,6 +19,7 @@ function createMockEndpoint(overrides: {
 	name: string;
 	family: string;
 	showInModelPicker?: boolean;
+	multiplier?: number;
 }): IChatEndpoint {
 	return {
 		model: overrides.model,
@@ -26,6 +27,7 @@ function createMockEndpoint(overrides: {
 		family: overrides.family,
 		version: '1.0',
 		showInModelPicker: overrides.showInModelPicker ?? true,
+		multiplier: overrides.multiplier,
 		// Required properties with sensible defaults
 		maxOutputTokens: 4096,
 		supportsToolCalls: true,
@@ -289,6 +291,33 @@ describe('ClaudeCodeModels', () => {
 
 			expect(models).toHaveLength(1);
 			expect(models[0].id).toBe('claude-sonnet-4-model');
+		});
+	});
+
+	describe('multiplier', () => {
+		it('returns multiplier from endpoint', async () => {
+			const service = createServiceWithEndpoints([
+				createMockEndpoint({ model: 'claude-opus-4.5-model', name: 'Claude Opus 4.5', family: 'claude-opus-4.5', multiplier: 5 }),
+				createMockEndpoint({ model: 'claude-sonnet-4-model', name: 'Claude Sonnet 4', family: 'claude-sonnet-4', multiplier: 1 }),
+			]);
+
+			const models = await service.getModels();
+
+			const opusModel = models.find(m => m.id === 'claude-opus-4.5-model');
+			const sonnetModel = models.find(m => m.id === 'claude-sonnet-4-model');
+
+			expect(opusModel?.multiplier).toBe(5);
+			expect(sonnetModel?.multiplier).toBe(1);
+		});
+
+		it('returns undefined multiplier when not set', async () => {
+			const service = createServiceWithEndpoints([
+				createMockEndpoint({ model: 'claude-sonnet-4-model', name: 'Claude Sonnet 4', family: 'claude-sonnet-4' }),
+			]);
+
+			const models = await service.getModels();
+
+			expect(models[0].multiplier).toBeUndefined();
 		});
 	});
 });

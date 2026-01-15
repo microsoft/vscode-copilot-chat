@@ -74,7 +74,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		const models = await this.claudeCodeModels.getModels();
 		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
 			id: model.id,
-			name: model.name
+			name: model.name,
+			description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
 		}));
 
 		return {

@@ -11,26 +11,32 @@ import { Lazy } from '../../../../util/vs/base/common/lazy';
 
 const CLAUDE_CODE_MODEL_MEMENTO_KEY = 'github.copilot.claudeCode.sessionModel';
 
+export interface ClaudeCodeModelInfo {
+	id: string;
+	name: string;
+	multiplier?: number;
+}
+
 export interface IClaudeCodeModels {
 	readonly _serviceBrand: undefined;
 	resolveModel(modelId: string): Promise<string | undefined>;
 	getDefaultModel(): Promise<string | undefined>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
-	getModels(): Promise<{ id: string; name: string }[]>;
+	getModels(): Promise<ClaudeCodeModelInfo[]>;
 }
 
 export const IClaudeCodeModels = createServiceIdentifier<IClaudeCodeModels>('IClaudeCodeModels');
 
 export class ClaudeCodeModels implements IClaudeCodeModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<{ id: string; name: string }[]>>;
+	private readonly _availableModels: Lazy<Promise<ClaudeCodeModelInfo[]>>;
 
 	constructor(
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
-		this._availableModels = new Lazy<Promise<{ id: string; name: string }[]>>(() => this._getAvailableModels());
+		this._availableModels = new Lazy<Promise<ClaudeCodeModelInfo[]>>(() => this._getAvailableModels());
 	}
 
 	async resolveModel(modelId: string): Promise<string | undefined> {
@@ -64,12 +70,12 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 		await this.extensionContext.globalState.update(CLAUDE_CODE_MODEL_MEMENTO_KEY, modelId);
 	}
 
-	public async getModels(): Promise<{ id: string; name: string }[]> {
+	public async getModels(): Promise<ClaudeCodeModelInfo[]> {
 		// Cache the result to avoid multiple queries
 		return this._availableModels.value;
 	}
 
-	private async _getAvailableModels(): Promise<{ id: string; name: string }[]> {
+	private async _getAvailableModels(): Promise<ClaudeCodeModelInfo[]> {
 		try {
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
 
@@ -84,7 +90,7 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 				// Fall back to all available models if no Claude-specific ones
 				return endpoints
 					.filter(e => e.showInModelPicker)
-					.map(e => ({ id: e.model, name: e.name }));
+					.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }));
 			}
 
 			// Filter to only include the latest version of each model family
@@ -105,7 +111,7 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 				}
 			}
 
-			return Array.from(familyMap.values()).map(v => ({ id: v.endpoint.model, name: v.endpoint.name }));
+			return Array.from(familyMap.values()).map(v => ({ id: v.endpoint.model, name: v.endpoint.name, multiplier: v.endpoint.multiplier }));
 		} catch (ex) {
 			this.logService.error(`[ClaudeCodeModels] Failed to fetch models`, ex);
 			return [];
