@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -17,12 +19,12 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
+import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
+import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
@@ -100,8 +102,8 @@ export class ClaudeAgentManager extends Disposable {
 			}
 
 			this.logService.error(invokeError as Error);
-			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : `Claude CLI Error: ${invokeError.message}`;
-			stream.markdown('❌ Error: ' + errorMessage);
+			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : l10n.t('Claude CLI Error: {0}', invokeError.message);
+			stream.markdown(l10n.t('Error: {0}', errorMessage));
 			return {
 				// This currently can't be used by the sessions API https://github.com/microsoft/vscode/issues/263111
 				errorDetails: { message: errorMessage },
@@ -183,6 +185,7 @@ export class ClaudeCodeSession extends Disposable {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
+		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
@@ -290,9 +293,13 @@ export class ClaudeCodeSession extends Disposable {
 			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
 			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
-				return this._currentRequest ?
-					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
-					{ behavior: 'deny', message: 'No active request' };
+				if (!this._currentRequest) {
+					return { behavior: 'deny', message: 'No active request' };
+				}
+				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
+				return this.toolPermissionService.canUseTool(name, input, {
+					toolInvocationToken: this._currentRequest.toolInvocationToken
+				});
 			},
 			systemPrompt: {
 				type: 'preset',
@@ -533,7 +540,7 @@ export class ClaudeCodeSession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
-		const input = toolUse.input as ITodoWriteInput;
+		const input = toolUse.input as TodoWriteInput;
 		this.toolsService.invokeTool(ToolName.CoreManageTodoList, {
 			input: {
 				operation: 'write',
@@ -560,86 +567,12 @@ export class ClaudeCodeSession extends Disposable {
 		stream: vscode.ChatResponseStream
 	): void {
 		if (message.subtype === 'error_max_turns') {
-			stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
+			stream.progress(l10n.t('Maximum turns reached ({0})', message.num_turns));
 		} else if (message.subtype === 'error_during_execution') {
-			throw new KnownClaudeError(`Error during execution`);
+			throw new KnownClaudeError(l10n.t('Error during execution'));
 		}
 	}
 
-	/**
-	 * Handles tool permission requests by showing a confirmation dialog to the user
-	 */
-	private async canUseTool(toolName: string, input: Record<string, unknown>, toolInvocationToken: vscode.ChatParticipantToolToken): Promise<{ behavior: 'allow'; updatedInput: Record<string, unknown> } | { behavior: 'deny'; message: string }> {
-		this.logService.trace(`ClaudeCodeSession: canUseTool: ${toolName}(${JSON.stringify(input)})`);
-		if (await this.canAutoApprove(toolName, input)) {
-			this.logService.trace(`ClaudeCodeSession: auto-approving ${toolName}`);
-
-			return {
-				behavior: 'allow',
-				updatedInput: input
-			};
-		}
-
-		try {
-			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-				input: this.getConfirmationToolParams(toolName, input),
-				toolInvocationToken,
-			}, CancellationToken.None);
-			const firstResultPart = result.content.at(0);
-			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
-				return {
-					behavior: 'allow',
-					updatedInput: input
-				};
-			}
-		} catch { }
-		return {
-			behavior: 'deny',
-			message: ClaudeCodeSession.DenyToolMessage
-		};
-	}
-
-	private getConfirmationToolParams(toolName: string, input: Record<string, unknown>): IConfirmationToolParams {
-		if (toolName === ClaudeToolNames.Bash) {
-			return {
-				title: `Use ${toolName}?`,
-				message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-				confirmationType: 'terminal',
-				terminalCommand: input.command as string | undefined
-			};
-		} else if (toolName === ClaudeToolNames.ExitPlanMode) {
-			const plan = (input as unknown as IExitPlanModeInput).plan;
-			return {
-				title: `Ready to code?`,
-				message: 'Here is Claude\'s plan:\n\n' + plan,
-				confirmationType: 'basic'
-			};
-		}
-
-		return {
-			title: `Use ${toolName}?`,
-			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-			confirmationType: 'basic'
-		};
-	}
-
-	private async canAutoApprove(toolName: string, input: Record<string, unknown>): Promise<boolean> {
-		if (toolName === ClaudeToolNames.Edit || toolName === ClaudeToolNames.Write || toolName === ClaudeToolNames.MultiEdit) {
-			return await this.instantiationService.invokeFunction(isFileOkForTool, URI.file(input.file_path as string));
-		}
-
-		return false;
-	}
-}
-
-/**
- * Tool params from core
- */
-interface IConfirmationToolParams {
-	readonly title: string;
-	readonly message: string;
-	readonly confirmationType?: 'basic' | 'terminal';
-	readonly terminalCommand?: string;
 }
 
 interface IManageTodoListToolInputParams {

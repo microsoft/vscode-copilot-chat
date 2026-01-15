@@ -9,6 +9,9 @@ import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
+// Import the tool permission handlers
+import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
+
 export class ClaudeChatSessionParticipant {
 	constructor(
 		private readonly sessionType: string,
