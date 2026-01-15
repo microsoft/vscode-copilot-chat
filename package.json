@@ -1771,23 +1771,6 @@
 				}
 			},
 			{
-				"vendor": "groq",
-				"displayName": "Groq",
-				"configuration": {
-					"properties": {
-						"apiKey": {
-							"type": "string",
-							"secret": true,
-							"description": "API key for Groq",
-							"title": "API Key"
-						}
-					},
-					"required": [
-						"apiKey"
-					]
-				}
-			},
-			{
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
 				"configuration": {
@@ -1862,10 +1845,6 @@
 										"description": "Unique identifier for the model"
 									},
 									"name": {
-										"type": "string",
-										"description": "Display name of the custom OpenAI model"
-									},
-									"gpu": {
 										"type": "string",
 										"description": "Display name of the custom OpenAI model"
 									},
@@ -1958,10 +1937,6 @@
 										"type": "string",
 										"description": "Display name of the custom OpenAI model"
 									},
-									"gpu": {
-										"type": "string",
-										"description": "Display name of the custom OpenAI model"
-									},
 									"url": {
 										"type": "string",
 										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
@@ -1981,19 +1956,6 @@
 									"maxOutputTokens": {
 										"type": "number",
 										"description": "Maximum number of output tokens supported by the model"
-									},
-									"editTools": {
-										"type": "array",
-										"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
-										"items": {
-											"type": "string",
-											"enum": [
-												"find-replace",
-												"multi-find-replace",
-												"apply-patch",
-												"code-rewrite"
-											]
-										}
 									},
 									"thinking": {
 										"type": "boolean",

@@ -12,7 +12,7 @@ import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { byokKnownModelToAPIInfo, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
-import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAIComaptibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
+import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
@@ -98,15 +98,15 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 	}
 
 	protected override async configureDefaultGroupWithApiKeyOnly(): Promise<string | undefined> {
-		// No-op: Custom OAI models are configured separatekly via migration
+		// No-op: Custom OAI models are configured separately via migration
 		return;
 	}
 
-	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: CustomOAIModelProviderConfig | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[]> {
+	protected override async getAllModels(silent: boolean, apiKey: string | undefined, configuration: CustomOAIModelProviderConfig | undefined): Promise<OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[]> {
 		if (configuration?.url) {
 			return super.getAllModels(silent, apiKey, configuration);
 		}
-		const models: OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[] = [];
+		const models: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>[] = [];
 		if (Array.isArray(configuration?.models)) {
 			for (const modelConfig of configuration.models) {
 				models.push({
@@ -118,7 +118,7 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 		return models;
 	}
 
-	protected override async createOpenAIEndPoint(model: OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>): Promise<OpenAIEndpoint> {
+	protected override async createOpenAIEndPoint(model: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>): Promise<OpenAIEndpoint> {
 		const url = this.resolveUrl(model.id, model.url);
 		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
 		const modelCapabilities = {

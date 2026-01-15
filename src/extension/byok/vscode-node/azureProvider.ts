@@ -13,7 +13,7 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { resolveModelInfo } from '../common/byokProvider';
 import { AzureOpenAIEndpoint } from '../node/azureOpenAIEndpoint';
-import { OpenAIComaptibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
+import { OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 import { AbstractCustomOAIBYOKModelProvider, CustomOAIModelProviderConfig, hasExplicitApiPath } from './customOAIProvider';
 
@@ -80,7 +80,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 	}
 
 	override async provideLanguageModelChatResponse(
-		model: OpenAIComaptibleLanguageModelChatInformation<CustomOAIModelProviderConfig>,
+		model: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>,
 		messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>,
 		options: ProvideLanguageModelChatResponseOptions,
 		progress: Progress<LanguageModelResponsePart2>,

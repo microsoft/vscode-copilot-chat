@@ -69,11 +69,11 @@ export abstract class AbstractLanguageModelChatProvider<C extends LanguageModelC
 	protected abstract getAllModels(silent: boolean, apiKey: string | undefined, configuration: C | undefined): Promise<T[]>;
 }
 
-export interface OpenAIComaptibleLanguageModelChatInformation<C extends LanguageModelChatConfiguration> extends ExtendedLanguageModelChatInformation<C> {
+export interface OpenAICompatibleLanguageModelChatInformation<C extends LanguageModelChatConfiguration> extends ExtendedLanguageModelChatInformation<C> {
 	url: string;
 }
 
-export abstract class AbstractOpenAICompatibleLMProvider<T extends LanguageModelChatConfiguration = LanguageModelChatConfiguration> extends AbstractLanguageModelChatProvider<T, OpenAIComaptibleLanguageModelChatInformation<T>> {
+export abstract class AbstractOpenAICompatibleLMProvider<T extends LanguageModelChatConfiguration = LanguageModelChatConfiguration> extends AbstractLanguageModelChatProvider<T, OpenAICompatibleLanguageModelChatInformation<T>> {
 	protected readonly _lmWrapper: CopilotLanguageModelWrapper;
 
 	constructor(
@@ -91,17 +91,17 @@ export abstract class AbstractOpenAICompatibleLMProvider<T extends LanguageModel
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 	}
 
-	async provideLanguageModelChatResponse(model: OpenAIComaptibleLanguageModelChatInformation<T>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+	async provideLanguageModelChatResponse(model: OpenAICompatibleLanguageModelChatInformation<T>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
 		const openAIChatEndpoint = await this.createOpenAIEndPoint(model);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}
 
-	async provideTokenCount(model: OpenAIComaptibleLanguageModelChatInformation<T>, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
+	async provideTokenCount(model: OpenAICompatibleLanguageModelChatInformation<T>, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		const openAIChatEndpoint = await this.createOpenAIEndPoint(model);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
 	}
 
-	protected async getAllModels(silent: boolean, apiKey: string | undefined, configuration: T | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<T>[]> {
+	protected async getAllModels(silent: boolean, apiKey: string | undefined, configuration: T | undefined): Promise<OpenAICompatibleLanguageModelChatInformation<T>[]> {
 		const modelsUrl = this.getModelsBaseUrl(configuration);
 		if (modelsUrl) {
 			const models = await this.getModelsFromEndpoint(modelsUrl, silent, apiKey);
@@ -158,7 +158,7 @@ export abstract class AbstractOpenAICompatibleLMProvider<T extends LanguageModel
 		}
 	}
 
-	protected async createOpenAIEndPoint(model: OpenAIComaptibleLanguageModelChatInformation<T>): Promise<OpenAIEndpoint> {
+	protected async createOpenAIEndPoint(model: OpenAICompatibleLanguageModelChatInformation<T>): Promise<OpenAIEndpoint> {
 		const modelInfo = this.getModelInfo(model.id, model.url);
 		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
 			`${model.url}/responses` :

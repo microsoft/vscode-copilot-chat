@@ -9,7 +9,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { BYOKKnownModels, byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
-import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAIComaptibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
+import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
 interface OllamaModelInfoAPIResponse {
@@ -78,7 +78,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 		return undefined;
 	}
 
-	protected override async getAllModels(silent: boolean, apiKey: string | undefined, config: OllamaConfig | undefined): Promise<OpenAIComaptibleLanguageModelChatInformation<OllamaConfig>[]> {
+	protected override async getAllModels(silent: boolean, apiKey: string | undefined, config: OllamaConfig | undefined): Promise<OpenAICompatibleLanguageModelChatInformation<OllamaConfig>[]> {
 		if (!config) {
 			return [];
 		}
