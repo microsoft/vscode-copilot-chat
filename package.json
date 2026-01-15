@@ -5054,6 +5054,7 @@
 				"when": "config.github.copilot.chat.backgroundAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
+					"supportsImageAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
 					"supportsSymbolAttachments": true,
