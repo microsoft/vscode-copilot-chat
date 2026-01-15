@@ -70,12 +70,12 @@ export class ResponseStream {
 	/**
 	 * @throws client of the method should handle the error
 	 */
-	public destroy(): void {
-		const body = this.fetcherResponse.body();
+	public async destroy(): Promise<void> {
+		const body = await this.fetcherResponse.body();
 		// Destroy the stream so that the server is hopefully notified we don't want any more data
 		// and can cancel/forget about the request itself.
-		if (body && 'destroy' in body && typeof body.destroy === 'function') {
-			(body as unknown as ClientHttp2Stream).destroy();
+		if (body && typeof (body as ClientHttp2Stream).destroy === 'function') {
+			(body as ClientHttp2Stream).destroy();
 		} else if (body instanceof ReadableStream) {
 			void body.cancel();
 		}

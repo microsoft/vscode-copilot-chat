@@ -738,7 +738,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				try {
 					// Destroy the stream so that the server is hopefully notified we don't want any more data
 					// and can cancel/forget about the request itself.
-					responseStream.destroy();
+					await responseStream.destroy();
 				} catch (e) {
 					this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
 				}
