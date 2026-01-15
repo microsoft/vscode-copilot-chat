@@ -18,7 +18,7 @@ import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../plat
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, getRequestId, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
@@ -284,7 +284,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							isAuto: isAutoModel(chatEndpoint)
 						});
 					pendingLoggedChatRequest?.resolveWithCancelation();
-					return this.processCanceledResponse(response, ourRequestId);
+					return this.processCanceledResponse(response, ourRequestId, streamRecorder, telemetryProperties);
 				case FetchResponseKind.Failed: {
 					const processed = this.processFailedResponse(response, ourRequestId);
 					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher);
@@ -1039,7 +1039,59 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		return hasRepetition;
 	}
 
-	private processCanceledResponse(response: ChatRequestCanceled, requestId: string): ChatResponses {
+	/**
+	 * Check for repetition in partial response deltas from a cancelled request
+	 */
+	private checkRepetitionInDeltas(
+		deltas: IResponseDelta[],
+		requestId: string,
+		telemetryProperties?: TelemetryProperties
+	): void {
+		// Reconstruct the text content from deltas
+		const textContent = deltas.map(delta => delta.text).join('');
+		
+		// Reconstruct tokens from deltas (tokens are in the delta.text)
+		// For cancelled requests, we don't have the actual token array,
+		// so we'll use the text split by whitespace as an approximation
+		const tokens = textContent.split(/\s+/).filter(t => t.length > 0);
+
+		// Check for line repetition
+		const lineRepetitionStats = calculateLineRepetitionStats(textContent);
+		
+		// Check for token-level repetition
+		const hasRepetition = isRepetitive(tokens);
+		
+		// Send telemetry if repetition is detected
+		if (hasRepetition) {
+			const telemetryData = TelemetryData.createAndMarkAsIssued();
+			// For cancelled requests, we don't have a full RequestId object, just the string
+			const extended = telemetryData.extendedBy(telemetryProperties);
+			this._telemetryService.sendEnhancedGHTelemetryEvent('conversation.repetition.detected', extended.properties, extended.measurements);
+		}
+		
+		if (lineRepetitionStats.numberOfRepetitions >= 10) {
+			this._telemetryService.sendMSFTTelemetryEvent('conversation.repetition.detected', {
+				requestId: requestId,
+				finishReason: 'canceled', // Mark as canceled to distinguish from completed requests
+			}, {
+				numberOfRepetitions: lineRepetitionStats.numberOfRepetitions,
+				lengthOfLine: lineRepetitionStats.mostRepeatedLine.length,
+				totalLines: lineRepetitionStats.totalLines
+			});
+		}
+	}
+
+	private processCanceledResponse(
+		response: ChatRequestCanceled,
+		requestId: string,
+		streamRecorder?: FetchStreamRecorder,
+		telemetryProperties?: TelemetryProperties
+	): ChatResponses {
+		// Check for repetition in the partial response before cancellation
+		if (streamRecorder && streamRecorder.deltas.length > 0) {
+			this.checkRepetitionInDeltas(streamRecorder.deltas, requestId, telemetryProperties);
+		}
+
 		return {
 			type: ChatFetchResponseType.Canceled,
 			reason: response.reason,
