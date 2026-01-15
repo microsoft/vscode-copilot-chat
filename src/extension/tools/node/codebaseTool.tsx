@@ -152,7 +152,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 		const isAnonymous = !this.authenticationService.anyGitHubSession;
 
 		// Don't trigger nested tool calling loop if we're already in a subagent
-		if (this._input?.tools?.inSubAgent) {
+		if (this._input?.tools?.subAgentInvocationId) {
 			return false;
 		}
 

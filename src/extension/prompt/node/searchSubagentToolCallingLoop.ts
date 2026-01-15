@@ -54,7 +54,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			context.tools = {
 				...context.tools,
 				toolReferences: [],
-				inSubAgent: true
+				subAgentInvocationId: randomUUID()
 			};
 		}
 		context.query = this.options.promptText;
