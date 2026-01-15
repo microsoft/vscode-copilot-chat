@@ -862,7 +862,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
 		if (summary) {
-			void this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
+			const summaryRef = await this.chatDelegationSummaryService.trackSummaryUsage(session.object.sessionId, summary);
+			if (summaryRef) {
+				references.push(summaryRef);
+			}
 		}
 		// Do not await, we want this code path to be as fast as possible.
 		if (worktreeProperties) {
