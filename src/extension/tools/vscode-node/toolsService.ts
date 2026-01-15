@@ -146,7 +146,8 @@ export class ToolsService extends BaseToolsService {
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
-		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
+		// todo@connor4312: string check here is for back-compat for 1.109 Insiders
+		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [typeof t === 'string' ? t : t.name, enabled]));
 
 		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint));
 		const modelSpecificTools = this.getModelSpecificTools();

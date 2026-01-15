@@ -10,7 +10,7 @@ import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycl
 import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
 import { getContributedToolName } from '../common/toolNames';
-import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
+import { ICopilotTool, isVscodeLanguageModelTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IToolGroupingCache, IToolGroupingService } from '../common/virtualTools/virtualToolTypes';
 import '../node/allTools';
@@ -74,3 +74,41 @@ export class ToolsContribution extends Disposable {
 		}));
 	}
 }
+
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'gpt41_get_time',
+		inputSchema: {},
+		description: 'Get the current date and time (4.1)',
+		displayName: 'Get Time (GPT 4.1)',
+		userDescription: 'Gets the current date and time from the system. (4.1)',
+		toolReferenceName: 'get_time',
+		source: undefined,
+		tags: [],
+		models: [{ id: 'gpt-4.1' }],
+	},
+	class implements ICopilotTool<unknown> {
+		invoke() {
+			return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart('Current year is 2041 (GPT 4.1)')]);
+		}
+	}
+);
+
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'gpt4o_get_time',
+		inputSchema: {},
+		description: 'Get the current date and time (4o)',
+		userDescription: 'Gets the current date and time from the system. (4o)',
+		displayName: 'Get Time (GPT 4o)',
+		toolReferenceName: 'get_time',
+		source: undefined,
+		tags: [],
+		models: [{ id: 'gpt-4o' }],
+	},
+	class implements ICopilotTool<unknown> {
+		invoke() {
+			return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart('Current year is 2040 (GPT 4o)')]);
+		}
+	}
+);
