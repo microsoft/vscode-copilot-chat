@@ -400,7 +400,8 @@ function escapeDoubleDollarInCodeBlock(text: MarkdownString): MarkdownString {
 
 	// Don't escape fence lines (lines starting with ``` or ~~~)
 	// Fence lines may have language identifiers like ```sql
-	if (/^[`~]{3,}/.test(value.trimStart())) {
+	// Note: This matches the fenceLanguageRegex which requires fences at the start of the line
+	if (/^[`~]{3,}/.test(value)) {
 		return text;
 	}
 
