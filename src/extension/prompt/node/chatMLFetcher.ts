@@ -1050,6 +1050,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		// Reconstruct the text content from deltas
 		const textContent = deltas.map(delta => delta.text).join('');
 		
+		// Early exit if no content
+		if (!textContent || textContent.trim().length === 0) {
+			return;
+		}
+		
 		// Reconstruct tokens from deltas (tokens are in the delta.text)
 		// For cancelled requests, we don't have the actual token array,
 		// so we'll use the text split by whitespace as an approximation
