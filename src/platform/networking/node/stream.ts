@@ -213,7 +213,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
  * soon as it's finished.
  */
 export class SSEProcessor {
-	private requestId: RequestId = getRequestId(this.response);
+	private requestId: RequestId = getRequestId(this.response.headers);
 	/**
 	 * A key & value being here means at least one chunk with that choice index
 	 * has been received. A null value means we've already finished the given
@@ -407,7 +407,7 @@ export class SSEProcessor {
 
 				if (this.requestId.created === 0) {
 					// Would only be 0 if we're the first actual response chunk
-					this.requestId = getRequestId(this.response, json);
+					this.requestId = getRequestId(this.response.headers, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
 						this.requestId.created = Math.floor(Date.now() / 1000);
 					}
