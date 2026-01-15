@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClientHttp2Stream } from 'node:http2';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
@@ -71,14 +70,7 @@ export class ResponseStream {
 	 * @throws client of the method should handle the error
 	 */
 	public async destroy(): Promise<void> {
-		const body = await this.fetcherResponse.body();
-		// Destroy the stream so that the server is hopefully notified we don't want any more data
-		// and can cancel/forget about the request itself.
-		if (body && typeof (body as ClientHttp2Stream).destroy === 'function') {
-			(body as ClientHttp2Stream).destroy();
-		} else if (body instanceof ReadableStream) {
-			void body.cancel();
-		}
+		await this.fetcherResponse.body.destroy();
 	}
 
 	private static aggregateCompletionsStream(stream: Completion[]): Completion {

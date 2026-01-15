@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
@@ -486,11 +485,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		);
 
 		if (cancellationToken.isCancellationRequested) {
-			const body = await response!.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
 				// and can cancel/forget about the request itself.
-				(body as ClientHttp2Stream).destroy();
+				await response!.body.destroy();
 			} catch (e) {
 				this._logService.error(e, `Error destroying stream`);
 				this._telemetryService.sendGHTelemetryException(e, 'Error destroying stream');

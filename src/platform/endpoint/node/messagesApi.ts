@@ -5,7 +5,6 @@
 
 import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
@@ -271,7 +270,6 @@ export async function processResponseFromMessagesEndpoint(
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
@@ -298,11 +296,11 @@ export async function processResponseFromMessagesEndpoint(
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
 }
 
