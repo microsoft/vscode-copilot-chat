@@ -634,7 +634,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 			// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 			// If they are different then we will override the original one we set in telemetryData above.
-			const modelRequestId = getRequestId(response, undefined);
+			const modelRequestId = getRequestId(response.headers);
 			telemetryData.extendWithRequestId(modelRequestId);
 
 			// TODO: Add response length (requires parsing)
@@ -680,7 +680,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		response: Response,
 		requestId: string
 	): Promise<ChatRequestFailed> {
-		const modelRequestIdObj = getRequestId(response, undefined);
+		const modelRequestIdObj = getRequestId(response.headers);
 		requestId = modelRequestIdObj.headerRequestId || requestId;
 		modelRequestIdObj.headerRequestId = requestId;
 

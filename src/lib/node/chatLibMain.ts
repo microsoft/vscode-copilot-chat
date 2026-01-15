@@ -91,6 +91,8 @@ import { NullLanguageContextProviderService } from '../../platform/languageConte
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
 import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
+import { ICompletionsFetchService } from '../../platform/nesFetch/common/completionsFetchService';
+import { CompletionsFetchService } from '../../platform/nesFetch/node/completionsFetchServiceImpl';
 import { FetchOptions, IAbortController, IFetcherService, PaginationOptions } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { IProxyModelsService } from '../../platform/proxyModels/common/proxyModelsService';
@@ -785,6 +787,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	builder.define(ICompletionsRecentEditsProviderService, new SyncDescriptor(FullRecentEditsProvider, [undefined]));
 	builder.define(ICompletionsNotifierService, new SyncDescriptor(CompletionNotifier));
 	builder.define(ICompletionsOpenAIFetcherService, new SyncDescriptor(LiveOpenAIFetcher));
+	builder.define(ICompletionsFetchService, new SyncDescriptor(CompletionsFetchService));
 	builder.define(ICompletionsModelManagerService, new SyncDescriptor(AvailableModelsManager, [true]));
 	builder.define(ICompletionsAsyncManagerService, new SyncDescriptor(AsyncCompletionManager));
 	builder.define(ICompletionsContextProviderBridgeService, new SyncDescriptor(ContextProviderBridge));

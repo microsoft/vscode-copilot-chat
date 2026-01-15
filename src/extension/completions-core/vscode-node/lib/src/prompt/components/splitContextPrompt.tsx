@@ -11,6 +11,7 @@ import { ICompletionsRecentEditsProviderService } from '../recentEdits/recentEdi
 import { CodeSnippets } from './codeSnippets';
 import { AdditionalCompletionsContext, StableCompletionsContext } from './completionsContext';
 import { DocumentPrefix, DocumentSuffix } from './currentFile';
+import { Diagnostics } from './diagnostics';
 import { DocumentMarker } from './marker';
 import { RecentEdits } from './recentEdits';
 import { SimilarFiles } from './similarFiles';
@@ -29,6 +30,7 @@ export function splitContextCompletionsPrompt(accessor: ServicesAccessor) {
 			<StableCompletionsContext>
 				<DocumentMarker tdms={tdms} weight={0.7} />
 				<Traits weight={0.6} />
+				<Diagnostics tdms={tdms} weight={0.65} />
 				<CodeSnippets tdms={tdms} weight={0.9} />
 				<SimilarFiles tdms={tdms} instantiationService={instantiationService} weight={0.8} />
 			</StableCompletionsContext>
