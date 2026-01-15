@@ -115,7 +115,10 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				if (response.status === 402) {
 					// When we receive a 402, we have exceed the free tier quota
 					// This is stored on the token so let's refresh it
-					this.authService.resetCopilotToken(response.status);
+					if (!this.authService.copilotToken?.isCompletionsQuotaExceeded) {
+						this.authService.resetCopilotToken(response.status);
+						await this.authService.getCopilotToken();
+					}
 				}
 
 				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText, response.headers, () => response.text().catch(() => '')));
