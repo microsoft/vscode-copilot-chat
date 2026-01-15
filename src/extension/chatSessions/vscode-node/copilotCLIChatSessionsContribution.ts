@@ -337,7 +337,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				if (!parsedFile.header?.model) {
 					continue;
 				}
-				const modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model) || await this.copilotCLIModels.resolveModel(stripCopilotSuffix(parsedFile.header.model));
+				let modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model);
+				if (modelId) {
+					return modelId;
+				}
+				// Sometimes the models can contain ` (Copilot)` suffix, try stripping that and resolving again.
+				if (!parsedFile.header.model.includes('(')) {
+					continue;
+				}
+				modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model.substring(0, parsedFile.header.model.indexOf('(')).trim());
 				if (modelId) {
 					return modelId;
 				}
@@ -355,13 +363,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			this.notifySessionOptionsChange(resource, [{ optionId: MODELS_OPTION_ID, value: agentModel }]);
 		}
 	}
-}
-
-function stripCopilotSuffix(modelId: string) {
-	if (modelId.includes('(')) {
-		return modelId.substring(0, modelId.indexOf('(')).trim();
-	}
-	return modelId;
 }
 
 async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
