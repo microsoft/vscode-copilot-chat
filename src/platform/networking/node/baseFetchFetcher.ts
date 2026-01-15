@@ -89,7 +89,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			resp.headers,
 			() => resp.text(),
 			() => resp.json(),
-			async () => {
+			() => {
 				if (!resp.body) {
 					return Readable.from([]);
 				}

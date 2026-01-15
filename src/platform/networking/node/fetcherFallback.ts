@@ -109,10 +109,10 @@ async function tryFetch(fetcher: IFetcher, url: string, options: FetchOptions, l
 		try {
 			const json = JSON.parse(text); // Verify JSON
 			logService.debug(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded (JSON)`);
-			return { ok: true, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => json, async () => Readable.from([text]), response.fetcher) };
+			return { ok: true, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => json, () => Readable.from([text]), response.fetcher) };
 		} catch (err) {
 			logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed to parse JSON: ${err.message}`);
-			return { ok: false, err, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => { throw err; }, async () => Readable.from([text]), response.fetcher) };
+			return { ok: false, err, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => { throw err; }, () => Readable.from([text]), response.fetcher) };
 		}
 	} catch (err) {
 		logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);

@@ -29,7 +29,7 @@ export class Response {
 		readonly headers: IHeaders,
 		private readonly getText: () => Promise<string>,
 		private readonly getJson: () => Promise<any>,
-		private readonly getBody: () => Promise<unknown | null>,
+		private readonly getBody: () => NodeJS.ReadableStream | null,
 		readonly fetcher: FetcherId
 	) { }
 
@@ -42,7 +42,7 @@ export class Response {
 	}
 
 	/** Async version of the standard .body field. */
-	async body(): Promise<unknown | null> {
+	body(): NodeJS.ReadableStream | null {
 		return this.getBody();
 	}
 }

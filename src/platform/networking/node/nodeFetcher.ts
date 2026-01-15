@@ -103,7 +103,7 @@ export class NodeFetcher implements IFetcher {
 					nodeFetcherResponse.headers,
 					async () => nodeFetcherResponse.text(),
 					async () => nodeFetcherResponse.json(),
-					async () => nodeFetcherResponse.body(),
+					() => nodeFetcherResponse.body(),
 					NodeFetcher.ID
 				));
 			});
@@ -194,7 +194,7 @@ class NodeFetcherResponse {
 		return JSON.parse(text);
 	}
 
-	public async body(): Promise<NodeJS.ReadableStream | null> {
+	public body(): NodeJS.ReadableStream | null {
 		this.signal.addEventListener('abort', () => {
 			this.res.emit('error', makeAbortError(this.signal));
 			this.res.destroy();
