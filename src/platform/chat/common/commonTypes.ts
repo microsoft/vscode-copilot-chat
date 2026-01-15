@@ -46,7 +46,11 @@ export enum ChatLocation {
 	/**
 	 * A request coming through the OpenAILanguageModelServer
 	 */
-	ResponsesProxy = 8
+	ResponsesProxy = 8,
+	/**
+	 * A request coming through the ClaudeLanguageModelServer (Messages API)
+	 */
+	MessagesProxy = 9
 }
 
 export namespace ChatLocation {

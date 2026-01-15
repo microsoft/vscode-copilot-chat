@@ -31,7 +31,7 @@ import { Logger } from '../../lib/src/logger';
 import { isCompletionEnabledForDocument } from './config';
 import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from './copilotCompletionFeedbackTracker';
 import { ICompletionsExtensionStatus } from './extensionStatus';
-import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostText';
+import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostTextProvider';
 
 const logger = new Logger('inlineCompletionItemProvider');
 

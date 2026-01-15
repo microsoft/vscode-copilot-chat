@@ -18,6 +18,14 @@ resources:
       endpoint: Monaco
 
 parameters:
+  - name: customNPMRegistry
+    displayName: 📦 Custom NPM Registry (Terrapin)
+    type: boolean
+    default: true
+  - name: generateNotice
+    displayName: 📝 Generate Notice
+    type: boolean
+    default: true
   - name: publishExtension
     displayName: 🚀 Publish Pre-Release
     type: boolean
@@ -228,5 +236,10 @@ extends:
         areaPath: 'Visual Studio Code Copilot Extensions'
         serviceTreeID: '1788a767-5861-45fb-973b-c686b67c5541'
       enabled: true
+
+    ${{ if eq(parameters.customNPMRegistry, false) }}:
+      customNPMRegistry: ''
+
+    generateNotice: ${{ parameters.generateNotice }}
 
     publishExtension: ${{ parameters.publishExtension }}

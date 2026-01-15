@@ -5,15 +5,19 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { Uri } from 'vscode';
+import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Delayer } from '../../../../util/vs/base/common/async';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
-import { IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
@@ -35,7 +39,6 @@ export class CopilotCLISessionOptions {
 	private readonly agent?: SweCustomAgent;
 	private readonly customAgents?: SweCustomAgent[];
 	private readonly mcpServers?: SessionOptions['mcpServers'];
-	private readonly logger: ReturnType<typeof getCopilotLogger>;
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
 	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
@@ -45,7 +48,6 @@ export class CopilotCLISessionOptions {
 		this.mcpServers = options.mcpServers;
 		this.agent = options.agent;
 		this.customAgents = options.customAgents;
-		this.logger = getCopilotLogger(logger);
 		this.requestPermissionRejected = async (permission: PermissionRequest): ReturnType<NonNullable<SessionOptions['requestPermission']>> => {
 			logger.info(`[CopilotCLISession] Permission request denied for permission as no handler was set: ${permission.kind}`);
 			return {
@@ -66,7 +68,6 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
-			logger: this.logger,
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
 			}
@@ -144,7 +145,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.model, name: model.label }));
+			return models.map(model => ({ id: model.id, name: model.name }));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
@@ -154,6 +155,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 
 export interface ICopilotCLIAgents {
 	readonly _serviceBrand: undefined;
+	readonly onDidChangeAgents: Event<void>;
 	getDefaultAgent(): Promise<string>;
 	resolveAgent(agentId: string): Promise<SweCustomAgent | undefined>;
 	setDefaultAgent(agent: string | undefined): Promise<void>;
@@ -164,16 +166,51 @@ export interface ICopilotCLIAgents {
 
 export const ICopilotCLIAgents = createServiceIdentifier<ICopilotCLIAgents>('ICopilotCLIAgents');
 
-export class CopilotCLIAgents implements ICopilotCLIAgents {
+export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	declare _serviceBrand: undefined;
 	private sessionAgents: Record<string, { agentId?: string; createdDateTime: number }> = {};
-	private _agents?: Readonly<SweCustomAgent>[];
+	private _agentsPromise?: Promise<Readonly<SweCustomAgent>[]>;
+	private readonly _onDidChangeAgents = this._register(new Emitter<void>());
+	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
+	private readonly _fileWatchers = this._register(new DisposableStore());
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-	) { }
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+	) {
+		super();
+		this.setupFileWatchers();
+		void this.getAgents();
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
+			this.setupFileWatchers();
+			this._refreshAgents();
+		}));
+	}
+
+	protected setupFileWatchers(): void {
+		this._fileWatchers.clear();
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		const refresher = this._fileWatchers.add(new Delayer(500));
+		for (const folder of workspaceFolders) {
+			const pattern = new RelativePattern(folder, '.github/agents/*.agent.md');
+			const watcher = this._fileWatchers.add(this.fileSystemService.createFileSystemWatcher(pattern));
+			this._fileWatchers.add(watcher.onDidCreate(() => refresher.trigger(() => this._refreshAgents())));
+			this._fileWatchers.add(watcher.onDidChange(() => refresher.trigger(() => this._refreshAgents())));
+			this._fileWatchers.add(watcher.onDidDelete(() => refresher.trigger(() => this._refreshAgents())));
+		}
+	}
+
+	private _refreshAgents(): void {
+		this._agentsPromise = undefined;
+		this.getAgents().catch((error) => {
+			this.logService.error('[CopilotCLIAgents] Failed to refresh agents', error);
+		});
+		this._onDidChangeAgents.fire();
+	}
+
 	async trackSessionAgent(sessionId: string, agent: string | undefined): Promise<void> {
 		const details = Object.keys(this.sessionAgents).length ? this.sessionAgents : this.extensionContext.workspaceState.get<Record<string, { agentId?: string; createdDateTime: number }>>(COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY, this.sessionAgents);
 
@@ -227,17 +264,16 @@ export class CopilotCLIAgents implements ICopilotCLIAgents {
 	}
 
 	async getAgents(): Promise<Readonly<SweCustomAgent>[]> {
-		// Fetching agents from the SDK can be slow, cache the result while allowing background refreshes.
-		const agents = this._agents;
-		const promise = this.getAgentsImpl();
+		// Cache the promise to avoid concurrent fetches
+		if (!this._agentsPromise) {
+			this._agentsPromise = this.getAgentsImpl().catch((error) => {
+				this.logService.error('[CopilotCLIAgents] Failed to fetch custom agents', error);
+				this._agentsPromise = undefined;
+				return [];
+			});
+		}
 
-		promise.then(fetchedAgents => {
-			this._agents = fetchedAgents;
-		}).catch((error) => {
-			this.logService.error('[CopilotCLISession] Failed to fetch custom agents', error);
-		});
-
-		return agents ?? promise;
+		return this._agentsPromise;
 	}
 
 	async getAgentsImpl(): Promise<Readonly<SweCustomAgent>[]> {
