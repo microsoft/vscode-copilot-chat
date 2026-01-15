@@ -6,9 +6,12 @@
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Codicon } from '../../../../util/vs/base/common/codicons';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
@@ -94,6 +97,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -119,6 +123,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	}
 
 	public async handleRequest(
+		requestId: string,
+		prompt: string,
+		attachments: Attachment[],
+		modelId: string | undefined,
+		token: vscode.CancellationToken
+	): Promise<void> {
+		const promptLabel = prompt.length > 50 ? prompt.substring(0, 47) + '...' : prompt;
+		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'copilot', false, true);
+		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, prompt, attachments, modelId, token));
+	}
+
+	private async _handleRequestImpl(
 		requestId: string,
 		prompt: string,
 		attachments: Attachment[],
@@ -157,6 +173,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			);
 		}));
 		const chunkMessageIds = new Set<string>();
+		const assistantMessageChunks: string[] = [];
+		const logStartTime = Date.now();
 		try {
 			// Where possible try to avoid an extra call to getSelectedModel by using cached value.
 			const [currentModel, authInfo] = await Promise.all([
@@ -171,17 +189,23 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				await raceCancellation(this._sdkSession.setSelectedModel(modelId), token);
 			}
 
-			disposables.add(toDisposable(this._sdkSession.on('*', (event) => this.logService.trace(`[CopilotCLISession]CopilotCLI Event: ${JSON.stringify(event, null, 2)}`))));
+			disposables.add(toDisposable(this._sdkSession.on('*', (event) => {
+				this.logService.trace(`[CopilotCLISession] CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
+			})));
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
 			})));
-			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
-				// Support for streaming chunked messages.
-				if (typeof event.data.chunkContent === 'string' && event.data.chunkContent.length) {
+			disposables.add(toDisposable(this._sdkSession.on('assistant.message_delta', (event) => {
+				// Support for streaming delta messages.
+				if (typeof event.data.deltaContent === 'string' && event.data.deltaContent.length) {
 					chunkMessageIds.add(event.data.messageId);
-					this._stream?.markdown(event.data.chunkContent);
+					assistantMessageChunks.push(event.data.deltaContent);
+					this._stream?.markdown(event.data.deltaContent);
 				}
+			})));
+			disposables.add(toDisposable(this._sdkSession.on('assistant.message', (event) => {
 				if (typeof event.data.content === 'string' && event.data.content.length && !chunkMessageIds.has(event.data.messageId)) {
+					assistantMessageChunks.push(event.data.content);
 					this._stream?.markdown(event.data.content);
 				}
 			})));
@@ -228,6 +252,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
 				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
 				this.logService.trace(`[CopilotCLISession]Complete Tool ${toolName}, ${parts}`);
+
+				// Log tool call to request logger
+				const eventError = event.data.error ? { ...event.data.error, code: event.data.error.code || '' } : undefined;
+				const eventData = { ...event.data, error: eventError };
+
+				this._logToolCall(event.data.toolCallId, toolName, toolCalls.get(event.data.toolCallId)?.arguments, eventData);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
 				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
@@ -251,11 +281,17 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			}
 			this._status = ChatSessionStatus.Completed;
 			this._statusChange.fire(this._status);
+
+			// Log the completed conversation
+			this._logConversation(prompt, assistantMessageChunks.join(''), logStartTime, 'Completed');
 		} catch (error) {
 			this._status = ChatSessionStatus.Failed;
 			this._statusChange.fire(this._status);
 			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+
+			// Log the failed conversation
+			this._logConversation(prompt, assistantMessageChunks.join(''), logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
 		} finally {
 			this._pendingPrompt = undefined;
 			disposables.dispose();
@@ -378,5 +414,81 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._permissionRequested = undefined;
 		}
 		return this._permissionHandler;
+	}
+
+	private _logConversation(userPrompt: string, assistantResponse: string, startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): void {
+		const markdownContent = this._renderConversationToMarkdown(userPrompt, assistantResponse, startTimeMs, status, errorMessage);
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: `Background Agent | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			startTimeMs,
+			icon: Codicon.copilot,
+			markdownContent,
+			isConversationRequest: true
+		});
+	}
+
+	private _renderConversationToMarkdown(userPrompt: string, assistantResponse: string, startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): string {
+		const result: string[] = [];
+		result.push(`# Background Agent Session`);
+		result.push(``);
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`sessionId    : ${this.sessionId}`);
+		result.push(`status       : ${status}`);
+		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
+		result.push(`endTime      : ${new Date().toISOString()}`);
+		result.push(`duration     : ${Date.now() - startTimeMs}ms`);
+		if (errorMessage) {
+			result.push(`error        : ${errorMessage}`);
+		}
+		result.push(`~~~`);
+		result.push(``);
+		result.push(`## User Prompt`);
+		result.push(`~~~`);
+		result.push(userPrompt);
+		result.push(`~~~`);
+		result.push(``);
+		result.push(`## Assistant Response`);
+		result.push(`~~~`);
+		result.push(assistantResponse || '(no response)');
+		result.push(`~~~`);
+		return result.join('\n');
+	}
+
+	private _logToolCall(toolCallId: string, toolName: string, args: unknown, eventData: { success: boolean; error?: { code: string; message: string }; result?: { content: string } }): void {
+		const argsStr = args !== undefined ? (typeof args === 'string' ? args : JSON.stringify(args, undefined, 2)) : '';
+		const resultStr = eventData.result?.content ?? '';
+		const errorStr = eventData.error ? `Error: ${eventData.error.code} - ${eventData.error.message}` : '';
+
+		const markdownContent = [
+			`# Tool Call: ${toolName}`,
+			``,
+			`## Metadata`,
+			`~~~`,
+			`toolCallId   : ${toolCallId}`,
+			`toolName     : ${toolName}`,
+			`success      : ${eventData.success}`,
+			`~~~`,
+			``,
+			`## Arguments`,
+			`~~~`,
+			argsStr,
+			`~~~`,
+			``,
+			`## Result`,
+			`~~~`,
+			eventData.success ? resultStr : errorStr,
+			`~~~`,
+		].join('\n');
+
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: `Tool: ${toolName}`,
+			startTimeMs: Date.now(),
+			icon: Codicon.tools,
+			markdownContent,
+			isConversationRequest: true
+		});
 	}
 }

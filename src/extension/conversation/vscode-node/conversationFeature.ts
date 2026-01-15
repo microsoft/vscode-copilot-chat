@@ -232,7 +232,7 @@ export class ConversationFeature implements IExtensionContribution {
 					return;
 				}
 
-				const repository = this.gitCommitMessageService.getRepository(uri);
+				const repository = await this.gitCommitMessageService.getRepository(uri);
 				if (!repository) {
 					return;
 				}
@@ -246,7 +246,7 @@ export class ConversationFeature implements IExtensionContribution {
 				}
 			}),
 			vscode.commands.registerCommand('github.copilot.git.generateCommitMessage', async (rootUri: vscode.Uri | undefined, _: vscode.SourceControlInputBoxValueProviderContext[], cancellationToken: vscode.CancellationToken | undefined) => {
-				const repository = this.gitCommitMessageService.getRepository(rootUri);
+				const repository = await this.gitCommitMessageService.getRepository(rootUri);
 				if (!repository) {
 					return;
 				}

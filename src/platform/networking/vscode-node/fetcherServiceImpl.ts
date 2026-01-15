@@ -144,7 +144,7 @@ export class FetcherService implements IFetcherService {
 		return this._getAvailableFetchers()[0].isInternetDisconnectedError(e);
 	}
 	isFetcherError(e: any): boolean {
-		return this._getAvailableFetchers()[0].isFetcherError(e);
+		return !!e?.fetcherId || this._getAvailableFetchers()[0].isFetcherError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._getAvailableFetchers()[0].getUserMessageForFetcherError(err);

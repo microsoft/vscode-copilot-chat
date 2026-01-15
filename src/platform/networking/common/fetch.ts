@@ -5,7 +5,7 @@
 
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
 import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
-import { Response } from './fetcherService';
+import { IHeaders } from './fetcherService';
 import { ChoiceLogProbs, FilterReason } from './openai';
 
 
@@ -20,14 +20,14 @@ export interface RequestId {
 	deploymentId: string;
 }
 
-export function getRequestId(response: Response, json?: any): RequestId {
+export function getRequestId(headers: IHeaders, json?: any): RequestId {
 	return {
-		headerRequestId: response.headers.get('x-request-id') || '',
-		gitHubRequestId: response.headers.get('x-github-request-id') || '',
+		headerRequestId: headers.get('x-request-id') || '',
+		gitHubRequestId: headers.get('x-github-request-id') || '',
 		completionId: json && json.id ? json.id : '',
 		created: json && json.created ? json.created : 0,
-		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
-		deploymentId: response.headers.get('azureml-model-deployment') || '',
+		serverExperiments: headers.get('X-Copilot-Experiment') || '',
+		deploymentId: headers.get('azureml-model-deployment') || '',
 	};
 }
 
@@ -85,8 +85,15 @@ export interface ICopilotToolCall {
 	id: string;
 }
 
+export interface ICopilotToolCallStreamUpdate {
+	name: string;
+	arguments: string;
+	id?: string;
+}
+
 export interface ICopilotBeginToolCall {
 	name: string;
+	id?: string;
 }
 
 /**
@@ -129,6 +136,7 @@ export interface IResponseDelta {
 	copilotReferences?: ICopilotReference[];
 	copilotErrors?: ICopilotError[];
 	copilotToolCalls?: ICopilotToolCall[];
+	copilotToolCallStreamUpdates?: ICopilotToolCallStreamUpdate[];
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;

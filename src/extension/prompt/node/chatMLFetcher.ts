@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
@@ -486,11 +485,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		);
 
 		if (cancellationToken.isCancellationRequested) {
-			const body = await response!.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
 				// and can cancel/forget about the request itself.
-				(body as ClientHttp2Stream).destroy();
+				await response!.body.destroy();
 			} catch (e) {
 				this._logService.error(e, `Error destroying stream`);
 				this._telemetryService.sendGHTelemetryException(e, 'Error destroying stream');
@@ -634,7 +632,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 			// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 			// If they are different then we will override the original one we set in telemetryData above.
-			const modelRequestId = getRequestId(response, undefined);
+			const modelRequestId = getRequestId(response.headers);
 			telemetryData.extendWithRequestId(modelRequestId);
 
 			// TODO: Add response length (requires parsing)
@@ -680,7 +678,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		response: Response,
 		requestId: string
 	): Promise<ChatRequestFailed> {
-		const modelRequestIdObj = getRequestId(response, undefined);
+		const modelRequestIdObj = getRequestId(response.headers);
 		requestId = modelRequestIdObj.headerRequestId || requestId;
 		modelRequestIdObj.headerRequestId = requestId;
 
@@ -1225,5 +1223,7 @@ export function locationToIntent(location: ChatLocation): string {
 			return 'conversation-agent';
 		case ChatLocation.ResponsesProxy:
 			return 'responses-proxy';
+		case ChatLocation.MessagesProxy:
+			return 'messages-proxy';
 	}
 }

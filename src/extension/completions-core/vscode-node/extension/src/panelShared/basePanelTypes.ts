@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, Range } from 'vscode';
-import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 
 // Base interface for a completion displayed in the panel.
 export interface BasePanelCompletion {

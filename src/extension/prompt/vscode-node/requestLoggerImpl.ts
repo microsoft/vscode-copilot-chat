@@ -83,7 +83,9 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 				details.push(`${totalClearedThinkingTurns} thinking turns`);
 			}
 
-			text += `🧹 Context cleared: ${details.join(', ')}`;
+			if (details.length > 0) {
+				text += `🧹 Context cleared: ${details.join(', ')}`;
+			}
 		}
 
 		return text;
