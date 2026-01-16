@@ -14,6 +14,7 @@ export enum ToolCategory {
 	VSCodeInteraction = 'VS Code Interaction',
 	Testing = 'Testing',
 	RedundantButSpecific = 'Redundant but Specific',
+	Agent = 'Agent',
 	// Core tools that should not be grouped
 	Core = 'Core'
 }
@@ -173,8 +174,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindFiles]: ToolCategory.Core,
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
-	[ToolName.CoreRunSubagent]: ToolCategory.Core,
-	[ToolName.SearchSubagent]: ToolCategory.Core,
+	[ToolName.CoreRunSubagent]: ToolCategory.Agent,
+	[ToolName.SearchSubagent]: ToolCategory.Agent,
 	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled

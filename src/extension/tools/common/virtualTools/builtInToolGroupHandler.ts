@@ -28,6 +28,8 @@ function getCategorySummary(category: ToolCategory): string {
 			return 'Call tools from this group when you need to interact with the VS Code workspace and access VS Code features.';
 		case ToolCategory.Testing:
 			return 'Call tools from this group when you need to run tests, analyze test failures, and manage test workflows.';
+		case ToolCategory.Agent:
+			return 'Call tools from this group when you need to delegate tasks to other agents or launch specialized subagents for complex operations.';
 		case ToolCategory.RedundantButSpecific: {
 			const toolNames = getToolsForCategory(category);
 			return `These tools have overlapping functionalities but are highly specialized for certain tasks. Tools: ${toolNames.join(', ')}`;
