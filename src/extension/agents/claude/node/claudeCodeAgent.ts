@@ -450,6 +450,12 @@ export class ClaudeCodeSession extends Disposable {
 		} catch (error) {
 			// Only clean up if this is still the active session (not stale from model change)
 			if (mySessionVersion === this._sessionVersion) {
+				// Reset session state so the next invoke() can start a fresh session
+				this._queryGenerator = undefined;
+				this._abortController.abort();
+				this._abortController = new AbortController();
+				this._currentRequest = undefined;
+
 				// Reject all pending requests
 				this._promptQueue.forEach(req => req.deferred.error(error as Error));
 				this._promptQueue = [];

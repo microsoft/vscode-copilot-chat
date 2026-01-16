@@ -139,6 +139,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return;
 		}
 
+		// If the message indicates it was interrupted, skip it
+		// TODO: I think there's another message that is shown when
+		// the user cancels a tool call... I saw it once, so this may
+		// need another check.
+		if (textContent === '[Request interrupted by user]') {
+			return;
+		}
+
 		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined, undefined);
 	}
 
