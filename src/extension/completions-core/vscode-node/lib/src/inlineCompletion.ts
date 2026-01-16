@@ -6,9 +6,10 @@ import { CancellationToken, Position, Range } from 'vscode-languageserver-protoc
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionState, createCompletionState } from './completionState';
 import { completionsFromGhostTextResults, CopilotCompletion } from './ghostText/copilotCompletion';
-import { getGhostText, GetGhostTextOptions, ResultType } from './ghostText/ghostText';
+import { getGhostText, GetGhostTextOptions } from './ghostText/ghostText';
 import { setLastShown } from './ghostText/last';
 import { ITextEditorOptions } from './ghostText/normalizeIndent';
+import { ResultType } from './ghostText/resultType';
 import { ICompletionsSpeculativeRequestCache } from './ghostText/speculativeRequestCache';
 import { GhostTextResultWithTelemetry, handleGhostTextResultTelemetry, logger } from './ghostText/telemetry';
 import { ICompletionsLogTargetService } from './logger';

@@ -14,7 +14,7 @@ import { Prompt } from '../../prompt/prompt';
 import { TelemetryWithExp } from '../../telemetry';
 import { createLibTestingContext } from '../../test/context';
 import { delay } from '../../util/async';
-import { ResultType } from '../ghostText';
+import { ResultType } from '../resultType';
 import { AsyncCompletionManager } from './../asyncCompletions';
 import { GhostTextResultWithTelemetry, mkBasicResultTelemetry } from './../telemetry';
 

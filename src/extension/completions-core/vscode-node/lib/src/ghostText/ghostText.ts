@@ -7,7 +7,6 @@ import { ITelemetryService } from '../../../../../../platform/telemetry/common/t
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
 import { ICompletionsNotifierService } from '../completionNotifier';
@@ -18,7 +17,6 @@ import { ICompletionsLogTargetService, Logger } from '../logger';
 import { isAbortError } from '../networking';
 import { EngineRequestInfo, getEngineRequestInfo } from '../openai/config';
 import {
-	CompletionHeaders,
 	FinishedCallback
 } from '../openai/fetch';
 import { APIChoice } from '../openai/openai';
@@ -26,13 +24,10 @@ import { ICompletionsStatusReporter } from '../progress';
 import { ICompletionsContextProviderBridgeService } from '../prompt/components/contextProviderBridge';
 import { ICompletionsContextProviderService } from '../prompt/contextProviderStatistics';
 import {
-	ContextIndentation,
 	contextIndentation,
-	isEmptyBlockStartUtil,
-	parsingBlockFinished,
 } from '../prompt/parseBlock';
 import { ExtractPromptOptions, Prompt, PromptResponsePresent, extractPrompt, trimLastLine } from '../prompt/prompt';
-import { ComputationStatus, MaybeRepoInfo, extractRepoInfoInBackground } from '../prompt/repository';
+import { ComputationStatus, extractRepoInfoInBackground } from '../prompt/repository';
 import { checkSuffix, postProcessChoiceInContext } from '../suggestions/suggestions';
 import {
 	TelemetryData,
@@ -46,13 +41,13 @@ import {
 import { IPosition, LocationFactory, TextDocumentContents } from '../textDocument';
 import { delay } from '../util/async';
 import { ICompletionsAsyncManagerService } from './asyncCompletions';
-import { BlockPositionType, BlockTrimmer, getBlockPositionType } from './blockTrimmer';
+import { BlockTrimmer } from './blockTrimmer';
 import { ICompletionsCacheService } from './completionsCache';
 import { CompletionsFromNetwork, makeGhostAPIChoice } from './completionsFromNetwork';
-import { ICompletionsBlockModeConfig } from './configBlockMode';
 import { ICompletionsCurrentGhostText } from './current';
-import { requestMultilineScore } from './multilineModel';
-import { StreamedCompletionSplitter } from './streamedCompletionSplitter';
+import { getGhostTextStrategy } from './ghostTextStrategy';
+import { RequestContext } from './requestContext';
+import { ResultType } from './resultType';
 import {
 	GhostTextResultWithTelemetry,
 	mkBasicResultTelemetry,
@@ -76,202 +71,6 @@ export interface CompletionResult {
 	suffixCoverage: number;
 	copilotAnnotations?: CopilotNamedAnnotationList;
 	clientCompletionId: string;
-}
-
-export enum ResultType {
-	Network,
-	Cache,
-	TypingAsSuggested,
-	Cycling,
-	Async,
-}
-
-// p50 line length is 19 characters (p95 is 73)
-// average token length is around 4 characters
-// the below values have quite a bit of buffer while bringing the limit in significantly from 500
-const maxSinglelineTokens = 20;
-
-type GhostTextStrategy = {
-	blockMode: BlockMode;
-	requestMultiline: boolean;
-	finishedCb: FinishedCallback;
-	stop?: string[];
-	maxTokens?: number;
-};
-
-function takeNLines(n: number): FinishedCallback {
-	return (text: string): number | undefined => {
-		// If the text is longer than n lines, return the offset.
-		// Checks for n+1 lines because of the leading newline.
-		const lines = text?.split('\n') ?? [];
-		if (lines.length > n + 1) {
-			return lines.slice(0, n + 1).join('\n').length;
-		}
-	};
-}
-
-async function getGhostTextStrategy(
-	accessor: ServicesAccessor,
-	completionState: CompletionState,
-	prefix: string,
-	prompt: PromptResponsePresent,
-	isCycling: boolean,
-	inlineSuggestion: boolean,
-	hasAcceptedCurrentCompletion: boolean,
-	preIssuedTelemetryData: TelemetryWithExp
-): Promise<GhostTextStrategy> {
-	const instantiationService = accessor.get(IInstantiationService);
-	const featuresService = accessor.get(ICompletionsFeaturesService);
-	const blockModeConfig = accessor.get(ICompletionsBlockModeConfig);
-	const multilineAfterAcceptLines = featuresService.multilineAfterAcceptLines(preIssuedTelemetryData);
-	const blockMode = blockModeConfig.forLanguage(completionState.textDocument.detectedLanguageId, preIssuedTelemetryData);
-	switch (blockMode) {
-		case BlockMode.Server:
-			// Override the server-side trimming after accepting a completion
-			if (hasAcceptedCurrentCompletion) {
-				return {
-					blockMode: BlockMode.Parsing,
-					requestMultiline: true,
-					finishedCb: takeNLines(multilineAfterAcceptLines),
-					stop: ['\n\n'],
-					maxTokens: maxSinglelineTokens * multilineAfterAcceptLines,
-				};
-			}
-			return {
-				blockMode: BlockMode.Server,
-				requestMultiline: true,
-				finishedCb: _ => undefined,
-			};
-		case BlockMode.Parsing:
-		case BlockMode.ParsingAndServer:
-		case BlockMode.MoreMultiline:
-		default: {
-			// we shouldn't drop through to here, but in case we do, be explicit about the behaviour
-			let requestMultiline: MultilineDetermination;
-			try {
-				requestMultiline = await instantiationService.invokeFunction(shouldRequestMultiline,
-					blockMode,
-					completionState.textDocument,
-					completionState.position,
-					inlineSuggestion,
-					hasAcceptedCurrentCompletion,
-					prompt
-				);
-			} catch (err) {
-				// Fallback to non-multiline
-				requestMultiline = { requestMultiline: false };
-			}
-			if (
-				!hasAcceptedCurrentCompletion &&
-				requestMultiline.requestMultiline &&
-				featuresService.singleLineUnlessAccepted(preIssuedTelemetryData)
-			) {
-				requestMultiline.requestMultiline = false;
-			}
-			if (requestMultiline.requestMultiline) {
-				// Note that `trailingWs` contains *any* trailing whitespace from the prompt, but the prompt itself
-				// is only trimmed if the entire last line is whitespace.  We have to account for that here when we
-				// check whether the block body is finished.
-				let adjustedPosition;
-				if (prompt.trailingWs.length > 0 && !prompt.prompt.prefix.endsWith(prompt.trailingWs)) {
-					// Prompt was adjusted, so adjust the position to match
-					adjustedPosition = LocationFactory.position(
-						completionState.position.line,
-						Math.max(completionState.position.character - prompt.trailingWs.length, 0)
-					);
-				} else {
-					// Otherwise, just use the original position
-					adjustedPosition = completionState.position;
-				}
-				return {
-					blockMode: blockMode,
-					requestMultiline: true,
-					...instantiationService.invokeFunction(buildFinishedCallback,
-						blockMode,
-						completionState.textDocument,
-						adjustedPosition,
-						requestMultiline.blockPosition,
-						prefix,
-						true,
-						prompt.prompt,
-						preIssuedTelemetryData
-					),
-				};
-			}
-			// Override single-line to multiline after accepting a completion
-			if (hasAcceptedCurrentCompletion) {
-				const result: GhostTextStrategy = {
-					blockMode: BlockMode.Parsing,
-					requestMultiline: true,
-					finishedCb: takeNLines(multilineAfterAcceptLines),
-					stop: ['\n\n'],
-					maxTokens: maxSinglelineTokens * multilineAfterAcceptLines,
-				};
-				if (blockMode === BlockMode.MoreMultiline) {
-					result.blockMode = BlockMode.MoreMultiline;
-				}
-				return result;
-			}
-			// not multiline
-			return {
-				blockMode: blockMode,
-				requestMultiline: false,
-				...instantiationService.invokeFunction(buildFinishedCallback,
-					blockMode,
-					completionState.textDocument,
-					completionState.position,
-					requestMultiline.blockPosition,
-					prefix,
-					false,
-					prompt.prompt,
-					preIssuedTelemetryData
-				),
-			};
-		}
-	}
-}
-
-function buildFinishedCallback(
-	accessor: ServicesAccessor,
-	blockMode: BlockMode,
-	document: TextDocumentContents,
-	position: IPosition,
-	positionType: BlockPositionType | undefined,
-	prefix: string,
-	multiline: boolean,
-	prompt: Prompt,
-	telemetryData: TelemetryWithExp
-): { finishedCb: FinishedCallback; maxTokens?: number } {
-	const featuresService = accessor.get(ICompletionsFeaturesService);
-	const instantiationService = accessor.get(IInstantiationService);
-	if (multiline && blockMode === BlockMode.MoreMultiline && BlockTrimmer.isSupported(document.detectedLanguageId)) {
-		const lookAhead =
-			positionType === BlockPositionType.EmptyBlock || positionType === BlockPositionType.BlockEnd
-				? featuresService.longLookaheadSize(telemetryData)
-				: featuresService.shortLookaheadSize(telemetryData);
-
-		const completionsCacheService = accessor.get(ICompletionsCacheService);
-		const finishedCb = instantiationService.createInstance(StreamedCompletionSplitter,
-			prefix,
-			document.detectedLanguageId,
-			false,
-			lookAhead,
-			(extraPrefix: string, item: APIChoice) => {
-				const cacheContext = {
-					prefix: prefix + extraPrefix,
-					prompt: { ...prompt, prefix: prompt.prefix + extraPrefix },
-				};
-				appendToCache(completionsCacheService, cacheContext, item);
-			}
-		).getFinishedCallback();
-
-		return {
-			finishedCb,
-			maxTokens: featuresService.maxMultilineTokens(telemetryData),
-		};
-	}
-
-	return { finishedCb: multiline ? parsingBlockFinished(document, position) : _ => undefined };
 }
 
 export type GetGhostTextOptions = ExtractPromptOptions & {
@@ -850,51 +649,6 @@ function getLocalInlineSuggestion(
 	}
 }
 
-/** Info for caching completions. */
-interface CacheContext {
-	/** The text content up to the cursor. */
-	prefix: string;
-	/** The prompt to send to the model. */
-	prompt: Prompt;
-	/**
-	 * If true, add an extra newline at the end of the prefix of the prompt. This is used to get a completion for the next line.
-	 * Unset if the feature is disabled.
-	 */
-	requestForNextLine?: boolean;
-}
-
-/** Info for requesting and caching completions. */
-export interface RequestContext {
-	/** How block trimming should be done. */
-	blockMode: BlockMode;
-	/** The language of the file. */
-	languageId: string;
-	/** Information about the repository the file is in, if available. */
-	repoInfo: MaybeRepoInfo;
-	/** The engine used for the request. */
-	engineModelId: string;
-	/** A request id we choose in the hope that the model will use it in responses */
-	ourRequestId: string;
-	/** The text content up to the cursor. */
-	prefix: string;
-	/** The prompt to send to the model. */
-	prompt: Prompt;
-	/** Whether this request should be able to generate multiple lines. */
-	multiline: boolean;
-	/** Indentation (tabs or spaces) on/before and after the cursor. */
-	indentation: ContextIndentation;
-	/** Follow up request happening when user requested cycling */
-	isCycling: boolean;
-	/** Additional request headers */
-	headers: CompletionHeaders;
-	/** Optional override for the default stop sequences for this request. */
-	stop?: string[];
-	/** Optional override for max tokens to return */
-	maxTokens?: number;
-	/** Whether the current request is following an accepted completion. */
-	afterAccept: boolean;
-}
-
 /** Checks if the position is valid inline suggestion position. Returns `undefined` if it's position where ghost text shouldn't be displayed */
 function isInlineSuggestion(document: TextDocumentContents, position: IPosition) {
 	//Checks if we're in the position for the middle of the line suggestion
@@ -927,91 +681,11 @@ function isValidMiddleOfTheLinePosition(selectionPosition: IPosition, doc: TextD
 	return /^\s*[)>}\]"'`]*\s*[:{;,]?\s*$/.test(endOfLine);
 }
 
-/** Checks if position is the beginning of an empty line (including indentation) */
-function isNewLine(selectionPosition: IPosition, doc: TextDocumentContents): boolean {
-	const line = doc.lineAt(selectionPosition);
-	const lineTrimmed = line.text.trim();
-	return lineTrimmed.length === 0;
-}
-
 // This enables tests to control multi line behavior
 export class ForceMultiLine {
 	static readonly default = new ForceMultiLine();
 
 	constructor(readonly requestMultilineOverride = false) { }
-}
-
-type MultilineDetermination = {
-	requestMultiline: boolean;
-	blockPosition?: BlockPositionType;
-};
-
-async function shouldRequestMultiline(
-	accessor: ServicesAccessor,
-	blockMode: BlockMode,
-	document: TextDocumentContents,
-	position: IPosition,
-	inlineSuggestion: boolean,
-	afterAccept: boolean,
-	prompt: PromptResponsePresent
-): Promise<MultilineDetermination> {
-
-	// Parsing long files for multiline completions is slow, so we only do
-	// it for files with less than 8000 lines
-	if (document.lineCount >= 8000) {
-		telemetry(
-			accessor,
-			'ghostText.longFileMultilineSkip',
-			TelemetryData.createAndMarkAsIssued({
-				languageId: document.detectedLanguageId,
-				lineCount: String(document.lineCount),
-				currentLine: String(position.line),
-			})
-		);
-	} else {
-		if (blockMode === BlockMode.MoreMultiline && BlockTrimmer.isSupported(document.detectedLanguageId)) {
-			if (!afterAccept) {
-				return { requestMultiline: false };
-			}
-			const blockPosition = await getBlockPositionType(document, position);
-			return { requestMultiline: true, blockPosition };
-		}
-
-		const targetLanguagesNewLine = ['typescript', 'typescriptreact'];
-		if (targetLanguagesNewLine.includes(document.detectedLanguageId)) {
-			const newLine = isNewLine(position, document);
-			if (newLine) {
-				return { requestMultiline: true };
-			}
-		}
-		let requestMultiline = false;
-		if (!inlineSuggestion && isSupportedLanguageId(document.detectedLanguageId)) {
-			// Can only check block-level nodes of languages we support
-			requestMultiline = await isEmptyBlockStartUtil(document, position);
-		} else if (inlineSuggestion && isSupportedLanguageId(document.detectedLanguageId)) {
-			//If we are inline, check if we would suggest multiline for current position or if we would suggest a multiline completion if we were at the end of the line
-			requestMultiline =
-				(await isEmptyBlockStartUtil(document, position)) ||
-				(await isEmptyBlockStartUtil(document, document.lineAt(position).range.end));
-		}
-		// If requestMultiline is false, for specific languages check multiline score
-		if (!requestMultiline) {
-			const requestMultiModelThreshold = 0.5;
-			const targetLanguagesModel = ['javascript', 'javascriptreact', 'python'];
-			if (targetLanguagesModel.includes(document.detectedLanguageId)) {
-				// Call multiline model if not multiline and EXP flag is set.
-				const multiModelScore = requestMultilineScore(prompt.prompt, document.detectedLanguageId);
-				requestMultiline = multiModelScore > requestMultiModelThreshold;
-			}
-		}
-		return { requestMultiline };
-	}
-	return { requestMultiline: false };
-}
-
-/** Appends completions to existing entry in cache or creates new entry. */
-export function appendToCache(competionsCacheService: ICompletionsCacheService, requestContext: CacheContext, choice: APIChoice) {
-	competionsCacheService.append(requestContext.prefix, requestContext.prompt.suffix, choice);
 }
 
 function adjustLeadingWhitespace(index: number, text: string, ws: string): GhostCompletion {
@@ -1215,30 +889,4 @@ function telemetryIssued(
 function addDocumentTelemetry(telemetry: TelemetryWithExp, document: TextDocumentContents): void {
 	telemetry.measurements.documentLength = document.getText().length;
 	telemetry.measurements.documentLineCount = document.lineCount;
-}
-
-export function telemetryPerformance(
-	accessor: ServicesAccessor,
-	performanceKind: string,
-	choice: APIChoice,
-	requestStart: number,
-	processingTimeMs: number
-) {
-	const requestTimeMs = Date.now() - requestStart;
-	const deltaMs = requestTimeMs - processingTimeMs;
-
-	const telemetryData = choice.telemetryData.extendedBy(
-		{},
-		{
-			completionCharLen: choice.completionText.length,
-			requestTimeMs: requestTimeMs,
-			processingTimeMs: processingTimeMs,
-			deltaMs: deltaMs,
-			// Choice properties
-			meanLogProb: choice.meanLogProb || NaN,
-			meanAlternativeLogProb: choice.meanAlternativeLogProb || NaN,
-		}
-	);
-	telemetryData.extendWithRequestId(choice.requestId);
-	telemetry(accessor, `ghostText.${performanceKind}`, telemetryData);
 }
