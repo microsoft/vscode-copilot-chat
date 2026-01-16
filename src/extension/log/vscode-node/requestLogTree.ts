@@ -601,60 +601,103 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		} else if (element) {
 			return [];
 		} else {
-			let lastPrompt: ChatPromptItem | undefined;
-			const result: (ChatPromptItem | TreeChildItem)[] = [];
-			const seen = new Set<CapturingToken>();
+			// Build hierarchical tree structure based on token parentToken relationships
+			return this.buildHierarchicalTree();
+		}
+	}
 
-			const pushLastPrompt = () => {
-				if (lastPrompt) {
-					if (lastPrompt.token.flattenSingleChild && lastPrompt.children.length === 1 && !lastPrompt.hasSeen) {
-						result.push(lastPrompt.children[0]);
-					} else {
-						if (lastPrompt.token.promoteMainEntry) {
-							lastPrompt.promoteMainEntry();
-						}
-						result.push(lastPrompt);
-					}
-				}
-			};
+	/**
+	 * Build a hierarchical tree structure that respects parentToken relationships.
+	 * Tokens with parentToken are nested under their parent's ChatPromptItem.
+	 */
+	private buildHierarchicalTree(): (ChatPromptItem | TreeChildItem)[] {
+		const result: (ChatPromptItem | TreeChildItem)[] = [];
+		const seen = new Set<CapturingToken>();
 
-			for (const currReq of this.requestLogger.getRequests()) {
+		// Map from token to its ChatPromptItem for nesting child tokens
+		const tokenToPromptItem = new Map<CapturingToken, ChatPromptItem>();
 
-				if (currReq.token !== lastPrompt?.token) {
-					pushLastPrompt();
-					lastPrompt = (currReq.token === undefined ? undefined
-						: ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token))
-					);
-					if (currReq.token) {
-						seen.add(currReq.token);
-					}
-				}
+		// First pass: create ChatPromptItems for all tokens and collect entries
+		let lastPrompt: ChatPromptItem | undefined;
 
-				const currReqTreeItem = this.logToTreeItem(currReq);
-				if (lastPrompt === undefined) {
-					result.push(currReqTreeItem);
+		for (const currReq of this.requestLogger.getRequests()) {
+			if (currReq.token !== lastPrompt?.token) {
+				// Token changed - create or get the ChatPromptItem for this token
+				if (currReq.token === undefined) {
+					lastPrompt = undefined;
 				} else {
-					const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
-					if (!alreadyIncludesThisRequest) {
-						lastPrompt.children.push(currReqTreeItem);
+					// Check if we already have a ChatPromptItem for this token
+					let existingPrompt = tokenToPromptItem.get(currReq.token);
+					if (!existingPrompt) {
+						existingPrompt = ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token));
+						tokenToPromptItem.set(currReq.token, existingPrompt);
 					}
+					lastPrompt = existingPrompt;
+					seen.add(currReq.token);
 				}
 			}
 
-			pushLastPrompt();
-
-			return filterMap(result, r => {
-				if (!this.filters.itemIncluded(r)) {
-					return undefined;
+			const currReqTreeItem = this.logToTreeItem(currReq);
+			if (lastPrompt === undefined) {
+				result.push(currReqTreeItem);
+			} else {
+				const alreadyIncludesThisRequest = lastPrompt.children.find(existingChild => existingChild.id === currReqTreeItem.id);
+				if (!alreadyIncludesThisRequest) {
+					lastPrompt.children.push(currReqTreeItem);
 				}
-
-				if (r instanceof ChatPromptItem) {
-					return r.withFilteredChildren(child => this.filters.itemIncluded(child));
-				}
-
-				return r;
-			});
+			}
 		}
+
+		// Second pass: build hierarchy by nesting child tokens under parent tokens
+		const rootPrompts: ChatPromptItem[] = [];
+		const nestedTokens = new Set<CapturingToken>();
+
+		for (const [token, promptItem] of tokenToPromptItem) {
+			if (token.parentToken) {
+				// This token has a parent - try to nest it
+				const parentPromptItem = tokenToPromptItem.get(token.parentToken);
+				if (parentPromptItem) {
+					// Add this prompt item as a child of the parent
+					parentPromptItem.children.push(promptItem);
+					nestedTokens.add(token);
+				}
+			}
+		}
+
+		// Third pass: collect root-level prompt items (those not nested under a parent)
+		for (const [token, promptItem] of tokenToPromptItem) {
+			if (!nestedTokens.has(token)) {
+				// This is a root-level prompt (no parent or parent not in our set)
+				// Apply flattening and promotion logic
+				if (promptItem.token.flattenSingleChild && promptItem.children.length === 1 && !promptItem.hasSeen) {
+					result.push(promptItem.children[0]);
+				} else {
+					if (promptItem.token.promoteMainEntry) {
+						promptItem.promoteMainEntry();
+					}
+					rootPrompts.push(promptItem);
+				}
+			}
+		}
+
+		// Add root prompts to result (they may have been added by non-token entries already)
+		for (const prompt of rootPrompts) {
+			if (!result.includes(prompt)) {
+				result.push(prompt);
+			}
+		}
+
+		return filterMap(result, r => {
+			if (!this.filters.itemIncluded(r)) {
+				return undefined;
+			}
+
+			if (r instanceof ChatPromptItem) {
+				return r.withFilteredChildren(child => this.filters.itemIncluded(child));
+			}
+
+			return r;
+		});
 	}
 
 	private logToTreeItem(r: LoggedInfo): TreeChildItem {
@@ -671,12 +714,12 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 	}
 }
 
-type TreeChildItem = ChatRequestItem | ChatElementItem | ToolCallItem;
+type TreeChildItem = ChatRequestItem | ChatElementItem | ToolCallItem | ChatPromptItem;
 
 class ChatPromptItem extends vscode.TreeItem {
 	private static readonly ids = new WeakMap<LoggedInfo, ChatPromptItem>();
 	override readonly contextValue = 'chatprompt';
-	public children: TreeChildItem[] = [];
+	public children: (TreeChildItem | ChatPromptItem)[] = [];
 	public override id: string | undefined;
 	/**
 	 * The ID of the main entry that was promoted to this parent item.
@@ -739,9 +782,15 @@ class ChatPromptItem extends vscode.TreeItem {
 		};
 	}
 
-	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
+	public withFilteredChildren(filter: (child: TreeChildItem | ChatPromptItem) => boolean): ChatPromptItem {
 		const item = new ChatPromptItem(this.token, this.hasSeen, this.mainEntryId);
-		item.children = this.children.filter(filter);
+		item.children = this.children.filter(filter).map(child => {
+			// Recursively filter nested ChatPromptItems
+			if (child instanceof ChatPromptItem) {
+				return child.withFilteredChildren(filter);
+			}
+			return child;
+		});
 		item.id = this.id;
 		item.iconPath = this.iconPath;
 		item.command = this.command;
