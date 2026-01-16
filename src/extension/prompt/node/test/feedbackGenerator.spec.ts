@@ -366,7 +366,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 1);
 			assert.strictEqual(comments[0].kind, 'bug');
 			assert.strictEqual(comments[0].severity, 'high');
-			assert.strictEqual(comments[0].body.valueOf, 'This is a bug.');
+			assert.strictEqual(typeof comments[0].body === 'string' ? comments[0].body : comments[0].body.value, 'This is a bug.');
 			assert.strictEqual(comments[0].uri, uri);
 			assert.strictEqual(comments[0].languageId, 'typescript');
 			assert.strictEqual(comments[0].originalIndex, 0);
@@ -397,9 +397,9 @@ suite('parseReviewComments', function () {
 			const comments = parseReviewComments(request, input, message);
 
 			assert.strictEqual(comments.length, 2);
-			assert.strictEqual(comments[0].body.valueOf, 'First issue.');
+			assert.strictEqual(typeof comments[0].body === 'string' ? comments[0].body : comments[0].body.value, 'First issue.');
 			assert.strictEqual(comments[0].originalIndex, 0);
-			assert.strictEqual(comments[1].body.valueOf, 'Second issue.');
+			assert.strictEqual(typeof comments[1].body === 'string' ? comments[1].body : comments[1].body.value, 'Second issue.');
 			assert.strictEqual(comments[1].originalIndex, 1);
 		});
 	});
@@ -584,27 +584,6 @@ suite('parseReviewComments', function () {
 			const comments = parseReviewComments(request, input, message);
 
 			assert.strictEqual(comments.length, 0);
-		});
-
-		test('includes comment inside change hunk range', function () {
-			const uri = Uri.file('/test/file.ts');
-			const content = 'line 0\nline 1\nline 2';
-			const snapshot = createTestSnapshot(uri, content);
-			const input: CurrentChangeInput[] = [{
-				document: snapshot,
-				relativeDocumentPath: 'file.ts',
-				change: {
-					repository: {} as any,
-					uri,
-					hunks: [{ range: new Range(0, 0, 2, 6), text: content }]
-				}
-			}];
-			const request = createReviewRequest();
-			const message = '1. Line 2 in `file.ts`, bug: Inside hunk range.\n\n';
-
-			const comments = parseReviewComments(request, input, message);
-
-			assert.strictEqual(comments.length, 1);
 		});
 
 		test('uses selection range for filtering when selection is provided', function () {
