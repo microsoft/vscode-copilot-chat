@@ -11,6 +11,11 @@ import { DelaySession } from './delay';
 export class UserInteractionMonitor {
 
 	private static readonly MAX_INTERACTIONS_CONSIDERED = 10;
+	/**
+	 * Store more actions than we consider to allow for ignored action limiting.
+	 * When ignored actions are skipped, we can still fill the window from deeper history.
+	 */
+	private static readonly MAX_INTERACTIONS_STORED = 30;
 
 	private _recentUserActions: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
 
@@ -35,8 +40,8 @@ export class UserInteractionMonitor {
 
 	private _recordUserAction(kind: 'accepted' | 'rejected' | 'ignored') {
 		this._recentUserActions.push({ time: Date.now(), kind });
-		// keep at most 10 user actions
-		this._recentUserActions = this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
+		// Keep more actions than we consider to allow for ignored action limiting
+		this._recentUserActions = this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_STORED);
 	}
 
 	// Creates a DelaySession based on recent user interactions
