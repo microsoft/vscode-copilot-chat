@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { isAnthropicFamily } from '../../endpoint/common/chatModelCapabilities';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { IChatEndpoint } from './networking';
 
 /**
  * Types for Anthropic Messages API
@@ -151,6 +153,28 @@ export function isAnthropicContextEditingEnabled(
 	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
 	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
 	return !!(useMessagesApi && contextEditingEnabled);
+}
+
+/**
+ * Checks if Anthropic tool search is enabled for the given endpoint.
+ * This requires the endpoint to be Anthropic, Messages API to be enabled,
+ * and tool search to be enabled.
+ * @param endpoint The chat endpoint to check
+ * @param configurationService The configuration service
+ * @param experimentationService The experimentation service
+ * @returns true if Anthropic tool search is enabled for this endpoint
+ */
+export function isAnthropicToolSearchEnabled(
+	endpoint: IChatEndpoint,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService
+): boolean {
+	if (!isAnthropicFamily(endpoint)) {
+		return false;
+	}
+	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
+	const toolSearchEnabled = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+	return !!(useMessagesApi && toolSearchEnabled);
 }
 
 export interface ContextEditingConfig {
