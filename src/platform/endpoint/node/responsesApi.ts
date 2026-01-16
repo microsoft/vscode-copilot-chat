@@ -22,7 +22,7 @@ import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../ne
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
+import { getVerbosityForModelSync, isHiddenModelB } from '../common/chatModelCapabilities';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
@@ -57,8 +57,12 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		'disabled';
 	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
 	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
-	const effort = effortConfig === 'default' ? 'medium' : effortConfig;
-	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	let effort = effortConfig === 'default' ? 'medium' : effortConfig;
+	let summary = summaryConfig === 'off' ? 'detailed' : summaryConfig;
+	const reasoningParams = reasoningParameterValuesBasedOnModel(endpoint.family, effort, summary);
+	effort = reasoningParams?.effort || effort;
+	summary = reasoningParams?.summary || summary;
+
 	if (effort || summary) {
 		body.reasoning = {
 			...(effort ? { effort } : {}),
@@ -70,6 +74,20 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 
 	return body;
 }
+
+// for gpt-5.2 + models, changing the default reasoning parameters
+type ResponsesReasoningEffort = 'low' | 'medium' | 'high';
+type ResponsesReasoningSummary = 'concise' | 'detailed';
+
+function reasoningParameterValuesBasedOnModel(model: string, effort: ResponsesReasoningEffort, summary: ResponsesReasoningSummary): { effort?: ResponsesReasoningEffort; summary?: ResponsesReasoningSummary } | undefined {
+	if (isHiddenModelB(model)) {
+		return {
+			effort,
+			summary: 'concise',
+		};
+	}
+}
+
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
 	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(modelId, messages);
