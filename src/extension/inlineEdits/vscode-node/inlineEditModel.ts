@@ -29,7 +29,7 @@ const TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN = 5000; // milliseconds
 const TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN = 5000; // 5s
 
 export class InlineEditModel extends Disposable {
-	public readonly debugRecorder = this._register(new DebugRecorder(this.workspace));
+	public readonly debugRecorder: DebugRecorder;
 	public readonly nextEditProvider: NextEditProvider;
 
 	private readonly _predictor: IStatelessNextEditProvider;
@@ -48,6 +48,8 @@ export class InlineEditModel extends Disposable {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
+
+		this.debugRecorder = this._register(new DebugRecorder(this.workspace));
 
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);

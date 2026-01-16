@@ -2473,6 +2473,26 @@
 				"icon": "$(export)"
 			},
 			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"title": "Record Expected Edit (NES)",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"title": "Confirm and Save Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"title": "Cancel Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.submit",
+				"title": "Submit NES Captures",
+				"category": "Copilot"
+			},
+			{
 				"command": "github.copilot.chat.showAsChatSession",
 				"title": "Show as chat session",
 				"icon": "$(chat-sparkle)"
@@ -4363,6 +4383,14 @@
 				{
 					"command": "github.copilot.chat.showAsChatSession",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.start",
+					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.submit",
+					"when": "github.copilot.inlineEditsEnabled"
 				}
 			],
 			"view/title": [
@@ -4838,6 +4866,22 @@
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"key": "ctrl+k ctrl+r",
+				"mac": "cmd+k cmd+r",
+				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"key": "enter",
+				"when": "copilotNesCaptureMode && editorTextFocus"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"key": "escape",
+				"when": "copilotNesCaptureMode && editorTextFocus"
 			}
 		],
 		"walkthroughs": [
