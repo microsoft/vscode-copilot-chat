@@ -24,6 +24,7 @@ export interface IChatMLFetcherSuccessfulData {
 	timeToFirstTokenEmitted: number;
 	hasImageMessages: boolean;
 	fetcher: FetcherId | undefined;
+	bytesReceived: number | undefined;
 }
 
 export interface IChatMLFetcherCancellationProperties {
@@ -50,6 +51,7 @@ export interface IChatMLFetcherCancellationMeasures {
 	isVisionRequest: number;
 	isBYOK: number;
 	isAuto: number;
+	bytesReceived: number | undefined;
 }
 
 export class ChatMLFetcherTelemetrySender {
@@ -67,7 +69,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstToken,
 			timeToFirstTokenEmitted,
 			hasImageMessages,
-			fetcher
+			fetcher,
+			bytesReceived
 		}: IChatMLFetcherSuccessfulData,
 	) {
 		/* __GDPR__
@@ -103,6 +106,7 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+				"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received in the response", "isMeasurement": true },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -145,7 +149,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToComplete: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 			isVisionRequest: hasImageMessages ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
-			isAuto: isAutoModel(chatEndpointInfo)
+			isAuto: isAutoModel(chatEndpointInfo),
+			bytesReceived
 		});
 	}
 
@@ -173,7 +178,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToCancelled,
 			isVisionRequest,
 			isBYOK,
-			isAuto
+			isAuto,
+			bytesReceived
 		}: IChatMLFetcherCancellationMeasures
 	) {
 		/* __GDPR__
@@ -195,6 +201,7 @@ export class ChatMLFetcherTelemetrySender {
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
+				"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received before cancellation", "isMeasurement": true },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -223,7 +230,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToCancelled,
 			isVisionRequest,
 			isBYOK,
-			isAuto
+			isAuto,
+			bytesReceived
 		});
 	}
 
@@ -238,6 +246,7 @@ export class ChatMLFetcherTelemetrySender {
 		timeToFirstToken: number,
 		isVisionRequest: boolean,
 		fetcher: FetcherId | undefined,
+		bytesReceived: number | undefined,
 		wasRetried: boolean = false,
 	) {
 		/* __GDPR__
@@ -264,6 +273,7 @@ export class ChatMLFetcherTelemetrySender {
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
 				"wasRetried": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the error will be retried", "isMeasurement": true },
+				"bytesReceived": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of bytes received before the error", "isMeasurement": true },
 				"retryAfterError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the original request." },
 				"retryAfterErrorGitHubRequestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "GitHub request id of the original request if available" },
 				"connectivityTestError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error of the connectivity test." },
@@ -296,7 +306,8 @@ export class ChatMLFetcherTelemetrySender {
 			isVisionRequest: isVisionRequest ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
 			isAuto: isAutoModel(chatEndpointInfo),
-			wasRetried: wasRetried ? 1 : 0
+			wasRetried: wasRetried ? 1 : 0,
+			bytesReceived
 		});
 	}
 }
