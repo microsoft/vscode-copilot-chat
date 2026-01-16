@@ -184,10 +184,11 @@ const jsonSchemaRules: ((family: string, node: JsonSchema, didFix: (message: str
 					(n as any).nullable = true;
 					onFix(`converted nullable type array to OpenAPI nullable keyword for Gemini compatibility`);
 				} else if (hasNull && nonNullTypes.length > 1) {
-					// For multiple non-null types with null, we can't easily convert, just remove null
-					// This is a limitation, but better than a 400 error
+					// For multiple non-null types with null, we can't easily convert, so we remove null.
+					// This changes the schema semantics: the field is no longer nullable and values of `null`
+					// will fail validation. This is a limitation, but better than a blank 400 error from the model.
 					(n as any).type = nonNullTypes;
-					onFix(`removed null from multi-type union for Gemini compatibility`);
+					onFix(`removed null from multi-type union for Gemini compatibility; this makes the field non-nullable and may cause validation errors for callers that pass null`);
 				}
 			}
 		});
