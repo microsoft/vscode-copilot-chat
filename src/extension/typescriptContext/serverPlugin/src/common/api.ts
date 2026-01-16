@@ -13,7 +13,7 @@ import { FunctionContextProvider } from './functionContextProvider';
 import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
 import { ModuleContextProvider } from './moduleContextProvider';
 import { validateNesRename, type PrepareNesRenameResult } from './nesRenameValidator';
-import { RenameKind, type FilePath } from './protocol';
+import { RenameKind, type FilePath, type LastSymbolRename } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
 import { RecoverableError } from './types';
 import tss from './typescripts';
@@ -146,7 +146,7 @@ export function computeContext(result: ContextResult, session: ComputeContextSes
 	providers.execute(result, session, languageService, token);
 }
 
-export function prepareNesRename(result: PrepareNesRenameResult, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, token: tt.CancellationToken): void {
+export function prepareNesRename(result: PrepareNesRenameResult, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: LastSymbolRename, token: tt.CancellationToken): void {
 	if (typeof oldName !== 'string' || oldName.length === 0) {
 		result.setCanRename(RenameKind.no, 'No old name provided');
 		return;

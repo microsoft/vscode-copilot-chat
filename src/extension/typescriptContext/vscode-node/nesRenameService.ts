@@ -27,13 +27,17 @@ type PrepareNesRenameRequestArgs = Omit<protocol.PrepareNesRenameRequestArgs, 'f
 };
 
 namespace PrepareNesRenameRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, startTime: number, timeBudget: number): PrepareNesRenameRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, oldName: string, newName: string, lastSymbolRename: vscode.Range | undefined, startTime: number, timeBudget: number): PrepareNesRenameRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
 			offset: position.character + 1,
 			oldName: oldName,
 			newName: newName,
+			lastSymbolRename: lastSymbolRename ? {
+				start: { line: lastSymbolRename.start.line + 1, offset: lastSymbolRename.start.character + 1 },
+				end: { line: lastSymbolRename.end.line + 1, offset: lastSymbolRename.end.character + 1 }
+			} : undefined,
 			startTime: startTime,
 			timeBudget: timeBudget
 		};
@@ -113,7 +117,7 @@ export class NesRenameContribution implements vscode.Disposable {
 	) {
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
 		this.disposables = new DisposableStore();
-		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, requestId: string | undefined): Promise<protocol.RenameKind> => {
+		this.disposables.add(vscode.commands.registerCommand('github.copilot.nes.prepareRename', async (uri: vscode.Uri | undefined, position: vscode.Position | undefined, oldName: string | undefined, newName: string | undefined, lastSymbolRename: vscode.Range | undefined, requestId: string | undefined): Promise<protocol.RenameKind> => {
 			const params = this.resolveParams(uri, position, oldName, newName, requestId);
 			if (params === undefined) {
 				return protocol.RenameKind.no;
@@ -130,7 +134,7 @@ export class NesRenameContribution implements vscode.Disposable {
 			}
 
 			const startTime = Date.now();
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, startTime, 300);
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, lastSymbolRename, startTime, 300);
 
 			const tokenSource = new vscode.CancellationTokenSource();
 			try {
@@ -161,7 +165,7 @@ export class NesRenameContribution implements vscode.Disposable {
 				return;
 			}
 
-			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, Date.now(), 300);
+			const args: PrepareNesRenameRequestArgs = PrepareNesRenameRequestArgs.create(document, position, oldName, newName, undefined, Date.now(), 300);
 			const tokenSource = new vscode.CancellationTokenSource();
 			try {
 				const result = await vscode.commands.executeCommand<protocol.PrepareNesRenameResponse>('typescript.tsserverRequest', '_.copilot.prepareNesRename', args, NesRenameContribution.ExecConfig, tokenSource.token);

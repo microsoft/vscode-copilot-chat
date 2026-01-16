@@ -426,15 +426,24 @@ export type ComputeContextResponse = (tt.server.protocol.Response & {
 	body: ComputeContextResponse.OK | ComputeContextResponse.Failed;
 }) | { type: 'cancelled' };
 
-export namespace ComputeContextResponse {
-
-	export type OK = ContextRequestResult;
+export namespace CustomResponse {
 
 	export type Failed = {
 		error: ErrorCode;
 		message: string;
 		stack?: string;
 	};
+
+	export function isError(response: tt.server.protocol.Response): response is tt.server.protocol.Response & { body: Failed } {
+		return response.type === 'response' && (response.body as Failed).error !== undefined;
+	}
+}
+
+export namespace ComputeContextResponse {
+
+	export type OK = ContextRequestResult;
+
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: ComputeContextResponse): boolean {
 		return (response.type === 'cancelled');
@@ -444,7 +453,10 @@ export namespace ComputeContextResponse {
 		return response.type === 'response' && (response.body as OK).state !== undefined;
 	}
 	export function isError(response: ComputeContextResponse): response is tt.server.protocol.Response & { body: Failed } {
-		return response.type === 'response' && (response.body as Failed).error !== undefined;
+		if (response.type === 'cancelled') {
+			return false;
+		}
+		return CustomResponse.isError(response);
 	}
 }
 
@@ -472,6 +484,21 @@ export enum RenameKind {
 	maybe = 'maybe'
 }
 
+export namespace RenameKind {
+	export function fromString(value: string): RenameKind {
+		switch (value) {
+			case 'no':
+				return RenameKind.no;
+			case 'yes':
+				return RenameKind.yes;
+			case 'maybe':
+				return RenameKind.maybe;
+			default:
+				return RenameKind.no;
+		}
+	}
+}
+
 export namespace PrepareNesRenameResult {
 	export type Yes = {
 		canRename: RenameKind.yes;
@@ -497,9 +524,15 @@ export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
 export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	oldName: string;
 	newName: string;
+	lastSymbolRename?: {
+		start: { line: number; offset: number };
+		end: { line: number; offset: number };
+	};
 	startTime: number;
 	timeBudget: number;
 }
+
+export type LastSymbolRename = PrepareNesRenameRequestArgs['lastSymbolRename'];
 
 export namespace PrepareNesRenameResponse {
 

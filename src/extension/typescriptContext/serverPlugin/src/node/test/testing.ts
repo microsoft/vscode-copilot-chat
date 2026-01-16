@@ -9,7 +9,7 @@ import { type LanguageService } from 'typescript';
 import { computeContext as _computeContext, prepareNesRename as _prepareNesRename } from '../../common/api';
 import { CharacterBudget, ContextResult, RequestContext, SingleLanguageServiceSession, type ComputeContextSession } from '../../common/contextProvider';
 import { PrepareNesRenameResult } from '../../common/nesRenameValidator';
-import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
+import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type LastSymbolRename, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -127,7 +127,7 @@ export function computeContext(session: TestSession, document: string, position:
 	return result.items().filter((item) => item.kind === contextKind);
 }
 
-export function prepareNesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string): RenameKind | undefined {
+export function prepareNesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string, lastSymbolRename?: LastSymbolRename): RenameKind | undefined {
 	const program = session.service.getProgram();
 	if (program === undefined) {
 		return;
@@ -138,7 +138,7 @@ export function prepareNesRename(session: TestSession, document: string, positio
 	}
 	const result = new PrepareNesRenameResult();
 	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
-	_prepareNesRename(result, session.service, document, pos, oldName, newName, new NullCancellationToken());
+	_prepareNesRename(result, session.service, document, pos, oldName, newName, lastSymbolRename, new NullCancellationToken());
 	return result.getCanRename();
 }
 

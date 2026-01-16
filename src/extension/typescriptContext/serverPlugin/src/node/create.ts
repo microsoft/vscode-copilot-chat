@@ -5,13 +5,28 @@
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext, prepareNesRename } from '../common/api';
 import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
-import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
+import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
 import { PrepareNesRenameResult } from '../common/nesRenameValidator';
 import TS from '../common/typescript';
 import { NodeHost } from './host';
 const ts = TS();
+
+interface FailedHandlerResponse extends tt.server.HandlerResponse {
+	response: CustomResponse.Failed;
+	responseRequired: boolean;
+}
+
+namespace FailedHandlerResponse {
+	export function is(value: unknown): value is FailedHandlerResponse {
+		const candidate = value as FailedHandlerResponse;
+		if (candidate === undefined || candidate === null || typeof candidate !== 'object' || candidate.response === undefined || typeof candidate.response !== 'object' || typeof candidate.responseRequired !== 'boolean') {
+			return false;
+		}
+		return candidate.response.error !== undefined && typeof candidate.response.message === 'string';
+	}
+}
 
 interface ComputeContextHandlerResponse extends tt.server.HandlerResponse {
 	response: ComputeContextResponse.OK | ComputeContextResponse.Failed;
@@ -26,12 +41,21 @@ let languageServerSession: LanguageServerSession | undefined = undefined;
 let languageServiceHost: tt.LanguageServiceHost | undefined = undefined;
 let pingResult: PingResponse.OK | PingResponse.Error = { kind: 'error', message: 'Attempt to install context handler failed' };
 
-const computeContextHandler = (request: ComputeContextRequest): ComputeContextHandlerResponse => {
-	const totalStart = Date.now();
-	if (request.arguments === undefined) {
+type ResolvedInput = {
+	languageService: tt.LanguageService;
+	program: tt.Program;
+	file: tt.server.NormalizedPath;
+	pos: number;
+	startTime: number;
+	timeBudget: number;
+	requestStartTime: number;
+}
+const resolveInput = <T extends tt.server.protocol.FileRequestArgs & tt.server.protocol.Location & { timeBudget?: number; startTime?: number }>(args: T | undefined, defaultTimeBudget: number): ResolvedInput | FailedHandlerResponse => {
+	const requestStartTime = Date.now();
+	if (args === undefined) {
 		return { response: { error: ErrorCode.noArguments, message: 'No arguments provided' }, responseRequired: true };
 	}
-	const args = request.arguments;
+
 	const fileAndProject = languageServerSession?.getFileAndProject(args);
 	if (fileAndProject === undefined) {
 		return { response: { error: ErrorCode.noProject, message: 'No project found' }, responseRequired: true };
@@ -45,14 +69,14 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 		return { response: { error: ErrorCode.invalidPosition, message: 'Position not valid' }, responseRequired: true };
 	}
 
-	let startTime = request.arguments?.startTime ?? totalStart;
-	let timeBudget = typeof args.timeBudget === 'number' ? args.timeBudget : 100;
-	if (startTime + timeBudget > totalStart) {
-		// We are already in a timeout. So we let the computation run for 100ms
+	let startTime = args.startTime ?? requestStartTime;
+	let timeBudget = typeof args.timeBudget === 'number' ? args.timeBudget : defaultTimeBudget;
+	if (startTime + timeBudget > requestStartTime) {
+		// We are already in a timeout. So we let the computation run for defaultTimeBudget.
 		// to profit from caching for the next request. In all other cases we take
 		// the time budget left since we might be able to provide a little context.
-		startTime = totalStart;
-		timeBudget = 100;
+		startTime = requestStartTime;
+		timeBudget = defaultTimeBudget;
 	}
 
 	// We get the language service here to get the timings outside of the compute context. Accessing the language service
@@ -62,6 +86,16 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	if (program === undefined) {
 		return { response: { error: ErrorCode.noProgram, message: 'No program found' }, responseRequired: true };
 	}
+	return { languageService, program, file, pos, timeBudget, startTime, requestStartTime };
+};
+
+const computeContextHandler = (request: ComputeContextRequest): ComputeContextHandlerResponse => {
+	const input = resolveInput(request.arguments, 100);
+	if (FailedHandlerResponse.is(input)) {
+		return input;
+	}
+	const { languageService, file, pos, timeBudget, startTime, requestStartTime } = input;
+	const args = request.arguments!;
 
 	const computeStart = Date.now();
 	const primaryCharacterBudget = new CharacterBudget(typeof args.primaryCharacterBudget === 'number' ? args.primaryCharacterBudget : 7 * 1024 * 4);
@@ -88,41 +122,23 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 		}
 	}
 	const endTime = Date.now();
-	result.addTimings(endTime - totalStart, endTime - computeStart);
+	result.addTimings(endTime - requestStartTime, endTime - computeStart);
 	result.setTimedOut(cancellationToken.isTimedOut());
 	return { response: result.toJson(), responseRequired: true };
 };
 
 const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRenameHandlerResponse => {
-	const totalStart = Date.now();
-	if (request.arguments === undefined) {
-		return { response: { error: ErrorCode.noArguments, message: 'No arguments provided' }, responseRequired: true };
+	const input = resolveInput(request.arguments, 50);
+	if (FailedHandlerResponse.is(input)) {
+		return input;
 	}
 
-	const args = request.arguments;
-	let startTime = request.arguments?.startTime ?? totalStart;
-	let timeBudget = typeof args.timeBudget === 'number' ? args.timeBudget : 100;
-	if (startTime + timeBudget > totalStart) {
-		startTime = totalStart;
-		timeBudget = 50;
-	}
+	const { languageService, file, pos, timeBudget, startTime } = input;
 
-	const fileAndProject = languageServerSession?.getFileAndProject(args);
-	if (fileAndProject === undefined) {
-		return { response: { error: ErrorCode.noProject, message: 'No project found' }, responseRequired: true };
-	}
-	if (typeof args.line !== 'number' || typeof args.offset !== 'number') {
-		return { response: { error: ErrorCode.invalidArguments, message: 'No project found' }, responseRequired: true };
-	}
-	const { file, project } = fileAndProject;
-	const pos = languageServerSession?.getPositionInFile(args, file);
-	if (pos === undefined) {
-		return { response: { error: ErrorCode.invalidPosition, message: 'Position not valid' }, responseRequired: true };
-	}
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
 	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
 	try {
-		prepareNesRename(result, project.getLanguageService(), file, pos, request.arguments?.oldName, request.arguments?.newName, cancellationToken);
+		prepareNesRename(result, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, request.arguments?.lastSymbolRename, cancellationToken);
 	} catch (error) {
 		if (error instanceof ts.OperationCanceledException) {
 			result.setCanRename(RenameKind.no, 'Operation canceled');

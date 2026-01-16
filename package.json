@@ -5287,7 +5287,8 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"yargs": "^17.7.2"
+		"yargs": "^17.7.2",
+		"zod": "3.25.76"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
