@@ -10,12 +10,12 @@ import { DelaySession } from './delay';
 
 export class UserInteractionMonitor {
 
-	private static readonly MAX_INTERACTIONS_CONSIDERED = 10;
+	protected static readonly MAX_INTERACTIONS_CONSIDERED = 10;
 	/**
 	 * Store more actions than we consider to allow for ignored action limiting.
 	 * When ignored actions are skipped, we can still fill the window from deeper history.
 	 */
-	private static readonly MAX_INTERACTIONS_STORED = 30;
+	protected static readonly MAX_INTERACTIONS_STORED = 30;
 
 	/**
 	 * Used for aggressiveness level calculation.
