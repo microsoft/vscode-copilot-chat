@@ -147,7 +147,6 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 						const label = labelFromPrompt(firstUserMessage ?? '');
 						if (!label) {
-							this.logService.warn(`Copilot CLI session ${metadata.sessionId} has no user messages.`);
 							return;
 						}
 						return {
