@@ -21,6 +21,7 @@ class MockTextDocument implements TextDocument {
 	readonly isDirty = false;
 	readonly isClosed = false;
 	readonly eol: EndOfLine = 1;
+	readonly encoding = 'utf8';
 	private readonly _lines: string[];
 
 	constructor(uri: Uri, content: string, languageId = 'typescript') {
@@ -365,7 +366,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 1);
 			assert.strictEqual(comments[0].kind, 'bug');
 			assert.strictEqual(comments[0].severity, 'high');
-			assert.strictEqual(comments[0].body.value, 'This is a bug.');
+			assert.strictEqual(comments[0].body.valueOf, 'This is a bug.');
 			assert.strictEqual(comments[0].uri, uri);
 			assert.strictEqual(comments[0].languageId, 'typescript');
 			assert.strictEqual(comments[0].originalIndex, 0);
@@ -396,9 +397,9 @@ suite('parseReviewComments', function () {
 			const comments = parseReviewComments(request, input, message);
 
 			assert.strictEqual(comments.length, 2);
-			assert.strictEqual(comments[0].body.value, 'First issue.');
+			assert.strictEqual(comments[0].body.valueOf, 'First issue.');
 			assert.strictEqual(comments[0].originalIndex, 0);
-			assert.strictEqual(comments[1].body.value, 'Second issue.');
+			assert.strictEqual(comments[1].body.valueOf, 'Second issue.');
 			assert.strictEqual(comments[1].originalIndex, 1);
 		});
 	});
