@@ -104,9 +104,22 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		return headers;
 	}
 
-	private post(authToken: string, path: string, body: unknown, token: CancellationToken) {
+	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, token: CancellationToken): Promise<Response> {
+		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+
+		// Retry on 500 errors as these can be transient
+		if (response.status === 500 && retries > 0) {
+			this.logService.warn(`ExternalIngestClient::post(): Got 500, retrying... (${retries} retries remaining)`);
+			return this.post(authToken, path, body, { retries: retries - 1 }, token);
+		}
+
+		if (!response.ok) {
+			throw new Error(`POST to ${url} failed with status ${response.status}`);
+		}
+
+		return response;
 	}
 
 	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
@@ -170,7 +183,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				new_checkpoint: newCheckpoint,
 				geo_filter: Buffer.from(geoFilter.toBytes()).toString('base64'),
 				coded_symbols: codedSymbols,
-			}, token);
+			}, {}, token);
 		};
 
 		let createIngestResponse: Response;
@@ -252,6 +265,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						coded_symbols: codedSymbols,
 						coded_symbol_range: codedSymbolRange,
 					},
+					{},
 					token
 				);
 				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
@@ -292,7 +306,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
 				page_token: pageToken,
-			}, token);
+			}, {}, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
 				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[]; next_page_token: string | undefined };
@@ -324,7 +338,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 							ingest_id: ingestId,
 							content,
 							file_path: paths.relative,
-						}, token);
+						}, { retries: 3 }, token);
 						this.logService.debug(`ExternalIngestClient::updateIndex(): Document upload response status: ${res.status}`);
 					})();
 					p.catch(e => {
@@ -371,7 +385,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		onProgress?.(l10n.t('Finalizing index...'));
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
-		}, token);
+		}, {}, token);
 
 		this.logService.info('ExternalIngestClient::updateIndex(): SUCCESS!!');
 		const requestId = resp.headers.get('x-github-request-id');
@@ -458,7 +472,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			scoping_query: `fileset:${filesetName}`,
 			embedding_model: embeddingType.id,
 			limit,
-		}, token);
+		}, {}, token);
 
 		const body = await resp.json() as SearchFilesetsResponse;
 		return {
