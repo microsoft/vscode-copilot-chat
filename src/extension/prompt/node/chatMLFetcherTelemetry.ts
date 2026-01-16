@@ -14,7 +14,7 @@ import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 
 export interface IChatMLFetcherSuccessfulData {
 	chatCompletion: ChatCompletion;
-	baseTelemetry: TelemetryData | undefined;
+	baseTelemetry: TelemetryData;
 	userInitiatedRequest: boolean | undefined;
 	chatEndpointInfo: IChatEndpoint | undefined;
 	requestBody: IEndpointBody;
@@ -52,6 +52,7 @@ export interface IChatMLFetcherCancellationMeasures {
 	isBYOK: number;
 	isAuto: number;
 	bytesReceived: number | undefined;
+	issuedTime: number;
 }
 
 export class ChatMLFetcherTelemetrySender {
@@ -103,6 +104,7 @@ export class ChatMLFetcherTelemetrySender {
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+				"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
@@ -146,7 +148,8 @@ export class ChatMLFetcherTelemetrySender {
 			completionTokens: chatCompletion.usage?.completion_tokens,
 			timeToFirstToken,
 			timeToFirstTokenEmitted,
-			timeToComplete: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
+			timeToComplete: Date.now() - baseTelemetry.issuedTime,
+			issuedTime: baseTelemetry.issuedTime,
 			isVisionRequest: hasImageMessages ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
 			isAuto: isAutoModel(chatEndpointInfo),
@@ -179,7 +182,8 @@ export class ChatMLFetcherTelemetrySender {
 			isVisionRequest,
 			isBYOK,
 			isAuto,
-			bytesReceived
+			bytesReceived,
+			issuedTime,
 		}: IChatMLFetcherCancellationMeasures
 	) {
 		/* __GDPR__
@@ -197,7 +201,9 @@ export class ChatMLFetcherTelemetrySender {
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
-				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to cancellation", "isMeasurement": true },
+				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+				"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
@@ -228,6 +234,8 @@ export class ChatMLFetcherTelemetrySender {
 			timeToFirstToken,
 			timeToFirstTokenEmitted,
 			timeToCancelled,
+			timeToComplete: timeToCancelled,
+			issuedTime,
 			isVisionRequest,
 			isBYOK,
 			isAuto,
@@ -247,6 +255,7 @@ export class ChatMLFetcherTelemetrySender {
 		isVisionRequest: boolean,
 		fetcher: FetcherId | undefined,
 		bytesReceived: number | undefined,
+		issuedTime: number,
 		wasRetried: boolean = false,
 	) {
 		/* __GDPR__
@@ -269,6 +278,8 @@ export class ChatMLFetcherTelemetrySender {
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
+				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+				"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for an Auto model", "isMeasurement": true },
@@ -303,6 +314,8 @@ export class ChatMLFetcherTelemetrySender {
 			promptTokenCount: tokenCount,
 			tokenCountMax: maxResponseTokens,
 			timeToFirstToken,
+			timeToComplete: Date.now() - issuedTime,
+			issuedTime,
 			isVisionRequest: isVisionRequest ? 1 : -1,
 			isBYOK: isBYOKModel(chatEndpointInfo),
 			isAuto: isAutoModel(chatEndpointInfo),

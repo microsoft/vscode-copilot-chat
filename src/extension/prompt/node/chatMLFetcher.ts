@@ -279,17 +279,18 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							tokenCountMax: maxResponseTokens,
 							timeToFirstToken,
 							timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
-							timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
+							timeToCancelled: Date.now() - baseTelemetry.issuedTime,
 							isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 							isBYOK: isBYOKModel(chatEndpoint),
 							isAuto: isAutoModel(chatEndpoint),
-							bytesReceived: actualBytesReceived
+							bytesReceived: actualBytesReceived,
+							issuedTime: baseTelemetry.issuedTime,
 						});
 					pendingLoggedChatRequest?.resolveWithCancelation();
 					return this.processCanceledResponse(response, ourRequestId);
 				case FetchResponseKind.Failed: {
 					const processed = this.processFailedResponse(response, ourRequestId);
-					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher, actualBytesReceived);
+					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher, actualBytesReceived, baseTelemetry.issuedTime);
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
 				}
@@ -314,7 +315,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
 					connectivityTestErrorGitHubRequestId = connectivity.connectivityTestErrorGitHubRequestId;
 					if (connectivity.retryRequest) {
-						Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived, true);
+						Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived, baseTelemetry.issuedTime, true);
 						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
 						const retryResult = await this.fetchMany({
 							...opts,
@@ -370,11 +371,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 						isBYOK: isBYOKModel(chatEndpoint),
 						isAuto: isAutoModel(chatEndpoint),
-						bytesReceived: err.bytesReceived
+						bytesReceived: err.bytesReceived,
+						issuedTime: baseTelemetry.issuedTime,
 					}
 				);
 			} else {
-				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived);
+				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived, baseTelemetry.issuedTime);
 			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
