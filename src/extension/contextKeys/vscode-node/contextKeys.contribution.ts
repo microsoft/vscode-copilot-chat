@@ -141,8 +141,10 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.ContactSupport;
 		} else if (error instanceof ChatDisabledError) {
 			key = welcomeViewContextKeys.CopilotChatDisabled;
-		} else if (error && !extensions.getExtension(EXTENSION_ID)?.isActive) {
-			key = welcomeViewContextKeys.Offline;
+		} else if (error) {
+			if (!extensions.getExtension(EXTENSION_ID)?.isActive) {
+				key = welcomeViewContextKeys.Offline;
+			}
 			this._scheduleOfflineCheck();
 		}
 
