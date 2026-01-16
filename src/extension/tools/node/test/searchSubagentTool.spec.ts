@@ -11,9 +11,9 @@ import { ToolRegistry } from '../../common/toolsRegistry';
 import '../searchSubagentTool';
 
 suite('SearchSubagentTool', () => {
-	test('is registered and categorized as Core', () => {
+	test('is registered and categorized as Agent', () => {
 		const isRegistered = ToolRegistry.getTools().some(t => t.toolName === ToolName.SearchSubagent);
 		expect(isRegistered).toBe(true);
-		expect(toolCategories[ToolName.SearchSubagent]).toBe(ToolCategory.Core);
+		expect(toolCategories[ToolName.SearchSubagent]).toBe(ToolCategory.Agent);
 	});
 });
