@@ -729,7 +729,9 @@ class ChatPromptItem extends vscode.TreeItem {
 			return;
 		}
 		this.mainEntryId = child.id;
-		this.iconPath = new vscode.ThemeIcon(child.iconPath ? (typeof child.iconPath === 'string' ? child.iconPath : (child.iconPath as vscode.ThemeIcon).id) : 'copilot');
+		if (child.iconPath) {
+			this.iconPath = child.iconPath;
+		}
 		this.command = {
 			command: 'vscode.open',
 			title: '',
@@ -740,6 +742,9 @@ class ChatPromptItem extends vscode.TreeItem {
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
 		const item = new ChatPromptItem(this.token, this.hasSeen, this.mainEntryId);
 		item.children = this.children.filter(filter);
+		item.id = this.id;
+		item.iconPath = this.iconPath;
+		item.command = this.command;
 		return item;
 	}
 }

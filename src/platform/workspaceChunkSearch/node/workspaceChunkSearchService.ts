@@ -93,7 +93,7 @@ export interface IWorkspaceChunkSearchService extends IDisposable {
 
 	triggerLocalIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>>;
+	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>>;
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void>;
 }
@@ -205,12 +205,12 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 		return impl.triggerLocalIndexing(trigger, telemetryInfo);
 	}
 
-	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		const impl = await this.tryInit(false);
+	async triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		const impl = await raceCancellationError(this.tryInit(false), token);
 		if (!impl) {
 			throw new Error('Workspace chunk search service not available');
 		}
-		return impl.triggerRemoteIndexing(trigger, telemetryInfo);
+		return impl.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
 	}
 
 	async deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -293,7 +293,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
 			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
-				void this.triggerRemoteIndexing('auto', new TelemetryCorrelationId('onDidGrantAuthUpgrade')).catch(e => {
+				void this.triggerRemoteIndexing('auto', () => { }, new TelemetryCorrelationId('onDidGrantAuthUpgrade'), CancellationToken.None).catch(e => {
 					// noop
 				});
 			}
@@ -344,8 +344,8 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 	}
 
-	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, telemetryInfo);
+	triggerRemoteIndexing(trigger: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		return this._codeSearchChunkSearch.triggerRemoteIndexing(trigger, onProgress, telemetryInfo, token);
 	}
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {
@@ -871,7 +871,7 @@ export class NullWorkspaceChunkSearchService implements IWorkspaceChunkSearchSer
 	async triggerLocalIndexing(): Promise<Result<true, TriggerIndexingError>> {
 		return Result.ok(true);
 	}
-	triggerRemoteIndexing(): Promise<Result<true, TriggerIndexingError>> {
+	triggerRemoteIndexing(_trigger?: BuildIndexTriggerReason, _onProgress?: (message: string) => void, _telemetryInfo?: TelemetryCorrelationId, _token?: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		return Promise.resolve(Result.ok(true));
 	}
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {

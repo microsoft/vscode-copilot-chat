@@ -10,7 +10,6 @@ dotenv.config({ path: '../.env' });
 import { promises as fs } from 'fs';
 import { outdent } from 'outdent';
 import * as path from 'path';
-import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
 import { CopilotToken, createTestExtendedTokenInfo } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
@@ -51,13 +50,12 @@ class TestFetcher implements IFetcher {
 		};
 
 		const found = typeof responseText === 'string';
-		return new Response(
+		const text = responseText || '';
+		return Response.fromText(
 			found ? 200 : 404,
 			found ? 'OK' : 'Not Found',
 			headers,
-			async () => responseText || '',
-			async () => JSON.parse(responseText || ''),
-			async () => stream.Readable.from([responseText || '']),
+			text,
 			'node-http'
 		);
 	}

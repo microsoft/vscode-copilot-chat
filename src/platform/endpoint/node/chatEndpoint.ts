@@ -185,6 +185,12 @@ export class ChatEndpoint implements IChatEndpoint {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 
+			// Add tool search beta if enabled
+			const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._expService);
+			if (toolSearchEnabled) {
+				betaFeatures.push('advanced-tool-use-2025-11-20');
+			}
+
 			if (betaFeatures.length > 0) {
 				headers['anthropic-beta'] = betaFeatures.join(',');
 			}
@@ -345,7 +351,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, response, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

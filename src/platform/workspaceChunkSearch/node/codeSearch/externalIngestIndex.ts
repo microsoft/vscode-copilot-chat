@@ -176,7 +176,7 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(token: CancellationToken): Promise<void> {
+	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<void> {
 
 		await this.initialize();
 
@@ -194,7 +194,8 @@ export class ExternalIngestIndex extends Disposable {
 			this.getFilesetName(primaryRoot),
 			currentCheckpoint,
 			this.getFilesToIndexFromDb(),
-			token
+			token,
+			onProgress
 		);
 
 		if (result.isOk()) {
@@ -210,7 +211,7 @@ export class ExternalIngestIndex extends Disposable {
 
 		const resolvedQuery = await query.resolveQuery(token);
 
-		await raceCancellationError(this.doIngest(token), token);
+		await raceCancellationError(this.doIngest(() => { }, token), token);
 
 		// TODO: search changed files too
 		const primaryRoot = workspaceFolders[0];

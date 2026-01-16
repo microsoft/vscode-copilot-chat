@@ -2,6 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
+import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
@@ -21,10 +24,11 @@ import {
 	CompletionHeaders,
 	CompletionRequestExtra,
 	CopilotUiKind,
-	FinishedCallback, ICompletionsOpenAIFetcherService, PostOptions
+	FinishedCallback,
+	ICompletionsOpenAIFetcherService,
+	PostOptions
 } from '../openai/fetch';
 import { APIChoice, getTemperatureForSamples } from '../openai/openai';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 import { ICompletionsStatusReporter } from '../progress';
 import { ICompletionsContextProviderBridgeService } from '../prompt/components/contextProviderBridge';
 import { ICompletionsContextProviderService } from '../prompt/contextProviderStatistics';
@@ -94,129 +98,292 @@ export enum ResultType {
 // the below values have quite a bit of buffer while bringing the limit in significantly from 500
 const maxSinglelineTokens = 20;
 
-async function genericGetCompletionsFromNetwork<T>(
-	accessor: ServicesAccessor,
-	requestContext: RequestContext,
-	baseTelemetryData: TelemetryWithExp,
-	cancellationToken: ICancellationToken | undefined,
-	finishedCb: FinishedCallback,
-	what: string,
-	processChoices: (
-		requestStart: number,
-		processingTime: number,
-		choicesStream: AsyncIterable<APIChoice>
-	) => Promise<GhostTextResultWithTelemetry<T>>
-): Promise<GhostTextResultWithTelemetry<T>> {
-	const featuresService = accessor.get(ICompletionsFeaturesService);
-	const fetcherService = accessor.get(ICompletionsOpenAIFetcherService);
-	const runtimeMode = accessor.get(ICompletionsRuntimeModeService);
-	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = accessor.get(ICompletionsLogTargetService);
-	const userErrorNotifier = accessor.get(ICompletionsUserErrorNotifierService);
-	ghostTextLogger.debug(logTarget, `Getting ${what} from network`);
+export type GetNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice, Promise<void>]>;
 
-	// copy the base telemetry data
-	baseTelemetryData = baseTelemetryData.extendedBy();
+type GetAllNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice[], Promise<void>]>;
 
-	// Request one choice for automatic requests, three for invoked (cycling) requests.
-	const n = requestContext.isCycling ? 3 : 1;
-	const temperature = getTemperatureForSamples(runtimeMode, n);
-	const extra: CompletionRequestExtra = {
-		language: requestContext.languageId,
-		next_indent: requestContext.indentation.next ?? 0,
-		trim_by_indentation: shouldDoServerTrimming(requestContext.blockMode),
-		prompt_tokens: requestContext.prompt.prefixTokens ?? 0,
-		suffix_tokens: requestContext.prompt.suffixTokens ?? 0,
-	};
-	const postOptions: PostOptions = { n, temperature, code_annotations: false };
-	const modelTerminatesSingleline =
-		featuresService.modelAlwaysTerminatesSingleline(baseTelemetryData);
-	const simulateSingleline =
-		requestContext.blockMode === BlockMode.MoreMultiline &&
-		BlockTrimmer.isSupported(requestContext.languageId) &&
-		!modelTerminatesSingleline;
-	if (!requestContext.multiline && !simulateSingleline) {
-		// If we are not in multiline mode, we get the server to truncate the results. This does mean that we
-		// also cache a single line result which will be reused even if we are later in multiline mode. This is
-		// an acceptable trade-off as the transition should be relatively rare and truncating on the server is
-		// more efficient.
-		// Note that this also means we don't need to truncate when creating the GhostAPIChoice object below.
-		postOptions['stop'] = ['\n'];
-	} else if (requestContext.stop) {
-		postOptions['stop'] = requestContext.stop;
-	}
-	if (requestContext.maxTokens !== undefined) {
-		postOptions['max_tokens'] = requestContext.maxTokens;
-	}
+export class CompletionsFromNetwork {
 
-	const requestStart = Date.now();
+	constructor(
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICompletionsOpenAIFetcherService private readonly fetcherService: ICompletionsOpenAIFetcherService,
+		@ICompletionsFeaturesService private readonly featuresService: ICompletionsFeaturesService,
+		@ICompletionsRuntimeModeService private readonly runtimeMode: ICompletionsRuntimeModeService,
+		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
+		@ICompletionsCacheService private readonly completionsCacheService: ICompletionsCacheService,
+		@ICompletionsUserErrorNotifierService private readonly userErrorNotifier: ICompletionsUserErrorNotifierService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly expService: IExperimentationService,
+	) { }
 
-	// extend telemetry data
-	const newProperties: { [key: string]: string } = {
-		endpoint: 'completions',
-		uiKind: CopilotUiKind.GhostText,
-		temperature: JSON.stringify(temperature),
-		n: JSON.stringify(n),
-		stop: JSON.stringify(postOptions['stop']) ?? 'unset',
-		logit_bias: JSON.stringify(null),
-	};
+	/** Requests new completion from OpenAI, should be called if and only if the completions for given prompt were not cached before.
+	 *  It returns only first completion, additional completions are added to the caches in the background.
+	 *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
+	 */
+	public async getCompletionsFromNetwork(
+		requestContext: RequestContext,
+		baseTelemetryData: TelemetryWithExp,
+		cancellationToken: ICancellationToken | undefined,
+		finishedCb: FinishedCallback
+	): Promise<GetNetworkCompletionsType> {
+		return this.genericGetCompletionsFromNetwork(
+			requestContext,
+			baseTelemetryData,
+			cancellationToken,
+			finishedCb,
+			'completions',
+			async (requestStart, processingTime, choicesStream): Promise<GetNetworkCompletionsType> => {
+				const choicesIterator = choicesStream[Symbol.asyncIterator]();
 
-	Object.assign(baseTelemetryData.properties, newProperties);
+				const firstRes = await choicesIterator.next();
 
-	try {
-		const completionParams = {
-			prompt: requestContext.prompt,
-			languageId: requestContext.languageId,
-			repoInfo: requestContext.repoInfo,
-			ourRequestId: requestContext.ourRequestId,
-			engineModelId: requestContext.engineModelId,
-			count: n,
-			uiKind: CopilotUiKind.GhostText,
-			postOptions,
-			headers: requestContext.headers,
-			extra,
-		};
-		const res = await fetcherService.fetchAndStreamCompletions(completionParams, baseTelemetryData, finishedCb, cancellationToken);
-		if (res.type === 'failed') {
-			return {
-				type: 'failed',
-				reason: res.reason,
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-			};
-		}
+				if (firstRes.done) {
+					ghostTextLogger.debug(this.logTarget, 'All choices redacted');
+					return {
+						type: 'empty',
+						reason: 'all choices redacted',
+						telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+					};
+				}
+				if (cancellationToken?.isCancellationRequested) {
+					ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting redactedChoices iterator');
+					return {
+						type: 'canceled',
+						reason: 'after awaiting redactedChoices iterator',
+						telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
+					};
+				}
 
-		if (res.type === 'canceled') {
-			ghostTextLogger.debug(logTarget, 'Cancelled after awaiting fetchCompletions');
-			return {
-				type: 'canceled',
-				reason: res.reason,
-				telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
-			};
-		}
+				const firstChoice: APIChoice = firstRes.value;
 
-		return processChoices(requestStart, res.getProcessingTime(), res.choices);
-	} catch (err) {
-		// If we cancelled a network request, we don't want to log an error
-		if (isAbortError(err)) {
-			return {
-				type: 'canceled',
-				reason: 'network request aborted',
-				telemetryData: mkCanceledResultTelemetry(baseTelemetryData, {
-					cancelledNetworkRequest: true,
-				}),
-			};
-		} else {
-			instantiationService.invokeFunction(acc => ghostTextLogger.exception(acc, err, `Error on ghost text request`));
-			userErrorNotifier.notifyUser(err);
-			if (runtimeMode.shouldFailForDebugPurposes()) {
-				throw err;
+				if (firstChoice === undefined) {
+					// This is probably unreachable given the firstRes.done check above
+					ghostTextLogger.debug(this.logTarget, 'Got undefined choice from redactedChoices iterator');
+					return {
+						type: 'empty',
+						reason: 'got undefined choice from redactedChoices iterator',
+						telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+					};
+				}
+
+				this.instantiationService.invokeFunction(telemetryPerformance, 'performance', firstChoice, requestStart, processingTime);
+
+				ghostTextLogger.debug(this.logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
+				// Adds first result to cache
+				const processedFirstChoice = postProcessChoices(firstChoice);
+				if (processedFirstChoice) {
+					appendToCache(this.completionsCacheService, requestContext, processedFirstChoice);
+					ghostTextLogger.debug(this.logTarget,
+						`GhostText first completion (index ${processedFirstChoice?.choiceIndex}): ${JSON.stringify(processedFirstChoice?.completionText)}`
+					);
+				}
+				//Create promise for each result, don't `await` it (unless in test mode) but handle asynchronously with `.then()`
+				const cacheDone = (async () => {
+					const apiChoices: APIChoice[] = processedFirstChoice !== undefined ? [processedFirstChoice] : [];
+					for await (const choice of choicesStream) {
+						if (choice === undefined) { continue; }
+						ghostTextLogger.debug(this.logTarget,
+							`GhostText later completion (index ${choice?.choiceIndex}): ${JSON.stringify(choice.completionText)}`
+						);
+						const processedChoice = postProcessChoices(choice, apiChoices);
+						if (!processedChoice) { continue; }
+						apiChoices.push(processedChoice);
+						appendToCache(this.completionsCacheService, requestContext, processedChoice);
+					}
+				})();
+				if (this.runtimeMode.isRunningInTest()) {
+					await cacheDone;
+				}
+				if (processedFirstChoice) {
+					// Because we ask the server to stop at \n above, we don't need to force single line here
+					return {
+						type: 'success',
+						value: [makeGhostAPIChoice(processedFirstChoice, { forceSingleLine: false }), cacheDone],
+						telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+						telemetryBlob: baseTelemetryData,
+						resultType: ResultType.Network,
+					};
+				} else {
+					return {
+						type: 'empty',
+						reason: 'got undefined processedFirstChoice',
+						telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+					};
+				}
 			}
-			// not including err in this result because it'll end up in standard telemetry
-			return {
-				type: 'failed',
-				reason: 'non-abort error on ghost text request',
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+		);
+	}
+
+	/** Requests new completion from OpenAI, should be called if and only if we are in the servers-side termination mode, and it's follow-up cycling request
+	 *  It returns all requested completions
+	 *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
+	 */
+	public async getAllCompletionsFromNetwork(
+		requestContext: RequestContext,
+		baseTelemetryData: TelemetryWithExp,
+		cancellationToken: ICancellationToken | undefined,
+		finishedCb: FinishedCallback
+	): Promise<GetAllNetworkCompletionsType> {
+		return this.genericGetCompletionsFromNetwork(
+			requestContext,
+			baseTelemetryData,
+			cancellationToken,
+			finishedCb,
+			'all completions',
+			async (requestStart, processingTime, choicesStream): Promise<GetAllNetworkCompletionsType> => {
+				const apiChoices: APIChoice[] = [];
+				for await (const choice of choicesStream) {
+					if (cancellationToken?.isCancellationRequested) {
+						ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting choices iterator');
+						return {
+							type: 'canceled',
+							reason: 'after awaiting choices iterator',
+							telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
+						};
+					}
+					const processedChoice = postProcessChoices(choice, apiChoices);
+					if (!processedChoice) { continue; }
+					apiChoices.push(processedChoice);
+				}
+				//Append results to current completions cache, and network cache
+				if (apiChoices.length > 0) {
+					for (const choice of apiChoices) {
+						appendToCache(this.completionsCacheService, requestContext, choice);
+					}
+
+					this.instantiationService.invokeFunction(telemetryPerformance, 'cyclingPerformance', apiChoices[0], requestStart, processingTime);
+				}
+				return {
+					type: 'success',
+					value: [apiChoices, Promise.resolve()],
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+					telemetryBlob: baseTelemetryData,
+					resultType: ResultType.Cycling,
+				};
+			}
+		);
+	}
+
+	private async genericGetCompletionsFromNetwork<T>(
+		requestContext: RequestContext,
+		baseTelemetryData: TelemetryWithExp,
+		cancellationToken: ICancellationToken | undefined,
+		finishedCb: FinishedCallback,
+		what: string,
+		processChoices: (
+			requestStart: number,
+			processingTime: number,
+			choicesStream: AsyncIterable<APIChoice>
+		) => Promise<GhostTextResultWithTelemetry<T>>
+	): Promise<GhostTextResultWithTelemetry<T>> {
+		ghostTextLogger.debug(this.logTarget, `Getting ${what} from network`);
+
+		// copy the base telemetry data
+		baseTelemetryData = baseTelemetryData.extendedBy();
+
+		// Request one choice for automatic requests, three for invoked (cycling) requests.
+		const n = requestContext.isCycling ? 3 : 1;
+		const temperature = getTemperatureForSamples(this.runtimeMode, n);
+		const extra: CompletionRequestExtra = {
+			language: requestContext.languageId,
+			next_indent: requestContext.indentation.next ?? 0,
+			trim_by_indentation: shouldDoServerTrimming(requestContext.blockMode),
+			prompt_tokens: requestContext.prompt.prefixTokens ?? 0,
+			suffix_tokens: requestContext.prompt.suffixTokens ?? 0,
+		};
+		const postOptions: PostOptions = { n, temperature, code_annotations: false };
+		const modelTerminatesSingleline =
+			this.featuresService.modelAlwaysTerminatesSingleline(baseTelemetryData);
+		const simulateSingleline =
+			requestContext.blockMode === BlockMode.MoreMultiline &&
+			BlockTrimmer.isSupported(requestContext.languageId) &&
+			!modelTerminatesSingleline;
+		if (!requestContext.multiline && !simulateSingleline) {
+			// If we are not in multiline mode, we get the server to truncate the results. This does mean that we
+			// also cache a single line result which will be reused even if we are later in multiline mode. This is
+			// an acceptable trade-off as the transition should be relatively rare and truncating on the server is
+			// more efficient.
+			// Note that this also means we don't need to truncate when creating the GhostAPIChoice object below.
+			postOptions['stop'] = ['\n'];
+		} else if (requestContext.stop) {
+			postOptions['stop'] = requestContext.stop;
+		}
+		if (requestContext.maxTokens !== undefined) {
+			postOptions['max_tokens'] = requestContext.maxTokens;
+		}
+
+		const requestStart = Date.now();
+
+		// extend telemetry data
+		const newProperties: { [key: string]: string } = {
+			endpoint: 'completions',
+			uiKind: CopilotUiKind.GhostText,
+			temperature: JSON.stringify(temperature),
+			n: JSON.stringify(n),
+			stop: JSON.stringify(postOptions['stop']) ?? 'unset',
+			logit_bias: JSON.stringify(null),
+		};
+
+		Object.assign(baseTelemetryData.properties, newProperties);
+
+		try {
+			const completionParams = {
+				prompt: requestContext.prompt,
+				languageId: requestContext.languageId,
+				repoInfo: requestContext.repoInfo,
+				ourRequestId: requestContext.ourRequestId,
+				engineModelId: requestContext.engineModelId,
+				count: n,
+				uiKind: CopilotUiKind.GhostText,
+				postOptions,
+				headers: requestContext.headers,
+				extra,
 			};
+			const res =
+				this.configurationService.getExperimentBasedConfig(ChatConfigKey.TeamInternal.GhostTextUseCompletionsFetchService, this.expService)
+					? await this.fetcherService.fetchAndStreamCompletions2(completionParams, baseTelemetryData, finishedCb, cancellationToken)
+					: await this.fetcherService.fetchAndStreamCompletions(completionParams, baseTelemetryData, finishedCb, cancellationToken);
+			if (res.type === 'failed') {
+				return {
+					type: 'failed',
+					reason: res.reason,
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+				};
+			}
+
+			if (res.type === 'canceled') {
+				ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting fetchCompletions');
+				return {
+					type: 'canceled',
+					reason: res.reason,
+					telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
+				};
+			}
+
+			return processChoices(requestStart, res.getProcessingTime(), res.choices);
+		} catch (err) {
+			// If we cancelled a network request, we don't want to log an error
+			if (isAbortError(err)) {
+				return {
+					type: 'canceled',
+					reason: 'network request aborted',
+					telemetryData: mkCanceledResultTelemetry(baseTelemetryData, {
+						cancelledNetworkRequest: true,
+					}),
+				};
+			} else {
+				this.instantiationService.invokeFunction(acc => ghostTextLogger.exception(acc, err, `Error on ghost text request`));
+				this.userErrorNotifier.notifyUser(err);
+				if (this.runtimeMode.shouldFailForDebugPurposes()) {
+					throw err;
+				}
+				// not including err in this result because it'll end up in standard telemetry
+				return {
+					type: 'failed',
+					reason: 'non-abort error on ghost text request',
+					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
+				};
+			}
 		}
 	}
 }
@@ -226,7 +393,6 @@ async function genericGetCompletionsFromNetwork<T>(
  */
 function postProcessChoices(
 	newChoice: APIChoice,
-	requestContext: RequestContext,
 	currentChoices?: APIChoice[]
 ): APIChoice | undefined {
 	if (!currentChoices) { currentChoices = []; }
@@ -237,167 +403,6 @@ function postProcessChoices(
 		return undefined;
 	}
 	return newChoice;
-}
-
-export type GetNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice, Promise<void>]>;
-
-/** Requests new completion from OpenAI, should be called if and only if the completions for given prompt were not cached before.
- *  It returns only first completion, additional completions are added to the caches in the background.
- *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
- */
-async function getCompletionsFromNetwork(
-	accessor: ServicesAccessor,
-	requestContext: RequestContext,
-	baseTelemetryData: TelemetryWithExp,
-	cancellationToken: ICancellationToken | undefined,
-	finishedCb: FinishedCallback
-): Promise<GetNetworkCompletionsType> {
-	const instantiationService = accessor.get(IInstantiationService);
-	const logTarget = accessor.get(ICompletionsLogTargetService);
-	const runtimeMode = accessor.get(ICompletionsRuntimeModeService);
-	return genericGetCompletionsFromNetwork(
-		accessor,
-		requestContext,
-		baseTelemetryData,
-		cancellationToken,
-		finishedCb,
-		'completions',
-		async (requestStart, processingTime, choicesStream): Promise<GetNetworkCompletionsType> => {
-			const choicesIterator = choicesStream[Symbol.asyncIterator]();
-
-			const firstRes = await choicesIterator.next();
-
-			if (firstRes.done) {
-				ghostTextLogger.debug(logTarget, 'All choices redacted');
-				return {
-					type: 'empty',
-					reason: 'all choices redacted',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-				};
-			}
-			if (cancellationToken?.isCancellationRequested) {
-				ghostTextLogger.debug(logTarget, 'Cancelled after awaiting redactedChoices iterator');
-				return {
-					type: 'canceled',
-					reason: 'after awaiting redactedChoices iterator',
-					telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
-				};
-			}
-
-			const firstChoice: APIChoice = firstRes.value;
-
-			if (firstChoice === undefined) {
-				// This is probably unreachable given the firstRes.done check above
-				ghostTextLogger.debug(logTarget, 'Got undefined choice from redactedChoices iterator');
-				return {
-					type: 'empty',
-					reason: 'got undefined choice from redactedChoices iterator',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-				};
-			}
-
-			instantiationService.invokeFunction(telemetryPerformance, 'performance', firstChoice, requestStart, processingTime);
-
-			ghostTextLogger.debug(logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
-			// Adds first result to cache
-			const processedFirstChoice = postProcessChoices(firstChoice, requestContext);
-			if (processedFirstChoice) {
-				instantiationService.invokeFunction(appendToCache, requestContext, processedFirstChoice);
-				ghostTextLogger.debug(logTarget,
-					`GhostText first completion (index ${processedFirstChoice?.choiceIndex}): ${JSON.stringify(processedFirstChoice?.completionText)}`
-				);
-			}
-			//Create promise for each result, don't `await` it (unless in test mode) but handle asynchronously with `.then()`
-			const cacheDone = (async () => {
-				const apiChoices: APIChoice[] = processedFirstChoice !== undefined ? [processedFirstChoice] : [];
-				for await (const choice of choicesStream) {
-					if (choice === undefined) { continue; }
-					ghostTextLogger.debug(logTarget,
-						`GhostText later completion (index ${choice?.choiceIndex}): ${JSON.stringify(choice.completionText)}`
-					);
-					const processedChoice = postProcessChoices(choice, requestContext, apiChoices);
-					if (!processedChoice) { continue; }
-					apiChoices.push(processedChoice);
-					instantiationService.invokeFunction(appendToCache, requestContext, processedChoice);
-				}
-			})();
-			if (runtimeMode.isRunningInTest()) {
-				await cacheDone;
-			}
-			if (processedFirstChoice) {
-				// Because we ask the server to stop at \n above, we don't need to force single line here
-				return {
-					type: 'success',
-					value: [makeGhostAPIChoice(processedFirstChoice, { forceSingleLine: false }), cacheDone],
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-					telemetryBlob: baseTelemetryData,
-					resultType: ResultType.Network,
-				};
-			} else {
-				return {
-					type: 'empty',
-					reason: 'got undefined processedFirstChoice',
-					telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-				};
-			}
-		}
-	);
-}
-
-type GetAllNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice[], Promise<void>]>;
-
-/** Requests new completion from OpenAI, should be called if and only if we are in the servers-side termination mode, and it's follow-up cycling request
- *  It returns all requested completions
- *  Copies from the base telemetry data are used as the basis for each choice's telemetry.
- */
-async function getAllCompletionsFromNetwork(
-	accessor: ServicesAccessor,
-	requestContext: RequestContext,
-	baseTelemetryData: TelemetryWithExp,
-	cancellationToken: ICancellationToken | undefined,
-	finishedCb: FinishedCallback
-): Promise<GetAllNetworkCompletionsType> {
-	const logTarget = accessor.get(ICompletionsLogTargetService);
-	const instantiationService = accessor.get(IInstantiationService);
-	return genericGetCompletionsFromNetwork(
-		accessor,
-		requestContext,
-		baseTelemetryData,
-		cancellationToken,
-		finishedCb,
-		'all completions',
-		async (requestStart, processingTime, choicesStream): Promise<GetAllNetworkCompletionsType> => {
-			const apiChoices: APIChoice[] = [];
-			for await (const choice of choicesStream) {
-				if (cancellationToken?.isCancellationRequested) {
-					ghostTextLogger.debug(logTarget, 'Cancelled after awaiting choices iterator');
-					return {
-						type: 'canceled',
-						reason: 'after awaiting choices iterator',
-						telemetryData: mkCanceledResultTelemetry(baseTelemetryData),
-					};
-				}
-				const processedChoice = postProcessChoices(choice, requestContext, apiChoices);
-				if (!processedChoice) { continue; }
-				apiChoices.push(processedChoice);
-			}
-			//Append results to current completions cache, and network cache
-			if (apiChoices.length > 0) {
-				for (const choice of apiChoices) {
-					instantiationService.invokeFunction(appendToCache, requestContext, choice);
-				}
-
-				instantiationService.invokeFunction(telemetryPerformance, 'cyclingPerformance', apiChoices[0], requestStart, processingTime);
-			}
-			return {
-				type: 'success',
-				value: [apiChoices, Promise.resolve()],
-				telemetryData: mkBasicResultTelemetry(baseTelemetryData),
-				telemetryBlob: baseTelemetryData,
-				resultType: ResultType.Cycling,
-			};
-		}
-	);
 }
 
 function makeGhostAPIChoice(choice: APIChoice, options: { forceSingleLine: boolean }): APIChoice {
@@ -574,6 +579,7 @@ function buildFinishedCallback(
 				? featuresService.longLookaheadSize(telemetryData)
 				: featuresService.shortLookaheadSize(telemetryData);
 
+		const completionsCacheService = accessor.get(ICompletionsCacheService);
 		const finishedCb = instantiationService.createInstance(StreamedCompletionSplitter,
 			prefix,
 			document.detectedLanguageId,
@@ -584,7 +590,7 @@ function buildFinishedCallback(
 					prefix: prefix + extraPrefix,
 					prompt: { ...prompt, prefix: prompt.prefix + extraPrefix },
 				};
-				instantiationService.invokeFunction(appendToCache, cacheContext, item);
+				appendToCache(completionsCacheService, cacheContext, item);
 			}
 		).getFinishedCallback();
 
@@ -890,8 +896,9 @@ async function getGhostTextWithoutAbortHandling(
 			ghostTextLogger.debug(logTarget, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
 		} else {
 			// No local choices, go to network
+			const completionsFromNetwork = instantiationService.createInstance(CompletionsFromNetwork);
 			if (ghostTextOptions.isCycling) {
-				const networkChoices = await instantiationService.invokeFunction(getAllCompletionsFromNetwork,
+				const networkChoices = await completionsFromNetwork.getAllCompletionsFromNetwork(
 					requestContext,
 					telemetryData,
 					cancellationToken,
@@ -931,7 +938,7 @@ async function getGhostTextWithoutAbortHandling(
 				};
 
 				const asyncCancellationTokenSource = new CancellationTokenSource();
-				const requestPromise = instantiationService.invokeFunction(getCompletionsFromNetwork,
+				const requestPromise = completionsFromNetwork.getCompletionsFromNetwork(
 					requestContext,
 					telemetryData,
 					asyncCancellationTokenSource.token,
@@ -1067,8 +1074,8 @@ async function getGhostTextWithoutAbortHandling(
 export async function getGhostText(
 	accessor: ServicesAccessor,
 	completionState: CompletionState,
-	token?: ICancellationToken,
-	options?: Partial<GetGhostTextOptions>
+	token: ICancellationToken | undefined,
+	options: Partial<GetGhostTextOptions>
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 	const id = generateUuid();
 	const instantiationService = accessor.get(IInstantiationService);
@@ -1332,8 +1339,8 @@ async function shouldRequestMultiline(
 }
 
 /** Appends completions to existing entry in cache or creates new entry. */
-function appendToCache(accessor: ServicesAccessor, requestContext: CacheContext, choice: APIChoice) {
-	accessor.get(ICompletionsCacheService).append(requestContext.prefix, requestContext.prompt.suffix, choice);
+function appendToCache(competionsCacheService: ICompletionsCacheService, requestContext: CacheContext, choice: APIChoice) {
+	competionsCacheService.append(requestContext.prefix, requestContext.prompt.suffix, choice);
 }
 
 function adjustLeadingWhitespace(index: number, text: string, ws: string): GhostCompletion {

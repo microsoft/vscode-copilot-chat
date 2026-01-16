@@ -9,16 +9,84 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 /**
  * Types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/api/messages
+ *
+ * This interface supports both regular tools and server tools (web search, tool search):
+ * - Regular tools: require name, description, and input_schema
+ * - Tool search tools: require only type and name
  */
 export interface AnthropicMessagesTool {
 	name: string;
+	type?: string;
 	description?: string;
-	input_schema: {
+	input_schema?: {
 		type: 'object';
 		properties?: Record<string, unknown>;
 		required?: string[];
 	};
+	defer_loading?: boolean;
 }
+
+export interface ToolReference {
+	type: 'tool_reference';
+	tool_name: string;
+}
+
+export interface ToolSearchToolSearchResult {
+	type: 'tool_search_tool_search_result';
+	tool_references: ToolReference[];
+}
+
+export interface ToolSearchToolResultError {
+	type: 'tool_search_tool_result_error';
+	error_code: 'too_many_requests' | 'invalid_pattern' | 'pattern_too_long' | 'unavailable';
+}
+
+export interface ServerToolUse {
+	type: 'server_tool_use';
+	id: string;
+	name: string;
+	input: {
+		query: string;
+	};
+}
+
+export interface ToolSearchToolResult {
+	type: 'tool_search_tool_result';
+	tool_use_id: string;
+	content: ToolSearchToolSearchResult | ToolSearchToolResultError;
+}
+
+export interface ToolSearchUsage {
+	tool_search_requests: number;
+}
+
+/**
+ * Tools that should not use deferred loading when tool search is enabled.
+ * These are frequently used tools that benefit from being immediately available.
+ *
+ * TODO: @bhavyaus Replace these hardcoded strings with constants from ToolName enum
+ */
+export const nonDeferredToolNames = new Set([
+	// Read/navigate
+	'read_file',
+	'list_dir',
+	// Search
+	'grep_search',
+	'semantic_search',
+	'file_search',
+	// Edit
+	'replace_string_in_file',
+	'multi_replace_string_in_file',
+	'insert_edit_into_file',
+	'apply_patch',
+	'create_file',
+	// Terminal
+	'run_in_terminal',
+	'get_terminal_output',
+	// Other high-usage tools
+	'get_errors',
+	'manage_todo_list',
+]);
 
 /**
  * Context management types for Anthropic Messages API
@@ -159,9 +227,9 @@ export function getContextManagementFromConfig(
 
 	const contextEditingConfig: ContextEditingConfig = {
 		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',
-		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 100000,
+		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 75000,
 		keepCount: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.keepCount') ?? 5,
-		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 30000,
+		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 5000,
 		excludeTools: [],
 		clearInputs: experimentationService.getTreatmentVariable<boolean>('copilotchat.anthropic.contextEditing.toolResult.clearInputs') ?? true,
 		thinkingKeepTurns: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.thinking.keepTurns') ?? 1,

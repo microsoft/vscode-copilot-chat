@@ -33,6 +33,7 @@ export const enum ShowNextEditPreference {
 
 export type StreamedEdit = {
 	readonly edit: LineReplacement;
+	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
 	readonly targetDocument?: DocumentId;
 }

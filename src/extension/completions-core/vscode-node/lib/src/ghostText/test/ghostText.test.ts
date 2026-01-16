@@ -62,7 +62,7 @@ suite('Isolated GhostText tests', function () {
 
 		// Setup closures with the state as default
 		function requestGhostText(completionState = state) {
-			return getGhostText(accessor, completionState, token);
+			return getGhostText(accessor, completionState, token, {});
 		}
 		async function requestPrompt(completionState = state) {
 			const telemExp = TelemetryWithExp.createEmptyConfigForTesting();
