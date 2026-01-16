@@ -6,6 +6,8 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
+import tss from './typescripts';
+
 import { CompilerOptionsRunnable } from './baseContextProviders';
 import { ClassContextProvider } from './classContextProvider';
 import { ContextProvider, ContextRunnableCollector, RequestContext, type ComputeContextSession, type ContextProviderFactory, type ContextResult, type ContextRunnable, type ProviderComputeContext } from './contextProvider';
@@ -16,7 +18,6 @@ import { validateNesRename, type PrepareNesRenameResult } from './nesRenameValid
 import { RenameKind, type FilePath, type LastSymbolRename } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
 import { RecoverableError } from './types';
-import tss from './typescripts';
 
 class ProviderComputeContextImpl implements ProviderComputeContext {
 
@@ -146,7 +147,7 @@ export function computeContext(result: ContextResult, session: ComputeContextSes
 	providers.execute(result, session, languageService, token);
 }
 
-export function prepareNesRename(result: PrepareNesRenameResult, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: LastSymbolRename, token: tt.CancellationToken): void {
+export function prepareNesRename(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: LastSymbolRename | undefined, token: tt.CancellationToken): void {
 	if (typeof oldName !== 'string' || oldName.length === 0) {
 		result.setCanRename(RenameKind.no, 'No old name provided');
 		return;
@@ -155,8 +156,25 @@ export function prepareNesRename(result: PrepareNesRenameResult, languageService
 		result.setCanRename(RenameKind.no, 'No new name provided');
 		return;
 	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		result.setCanRename(RenameKind.no, 'No program found on language service');
+		return;
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		result.setCanRename(RenameKind.no, 'No source file found for document');
+		return;
+	}
+
 	const renameInfo = languageService.getRenameInfo(document, position, {});
 	if (!renameInfo.canRename) {
+		if (lastSymbolRename !== undefined) {
+			runPrepareNesRenameOnOldState(result, session, languageService, sourceFile, position, oldName, newName, lastSymbolRename, token);
+			return;
+		}
 		result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
 		return;
 	}
@@ -164,16 +182,10 @@ export function prepareNesRename(result: PrepareNesRenameResult, languageService
 		result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
 		return;
 	}
-	const program = languageService.getProgram();
-	if (program === undefined) {
-		result.setCanRename(RenameKind.no, 'No program found on language service');
-		return;
-	}
-	const sourceFile = program.getSourceFile(document);
-	if (sourceFile === undefined) {
-		result.setCanRename(RenameKind.no, 'No source file found for document');
-		return;
-	}
+
+}
+
+function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, token: tt.CancellationToken) {
 	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
 	if (tokenInfo.token === undefined) {
 		result.setCanRename(RenameKind.no, 'No token found at position');
@@ -182,4 +194,25 @@ export function prepareNesRename(result: PrepareNesRenameResult, languageService
 	result.setCanRename(RenameKind.maybe, oldName);
 	token.throwIfCancellationRequested();
 	validateNesRename(result, program, tokenInfo.token, oldName, newName, token);
+}
+
+function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: LastSymbolRename, token: tt.CancellationToken) {
+	const text = sourceFile.getFullText();
+	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.offset);
+	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.offset);
+	const newText = text.substring(0, startPos) + oldName + text.substring(endPos);
+	const newPos = position < startPos ? position : position - (newName.length - oldName.length);
+
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameInfo = languageService.getRenameInfo(sourceFile.fileName, newPos, {});
+		if (!renameInfo.canRename) {
+			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
+			return;
+		}
+		if (renameInfo.displayName !== oldName) {
+			result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+			return;
+		}
+		doPrepareNesRename(result, updatedProgram, updatedSourceFile, newPos, oldName, newName, token);
+	});
 }

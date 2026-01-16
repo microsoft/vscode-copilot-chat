@@ -199,7 +199,7 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
 	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
 	try {
-		prepareNesRename(result, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, request.arguments?.lastSymbolRename, cancellationToken);
+		prepareNesRename(result, languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, request.arguments?.lastSymbolRename, cancellationToken);
 	} catch (error) {
 		if (error instanceof ts.OperationCanceledException) {
 			result.setCanRename(RenameKind.no, 'Operation canceled');

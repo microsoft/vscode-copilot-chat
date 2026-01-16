@@ -141,7 +141,7 @@ class LocalLanguageServiceHost implements tt.LanguageServiceHost {
 	public getScriptSnapshot(fileName: string): tt.IScriptSnapshot | undefined {
 		let result: tt.IScriptSnapshot | undefined = this.scriptSnapshots.get(fileName);
 		if (result === undefined) {
-			const content: string | undefined = this.overrides?.get(fileName) ?? ts.sys.fileExists(fileName) ? ts.sys.readFile(fileName) : undefined;
+			const content: string | undefined = this.overrides?.get(fileName) ?? (ts.sys.fileExists(fileName) ? ts.sys.readFile(fileName) : undefined);
 			if (content === undefined) {
 				return undefined;
 			}

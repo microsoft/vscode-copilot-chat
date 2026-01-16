@@ -532,7 +532,7 @@ export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLoca
 	timeBudget: number;
 }
 
-export type LastSymbolRename = PrepareNesRenameRequestArgs['lastSymbolRename'];
+export type LastSymbolRename = NonNullable<PrepareNesRenameRequestArgs['lastSymbolRename']>;
 
 export namespace PrepareNesRenameResponse {
 

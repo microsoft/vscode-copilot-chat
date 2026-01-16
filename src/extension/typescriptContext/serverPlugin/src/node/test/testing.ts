@@ -196,7 +196,7 @@ export function prepareNesRename(session: TestSession, document: string, positio
 	}
 	const result = new PrepareNesRenameResult();
 	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
-	_prepareNesRename(result, session.service, document, pos, oldName, newName, lastSymbolRename, new NullCancellationToken());
+	_prepareNesRename(result, session.session, session.service, document, pos, oldName, newName, lastSymbolRename, new NullCancellationToken());
 	return result.getCanRename();
 }
 
