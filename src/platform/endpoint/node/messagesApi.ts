@@ -5,7 +5,6 @@
 
 import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
@@ -13,11 +12,11 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
 interface AnthropicStreamEvent {
@@ -35,10 +34,13 @@ interface AnthropicStreamEvent {
 			output_tokens: number;
 			cache_creation_input_tokens?: number;
 			cache_read_input_tokens?: number;
+			server_tool_use?: {
+				tool_search_requests?: number;
+			};
 		};
 	};
 	index?: number;
-	content_block?: ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam;
+	content_block?: ContentBlockParam | ThinkingBlockParam | RedactedThinkingBlockParam | ServerToolUse | ToolSearchToolResult;
 	delta?: {
 		type: string;
 		text?: string;
@@ -53,10 +55,19 @@ interface AnthropicStreamEvent {
 		input_tokens?: number;
 		cache_creation_input_tokens?: number;
 		cache_read_input_tokens?: number;
+		server_tool_use?: {
+			tool_search_requests?: number;
+		};
 	};
+	context_management?: ContextManagementResponse;
 }
 
 export function createMessagesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
+
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
 		.map((tool): AnthropicMessagesTool => ({
@@ -67,30 +78,48 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 				properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
 				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
 			},
+			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
+			...(toolSearchEnabled && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
 
-	const configurationService = accessor.get(IConfigurationService);
-	const experimentationService = accessor.get(IExperimentationService);
-	const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
-	const maxTokens = options.postOptions.max_tokens ?? 1024;
-	const normalizedBudget = (configuredBudget && configuredBudget > 0)
-		? (configuredBudget < 1024 ? 1024 : configuredBudget)
-		: undefined;
-	const thinkingBudget = normalizedBudget
-		? Math.min(32000, maxTokens - 1, normalizedBudget)
-		: undefined;
+	// Build final tools array, adding tool search tool if enabled
+	const finalTools: AnthropicMessagesTool[] = [];
+	if (toolSearchEnabled) {
+		finalTools.push({ name: 'tool_search_tool_bm25', type: 'tool_search_tool_bm25_20251119', defer_loading: false });
+	}
+
+	if (anthropicTools) {
+		finalTools.push(...anthropicTools);
+	}
+
+	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	let thinkingBudget: number | undefined;
+	if (!options.disableThinking) {
+		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+		const maxTokens = options.postOptions.max_tokens ?? 1024;
+		const normalizedBudget = (configuredBudget && configuredBudget > 0)
+			? (configuredBudget < 1024 ? 1024 : configuredBudget)
+			: undefined;
+		thinkingBudget = normalizedBudget
+			? Math.min(32000, maxTokens - 1, normalizedBudget)
+			: undefined;
+	}
+
+	// Build context management configuration
+	const contextManagement = getContextManagementFromConfig(experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
 
 	return {
 		model,
 		...rawMessagesToMessagesAPI(options.messages),
 		stream: true,
-		tools: anthropicTools,
+		tools: finalTools.length > 0 ? finalTools : undefined,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
 		thinking: thinkingBudget ? {
 			type: 'enabled',
 			budget_tokens: thinkingBudget,
 		} : undefined,
+		context_management: contextManagement,
 	};
 }
 
@@ -221,18 +250,23 @@ function rawContentToAnthropicContent(content: readonly Raw.ChatCompletionConten
 			}
 			case Raw.ChatCompletionContentPartKind.Opaque: {
 				if (part.value && typeof part.value === 'object' && 'type' in part.value) {
-					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string; encrypted?: string } };
+					const opaqueValue = part.value as { type: string; thinking?: { id: string; text?: string | string[]; encrypted?: string } };
 					if (opaqueValue.type === 'thinking' && opaqueValue.thinking) {
-						if (opaqueValue.thinking.encrypted) {
+						const thinkingText = Array.isArray(opaqueValue.thinking.text)
+							? opaqueValue.thinking.text.join('')
+							: opaqueValue.thinking.text;
+						if (thinkingText && opaqueValue.thinking.encrypted) {
+							// Regular thinking block: text is present, encrypted field contains the signature
+							convertedContent.push({
+								type: 'thinking',
+								thinking: thinkingText,
+								signature: opaqueValue.thinking.encrypted,
+							});
+						} else if (opaqueValue.thinking.encrypted && !thinkingText) {
+							// Redacted thinking block: no text, only encrypted data from Claude
 							convertedContent.push({
 								type: 'redacted_thinking',
 								data: opaqueValue.thinking.encrypted,
-							});
-						} else if (opaqueValue.thinking.text) {
-							convertedContent.push({
-								type: 'thinking',
-								thinking: opaqueValue.thinking.text,
-								signature: '',
 							});
 						}
 					}
@@ -251,26 +285,23 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
-	telemetryService: ITelemetryService,
 	logService: ILogService,
 	response: Response,
-	expectedNumChoices: number,
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
 		const processor = instantiationService.createInstance(AnthropicMessagesProcessor, telemetryData, requestId, ghRequestId);
 		const parser = new SSEParser((ev) => {
 			try {
+				logService.trace(`[messagesAPI]SSE: ${ev.data}`);
 				const trimmed = ev.data?.trim();
 				if (!trimmed || trimmed === '[DONE]') {
 					return;
 				}
 
-				logService.trace(`SSE: ${trimmed}`);
 				const parsed = JSON.parse(trimmed) as Partial<AnthropicStreamEvent>;
 				const type = parsed.type ?? ev.type;
 				if (!type) {
@@ -285,29 +316,35 @@ export async function processResponseFromMessagesEndpoint(
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
 }
 
 export class AnthropicMessagesProcessor {
 	private textAccumulator: string = '';
 	private toolCallAccumulator: Map<number, { id: string; name: string; arguments: string }> = new Map();
+	private serverToolCallAccumulator: Map<number, { id: string; name: string; arguments: string }> = new Map();
+	private completedServerToolCalls: Map<string, { id: string; name: string; arguments: string }> = new Map();
 	private thinkingAccumulator: Map<number, { thinking: string; signature: string }> = new Map();
 	private completedToolCalls: Array<{ id: string; name: string; arguments: string }> = [];
 	private messageId: string = '';
 	private model: string = '';
 	private inputTokens: number = 0;
 	private outputTokens: number = 0;
-	private cachedTokens: number = 0;
+	private cacheCreationTokens: number = 0;
+	private cacheReadTokens: number = 0;
+	private contextManagementResponse?: ContextManagementResponse;
+	private toolSearchRequests: number = 0;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
 		private readonly ghRequestId: string,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	public push(chunk: AnthropicStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
@@ -323,26 +360,96 @@ export class AnthropicMessagesProcessor {
 					this.model = chunk.message.model;
 					this.inputTokens = chunk.message.usage.input_tokens;
 					this.outputTokens = chunk.message.usage.output_tokens;
-					if (chunk.message.usage.cache_read_input_tokens) {
-						this.cachedTokens = chunk.message.usage.cache_read_input_tokens;
+					this.cacheCreationTokens = chunk.message.usage.cache_creation_input_tokens ?? 0;
+					this.cacheReadTokens = chunk.message.usage.cache_read_input_tokens ?? 0;
+					if (chunk.message.usage.server_tool_use?.tool_search_requests) {
+						this.toolSearchRequests = chunk.message.usage.server_tool_use.tool_search_requests;
 					}
 				}
 				return;
 			case 'content_block_start':
 				if (chunk.content_block?.type === 'tool_use' && chunk.index !== undefined) {
+					const toolCallId = chunk.content_block.id || generateUuid();
 					this.toolCallAccumulator.set(chunk.index, {
-						id: chunk.content_block.id || generateUuid(),
+						id: toolCallId,
 						name: chunk.content_block.name || '',
 						arguments: '',
 					});
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.content_block.name || '' }]
+						beginToolCalls: [{ name: chunk.content_block.name || '', id: toolCallId }]
 					});
+				} else if (chunk.content_block?.type === 'server_tool_use' && chunk.index !== undefined) {
+					const serverToolUse = chunk.content_block as ServerToolUse;
+					const serverToolCallId = serverToolUse.id || generateUuid();
+					this.serverToolCallAccumulator.set(chunk.index, {
+						id: serverToolCallId,
+						name: serverToolUse.name || '',
+						arguments: '',
+					});
+				} else if (chunk.content_block?.type === 'tool_search_tool_result' && chunk.index !== undefined) {
+					const toolSearchResult = chunk.content_block as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const toolNames = toolSearchResult.content.tool_references.map(ref => ref.tool_name);
+
+						this.logService.trace(`[messagesAPI] Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						if (serverToolCall) {
+							let query: string | undefined;
+							try {
+								const parsed = JSON.parse(serverToolCall.arguments);
+								query = parsed.query;
+							} catch {
+								// Ignore parse errors
+							}
+							this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+							return onProgress({
+								text: '',
+								serverToolCalls: [{
+									id: serverToolCall.id,
+									name: serverToolCall.name,
+									arguments: JSON.stringify({ query, discovered_tools: toolNames }),
+									isServer: true,
+								}],
+							});
+						} else {
+							return onProgress({
+								text: '',
+								serverToolCalls: [{
+									id: toolSearchResult.tool_use_id,
+									name: 'tool_search_result',
+									arguments: JSON.stringify({ discovered_tools: toolNames }),
+									isServer: true,
+								}],
+							});
+						}
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this.logService.warn(`[messagesAPI] Tool search error: ${toolSearchResult.content.error_code}`);
+						return onProgress({
+							text: '',
+							copilotErrors: [{
+								agent: 'anthropic',
+								code: toolSearchResult.content.error_code,
+								message: `Tool search error: ${toolSearchResult.content.error_code}`,
+								type: 'error',
+								identifier: undefined
+							}]
+						});
+					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
+					});
+				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
+					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
+					onProgress({
+						text: '',
+						thinking: {
+							id: `thinking_${chunk.index}`,
+							encrypted: data,
+						}
 					});
 				}
 				return;
@@ -372,6 +479,18 @@ export class AnthropicMessagesProcessor {
 						const toolCall = this.toolCallAccumulator.get(chunk.index);
 						if (toolCall) {
 							toolCall.arguments += chunk.delta.partial_json;
+							onProgress({
+								text: '',
+								copilotToolCallStreamUpdates: [{
+									id: toolCall.id,
+									name: toolCall.name,
+									arguments: toolCall.arguments,
+								}],
+							});
+						}
+						const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
+						if (serverToolCall) {
+							serverToolCall.arguments += chunk.delta.partial_json;
 						}
 					}
 				}
@@ -391,6 +510,13 @@ export class AnthropicMessagesProcessor {
 						});
 						this.toolCallAccumulator.delete(chunk.index);
 					}
+					// Handle server tool call completion (tool search) - store for later combination with result
+					const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
+					if (serverToolCall) {
+						// Store completed server tool call by ID, waiting for tool_search_tool_result
+						this.completedServerToolCalls.set(serverToolCall.id, serverToolCall);
+						this.serverToolCallAccumulator.delete(chunk.index);
+					}
 					const thinking = this.thinkingAccumulator.get(chunk.index);
 					if (thinking && thinking.signature) {
 						onProgress({
@@ -406,10 +532,45 @@ export class AnthropicMessagesProcessor {
 				return;
 			case 'message_delta':
 				if (chunk.usage) {
+					// message_delta provides the most accurate token counts
 					this.outputTokens = chunk.usage.output_tokens;
+					this.inputTokens = chunk.usage.input_tokens ?? this.inputTokens;
+					this.cacheCreationTokens = chunk.usage.cache_creation_input_tokens ?? this.cacheCreationTokens;
+					this.cacheReadTokens = chunk.usage.cache_read_input_tokens ?? this.cacheReadTokens;
+					if (chunk.usage.server_tool_use?.tool_search_requests) {
+						this.toolSearchRequests = chunk.usage.server_tool_use.tool_search_requests;
+					}
+				}
+				if (chunk.context_management) {
+					this.contextManagementResponse = chunk.context_management;
+					// Report context management via delta so it gets logged to request logger
+					return onProgress({
+						text: '',
+						contextManagement: chunk.context_management
+					});
 				}
 				return;
 			case 'message_stop':
+				if (this.contextManagementResponse) {
+					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+						0
+					);
+					this.logService.trace(`[messagesAPI] Anthropic context editing applied: cleared ${totalClearedTokens} tokens.`);
+					this.telemetryData.extendedBy({
+						contextEditingApplied: 'true',
+						contextEditingClearedTokens: totalClearedTokens.toString(),
+						contextEditingEditCount: this.contextManagementResponse.applied_edits.length.toString(),
+					});
+				}
+				if (this.toolSearchRequests > 0) {
+					this.logService.trace(`[messagesAPI] Anthropic tool search requests: ${this.toolSearchRequests}.`);
+					this.telemetryData.extendedBy({
+						toolSearchUsed: 'true',
+						toolSearchRequests: this.toolSearchRequests.toString(),
+					});
+				}
+
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
@@ -425,11 +586,11 @@ export class AnthropicMessagesProcessor {
 						serverExperiments: ''
 					},
 					usage: {
-						prompt_tokens: this.inputTokens,
+						prompt_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens,
 						completion_tokens: this.outputTokens,
-						total_tokens: this.inputTokens + this.outputTokens,
+						total_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens + this.outputTokens,
 						prompt_tokens_details: {
-							cached_tokens: this.cachedTokens,
+							cached_tokens: this.cacheReadTokens,
 						},
 						completion_tokens_details: {
 							reasoning_tokens: 0,

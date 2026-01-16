@@ -22,6 +22,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { IClaudeCodeModels } from '../../../agents/claude/node/claudeCodeModels';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
@@ -37,6 +38,7 @@ interface MockClaudeSession {
 
 describe('ChatSessionContentProvider', () => {
 	let mockSessionService: IClaudeCodeSessionService;
+	let mockClaudeCodeModels: IClaudeCodeModels;
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
 	let accessor: ITestingServicesAccessor;
@@ -47,12 +49,23 @@ describe('ChatSessionContentProvider', () => {
 			getSession: vi.fn()
 		} as any;
 
+		mockClaudeCodeModels = {
+			resolveModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
+			getDefaultModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
+			setDefaultModel: vi.fn().mockResolvedValue(undefined),
+			getModels: vi.fn().mockResolvedValue([
+				{ id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+				{ id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }
+			])
+		} as any;
+
 		const serviceCollection = store.add(createExtensionUnitTestingServices());
 
 		const workspaceService = new TestWorkspaceService([workspaceFolderUri]);
 		serviceCollection.set(IWorkspaceService, workspaceService);
 
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
+		serviceCollection.define(IClaudeCodeModels, mockClaudeCodeModels);
 		accessor = serviceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
 		provider = instaService.createInstance(ClaudeChatSessionContentProvider);
@@ -435,7 +448,8 @@ describe('ChatSessionContentProvider', () => {
 		const realSessionService = instaService.createInstance(ClaudeCodeSessionService);
 
 		const childInstantiationService = instaService.createChild(new ServiceCollection(
-			[IClaudeCodeSessionService, realSessionService]
+			[IClaudeCodeSessionService, realSessionService],
+			[IClaudeCodeModels, mockClaudeCodeModels]
 		));
 		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider);
 

@@ -30,7 +30,7 @@ import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
-import { ChatVariables } from '../panel/chatVariables';
+import { ChatVariables, UserQuery } from '../panel/chatVariables';
 import { CustomInstructions } from '../panel/customInstructions';
 import { NotebookFormat, NotebookReminderInstructions } from '../panel/notebookEditCodePrompt';
 import { NotebookSummaryChange } from '../panel/notebookSummaryChangePrompt';
@@ -372,7 +372,9 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<ReminderInstructionsClass {...reminderProps} />
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
-					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
+						<UserQuery chatVariables={this.props.chatVariables} query={query + attachmentHint} />
+					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>
@@ -406,7 +408,7 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 		if (part.type === Raw.ChatCompletionContentPartKind.Text) {
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} />;
+			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}

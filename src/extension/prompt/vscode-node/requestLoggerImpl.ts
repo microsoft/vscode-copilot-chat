@@ -53,6 +53,41 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 			}).join('\n');
 		}
 
+		// Handle context management
+		if (d.contextManagement) {
+			if (i > 0 || text.length > 0) {
+				text += '\n';
+			}
+
+			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			);
+			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+				0
+			);
+			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+				0
+			);
+
+			const details: string[] = [];
+			if (totalClearedTokens > 0) {
+				details.push(`${totalClearedTokens} tokens`);
+			}
+			if (totalClearedToolUses > 0) {
+				details.push(`${totalClearedToolUses} tool uses`);
+			}
+			if (totalClearedThinkingTurns > 0) {
+				details.push(`${totalClearedThinkingTurns} thinking turns`);
+			}
+
+			if (details.length > 0) {
+				text += `🧹 Context cleared: ${details.join(', ')}`;
+			}
+		}
+
 		return text;
 	}).join('');
 }
@@ -311,6 +346,20 @@ export class RequestLogger extends AbstractRequestLogger {
 			thinking,
 			edits,
 			toolMetadata
+		));
+	}
+
+	public override logServerToolCall(id: string, name: string, args: unknown): void {
+		const syntheticResponse: LanguageModelToolResult2 = {
+			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
+		};
+		this._addEntry(new LoggedToolCall(
+			id,
+			`${name} [server]`,
+			args,
+			syntheticResponse,
+			this.currentRequest,
+			Date.now()
 		));
 	}
 

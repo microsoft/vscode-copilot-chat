@@ -150,7 +150,7 @@ export class InlineChatIntent implements IIntent {
 		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused);
 		const result = await handler.getResult();
 
-		if (!didEmitEdits) {
+		if (!didEmitEdits && !result.errorDetails) {
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
 			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
@@ -233,6 +233,7 @@ export class InlineChatIntent implements IIntent {
 		}
 
 		if (result.needsExitTool) {
+			this._logService.warn('[InlineChat], BAIL_OUT because of needsExitTool');
 			// BAILOUT: when no edits were emitted, invoke the exit tool manually
 			await this._toolsService.invokeTool(INLINE_CHAT_EXIT_TOOL_NAME, { toolInvocationToken: request.toolInvocationToken, input: undefined }, token);
 		}
@@ -349,7 +350,9 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		telemetry.sendToolCallingTelemetry(toolCallRounds, availableTools, token.isCancellationRequested ? 'cancelled' : lastResponse.type);
 
-		const needsExitTool = toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0);
+		const needsExitTool = lastResponse.type === ChatFetchResponseType.Success
+			&& (toolCallRounds.length === 0 || (toolCallRounds.length > 0 && toolCallRounds[toolCallRounds.length - 1].toolCalls.length === 0));
+
 		return { lastResponse, telemetry, needsExitTool };
 	}
 
@@ -375,6 +378,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 		const toolCalls: IToolCall[] = [];
 		const failedEdits: [IToolCall, vscode.ExtendedLanguageModelToolResult][] = [];
+
+		const toolExecutions: Promise<unknown>[] = [];
 
 		const fetchResult = await endpoint.makeChatRequest2({
 			debugName: 'InlineChat2Intent',
@@ -410,45 +415,52 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 						continue;
 					}
 
-					try {
-						stream.progress(l10n.t('Applying edits...'));
+					toolExecutions.push((async () => {
+						try {
+							stream.progress(l10n.t('Applying edits...'));
 
-						let input = isValidatedToolInput(validationResult)
-							? validationResult.inputObj
-							: JSON.parse(toolCall.arguments);
+							let input = isValidatedToolInput(validationResult)
+								? validationResult.inputObj
+								: JSON.parse(toolCall.arguments);
 
-						const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
-						if (copilotTool?.resolveInput) {
-							input = await copilotTool.resolveInput(input, {
-								request,
-								stream,
-								query: request.prompt,
-								chatVariables: new ChatVariablesCollection([...request.references]),
-								history: [],
-							}, CopilotToolMode.FullContext);
+							const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
+							if (copilotTool?.resolveInput) {
+								input = await copilotTool.resolveInput(input, {
+									request,
+									stream,
+									query: request.prompt,
+									chatVariables: new ChatVariablesCollection([...request.references]),
+									history: [],
+								}, CopilotToolMode.FullContext);
+							}
+
+							const result = await this._toolsService.invokeTool(toolCall.name, {
+								input,
+								toolInvocationToken: request.toolInvocationToken,
+								// Split on `__vscode` so it's the chat stream id
+								// TODO @lramos15 - This is a gross hack
+								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
+							}, token) as vscode.ExtendedLanguageModelToolResult;
+
+							if (result.hasError) {
+								failedEdits.push([toolCall, result]);
+								stream.progress(l10n.t('Looking not yet good, trying again...'));
+							}
+
+							this._logService.trace(`Tool ${toolCall.name} invocation result: ${JSON.stringify(result)}`);
+
+						} catch (err) {
+							this._logService.error(err, `Tool ${toolCall.name} invocation failed`);
+							failedEdits.push([toolCall, new LanguageModelToolResult([new LanguageModelTextPart(toErrorMessage(err))])]);
 						}
-
-						const result = await this._toolsService.invokeTool(toolCall.name, {
-							input,
-							toolInvocationToken: request.toolInvocationToken,
-						}, token) as vscode.ExtendedLanguageModelToolResult;
-
-						if (result.hasError) {
-							failedEdits.push([toolCall, result]);
-							stream.progress(l10n.t('Looking not yet good, trying again...'));
-						}
-
-						this._logService.trace(`Tool ${toolCall.name} invocation result: ${JSON.stringify(result)}`);
-
-					} catch (err) {
-						this._logService.error(err, `Tool ${toolCall.name} invocation failed`);
-						failedEdits.push([toolCall, new LanguageModelToolResult([new LanguageModelTextPart(toErrorMessage(err))])]);
-					}
+					})());
 				}
 
 				return undefined;
 			}
 		}, token);
+
+		await Promise.allSettled(toolExecutions);
 
 		return { fetchResult, toolCalls, failedEdits };
 	}
@@ -570,6 +582,10 @@ class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 			[]
 		);
 
-		return { lastResponse: fetchResult, telemetry, needsExitTool: telemetry.editCount === 0 };
+		return {
+			needsExitTool: telemetry.editCount === 0 && fetchResult.type === ChatFetchResponseType.Success,
+			lastResponse: fetchResult,
+			telemetry,
+		};
 	}
 }

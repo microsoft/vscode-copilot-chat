@@ -100,6 +100,8 @@ export class XtabNextCursorPredictor {
 		const lintOptions = this.determineLintOptions();
 		const lintErrors = lintOptions ? new LintErrors(lintOptions, promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService) : undefined;
 
+		const includeLineNumbersInRecentSnippets = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers, this.expService);
+
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
@@ -116,6 +118,10 @@ export class XtabNextCursorPredictor {
 				...promptPieces.opts,
 				includePostScript: false,
 				lintOptions,
+				recentlyViewedDocuments: {
+					...promptPieces.opts.recentlyViewedDocuments,
+					includeLineNumbers: includeLineNumbersInRecentSnippets,
+				},
 			},
 		);
 

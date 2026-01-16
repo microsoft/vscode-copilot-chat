@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Range } from '../../../../util/vs/editor/common/core/range';
 import { Diagnostic, Uri } from '../../../../vscodeTypes';
-import { ContextItem, ContextKind, SnippetContext, TraitContext } from '../../../languageServer/common/languageContextService';
+import { ContextItem, ContextKind, SnippetContext, TraitContext, type DiagnosticBagContext } from '../../../languageServer/common/languageContextService';
 
 export type LanguageContextEntry = {
 	context: ContextItem;
@@ -33,7 +34,14 @@ type SerializedTraitContext = {
 	value: string;
 }
 
-type SerializedContextItem = SerializedSnippetContext | SerializedTraitContext;
+type SerializedDiagnosticBagContext = {
+	kind: ContextKind.DiagnosticBag;
+	priority: number;
+	uri: string;
+	values: Omit<SerializedDiagnostic, 'uri'>[];
+}
+
+type SerializedContextItem = SerializedSnippetContext | SerializedTraitContext | SerializedDiagnosticBagContext;
 
 export type SerializedContextResponse = {
 	start: number;
@@ -62,6 +70,8 @@ function serializeLanguageContextItem(context: ContextItem): SerializedContextIt
 			return serializeSnippetContext(context);
 		case ContextKind.Trait:
 			return serializeTraitContext(context);
+		case ContextKind.DiagnosticBag:
+			return serializeDiagnosticBagContext(context);
 	}
 }
 
@@ -84,20 +94,41 @@ function serializeTraitContext(context: TraitContext): SerializedTraitContext {
 	};
 }
 
-export type SerializedDiagnostic = {
-	uri: string;
-	severity: number;
-	message: string;
-	source: string;
+function serializeDiagnosticBagContext(context: DiagnosticBagContext): SerializedDiagnosticBagContext {
+	const values = context.values.map((diagnostic) => {
+		return serializeDiagnostic(diagnostic);
+	});
+	return {
+		kind: context.kind,
+		priority: context.priority,
+		uri: context.uri.toString(),
+		values: values
+	};
 }
 
-function serializeDiagnostic(diagnostic: Diagnostic, resource: Uri): SerializedDiagnostic {
-	return {
-		uri: resource.toString(),
-		severity: diagnostic.severity,
+export type SerializedDiagnostic = {
+	uri: string;
+	severity: 'Error' | 'Warning' | 'Information' | 'Hint';
+	message: string;
+	source: string;
+	code: string | number | undefined;
+	range: string;
+}
+
+function serializeDiagnostic(diagnostic: Diagnostic): Omit<SerializedDiagnostic, 'uri'>;
+function serializeDiagnostic(diagnostic: Diagnostic, resource: Uri): SerializedDiagnostic;
+function serializeDiagnostic(diagnostic: Diagnostic, resource?: Uri): SerializedDiagnostic | Omit<SerializedDiagnostic, 'uri'> {
+	const result: SerializedDiagnostic | Omit<SerializedDiagnostic, 'uri'> = {
+		severity: diagnostic.severity === 0 ? 'Error' : diagnostic.severity === 1 ? 'Warning' : diagnostic.severity === 2 ? 'Information' : 'Hint',
 		message: diagnostic.message,
-		source: diagnostic.source || ''
+		source: diagnostic.source || '',
+		code: diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
+		range: new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1).toString(),
 	};
+	if (resource) {
+		(result as SerializedDiagnostic).uri = resource.toString();
+	}
+	return result;
 }
 
 export function serializeFileDiagnostics(diagnostics: [Uri, Diagnostic[]][]): SerializedDiagnostic[] {

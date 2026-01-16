@@ -9,14 +9,13 @@ dotenv.config({ path: '../.env' });
 
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
 import type { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
 import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
 import { createTextDocument } from '../src/_internal/extension/completions-core/vscode-node/lib/src/test/textDocument';
 import { TextDocumentIdentifier } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocument';
 import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocumentManager';
-import { CopilotToken, TokenEnvelope } from '../src/_internal/platform/authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../src/_internal/platform/authentication/common/copilotToken';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../src/_internal/platform/endpoint/common/endpointProvider';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
 import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../src/_internal/platform/networking/common/fetcherService';
@@ -51,13 +50,12 @@ class TestFetcher implements IFetcher {
 		};
 
 		const found = typeof responseText === 'string';
-		return new Response(
+		const text = responseText || '';
+		return Response.fromText(
 			found ? 200 : 404,
 			found ? 'OK' : 'Not Found',
 			headers,
-			async () => responseText || '',
-			async () => JSON.parse(responseText || ''),
-			async () => stream.Readable.from([responseText || '']),
+			text,
 			'node-http'
 		);
 	}
@@ -100,18 +98,10 @@ class TestFetcher implements IFetcher {
 	}
 }
 
-function createTestCopilotToken(envelope?: Partial<Omit<TokenEnvelope, 'expires_at'>>): CopilotToken {
-	const REFRESH_BUFFER_SECONDS = 60;
-	const expires_at = Date.now() + ((envelope?.refresh_in ?? 0) + REFRESH_BUFFER_SECONDS) * 1000;
-	return new CopilotToken({
+function createTestCopilotToken(): CopilotToken {
+	return new CopilotToken(createTestExtendedTokenInfo({
 		token: `test token ${Math.ceil(Math.random() * 100)}`,
-		refresh_in: 0,
-		expires_at,
-		username: 'testuser',
-		isVscodeTeamMember: false,
-		copilot_plan: 'testsku',
-		...envelope
-	});
+	}));
 }
 
 class TestAuthService extends Disposable implements IAuthenticationService {

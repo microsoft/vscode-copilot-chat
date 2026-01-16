@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { GenerateContentParameters, GoogleGenAI, Tool, Type } from '@google/genai';
+import { ApiError, GenerateContentParameters, GoogleGenAI, Tool, Type } from '@google/genai';
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -13,44 +13,32 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, handleAPIKeyUpdate, LMResponsePart } from '../common/byokProvider';
+import { BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
 import { toGeminiFunction as toGeminiFunctionDeclaration, ToolJsonSchema } from '../common/geminiFunctionDeclarationConverter';
 import { apiMessageToGeminiMessage, geminiMessagesToRawMessagesForLogging } from '../common/geminiMessageConverter';
+import { AbstractLanguageModelChatProvider, ExtendedLanguageModelChatInformation, LanguageModelChatConfiguration } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
-import { promptForAPIKey } from './byokUIService';
 
-export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
+export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvider {
+
 	public static readonly providerName = 'Gemini';
-	public readonly authType: BYOKAuthType = BYOKAuthType.GlobalApiKey;
-	private _genAIClient: GoogleGenAI | undefined;
-	private _genAIClientApiKey: string | undefined;
-	private _apiKey: string | undefined;
 
 	constructor(
-		private readonly _knownModels: BYOKKnownModels | undefined,
-		private readonly _byokStorageService: IBYOKStorageService,
-		@ILogService private readonly _logService: ILogService,
+		knownModels: BYOKKnownModels | undefined,
+		byokStorageService: IBYOKStorageService,
+		@ILogService logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger
-	) { }
-
-	private async _getOrReadApiKey(): Promise<string | undefined> {
-		if (!this._apiKey) {
-			this._apiKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
-		}
-		return this._apiKey;
+	) {
+		super(GeminiNativeBYOKLMProvider.providerName.toLowerCase(), GeminiNativeBYOKLMProvider.providerName, knownModels, byokStorageService, logService);
 	}
 
-	private _ensureClient(apiKey: string): GoogleGenAI {
-		if (!this._genAIClient || this._genAIClientApiKey !== apiKey) {
-			this._genAIClient = new GoogleGenAI({ apiKey });
-			this._genAIClientApiKey = apiKey;
+	protected async getAllModels(silent: boolean, apiKey: string | undefined): Promise<ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>[]> {
+		if (!apiKey && silent) {
+			return [];
 		}
-		return this._genAIClient;
-	}
 
-	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		const client = this._ensureClient(apiKey);
 		try {
+			const client = new GoogleGenAI({ apiKey });
 			const models = await client.models.list();
 			const modelList: Record<string, BYOKModelCapabilities> = {};
 
@@ -65,61 +53,28 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 					modelList[modelId] = this._knownModels[modelId];
 				}
 			}
-			return modelList;
-		} catch (error) {
-			this._logService.error(error, `Error fetching available ${GeminiNativeBYOKLMProvider.providerName} models`);
-			throw new Error(toErrorMessage(error, true));
-		}
-	}
-
-	async updateAPIKey(): Promise<void> {
-		const result = await handleAPIKeyUpdate(GeminiNativeBYOKLMProvider.providerName, this._byokStorageService, promptForAPIKey);
-		if (result.cancelled) {
-			return;
-		}
-
-		this._apiKey = result.apiKey;
-		if (this._apiKey) {
-			this._ensureClient(this._apiKey);
-		} else {
-			this._genAIClient = undefined;
-			this._genAIClientApiKey = undefined;
-		}
-	}
-
-	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
-		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
-			const storedKey = await this._byokStorageService.getAPIKey(GeminiNativeBYOKLMProvider.providerName);
-			// Normalize empty strings to undefined - the || undefined ensures that if trim() returns an empty string,
-			// we store undefined instead, so subsequent if (this._apiKey) checks treat it as "no key"
-			this._apiKey = storedKey?.trim() || undefined;
-		}
-		try {
-			if (this._apiKey) {
-				return byokKnownModelsToAPIInfo(GeminiNativeBYOKLMProvider.providerName, await this.getAllModels(this._apiKey));
-			} else if (options.silent && !this._apiKey) {
-				return [];
-			} else { // Not silent, and no api key = good to prompt user for api key
-				await this.updateAPIKey();
-				if (this._apiKey) {
-					return byokKnownModelsToAPIInfo(GeminiNativeBYOKLMProvider.providerName, await this.getAllModels(this._apiKey));
-				} else {
-					return [];
-				}
+			return byokKnownModelsToAPIInfo(this._name, modelList);
+		} catch (e) {
+			let error: Error;
+			if (e instanceof ApiError) {
+				let message = e.message;
+				try { message = JSON.parse(message).error?.message; } catch { /* ignore */ }
+				error = new Error(message ?? e.message, { cause: e });
+			} else {
+				error = new Error(toErrorMessage(e, true));
 			}
-		} catch {
-			return [];
+			this._logService.error(error, `Error fetching available ${GeminiNativeBYOKLMProvider.providerName} models`);
+			throw error;
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
-		const apiKey = await this._getOrReadApiKey();
+	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
+		const apiKey = model.configuration?.apiKey;
 		if (!apiKey) {
-			this._logService.error(`BYOK: No API key configured for provider ${GeminiNativeBYOKLMProvider.providerName}`);
-			throw new Error(`BYOK: No API key configured for provider ${GeminiNativeBYOKLMProvider.providerName}. Use the Copilot "Manage BYOK" command to add one.`);
+			throw new Error('API key not found for the model');
 		}
-		this._ensureClient(apiKey);
 
+		const client = new GoogleGenAI({ apiKey });
 		// Convert the messages from the API format into messages that we can use against Gemini
 		const { contents, systemInstruction } = apiMessageToGeminiMessage(messages as LanguageModelChatMessage[]);
 
@@ -194,7 +149,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(wrappedProgress, params, token);
+			const result = await this._makeRequest(client, wrappedProgress, params, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -243,16 +198,12 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: Progress<LMResponsePart>, params: GenerateContentParameters, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
-		if (!this._genAIClient) {
-			throw new Error('Gemini client is not initialized');
-		}
-
+	private async _makeRequest(client: GoogleGenAI, progress: Progress<LMResponsePart>, params: GenerateContentParameters, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
 
 		try {
-			const stream = await this._genAIClient.models.generateContentStream(params);
+			const stream = await client.models.generateContentStream(params);
 
 			let usage: APIUsage | undefined;
 			let pendingThinkingSignature: string | undefined;

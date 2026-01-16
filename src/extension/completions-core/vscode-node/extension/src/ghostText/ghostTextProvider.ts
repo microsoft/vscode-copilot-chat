@@ -5,21 +5,21 @@
 
 import {
 	CancellationToken,
-	commands,
 	InlineCompletionContext,
 	InlineCompletionEndOfLifeReason,
 	InlineCompletionEndOfLifeReasonKind,
 	InlineCompletionItem,
-	InlineCompletionItemProvider,
 	InlineCompletionList,
 	InlineCompletionTriggerKind,
 	PartialAcceptInfo,
 	Position,
 	Range,
 	TextDocument,
-	window,
+	window
 } from 'vscode';
-import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ISurveyService } from '../../../../../../platform/survey/common/surveyService';
+import { assertNever } from '../../../../../../util/vs/base/common/assert';
+import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
@@ -27,14 +27,21 @@ import { GhostText } from '../../../lib/src/inlineCompletion';
 import { telemetry } from '../../../lib/src/telemetry';
 import { wrapDoc } from '../textDocumentManager';
 
-const postInsertCmdName = '_github.copilot.ghostTextPostInsert2';
+export interface GhostTextCompletionList extends InlineCompletionList {
+	items: GhostTextCompletionItem[];
+}
 
-export class GhostTextProvider implements InlineCompletionItemProvider {
+export interface GhostTextCompletionItem extends InlineCompletionItem {
+	copilotCompletion: CopilotCompletion;
+}
+
+export class GhostTextProvider {
 
 	private readonly ghostText: GhostText;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ISurveyService private readonly _surveyService: ISurveyService,
 	) {
 		this.ghostText = this.instantiationService.createInstance(GhostText);
 	}
@@ -44,7 +51,7 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 		position: Position,
 		context: InlineCompletionContext,
 		token: CancellationToken
-	): Promise<InlineCompletionList | undefined> {
+	): Promise<GhostTextCompletionList | undefined> {
 		const textDocument = wrapDoc(vscodeDoc);
 		if (!textDocument) {
 			return;
@@ -69,60 +76,52 @@ export class GhostTextProvider implements InlineCompletionItemProvider {
 			return;
 		}
 
-		const items = rawCompletions.map(completion => {
+		const items: GhostTextCompletionItem[] = rawCompletions.map(completion => {
 			const { start, end } = completion.range;
 			const newRange = new Range(start.line, start.character, end.line, end.character);
 			return {
 				insertText: completion.insertText,
 				range: newRange,
-				command: {
-					title: 'Completion Accepted', // Unused
-					command: postInsertCmdName,
-					arguments: [completion],
-				},
-				correlationId: createCorrelationId('completions'),
-			};
+				copilotCompletion: completion,
+				correlationId: createCorrelationId('completions', {}),
+			} satisfies GhostTextCompletionItem;
 		});
 
 		return { items };
 	}
 
-	handleDidShowCompletionItem(item: InlineCompletionItem) {
-		const cmp = item.command!.arguments![0] as CopilotCompletion;
-		this.instantiationService.invokeFunction(handleGhostTextShown, cmp);
+	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
+		this.instantiationService.invokeFunction(handleGhostTextShown, item.copilotCompletion);
 	}
 
-	handleDidPartiallyAcceptCompletionItem(item: InlineCompletionItem, info: number | PartialAcceptInfo) {
+	handleDidPartiallyAcceptCompletionItem(item: GhostTextCompletionItem, info: number | PartialAcceptInfo) {
 		if (typeof info === 'number') {
 			return; // deprecated API
 		}
-		const cmp = item.command!.arguments![0] as CopilotCompletion;
-		this.instantiationService.invokeFunction(handlePartialGhostTextPostInsert, cmp, info.acceptedLength, info.kind);
+		this.instantiationService.invokeFunction(handlePartialGhostTextPostInsert, item.copilotCompletion, info.acceptedLength);
 	}
 
-	handleEndOfLifetime(completionItem: InlineCompletionItem, reason: InlineCompletionEndOfLifeReason) {
-		// Send telemetry event when a completion is explicitly dismissed
-		if (reason.kind !== InlineCompletionEndOfLifeReasonKind.Rejected) {
-			return;
+	async handleEndOfLifetime(completionItem: GhostTextCompletionItem, reason: InlineCompletionEndOfLifeReason) {
+		const copilotCompletion = completionItem.copilotCompletion;
+		switch (reason.kind) {
+			case InlineCompletionEndOfLifeReasonKind.Accepted: {
+				this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
+				this._surveyService.signalUsage('completions').catch(() => {
+					// Ignore errors from the survey command execution
+				});
+				return;
+			}
+			case InlineCompletionEndOfLifeReasonKind.Rejected: {
+				this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
+				return;
+			}
+			case InlineCompletionEndOfLifeReasonKind.Ignored: {
+				// @ulugbekna: no-op ?
+				return;
+			}
+			default: {
+				assertNever(reason);
+			}
 		}
-		const cmp = completionItem.command?.arguments?.[0] as CopilotCompletion | undefined;
-		if (!cmp) {
-			return;
-		}
-		this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', cmp.telemetry);
 	}
-}
-
-/** Registers the commands necessary to use GhostTextProvider (but not GhostTextProvider itself) */
-export function registerGhostTextDependencies(accessor: ServicesAccessor) {
-	const instantiationService = accessor.get(IInstantiationService);
-	const postCmdHandler = commands.registerCommand(postInsertCmdName, async (e: CopilotCompletion) => {
-		instantiationService.invokeFunction(handleGhostTextPostInsert, e);
-		try {
-			await commands.executeCommand('github.copilot.survey.signalUsage', 'completions');
-		} catch (e) {
-			// Ignore errors from the survey command execution
-		}
-	});
-	return postCmdHandler;
 }
