@@ -295,7 +295,7 @@ class Gpt5ReminderInstructions extends PromptElement<ReminderInstructionsProps> 
 				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
 				{this.props.hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!this.props.hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
-				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				When referring to symbols (classes, methods, variables, constants) in the user's workspace, wrap them in backticks. For filenames and paths, always use markdown links as specified in the fileLinkification section.<br />
 			</Tag>
 		</>;
 	}
