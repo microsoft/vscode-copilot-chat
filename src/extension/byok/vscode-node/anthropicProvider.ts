@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -142,31 +142,49 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		let hasMemoryTool = false;
 
-		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+		const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._experimentationService);
 
+		// Build tools array, handling both standard tools and native Anthropic tools
+		const tools: Anthropic.Beta.BetaToolUnion[] = [];
+
+		// Add tool search tool if enabled (must be first in the array)
+		if (toolSearchEnabled) {
+			tools.push({
+				name: 'tool_search_tool_bm25',
+				type: 'tool_search_tool_bm25_20251119',
+				defer_loading: false
+			} as Anthropic.Beta.BetaToolUnion);
+		}
+
+		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
 			if (tool.name === 'memory' && this._enableMemory(model.id)) {
 				hasMemoryTool = true;
-				return {
+				tools.push({
 					name: 'memory',
 					type: 'memory_20250818'
-				} as Anthropic.Beta.BetaMemoryTool20250818;
+				} as Anthropic.Beta.BetaMemoryTool20250818);
+				continue;
 			}
 
+			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
+			const shouldDefer = toolSearchEnabled && !nonDeferredToolNames.has(tool.name);
+
 			if (!tool.inputSchema) {
-				return {
+				tools.push({
 					name: tool.name,
 					description: tool.description,
 					input_schema: {
 						type: 'object',
 						properties: {},
 						required: []
-					}
-				};
+					},
+					...(shouldDefer ? { defer_loading: true } : {})
+				});
+				continue;
 			}
 
-			return {
+			tools.push({
 				name: tool.name,
 				description: tool.description,
 				input_schema: {
@@ -174,9 +192,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
 					required: (tool.inputSchema as { required?: string[] }).required ?? [],
 					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
-				}
-			};
-		});
+				},
+				...(shouldDefer ? { defer_loading: true } : {})
+			});
+		}
 
 		// Check if web search is enabled and append web_search tool if not already present.
 		// We need to do this because there is no local web_search tool definition we can replace.
@@ -431,6 +450,33 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 						[new LanguageModelTextPart(searchResults)]
 					));
 					pendingServerToolCall = undefined;
+				} else if ('content_block' in chunk && chunk.content_block.type === 'tool_search_tool_result') {
+					const toolSearchResult = chunk.content_block as unknown as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const searchResult = toolSearchResult.content as ToolSearchToolSearchResult;
+						const toolNames = searchResult.tool_references.map(ref => ref.tool_name);
+
+						this._logService.trace(`Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						let query: string | undefined;
+						if (pendingServerToolCall) {
+							try {
+								const parsed = JSON.parse(pendingServerToolCall.jsonInput || '{}');
+								query = parsed.query;
+							} catch {
+								// Ignore parse errors
+							}
+						}
+
+						progress.report(new LanguageModelToolResultPart(
+							toolSearchResult.tool_use_id,
+							[new LanguageModelTextPart(JSON.stringify({ query, discovered_tools: toolNames }))]
+						));
+						pendingServerToolCall = undefined;
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this._logService.warn(`Tool search error: ${toolSearchResult.content.error_code}`);
+						pendingServerToolCall = undefined;
+					}
 				}
 				continue;
 			}
