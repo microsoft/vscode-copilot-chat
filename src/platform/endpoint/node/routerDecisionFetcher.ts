@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '../../configuration/common/validator';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
-
-// Remote reasoning classifier configuration
-export const ROUTER_API_URL = '';
+import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 interface RouterDecisionResponse {
 	predicted_label: 'needs_reasoning' | 'no_reasoning';
@@ -22,6 +22,21 @@ interface RouterDecisionResponse {
 	};
 }
 
+const routerDecisionResponseValidator: IValidator<RouterDecisionResponse> = vObj({
+	predicted_label: vRequired(vEnum('needs_reasoning', 'no_reasoning')),
+	confidence: vRequired(vNumber()),
+	latency_ms: vRequired(vNumber()),
+	chosen_model: vRequired(vString()),
+	candidate_models: vRequired(vArray(vString())),
+	scores: vRequired(vObj({
+		needs_reasoning: vRequired(vNumber()),
+		no_reasoning: vRequired(vNumber())
+	}))
+});
+
+const MAX_RETRIES = 3;
+const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
+
 /**
  * Fetches routing decisions from a classification API to determine which model should handle a query.
  *
@@ -31,33 +46,63 @@ interface RouterDecisionResponse {
 export class RouterDecisionFetcher extends Disposable {
 	constructor(
 		private readonly _fetcherService: IFetcherService,
-		private readonly _logService: ILogService
+		private readonly _logService: ILogService,
+		private readonly _configurationService: IConfigurationService,
+		private readonly _experimentationService: IExperimentationService
 	) {
 		super();
 	}
 
 	async getRoutedModel(query: string, availableModels: string[], preferredModels: string[]): Promise<string> {
-		try {
-			const response = await this._fetcherService.fetch(ROUTER_API_URL, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
-			});
+		const routerApiUrl = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._experimentationService);
+		if (!routerApiUrl) {
+			throw new Error('Router API URL not configured');
+		}
 
-			if (!response.ok) {
-				throw new Error(`Reasoning classifier API request failed: ${response.statusText}`);
+		let lastError: Error | undefined;
+		for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+			let response: Response;
+			try {
+				response = await this._fetcherService.fetch(routerApiUrl, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					retryFallbacks: true,
+					body: JSON.stringify({ prompt: query, available_models: availableModels, preferred_models: preferredModels })
+				});
+			} catch (error) {
+				// Network error - retry
+				lastError = error instanceof Error ? error : new Error(String(error));
+				this._logService.warn(`Router API network error, retrying (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
+				continue;
 			}
 
-			const result: RouterDecisionResponse = await response.json();
+			if (RETRYABLE_STATUS_CODES.includes(response.status)) {
+				lastError = new Error(`Reasoning classifier API request failed: ${response.statusText} (status: ${response.status})`);
+				this._logService.warn(`Router API returned ${response.status}, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
+				continue;
+			}
+
+			if (!response.ok) {
+				// Non-retryable HTTP error (e.g. 404, 400, 401) - fail immediately
+				const error = new Error(`Reasoning classifier API request failed: ${response.status}`);
+				this._logService.error('Reasoning classification failed: ', error.message);
+				throw error;
+			}
+
+			const json = await response.json();
+			const { content: result, error: validationError } = routerDecisionResponseValidator.validate(json);
+			if (validationError) {
+				throw new Error(`Invalid router decision response: ${validationError.message}`);
+			}
 
 			this._logService.trace(`Reasoning classifier prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
 
 			return result.chosen_model;
-		} catch (error) {
-			this._logService.error('Reasoning classification failed', error);
-			throw error;
 		}
+
+		this._logService.error('Reasoning classification failed after retries: ', lastError?.message);
+		throw lastError;
 	}
 }
