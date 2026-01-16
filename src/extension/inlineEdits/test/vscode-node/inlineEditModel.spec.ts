@@ -18,7 +18,7 @@ import { IReader, observableSignal } from '../../../../util/vs/base/common/obser
 import { Selection, TextEditorSelectionChangeKind, Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { NextEditProvider } from '../../node/nextEditProvider';
-import { InlineEditTriggerer } from '../../vscode-node/inlineEditModel';
+import { InlineEditTriggerer } from '../../vscode-node/inlineEditTriggerer';
 import { IVSCodeObservableDocument } from '../../vscode-node/parts/vscodeWorkspace';
 
 
