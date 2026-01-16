@@ -85,6 +85,11 @@ export interface ICopilotToolCall {
 	id: string;
 }
 
+export interface IServerToolCall extends ICopilotToolCall {
+	/** Indicates this is a server-side tool call (e.g., tool_search, websearch) - not validated/executed by client */
+	isServer: true;
+}
+
 export interface ICopilotToolCallStreamUpdate {
 	name: string;
 	arguments: string;
@@ -146,6 +151,8 @@ export interface IResponseDelta {
 	statefulMarker?: string;
 	/** Context management information from Anthropic Messages API */
 	contextManagement?: ContextManagementResponse;
+	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
+	serverToolCalls?: IServerToolCall[];
 }
 
 export const enum ResponsePartKind {
