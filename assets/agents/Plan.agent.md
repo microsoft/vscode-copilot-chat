@@ -13,6 +13,12 @@ handoffs:
     prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.'
     showContinueOn: false
     send: true
+  - label: Build Fast with GLM
+    model: cerebras/zai-glm-4.7
+    agent: agent
+    prompt: Implement now, following the plan closely.
+    send: true
+    showContinueOn: false
 ---
 You are a PLANNING AGENT, NOT an implementation agent.
 
