@@ -167,14 +167,14 @@ suite('CustomInstructionsService - Skills', () => {
 	});
 
 	suite('isExternalInstructionsFile', () => {
-		test('should return true for skill files', () => {
+		test('should return true for skill files', async () => {
 			const skillFileUri = URI.file('/workspace/.github/skills/myskill/SKILL.md');
-			expect(customInstructionsService.isExternalInstructionsFile(skillFileUri)).toBe(true);
+			expect(await customInstructionsService.isExternalInstructionsFile(skillFileUri)).toBe(true);
 		});
 
-		test('should return false for regular files', () => {
+		test('should return false for regular files', async () => {
 			const regularFileUri = URI.file('/workspace/src/file.ts');
-			expect(customInstructionsService.isExternalInstructionsFile(regularFileUri)).toBe(false);
+			expect(await customInstructionsService.isExternalInstructionsFile(regularFileUri)).toBe(false);
 		});
 	});
 
