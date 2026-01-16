@@ -767,7 +767,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
+		// TODO: Fix issue where this method is called twice in a row with the same edit (different requestIds).
+		this._statelessNextEditProvider.handleIgnored?.();
+	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined || suggestion.result.edit === undefined) {
