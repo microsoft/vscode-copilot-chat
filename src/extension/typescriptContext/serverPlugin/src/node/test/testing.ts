@@ -4,15 +4,73 @@
  *--------------------------------------------------------------------------------------------*/
 import assert from 'assert';
 
-import { type LanguageService } from 'typescript';
+import * as tt from 'typescript';
+import TS from '../../common/typescript';
+const ts = TS();
 
 import { computeContext as _computeContext, prepareNesRename as _prepareNesRename } from '../../common/api';
-import { CharacterBudget, ContextResult, RequestContext, SingleLanguageServiceSession, type ComputeContextSession } from '../../common/contextProvider';
+import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, type Logger, type Search } from '../../common/contextProvider';
+import type { Host } from '../../common/host';
 import { PrepareNesRenameResult } from '../../common/nesRenameValidator';
 import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type LastSymbolRename, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
+
+export class SingleLanguageServiceSession extends ComputeContextSession {
+
+	private readonly languageService: tt.LanguageService;
+
+	public readonly logger: Logger;
+
+	constructor(languageService: tt.LanguageService, languageServiceHost: tt.LanguageServiceHost, host: Host) {
+		super(languageServiceHost, host, false);
+		this.languageService = languageService;
+		this.logger = new NullLogger();
+	}
+
+	public logError(_error: Error, _cmd: string): void {
+		// Null logger;
+	}
+
+	public *getLanguageServices(sourceFile?: tt.SourceFile): IterableIterator<tt.LanguageService> {
+		const ls: tt.LanguageService | undefined = this.languageService;
+		if (ls === undefined) {
+			return;
+		}
+		if (sourceFile === undefined) {
+			yield ls;
+		} else {
+			const file = ts.server.toNormalizedPath(sourceFile.fileName);
+			const scriptInfo = ls.getProgram()?.getSourceFile(file);
+			if (scriptInfo === undefined) {
+				return;
+			}
+			yield ls;
+		}
+	}
+
+	public override run<R>(search: Search<R>, context: RequestContext, token: tt.CancellationToken): [tt.Program | undefined, R | undefined] {
+		const program = this.languageService.getProgram();
+		if (program === undefined) {
+			return [undefined, undefined];
+		}
+		if (search.score(program, context) === 0) {
+			return [undefined, undefined];
+		}
+		const programSearch = search.with(program);
+		const result = programSearch.run(context, token);
+		if (result !== undefined) {
+			return [program, result];
+		} else {
+			return [undefined, undefined];
+		}
+	}
+
+	public override getScriptVersion(_sourceFile: tt.SourceFile): string | undefined {
+		return undefined;
+	}
+}
 
 function normalize(value: string): string {
 	return value.trim().replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\t+/g, ' ').replace(/\s+/g, ' ');
@@ -106,7 +164,7 @@ export function assertContextItems(actual: (ContextItem & PriorityTag)[], expect
 }
 
 export type TestSession = {
-	service: LanguageService;
+	service: tt.LanguageService;
 	session: ComputeContextSession;
 };
 
@@ -143,8 +201,8 @@ export function prepareNesRename(session: TestSession, document: string, positio
 }
 
 class LanguageServiceTestSession extends SingleLanguageServiceSession {
-	constructor(service: LanguageService, host: NodeHost) {
-		super(service, host);
+	constructor(service: tt.LanguageService, languageServiceHost: tt.LanguageServiceHost, host: NodeHost) {
+		super(service, languageServiceHost, host);
 	}
 
 	public override enableBlueprintSearch(): boolean {
@@ -153,7 +211,7 @@ class LanguageServiceTestSession extends SingleLanguageServiceSession {
 }
 
 export function create(fileOrDirectory: string): TestSession {
-	const service: LanguageService = LanguageServices.createLanguageService(fileOrDirectory);
-	const session = new LanguageServiceTestSession(service, new NodeHost());
+	const [service, host] = LanguageServices.createLanguageService(fileOrDirectory);
+	const session = new LanguageServiceTestSession(service, host, new NodeHost());
 	return { service, session };
 }

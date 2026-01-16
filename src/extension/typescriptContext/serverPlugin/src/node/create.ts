@@ -4,14 +4,75 @@
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext, prepareNesRename } from '../common/api';
-import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
+import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, TokenBudgetExhaustedError, type Logger } from '../common/contextProvider';
 import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
-import { CancellationTokenWithTimer } from '../common/typescripts';
+import { CancellationTokenWithTimer, Sessions } from '../common/typescripts';
+const ts = TS();
 
+import type { Host } from '../common/host';
 import { PrepareNesRenameResult } from '../common/nesRenameValidator';
 import TS from '../common/typescript';
 import { NodeHost } from './host';
-const ts = TS();
+
+export class LanguageServerSession extends ComputeContextSession {
+	private readonly session: tt.server.Session;
+
+	public readonly logger: Logger;
+
+	constructor(session: tt.server.Session, languageServiceHost: tt.LanguageServiceHost, host: Host) {
+		super(languageServiceHost, host, true);
+		this.session = session;
+		const projectService = Sessions.getProjectService(this.session);
+		this.logger = projectService?.logger ?? new NullLogger();
+	}
+
+	public logError(error: Error, cmd: string): void {
+		this.session.logError(error, cmd);
+	}
+
+	public getFileAndProject(args: tt.server.protocol.FileRequestArgs): Sessions.FileAndProject | undefined {
+		return Sessions.getFileAndProject(this.session, args);
+	}
+
+	public getPositionInFile(args: tt.server.protocol.Location & { position?: number }, file: tt.server.NormalizedPath): number | undefined {
+		return Sessions.getPositionInFile(this.session, args, file);
+	}
+
+	public *getLanguageServices(sourceFile?: tt.SourceFile): IterableIterator<tt.LanguageService> {
+		const projectService = Sessions.getProjectService(this.session);
+		if (projectService === undefined) {
+			return;
+		}
+		if (sourceFile === undefined) {
+			for (const project of projectService.configuredProjects.values()) {
+				const languageService = project.getLanguageService();
+				yield languageService;
+			}
+			for (const project of projectService.inferredProjects) {
+				const languageService = project.getLanguageService();
+				yield languageService;
+			}
+			for (const project of projectService.externalProjects) {
+				const languageService = project.getLanguageService();
+				yield languageService;
+			}
+		} else {
+			const file = ts.server.toNormalizedPath(sourceFile.fileName);
+			const scriptInfo = projectService.getScriptInfoForNormalizedPath(file)!;
+			yield* scriptInfo ? scriptInfo.containingProjects.map(p => p.getLanguageService()) : [];
+		}
+	}
+
+	public override getScriptVersion(sourceFile: tt.SourceFile): string | undefined {
+		const file = ts.server.toNormalizedPath(sourceFile.fileName);
+		const projectService = Sessions.getProjectService(this.session);
+		if (projectService === undefined) {
+			return undefined;
+		}
+		const scriptInfo = projectService.getScriptInfoForNormalizedPath(file);
+		return scriptInfo?.getLatestVersion();
+	}
+}
 
 interface FailedHandlerResponse extends tt.server.HandlerResponse {
 	response: CustomResponse.Failed;
@@ -168,7 +229,7 @@ export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
 				const versionSupported = isSupportedVersion();
 				pingResult = { kind: 'ok', session: true, supported: versionSupported, version: ts.version };
 				if (versionSupported) {
-					languageServerSession = new LanguageServerSession(info.session, new NodeHost());
+					languageServerSession = new LanguageServerSession(info.session, info.languageServiceHost, new NodeHost());
 					languageServiceHost = info.languageServiceHost;
 					info.session.addProtocolHandler('_.copilot.context', computeContextHandler);
 					info.session.addProtocolHandler('_.copilot.prepareNesRename', prepareNesRenameHandler);
