@@ -172,7 +172,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
-			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
+			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying.INSTANCE);
 
 			if (nextEditResult.isError() && nextEditResult.err instanceof NoNextEditReason.GotCancelled) {
 				logContext.setIsSkipped();
@@ -628,6 +628,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			});
 		})();
 
+		const isFromCursorJump = opts.retryState instanceof RetryState.Retrying && opts.retryState.reason === 'cursorJump';
+
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
@@ -670,7 +672,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					new LineRange(editWindowLineRange.start + cursorOriginalLinesOffset + 1 /* 0-based to 1-based */, editWindowLineRange.start + cursorOriginalLinesOffset + 2),
 					[editWindowLines[cursorOriginalLinesOffset].slice(0, cursorLineOffset - 1) + lineWithCursorContinued.value + editWindowLines[cursorOriginalLinesOffset].slice(cursorLineOffset - 1)]
 				);
-				pushEdit(Result.ok({ edit, window: editWindow }));
+				pushEdit(Result.ok({ edit, isFromCursorJump, window: editWindow }));
 
 				const lines: string[] = [];
 				let v = await linesIter.next();
@@ -689,6 +691,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 						new LineRange(line, line),
 						lines
 					),
+					isFromCursorJump,
 					window: editWindow
 				}));
 
@@ -785,7 +788,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							}
 						}
 
-						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow }));
+						pushEdit(Result.ok({ edit: singleLineEdit, isFromCursorJump, window: editWindow }));
 						i++;
 					}
 				}

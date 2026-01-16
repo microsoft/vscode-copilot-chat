@@ -272,7 +272,13 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			requestCancellationTokenSource.cancel();
 
 			const emptyList = new NesCompletionList(context.requestUuid, undefined, [], telemetryBuilder);
-			const correlationId = createCorrelationId('nes');
+			const isFromCursorJump = suggestion.kind === 'llm' && (
+				// edit came using cursor jump
+				!!(suggestion.val.result?.isFromCursorJump) ||
+				// no edit but cursor jump suggested jumping to a certain position
+				!!(suggestion.val.result?.jumpToPosition)
+			);
+			const correlationId = createCorrelationId('nes', { isFromCursorJump });
 
 			if (token.isCancellationRequested) {
 				logger.trace('Return: lost race to cancellation');

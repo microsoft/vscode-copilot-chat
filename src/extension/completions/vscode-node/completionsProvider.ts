@@ -138,6 +138,7 @@ export class CompletionsProvider extends Disposable {
 			edit: new StringReplacement(new OffsetRange(selection.start, selection.endExclusive), choice.text),
 			documentBeforeEdits: docContents,
 			showRangePreference: ShowNextEditPreference.Always,
+			isFromCursorJump: false,
 		});
 	}
 
