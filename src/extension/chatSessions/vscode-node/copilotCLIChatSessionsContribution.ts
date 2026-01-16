@@ -17,7 +17,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { disposableTimeout, raceCancellation } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
-import { Emitter } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observable';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -114,8 +114,12 @@ function escapeXml(text: string): string {
 		.replace(/'/g, '&apos;');
 }
 
-export class CopilotCLIChatSessionItemProvider extends Disposable {
-	private readonly controller: vscode.ChatSessionItemController;
+export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
+	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
+	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
+
+	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
+	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
@@ -125,45 +129,27 @@ export class CopilotCLIChatSessionItemProvider extends Disposable {
 	) {
 		super();
 		this._register(this.terminalIntegration);
-
-		this.controller = this._register(vscode.chat.createChatSessionItemController(
-			'copilotcli',
-			() => this.refresh()
-		));
-
 		this._register(this.copilotcliSessionService.onDidChangeSessions(() => {
 			this.notifySessionsChange();
 		}));
 	}
 
 	public notifySessionsChange(): void {
-		void this.controller.refreshHandler();
+		this._onDidChangeChatSessionItems.fire();
 	}
 
 	public swap(original: vscode.ChatSessionItem, modified: vscode.ChatSessionItem): void {
-		this.controller.items.delete(original.resource);
-		this.controller.items.add(modified);
+		this._onDidCommitChatSessionItem.fire({ original, modified });
 	}
 
-	private async refresh(): Promise<void> {
-		const ctx = new vscode.CancellationTokenSource();
-		try {
-			const sessions = await this.copilotcliSessionService.getAllSessions(ctx.token);
-			const items: vscode.ChatSessionItem[] = [];
+	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		const sessions = await this.copilotcliSessionService.getAllSessions(token);
+		const diskSessions = await Promise.all(sessions.map(async session => this._toChatSessionItem(session)));
 
-			for (const session of sessions) {
-				const item = await this._toChatSessionItem(session);
-				items.push(item);
-			}
+		const count = diskSessions.length;
+		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
 
-			this.controller.items.replace(items);
-
-			const count = items.length;
-			this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
-		}
-		finally {
-			ctx.dispose();
-		}
+		return diskSessions;
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
@@ -172,25 +158,27 @@ export class CopilotCLIChatSessionItemProvider extends Disposable {
 
 		const label = session.label;
 
-		const item = this.controller.createChatSessionItem(resource, label);
-
 		// Badge
+		let badge: vscode.MarkdownString | undefined;
 		if (worktreeProperties?.branchName) {
-			const badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties.branchName}`);
+			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties.branchName}`);
 			badge.supportThemeIcons = true;
-			item.badge = badge;
 		}
 
 		// Statistics
-		item.changes = await this.worktreeManager.getWorktreeChanges(session.id);
+		const changes = await this.worktreeManager.getWorktreeChanges(session.id);
 
 		// Status
-		item.status = session.status ?? vscode.ChatSessionStatus.Completed;
+		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
-		// Timing
-		item.timing = session.timing;
-
-		return item;
+		return {
+			resource,
+			label,
+			badge,
+			timing: session.timing,
+			changes,
+			status
+		} satisfies vscode.ChatSessionItem;
 	}
 
 	public async createCopilotCLITerminal(): Promise<void> {
