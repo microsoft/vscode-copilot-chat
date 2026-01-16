@@ -10,7 +10,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
  * Types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/api/messages
  *
- * This interface supports both regular tools and server tools (web search, tool search).:
+ * This interface supports both regular tools and server tools (web search, tool search):
  * - Regular tools: require name, description, and input_schema
  * - Tool search tools: require only type and name
  */
