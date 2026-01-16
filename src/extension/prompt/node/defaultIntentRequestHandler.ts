@@ -526,9 +526,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
 
@@ -719,7 +719,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
 
 		// Skip tool grouping when Anthropic tool search is enabled
-		if (isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this.configurationService, this._experimentationService)) {
+		if (isAnthropicToolSearchEnabled(this.options.invocation.endpoint, this._configurationService, this._experimentationService)) {
 			return tools;
 		}
 
