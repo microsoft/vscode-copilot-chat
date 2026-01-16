@@ -17,7 +17,17 @@ export class UserInteractionMonitor {
 	 */
 	private static readonly MAX_INTERACTIONS_STORED = 30;
 
-	private _recentUserActions: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
+	/**
+	 * Used for aggressiveness level calculation.
+	 * Includes all action types (accepted, rejected, ignored).
+	 */
+	private _recentUserActionsForAggressiveness: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
+
+	/**
+	 * Used for timing/debounce calculation.
+	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
+	 */
+	private _recentUserActionsForTiming: { time: number; kind: 'accepted' | 'rejected' }[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -39,9 +49,17 @@ export class UserInteractionMonitor {
 	}
 
 	private _recordUserAction(kind: 'accepted' | 'rejected' | 'ignored') {
-		this._recentUserActions.push({ time: Date.now(), kind });
-		// Keep more actions than we consider to allow for ignored action limiting
-		this._recentUserActions = this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_STORED);
+		const now = Date.now();
+
+		// Always record for aggressiveness calculation
+		this._recentUserActionsForAggressiveness.push({ time: now, kind });
+		this._recentUserActionsForAggressiveness = this._recentUserActionsForAggressiveness.slice(-UserInteractionMonitor.MAX_INTERACTIONS_STORED);
+
+		// Only record accepts/rejects for timing calculation
+		if (kind !== 'ignored') {
+			this._recentUserActionsForTiming.push({ time: now, kind });
+			this._recentUserActionsForTiming = this._recentUserActionsForTiming.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
+		}
 	}
 
 	// Creates a DelaySession based on recent user interactions
@@ -65,10 +83,8 @@ export class UserInteractionMonitor {
 		let multiplier = 1;
 
 		// Calculate impact of each action with time decay
-		for (const action of this._recentUserActions) {
-			if (action.kind === 'ignored') {
-				continue; // Ignore 'ignored' actions for debounce calculation
-			}
+		// Uses timing-specific array which only contains accepts/rejects
+		for (const action of this._recentUserActionsForTiming) {
 			const timeSinceAction = now - action.time;
 			if (timeSinceAction > DEBOUNCE_DECAY_TIME_MS) {
 				continue;
@@ -136,7 +152,7 @@ export class UserInteractionMonitor {
 	 * - Score is adjusted towards neutral (0.5) based on data confidence
 	 */
 	private _getUserHappinessScore(config: UserHappinessScoreConfiguration): number {
-		if (this._recentUserActions.length === 0) {
+		if (this._recentUserActionsForAggressiveness.length === 0) {
 			return 0.5; // neutral score when no data
 		}
 
@@ -203,7 +219,7 @@ export class UserInteractionMonitor {
 
 		if (!limitConsecutiveIgnored && !limitTotalIgnored) {
 			// No limiting - just take last MAX_INTERACTIONS_CONSIDERED
-			return this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
+			return this._recentUserActionsForAggressiveness.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
 		}
 
 		const result: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
@@ -211,8 +227,8 @@ export class UserInteractionMonitor {
 		let totalIgnored = 0;
 
 		// Walk backwards through history
-		for (let i = this._recentUserActions.length - 1; i >= 0 && result.length < UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED; i--) {
-			const action = this._recentUserActions[i];
+		for (let i = this._recentUserActionsForAggressiveness.length - 1; i >= 0 && result.length < UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED; i--) {
+			const action = this._recentUserActionsForAggressiveness[i];
 
 			if (action.kind === 'ignored') {
 				let skip = false;
