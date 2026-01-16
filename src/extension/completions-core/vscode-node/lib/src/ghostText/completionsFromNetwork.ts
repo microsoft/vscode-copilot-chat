@@ -6,24 +6,28 @@
 import { CancellationToken as ICancellationToken } from 'vscode-languageserver-protocol';
 import { IExperimentationService } from '../../../../../../lib/node/chatLibMain';
 import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
-import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { BlockMode, shouldDoServerTrimming } from '../config';
 import { ICompletionsUserErrorNotifierService } from '../error/userErrorNotifier';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
-import { ICompletionsLogTargetService } from '../logger';
+import { ICompletionsLogTargetService, Logger } from '../logger';
 import { isAbortError } from '../networkingTypes';
 import { CompletionRequestExtra, CopilotUiKind, FinishedCallback, ICompletionsOpenAIFetcherService, PostOptions } from '../openai/fetch';
 import { APIChoice, getTemperatureForSamples } from '../openai/openai';
-import { TelemetryWithExp } from '../telemetry';
+import { telemetry, TelemetryWithExp } from '../telemetry';
 import { ICompletionsRuntimeModeService } from '../util/runtimeMode';
 import { BlockTrimmer } from './blockTrimmer';
+import { appendToCache } from './cacheUtils';
 import { ICompletionsCacheService } from './completionsCache';
-import { appendToCache, ghostTextLogger, RequestContext, ResultType, telemetryPerformance } from './ghostText';
+import { RequestContext } from './requestContext';
+import { ResultType } from './resultType';
 import { GhostTextResultWithTelemetry, mkBasicResultTelemetry, mkCanceledResultTelemetry } from './telemetry';
 
 export type GetNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice, Promise<void>]>;
 
 export type GetAllNetworkCompletionsType = GhostTextResultWithTelemetry<[APIChoice[], Promise<void>]>;
+
+export const logger = new Logger('ghostText');
 
 export class CompletionsFromNetwork {
 
@@ -61,7 +65,7 @@ export class CompletionsFromNetwork {
 				const firstRes = await choicesIterator.next();
 
 				if (firstRes.done) {
-					ghostTextLogger.debug(this.logTarget, 'All choices redacted');
+					logger.debug(this.logTarget, 'All choices redacted');
 					return {
 						type: 'empty',
 						reason: 'all choices redacted',
@@ -69,7 +73,7 @@ export class CompletionsFromNetwork {
 					};
 				}
 				if (cancellationToken?.isCancellationRequested) {
-					ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting redactedChoices iterator');
+					logger.debug(this.logTarget, 'Cancelled after awaiting redactedChoices iterator');
 					return {
 						type: 'canceled',
 						reason: 'after awaiting redactedChoices iterator',
@@ -81,7 +85,7 @@ export class CompletionsFromNetwork {
 
 				if (firstChoice === undefined) {
 					// This is probably unreachable given the firstRes.done check above
-					ghostTextLogger.debug(this.logTarget, 'Got undefined choice from redactedChoices iterator');
+					logger.debug(this.logTarget, 'Got undefined choice from redactedChoices iterator');
 					return {
 						type: 'empty',
 						reason: 'got undefined choice from redactedChoices iterator',
@@ -91,12 +95,12 @@ export class CompletionsFromNetwork {
 
 				this.instantiationService.invokeFunction(telemetryPerformance, 'performance', firstChoice, requestStart, processingTime);
 
-				ghostTextLogger.debug(this.logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
+				logger.debug(this.logTarget, `Awaited first result, id:  ${firstChoice.choiceIndex}`);
 				// Adds first result to cache
 				const processedFirstChoice = postProcessChoices(firstChoice);
 				if (processedFirstChoice) {
 					appendToCache(this.completionsCacheService, requestContext, processedFirstChoice);
-					ghostTextLogger.debug(this.logTarget,
+					logger.debug(this.logTarget,
 						`GhostText first completion (index ${processedFirstChoice?.choiceIndex}): ${JSON.stringify(processedFirstChoice?.completionText)}`
 					);
 				}
@@ -105,7 +109,7 @@ export class CompletionsFromNetwork {
 					const apiChoices: APIChoice[] = processedFirstChoice !== undefined ? [processedFirstChoice] : [];
 					for await (const choice of choicesStream) {
 						if (choice === undefined) { continue; }
-						ghostTextLogger.debug(this.logTarget,
+						logger.debug(this.logTarget,
 							`GhostText later completion (index ${choice?.choiceIndex}): ${JSON.stringify(choice.completionText)}`
 						);
 						const processedChoice = postProcessChoices(choice, apiChoices);
@@ -157,7 +161,7 @@ export class CompletionsFromNetwork {
 				const apiChoices: APIChoice[] = [];
 				for await (const choice of choicesStream) {
 					if (cancellationToken?.isCancellationRequested) {
-						ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting choices iterator');
+						logger.debug(this.logTarget, 'Cancelled after awaiting choices iterator');
 						return {
 							type: 'canceled',
 							reason: 'after awaiting choices iterator',
@@ -199,7 +203,7 @@ export class CompletionsFromNetwork {
 			choicesStream: AsyncIterable<APIChoice>
 		) => Promise<GhostTextResultWithTelemetry<T>>
 	): Promise<GhostTextResultWithTelemetry<T>> {
-		ghostTextLogger.debug(this.logTarget, `Getting ${what} from network`);
+		logger.debug(this.logTarget, `Getting ${what} from network`);
 
 		// copy the base telemetry data
 		baseTelemetryData = baseTelemetryData.extendedBy();
@@ -272,7 +276,7 @@ export class CompletionsFromNetwork {
 			}
 
 			if (res.type === 'canceled') {
-				ghostTextLogger.debug(this.logTarget, 'Cancelled after awaiting fetchCompletions');
+				logger.debug(this.logTarget, 'Cancelled after awaiting fetchCompletions');
 				return {
 					type: 'canceled',
 					reason: res.reason,
@@ -292,7 +296,7 @@ export class CompletionsFromNetwork {
 					}),
 				};
 			} else {
-				this.instantiationService.invokeFunction(acc => ghostTextLogger.exception(acc, err, `Error on ghost text request`));
+				this.instantiationService.invokeFunction(acc => logger.exception(acc, err, `Error on ghost text request`));
 				this.userErrorNotifier.notifyUser(err);
 				if (this.runtimeMode.shouldFailForDebugPurposes()) {
 					throw err;
@@ -338,5 +342,31 @@ export function makeGhostAPIChoice(choice: APIChoice, options: { forceSingleLine
 		}
 	}
 	return ghostChoice;
+}
+
+export function telemetryPerformance(
+	accessor: ServicesAccessor,
+	performanceKind: string,
+	choice: APIChoice,
+	requestStart: number,
+	processingTimeMs: number
+) {
+	const requestTimeMs = Date.now() - requestStart;
+	const deltaMs = requestTimeMs - processingTimeMs;
+
+	const telemetryData = choice.telemetryData.extendedBy(
+		{},
+		{
+			completionCharLen: choice.completionText.length,
+			requestTimeMs: requestTimeMs,
+			processingTimeMs: processingTimeMs,
+			deltaMs: deltaMs,
+			// Choice properties
+			meanLogProb: choice.meanLogProb || NaN,
+			meanAlternativeLogProb: choice.meanAlternativeLogProb || NaN,
+		}
+	);
+	telemetryData.extendWithRequestId(choice.requestId);
+	telemetry(accessor, `ghostText.${performanceKind}`, telemetryData);
 }
 

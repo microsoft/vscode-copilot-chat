@@ -30,7 +30,8 @@ import { ICompletionsAsyncManagerService } from '../asyncCompletions';
 import { ICompletionsCacheService } from '../completionsCache';
 import { GetNetworkCompletionsType } from '../completionsFromNetwork';
 import { ICompletionsCurrentGhostText } from '../current';
-import { getGhostText, GhostCompletion, ResultType } from '../ghostText';
+import { getGhostText, GhostCompletion } from '../ghostText';
+import { ResultType } from '../resultType';
 import { mkBasicResultTelemetry } from '../telemetry';
 
 // Unit tests for ghostText that do not require network connectivity. For other
