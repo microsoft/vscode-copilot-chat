@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { PermissionMode, SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
@@ -17,6 +17,7 @@ import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/clau
 import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 const MODELS_OPTION_ID = 'model';
+const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -34,6 +35,12 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	 */
 	private readonly _sessionModels = new Map<string, string | undefined>();
 
+	/**
+	 * Track permission modes per session.
+	 * Instance-level to allow cleanup on dispose.
+	 */
+	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
+
 	constructor(
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
@@ -43,6 +50,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	public override dispose(): void {
 		this._sessionModels.clear();
+		this._sessionPermissionModes.clear();
 		super.dispose();
 	}
 
@@ -66,6 +74,20 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		this._sessionModels.set(sessionId, modelId);
 	}
 
+	/**
+	 * Gets the permission mode for a session
+	 */
+	public getPermissionModeForSession(sessionId: string): PermissionMode {
+		return this._sessionPermissionModes.get(sessionId) ?? 'acceptEdits';
+	}
+
+	/**
+	 * Sets the permission mode for a session
+	 */
+	public setPermissionModeForSession(sessionId: string, mode: PermissionMode): void {
+		this._sessionPermissionModes.set(sessionId, mode);
+	}
+
 	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
 		this._onDidChangeChatSessionOptions.fire({ resource, updates });
 	}
@@ -78,8 +100,20 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
 		}));
 
+		const permissionModeItems: vscode.ChatSessionProviderOptionItem[] = [
+			{ id: 'default', name: l10n.t('Ask before edits') },
+			{ id: 'acceptEdits', name: l10n.t('Edit automatically') },
+			{ id: 'plan', name: l10n.t('Plan mode') },
+		];
+
 		return {
 			optionGroups: [
+				{
+					id: PERMISSION_MODE_OPTION_ID,
+					name: l10n.t('Permission Mode'),
+					description: l10n.t('Pick Permission Mode'),
+					items: permissionModeItems,
+				},
 				{
 					id: MODELS_OPTION_ID,
 					name: l10n.t('Model'),
@@ -96,6 +130,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			if (update.optionId === MODELS_OPTION_ID) {
 				void this.claudeCodeModels.setDefaultModel(update.value);
 				this._sessionModels.set(sessionId, update.value);
+			} else if (update.optionId === PERMISSION_MODE_OPTION_ID) {
+				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
 			}
 		}
 	}
@@ -121,6 +157,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			// Keep track of model in memory
 			this._sessionModels.set(sessionId, selectedModel);
 		}
+
+		// Set permission mode option
+		const permissionMode = this.getPermissionModeForSession(sessionId);
+		options[PERMISSION_MODE_OPTION_ID] = permissionMode;
 
 		return {
 			history,

@@ -10,6 +10,7 @@ import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProv
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 // Import the tool permission handlers
+import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
 
 export class ClaudeChatSessionParticipant {
@@ -25,8 +26,8 @@ export class ClaudeChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const create = async (modelId?: string) => {
-			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId);
+		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
+			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
 			if (!claudeSessionId) {
 				stream.warning(vscode.l10n.t("Failed to create a new Claude Code session."));
 				return undefined;
@@ -37,13 +38,15 @@ export class ClaudeChatSessionParticipant {
 		if (chatSessionContext) {
 			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
 			const modelId = await this.contentProvider.getModelIdForSession(sessionId);
+			const permissionMode = this.contentProvider.getPermissionModeForSession(sessionId);
 
 			if (chatSessionContext.isUntitled) {
 				/* New, empty session */
-				const claudeSessionId = await create(modelId);
+				const claudeSessionId = await create(modelId, permissionMode);
 				if (claudeSessionId) {
-					// Track the model for the new session
+					// Track the model and permission mode for the new session
 					this.contentProvider.setModelIdForSession(claudeSessionId, modelId);
+					this.contentProvider.setPermissionModeForSession(claudeSessionId, permissionMode);
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
 						resource: ClaudeSessionUri.forSessionId(claudeSessionId),
@@ -54,7 +57,7 @@ export class ClaudeChatSessionParticipant {
 			}
 
 			/* Existing session */
-			await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId);
+			await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId, permissionMode);
 			return {};
 		}
 		/* Via @claude */

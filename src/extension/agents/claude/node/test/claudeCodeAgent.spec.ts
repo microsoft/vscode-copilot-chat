@@ -80,7 +80,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('processes a single request correctly', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
 		const stream = new MockChatResponseStream();
 
 		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
@@ -90,7 +90,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('queues multiple requests and processes them sequentially', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
 
 		const stream1 = new MockChatResponseStream();
 		const stream2 = new MockChatResponseStream();
@@ -109,7 +109,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('cancels pending requests when cancelled', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
 		const stream = new MockChatResponseStream();
 		const source = new CancellationTokenSource();
 		source.cancel();
@@ -119,7 +119,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('cleans up resources when disposed', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined);
+		const session = instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined);
 
 		// Dispose the session immediately
 		session.dispose();
@@ -132,8 +132,8 @@ describe('ClaudeCodeSession', () => {
 
 	it('handles multiple sessions with different session IDs', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session1 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-1', undefined));
-		const session2 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-2', undefined));
+		const session1 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-1', undefined, undefined));
+		const session2 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-2', undefined, undefined));
 
 		expect(session1.sessionId).toBe('session-1');
 		expect(session2.sessionId).toBe('session-2');
@@ -153,7 +153,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('initializes with model ID from constructor', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-opus'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-opus', undefined));
 		const stream = new MockChatResponseStream();
 
 		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
@@ -166,7 +166,7 @@ describe('ClaudeCodeSession', () => {
 		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
 		mockService.queryCallCount = 0;
 
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-sonnet'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-sonnet', undefined));
 
 		// First request with initial model
 		const stream1 = new MockChatResponseStream();
@@ -184,7 +184,7 @@ describe('ClaudeCodeSession', () => {
 		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
 		mockService.queryCallCount = 0;
 
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-sonnet'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-sonnet', undefined));
 
 		// First request
 		const stream1 = new MockChatResponseStream();

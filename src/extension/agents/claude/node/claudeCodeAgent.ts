@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
@@ -51,20 +51,20 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
-			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}.`);
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
 			let session: ClaudeCodeSession;
 			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
 				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -76,7 +76,8 @@ export class ClaudeAgentManager extends Disposable {
 				request.toolInvocationToken,
 				stream,
 				token,
-				modelId
+				modelId,
+				permissionMode
 			);
 
 			// Store the session if sessionId was assigned during invoke
@@ -172,12 +173,14 @@ export class ClaudeCodeSession extends Disposable {
 	private _abortController = new AbortController();
 	private _editTracker = new ExternalEditTracker();
 	private _currentModelId: string | undefined;
+	private _currentPermissionMode: PermissionMode;
 	private _sessionVersion = 0; // Used to detect stale abort handlers
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
 		public sessionId: string | undefined,
 		initialModelId: string | undefined,
+		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -189,6 +192,7 @@ export class ClaudeCodeSession extends Disposable {
 	) {
 		super();
 		this._currentModelId = initialModelId;
+		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
 	}
 
 	public override dispose(): void {
@@ -213,7 +217,8 @@ export class ClaudeCodeSession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string
+		modelId?: string,
+		permissionMode?: PermissionMode
 	): Promise<void> {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
@@ -221,15 +226,29 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Check if model changed - if so, restart the session with new model
 		const modelChanged = modelId !== undefined && modelId !== this._currentModelId;
-		if (modelChanged) {
-			this.logService.trace(`[ClaudeCodeSession] Model changed from ${this._currentModelId} to ${modelId}, restarting session`);
-			this._currentModelId = modelId;
-			// Abort current query and restart with new model
+		const permissionModeChanged = permissionMode !== undefined && permissionMode !== this._currentPermissionMode;
+		if (modelChanged || permissionModeChanged) {
+			if (modelChanged) {
+				this.logService.trace(`[ClaudeCodeSession] Model changed from ${this._currentModelId} to ${modelId}, restarting session`);
+				this._currentModelId = modelId;
+			}
+			if (permissionModeChanged) {
+				this.logService.trace(`[ClaudeCodeSession] Permission mode changed from ${this._currentPermissionMode} to ${permissionMode}, restarting session`);
+				this._currentPermissionMode = permissionMode;
+			}
+			// Abort current query and restart with new settings
 			if (this._queryGenerator) {
 				this._sessionVersion++; // Increment so old catch handlers know to ignore
 				this._abortController.abort();
 				this._abortController = new AbortController();
 				this._queryGenerator = undefined;
+				// Clear state from old session - these will be rejected by the old _cleanup() anyway
+				// but doing it here prevents race conditions
+				this._currentRequest = undefined;
+				this._promptQueue.forEach(req => req.deferred.error(new Error('Session restarted due to settings change')));
+				this._promptQueue = [];
+				this._pendingPrompt?.error(new Error('Session restarted due to settings change'));
+				this._pendingPrompt = undefined;
 			}
 		}
 
@@ -291,6 +310,8 @@ export class ClaudeCodeSession extends Disposable {
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
 			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			// Pass the permission mode to the SDK
+			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
 			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
@@ -298,7 +319,8 @@ export class ClaudeCodeSession extends Disposable {
 				}
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
-					toolInvocationToken: this._currentRequest.toolInvocationToken
+					toolInvocationToken: this._currentRequest.toolInvocationToken,
+					permissionMode: this._currentPermissionMode
 				});
 			},
 			systemPrompt: {
@@ -447,24 +469,35 @@ export class ClaudeCodeSession extends Disposable {
 					this._currentRequest = undefined;
 				}
 			}
+			// Generator ended normally - clean up so next invoke starts fresh
+			this._cleanup(mySessionVersion, new Error('Session ended unexpectedly'));
 		} catch (error) {
-			// Only clean up if this is still the active session (not stale from model change)
-			if (mySessionVersion === this._sessionVersion) {
-				// Reset session state so the next invoke() can start a fresh session
-				this._queryGenerator = undefined;
-				this._abortController.abort();
-				this._abortController = new AbortController();
-				this._currentRequest = undefined;
-
-				// Reject all pending requests
-				this._promptQueue.forEach(req => req.deferred.error(error as Error));
-				this._promptQueue = [];
-				this._pendingPrompt?.error(error as Error);
-				this._pendingPrompt = undefined;
-			} else {
-				this.logService.trace('[ClaudeCodeSession] Ignoring stale session error after model change');
-			}
+			this._cleanup(mySessionVersion, error as Error);
 		}
+	}
+
+	private _cleanup(sessionVersion: number, error: Error): void {
+		// Only clean up if this is still the active session (not stale from model change)
+		if (sessionVersion !== this._sessionVersion) {
+			this.logService.trace('[ClaudeCodeSession] Ignoring stale session cleanup after model change');
+			return;
+		}
+		// Reset session state so the next invoke() can start a fresh session
+		this._queryGenerator = undefined;
+		this._abortController.abort();
+		this._abortController = new AbortController();
+		this._currentRequest = undefined;
+		// Reject all pending requests
+		this._promptQueue.forEach(req => {
+			if (!req.deferred.isSettled) {
+				req.deferred.error(error);
+			}
+		});
+		this._promptQueue = [];
+		if (this._pendingPrompt && !this._pendingPrompt.isSettled) {
+			this._pendingPrompt.error(error);
+		}
+		this._pendingPrompt = undefined;
 	}
 
 	/**
