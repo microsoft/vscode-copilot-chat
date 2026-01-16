@@ -455,7 +455,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		parentTracer: ITracer,
 		telemetryBuilder: LlmNESTelemetryBuilder,
 		cancellationToken: CancellationToken
-	) {
+	): Promise<{
+		nextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit>;
+		nextEditResult: StatelessNextEditResult;
+	}> {
 		const curDocId = doc.id;
 		const tracer = parentTracer.sub('_executeNewNextEditRequest');
 
@@ -626,7 +629,16 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					// populate the cache
 					const nextEdit = rebasedEdit.replacements[0];
 					targetDocState.nextEdits.push(nextEdit);
-					cachedEdit = this._nextEditCache.setKthNextEdit(targetDocState.docId, targetDocState.docContents, ithEdit === 0 ? result.val.window : undefined, nextEdit, ithEdit, ithEdit === 0 ? targetDocState.nextEdits : undefined, ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined, req);
+					cachedEdit = this._nextEditCache.setKthNextEdit(
+						targetDocState.docId,
+						targetDocState.docContents,
+						ithEdit === 0 ? result.val.window : undefined,
+						nextEdit,
+						ithEdit,
+						ithEdit === 0 ? targetDocState.nextEdits : undefined,
+						ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
+						req
+					);
 					myTracer.trace(`populated cache for ${ithEdit}`);
 				}
 
