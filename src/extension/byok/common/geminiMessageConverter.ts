@@ -40,12 +40,18 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 			convertedContent.push(functionCallPart);
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType !== CustomDataPartMimeTypes.StatefulMarker && part.mimeType !== CustomDataPartMimeTypes.CacheControl) {
-				convertedContent.push({
-					inlineData: {
-						data: Buffer.from(part.data).toString('base64'),
-						mimeType: part.mimeType
-					}
-				});
+				// Filter out GIF images as Gemini doesn't support them
+				// Gemini supports: PNG, JPEG, WEBP, HEIC, HEIF (but NOT GIF)
+				// See: https://ai.google.dev/gemini-api/docs/image-understanding#supported-formats
+				const isUnsupportedImage = part.mimeType === 'image/gif';
+				if (!isUnsupportedImage) {
+					convertedContent.push({
+						inlineData: {
+							data: Buffer.from(part.data).toString('base64'),
+							mimeType: part.mimeType
+						}
+					});
+				}
 			}
 		} else if (part instanceof LanguageModelToolResultPart || part instanceof LanguageModelToolResultPart2) {
 			// Convert tool result content - handle both text and image parts
@@ -54,11 +60,12 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				.map(p => p.value)
 				.join('');
 
-			// Handle image parts in tool results
+			// Handle image parts in tool results, filtering out GIF images
 			const imageParts = part.content.filter((p): p is LanguageModelDataPart =>
 				p instanceof LanguageModelDataPart &&
 				p.mimeType !== CustomDataPartMimeTypes.StatefulMarker &&
-				p.mimeType !== CustomDataPartMimeTypes.CacheControl
+				p.mimeType !== CustomDataPartMimeTypes.CacheControl &&
+				p.mimeType !== 'image/gif' // Filter out GIF images
 			);
 
 			// If there are images, we need to handle them differently

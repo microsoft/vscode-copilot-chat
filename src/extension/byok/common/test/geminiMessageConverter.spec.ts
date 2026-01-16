@@ -274,6 +274,84 @@ describe('GeminiMessageConverter', () => {
 			expect(fr.functionResponse.response.images).toHaveLength(1);
 			expect(fr.functionResponse.response.images[0].mimeType).toBe('image/jpeg');
 		});
+
+		it('should filter out GIF images from user messages', () => {
+			const gifData = new Uint8Array([71, 73, 70, 56, 57, 97]); // GIF89a header
+			const pngData = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header
+			const gifPart = new LanguageModelDataPart(gifData, 'image/gif');
+			const pngPart = new LanguageModelDataPart(pngData, 'image/png');
+
+			const messages: LanguageModelChatMessage[] = [
+				{
+					role: LanguageModelChatMessageRole.User,
+					content: [new LanguageModelTextPart('Here are some images:'), gifPart as any, pngPart as any],
+					name: undefined
+				}
+			];
+
+			const result = apiMessageToGeminiMessage(messages);
+
+			expect(result.contents).toHaveLength(1);
+			// Should only have text part and PNG, GIF should be filtered out
+			expect(result.contents[0].parts).toHaveLength(2);
+			expect(result.contents[0].parts![0].text).toBe('Here are some images:');
+			expect(result.contents[0].parts![1]).toHaveProperty('inlineData');
+			const inlineData: any = result.contents[0].parts![1];
+			expect(inlineData.inlineData.mimeType).toBe('image/png');
+		});
+
+		it('should filter out GIF images from tool results', () => {
+			const gifData = new Uint8Array([71, 73, 70, 56, 57, 97]); // GIF89a header
+			const jpegData = new Uint8Array([255, 216, 255, 224]); // JPEG header
+			const gifPart = new LanguageModelDataPart(gifData, 'image/gif');
+			const jpegPart = new LanguageModelDataPart(jpegData, 'image/jpeg');
+			const textPart = new LanguageModelTextPart('{"result": "success"}');
+
+			const toolResult = new LanguageModelToolResultPart('processImages_12345', [textPart, gifPart as any, jpegPart as any]);
+			const messages: LanguageModelChatMessage[] = [
+				{
+					role: LanguageModelChatMessageRole.Assistant,
+					content: [toolResult],
+					name: undefined
+				}
+			];
+
+			const result = apiMessageToGeminiMessage(messages);
+
+			expect(result.contents).toHaveLength(1);
+			expect(result.contents[0].role).toBe('user');
+			const fr: any = result.contents[0].parts![0];
+			expect(fr.functionResponse.name).toBe('processImages');
+			// Should only have JPEG image, GIF should be filtered out
+			expect(fr.functionResponse.response.images).toHaveLength(1);
+			expect(fr.functionResponse.response.images[0].mimeType).toBe('image/jpeg');
+		});
+
+		it('should handle case where all images are GIFs in tool results', () => {
+			const gifData1 = new Uint8Array([71, 73, 70, 56, 57, 97]); // GIF89a
+			const gifData2 = new Uint8Array([71, 73, 70, 56, 55, 97]); // GIF87a
+			const gifPart1 = new LanguageModelDataPart(gifData1, 'image/gif');
+			const gifPart2 = new LanguageModelDataPart(gifData2, 'image/gif');
+			const textPart = new LanguageModelTextPart('{"status": "complete"}');
+
+			const toolResult = new LanguageModelToolResultPart('onlyGifs_12345', [textPart, gifPart1 as any, gifPart2 as any]);
+			const messages: LanguageModelChatMessage[] = [
+				{
+					role: LanguageModelChatMessageRole.Assistant,
+					content: [toolResult],
+					name: undefined
+				}
+			];
+
+			const result = apiMessageToGeminiMessage(messages);
+
+			expect(result.contents).toHaveLength(1);
+			const fr: any = result.contents[0].parts![0];
+			expect(fr.functionResponse.name).toBe('onlyGifs');
+			// All images were GIFs, so no images should be included
+			expect(fr.functionResponse.response.images).toBeUndefined();
+			expect(fr.functionResponse.response.status).toBe('complete');
+		});
 	});
 
 	describe('geminiMessagesToRawMessages', () => {
