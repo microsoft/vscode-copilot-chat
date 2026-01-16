@@ -120,225 +120,408 @@ function isCompletionRequestCancelled(
 	return cancellationToken?.isCancellationRequested || requestId !== currentGhostText.currentRequestId;
 }
 
-async function getGhostTextWithoutAbortHandling(
-	accessor: ServicesAccessor,
-	completionState: CompletionState,
-	ourRequestId: string,
-	preIssuedTelemetryDataWithExp: TelemetryWithExp,
-	cancellationToken?: ICancellationToken,
-	options?: Partial<GetGhostTextOptions>
-): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
-	let start = preIssuedTelemetryDataWithExp.issuedTime; // Start before getting exp assignments
-	const performanceMetrics: [string, number][] = [];
-	/** Internal helper to record performance measurements. Mutates performanceMetrics and start. */
-	function recordPerformance(name: string) {
-		const next = now();
-		performanceMetrics.push([name, next - start]);
-		start = next;
-	}
-	recordPerformance('telemetry');
-	const instantiationService = accessor.get(IInstantiationService);
-	const featuresService = accessor.get(ICompletionsFeaturesService);
-	const asyncCompletionManager = accessor.get(ICompletionsAsyncManagerService);
-	const logTarget = accessor.get(ICompletionsLogTargetService);
-	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
-	const statusReporter = accessor.get(ICompletionsStatusReporter);
+export class GhostTextComputer {
+	constructor(
+		@IInstantiationService public readonly instantiationService: IInstantiationService,
+		@ITelemetryService public readonly telemetryService: ITelemetryService,
+		@ICompletionsNotifierService public readonly notifierService: ICompletionsNotifierService,
+		@ICompletionsContextProviderBridgeService public readonly contextProviderBridge: ICompletionsContextProviderBridgeService,
+		@ICompletionsCurrentGhostText public readonly currentGhostText: ICompletionsCurrentGhostText,
+		@ICompletionsContextProviderService public readonly contextproviderStatistics: ICompletionsContextProviderService,
+		@ICompletionsAsyncManagerService public readonly asyncCompletionManager: ICompletionsAsyncManagerService,
+		@ICompletionsFeaturesService public readonly completionsFeaturesService: ICompletionsFeaturesService,
+		@ICompletionsLogTargetService public readonly logTarget: ICompletionsLogTargetService,
+		@ICompletionsStatusReporter public readonly statusReporter: ICompletionsStatusReporter
+	) { }
 
-	if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'cancelled before extractPrompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	const inlineSuggestion = isInlineSuggestion(completionState.textDocument, completionState.position);
-	if (inlineSuggestion === undefined) {
-		ghostTextLogger.debug(logTarget, 'Breaking, invalid middle of the line');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Invalid middle of the line',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	const engineInfo = instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
-	const ghostTextOptions = { ...defaultOptions, ...options, tokenizer: engineInfo.tokenizer };
-	const prompt = await instantiationService.invokeFunction(extractPrompt,
-		ourRequestId,
-		completionState,
-		preIssuedTelemetryDataWithExp,
-		undefined,
-		ghostTextOptions
-	);
-	recordPerformance('prompt');
-	if (prompt.type === 'copilotContentExclusion') {
-		ghostTextLogger.debug(logTarget, 'Copilot not available, due to content exclusion');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Copilot not available due to content exclusion',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	if (prompt.type === 'contextTooShort') {
-		ghostTextLogger.debug(logTarget, 'Breaking, not enough context');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Not enough context',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	if (prompt.type === 'promptError') {
-		ghostTextLogger.debug(logTarget, 'Error while building the prompt');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Error while building the prompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	if (ghostTextOptions.promptOnly) {
-		return { type: 'promptOnly', reason: 'Breaking, promptOnly set to true', prompt: prompt };
-	}
-
-	if (prompt.type === 'promptCancelled') {
-		ghostTextLogger.debug(logTarget, 'Cancelled during extractPrompt');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Cancelled during extractPrompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	if (prompt.type === 'promptTimeout') {
-		ghostTextLogger.debug(logTarget, 'Timeout during extractPrompt');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Timeout',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	if (prompt.prompt.prefix.length === 0 && prompt.prompt.suffix.length === 0) {
-		ghostTextLogger.debug(logTarget, 'Error empty prompt');
-		return {
-			type: 'abortedBeforeIssued',
-			reason: 'Empty prompt',
-			telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-		};
-	}
-
-	const debounce = instantiationService.invokeFunction(getRemainingDebounceMs, ghostTextOptions, preIssuedTelemetryDataWithExp);
-	if (debounce > 0) {
-		ghostTextLogger.debug(logTarget, `Debouncing ghost text request for ${debounce}ms`);
-		await delay(debounce);
-		if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
-			return {
-				type: 'abortedBeforeIssued',
-				reason: 'cancelled after debounce',
-				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
-			};
+	public async getGhostText(
+		completionState: CompletionState,
+		token: ICancellationToken | undefined,
+		options: Partial<GetGhostTextOptions>
+	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
+		const id = generateUuid();
+		this.currentGhostText.currentRequestId = id;
+		const telemetryData = await this.instantiationService.invokeFunction(createTelemetryWithExp, completionState.textDocument, id, options);
+		// A CLS consumer has an LSP bug where it erroneously makes method requests before `initialize` has returned, which
+		// means we can't use `initialize` to actually initialize anything expensive.  This the primary user of the
+		// tokenizer, so settle for initializing here instead.  We don't use waitForTokenizers() because in the event of a
+		// tokenizer load failure, that would spam handleException() on every request.
+		await initializeTokenizers.catch(() => { });
+		try {
+			this.contextProviderBridge.schedule(
+				completionState,
+				id,
+				options?.opportunityId ?? '',
+				telemetryData,
+				token,
+				options
+			);
+			this.notifierService.notifyRequest(completionState, id, telemetryData, token, options);
+			const result = await this.getGhostTextWithoutAbortHandling(completionState, id, telemetryData, token, options);
+			const statistics = this.contextproviderStatistics.getStatisticsForCompletion(id);
+			const opportunityId = options?.opportunityId ?? 'unknown';
+			for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
+				/* __GDPR__
+					"context-provider.completion-stats" : {
+						"owner": "dirkb",
+						"comment": "Telemetry for copilot inline completion context",
+						"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+						"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
+						"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context provider id" },
+						"resolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The resolution of the context" },
+						"usage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the context was used" },
+						"usageDetails": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Additional details about the usage as a JSON string" }
+					}
+				*/
+				this.telemetryService.sendMSFTTelemetryEvent(
+					'context-provider.completion-stats',
+					{
+						requestId: id,
+						opportunityId,
+						providerId,
+						resolution: statistic.resolution,
+						usage: statistic.usage,
+						usageDetails: JSON.stringify(statistic.usageDetails),
+					},
+					{
+					}
+				);
+			}
+			return result;
+		} catch (e) {
+			// The cancellation token may be called after the request is done but while we still process data.
+			// The underlying implementation catches abort errors for specific scenarios but we still have uncovered paths.
+			// To avoid returning an error to the editor, this acts as an fault barrier here.
+			if (isAbortError(e)) {
+				return {
+					type: 'canceled',
+					reason: 'aborted at unknown location',
+					telemetryData: mkCanceledResultTelemetry(telemetryData, {
+						cancelledNetworkRequest: true,
+					}),
+				};
+			}
+			throw e;
 		}
 	}
 
-	return statusReporter.withProgress(async () => {
-		const [prefix] = trimLastLine(
-			completionState.textDocument.getText(
-				LocationFactory.range(LocationFactory.position(0, 0), completionState.position)
-			)
-		);
+	private async getGhostTextWithoutAbortHandling(
+		completionState: CompletionState,
+		ourRequestId: string,
+		preIssuedTelemetryDataWithExp: TelemetryWithExp,
+		cancellationToken?: ICancellationToken,
+		options?: Partial<GetGhostTextOptions>
+	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
+		let start = preIssuedTelemetryDataWithExp.issuedTime; // Start before getting exp assignments
+		const performanceMetrics: [string, number][] = [];
+		/** Internal helper to record performance measurements. Mutates performanceMetrics and start. */
+		function recordPerformance(name: string) {
+			const next = now();
+			performanceMetrics.push([name, next - start]);
+			start = next;
+		}
+		recordPerformance('telemetry');
+		if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'cancelled before extractPrompt',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
 
-		const hasAcceptedCurrentCompletion = currentGhostText.hasAcceptedCurrentCompletion(prefix, prompt.prompt.suffix);
-		const originalPrompt = prompt.prompt;
-		const ghostTextStrategy = await instantiationService.invokeFunction(getGhostTextStrategy,
-			completionState,
-			prefix,
-			prompt,
-			ghostTextOptions.isCycling,
-			inlineSuggestion,
-			hasAcceptedCurrentCompletion,
-			preIssuedTelemetryDataWithExp
-		);
-		recordPerformance('strategy');
+		const inlineSuggestion = isInlineSuggestion(completionState.textDocument, completionState.position);
+		if (inlineSuggestion === undefined) {
+			ghostTextLogger.debug(this.logTarget, 'Breaking, invalid middle of the line');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Invalid middle of the line',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
 
-		let choices = instantiationService.invokeFunction(getLocalInlineSuggestion, prefix, originalPrompt, ghostTextStrategy.requestMultiline);
-		recordPerformance('cache');
-		const repoInfo = instantiationService.invokeFunction(extractRepoInfoInBackground, completionState.textDocument.uri);
-		const requestContext: RequestContext = {
-			blockMode: ghostTextStrategy.blockMode,
-			languageId: completionState.textDocument.detectedLanguageId,
-			repoInfo: repoInfo,
-			engineModelId: engineInfo.modelId,
+		const engineInfo = this.instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
+		const ghostTextOptions = { ...defaultOptions, ...options, tokenizer: engineInfo.tokenizer };
+		const prompt = await this.instantiationService.invokeFunction(extractPrompt,
 			ourRequestId,
-			prefix,
-			prompt: prompt.prompt,
-			multiline: ghostTextStrategy.requestMultiline,
-			indentation: contextIndentation(completionState.textDocument, completionState.position),
-			isCycling: ghostTextOptions.isCycling,
-			headers: engineInfo.headers,
-			stop: ghostTextStrategy.stop,
-			maxTokens: ghostTextStrategy.maxTokens,
-			afterAccept: hasAcceptedCurrentCompletion,
-		};
-		// Add headers to identify async completions and speculative requests
-		requestContext.headers = {
-			...requestContext.headers,
-			'X-Copilot-Async': 'true',
-			'X-Copilot-Speculative': ghostTextOptions.isSpeculative ? 'true' : 'false',
-		};
-
-		// this will be used as basis for the choice telemetry data
-		const telemetryData = instantiationService.invokeFunction(telemetryIssued,
-			completionState.textDocument,
-			requestContext,
-			completionState.position,
-			prompt,
+			completionState,
 			preIssuedTelemetryDataWithExp,
-			engineInfo,
+			undefined,
 			ghostTextOptions
 		);
+		recordPerformance('prompt');
+		if (prompt.type === 'copilotContentExclusion') {
+			ghostTextLogger.debug(this.logTarget, 'Copilot not available, due to content exclusion');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Copilot not available due to content exclusion',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
 
-		// Wait before requesting more completions if there is a candidate
-		// completion request in flight. Does not wait for cycling requests or
-		// if there is a cached completion.
-		if (
-			choices === undefined &&
-			!ghostTextOptions.isCycling &&
-			asyncCompletionManager.shouldWaitForAsyncCompletions(prefix, prompt.prompt)
-		) {
-			const choice = await asyncCompletionManager.getFirstMatchingRequestWithTimeout(
-				ourRequestId,
-				prefix,
-				prompt.prompt,
-				ghostTextOptions.isSpeculative,
-				telemetryData
-			);
-			recordPerformance('asyncWait');
-			if (choice) {
-				const forceSingleLine = !ghostTextStrategy.requestMultiline;
-				const trimmedChoice = makeGhostAPIChoice(choice[0], { forceSingleLine });
-				choices = [[trimmedChoice], ResultType.Async];
-			}
-			if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
-				ghostTextLogger.debug(logTarget, 'Cancelled before requesting a new completion');
+		if (prompt.type === 'contextTooShort') {
+			ghostTextLogger.debug(this.logTarget, 'Breaking, not enough context');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Not enough context',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
+
+		if (prompt.type === 'promptError') {
+			ghostTextLogger.debug(this.logTarget, 'Error while building the prompt');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Error while building the prompt',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
+
+		if (ghostTextOptions.promptOnly) {
+			return { type: 'promptOnly', reason: 'Breaking, promptOnly set to true', prompt: prompt };
+		}
+
+		if (prompt.type === 'promptCancelled') {
+			ghostTextLogger.debug(this.logTarget, 'Cancelled during extractPrompt');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Cancelled during extractPrompt',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
+
+		if (prompt.type === 'promptTimeout') {
+			ghostTextLogger.debug(this.logTarget, 'Timeout during extractPrompt');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Timeout',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
+
+		if (prompt.prompt.prefix.length === 0 && prompt.prompt.suffix.length === 0) {
+			ghostTextLogger.debug(this.logTarget, 'Error empty prompt');
+			return {
+				type: 'abortedBeforeIssued',
+				reason: 'Empty prompt',
+				telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
+			};
+		}
+
+		const debounce = this.instantiationService.invokeFunction(getRemainingDebounceMs, ghostTextOptions, preIssuedTelemetryDataWithExp);
+		if (debounce > 0) {
+			ghostTextLogger.debug(this.logTarget, `Debouncing ghost text request for ${debounce}ms`);
+			await delay(debounce);
+			if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
 				return {
 					type: 'abortedBeforeIssued',
-					reason: 'Cancelled after waiting for async completion',
-					telemetryData: mkBasicResultTelemetry(telemetryData),
+					reason: 'cancelled after debounce',
+					telemetryData: mkBasicResultTelemetry(preIssuedTelemetryDataWithExp),
 				};
 			}
 		}
 
-		const isMoreMultiline =
-			ghostTextStrategy.blockMode === BlockMode.MoreMultiline &&
-			BlockTrimmer.isSupported(completionState.textDocument.detectedLanguageId);
-		if (choices !== undefined) {
-			// Post-process any cached choices before deciding whether to issue a network request
-			choices[0] = choices[0]
+		return this.statusReporter.withProgress(async () => {
+			const [prefix] = trimLastLine(
+				completionState.textDocument.getText(
+					LocationFactory.range(LocationFactory.position(0, 0), completionState.position)
+				)
+			);
+
+			const hasAcceptedCurrentCompletion = this.currentGhostText.hasAcceptedCurrentCompletion(prefix, prompt.prompt.suffix);
+			const originalPrompt = prompt.prompt;
+			const ghostTextStrategy = await this.instantiationService.invokeFunction(getGhostTextStrategy,
+				completionState,
+				prefix,
+				prompt,
+				ghostTextOptions.isCycling,
+				inlineSuggestion,
+				hasAcceptedCurrentCompletion,
+				preIssuedTelemetryDataWithExp
+			);
+			recordPerformance('strategy');
+
+			let choices = this.instantiationService.invokeFunction(getLocalInlineSuggestion, prefix, originalPrompt, ghostTextStrategy.requestMultiline);
+			recordPerformance('cache');
+			const repoInfo = this.instantiationService.invokeFunction(extractRepoInfoInBackground, completionState.textDocument.uri);
+			const requestContext: RequestContext = {
+				blockMode: ghostTextStrategy.blockMode,
+				languageId: completionState.textDocument.detectedLanguageId,
+				repoInfo: repoInfo,
+				engineModelId: engineInfo.modelId,
+				ourRequestId,
+				prefix,
+				prompt: prompt.prompt,
+				multiline: ghostTextStrategy.requestMultiline,
+				indentation: contextIndentation(completionState.textDocument, completionState.position),
+				isCycling: ghostTextOptions.isCycling,
+				headers: engineInfo.headers,
+				stop: ghostTextStrategy.stop,
+				maxTokens: ghostTextStrategy.maxTokens,
+				afterAccept: hasAcceptedCurrentCompletion,
+			};
+			// Add headers to identify async completions and speculative requests
+			requestContext.headers = {
+				...requestContext.headers,
+				'X-Copilot-Async': 'true',
+				'X-Copilot-Speculative': ghostTextOptions.isSpeculative ? 'true' : 'false',
+			};
+
+			// this will be used as basis for the choice telemetry data
+			const telemetryData = this.instantiationService.invokeFunction(telemetryIssued,
+				completionState.textDocument,
+				requestContext,
+				completionState.position,
+				prompt,
+				preIssuedTelemetryDataWithExp,
+				engineInfo,
+				ghostTextOptions
+			);
+
+			// Wait before requesting more completions if there is a candidate
+			// completion request in flight. Does not wait for cycling requests or
+			// if there is a cached completion.
+			if (
+				choices === undefined &&
+				!ghostTextOptions.isCycling &&
+				this.asyncCompletionManager.shouldWaitForAsyncCompletions(prefix, prompt.prompt)
+			) {
+				const choice = await this.asyncCompletionManager.getFirstMatchingRequestWithTimeout(
+					ourRequestId,
+					prefix,
+					prompt.prompt,
+					ghostTextOptions.isSpeculative,
+					telemetryData
+				);
+				recordPerformance('asyncWait');
+				if (choice) {
+					const forceSingleLine = !ghostTextStrategy.requestMultiline;
+					const trimmedChoice = makeGhostAPIChoice(choice[0], { forceSingleLine });
+					choices = [[trimmedChoice], ResultType.Async];
+				}
+				if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
+					ghostTextLogger.debug(this.logTarget, 'Cancelled before requesting a new completion');
+					return {
+						type: 'abortedBeforeIssued',
+						reason: 'Cancelled after waiting for async completion',
+						telemetryData: mkBasicResultTelemetry(telemetryData),
+					};
+				}
+			}
+
+			const isMoreMultiline =
+				ghostTextStrategy.blockMode === BlockMode.MoreMultiline &&
+				BlockTrimmer.isSupported(completionState.textDocument.detectedLanguageId);
+			if (choices !== undefined) {
+				// Post-process any cached choices before deciding whether to issue a network request
+				choices[0] = choices[0]
+					.map(c =>
+						this.instantiationService.invokeFunction(postProcessChoiceInContext,
+							completionState.textDocument,
+							completionState.position,
+							c,
+							isMoreMultiline,
+							ghostTextLogger
+						)
+					)
+					.filter(c => c !== undefined);
+			}
+
+			if (choices !== undefined && choices[0].length === 0) {
+				ghostTextLogger.debug(this.logTarget, `Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
+				return {
+					type: 'empty',
+					reason: 'cached results empty after post-processing',
+					telemetryData: mkBasicResultTelemetry(telemetryData),
+				};
+			}
+			if (
+				choices !== undefined &&
+				choices[0].length > 0 &&
+				// If it's a cycling request, need to show multiple choices
+				(!ghostTextOptions.isCycling || choices[0].length > 1)
+			) {
+				ghostTextLogger.debug(this.logTarget, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
+			} else {
+				// No local choices, go to network
+				const completionsFromNetwork = this.instantiationService.createInstance(CompletionsFromNetwork);
+				if (ghostTextOptions.isCycling) {
+					const networkChoices = await completionsFromNetwork.getAllCompletionsFromNetwork(
+						requestContext,
+						telemetryData,
+						cancellationToken,
+						ghostTextStrategy.finishedCb
+					);
+
+					// TODO: if we already had some choices cached from the initial non-cycling request,
+					// and then the cycling request returns no results for some reason, we need to still
+					// return the original choices to the editor to avoid the ghost text disappearing completely.
+					// However this should be telemetrised according to the result of the cycling request itself,
+					// i.e. failure/empty (or maybe canceled).
+					//
+					// Right now this is awkward to orchestrate in the code and we don't handle it, incorrectly
+					// returning `ghostText.produced` instead. Cycling is a manual action and hence uncommon,
+					// so this shouldn't cause much inaccuracy, but we still should fix this.
+					if (networkChoices.type === 'success') {
+						const resultChoices = choices?.[0] ?? [];
+						networkChoices.value[0].forEach(c => {
+							// Collect only unique displayTexts
+							if (resultChoices.findIndex(v => v.completionText.trim() === c.completionText.trim()) !== -1) {
+								return;
+							}
+							resultChoices.push(c);
+						});
+						choices = [resultChoices, ResultType.Cycling];
+					} else {
+						if (choices === undefined) {
+							return networkChoices;
+						}
+					}
+				} else {
+					// Wrap an observer around the finished callback to update the
+					// async manager as the request streams in.
+					const finishedCb: FinishedCallback = (text, delta) => {
+						this.asyncCompletionManager.updateCompletion(ourRequestId, text);
+						return ghostTextStrategy.finishedCb(text, delta);
+					};
+
+					const asyncCancellationTokenSource = new CancellationTokenSource();
+					const requestPromise = completionsFromNetwork.getCompletionsFromNetwork(
+						requestContext,
+						telemetryData,
+						asyncCancellationTokenSource.token,
+						finishedCb
+					);
+					void this.asyncCompletionManager.queueCompletionRequest(
+						ourRequestId,
+						prefix,
+						prompt.prompt,
+						asyncCancellationTokenSource,
+						requestPromise
+					);
+					const c = await this.asyncCompletionManager.getFirstMatchingRequest(ourRequestId, prefix, prompt.prompt, ghostTextOptions.isSpeculative);
+					if (c === undefined) {
+						return {
+							type: 'empty',
+							reason: 'received no results from async completions',
+							telemetryData: mkBasicResultTelemetry(telemetryData),
+						};
+					}
+					choices = [[c[0]], ResultType.Async];
+				}
+				recordPerformance('network');
+			}
+			if (choices === undefined) {
+				return {
+					type: 'failed',
+					reason: 'internal error: choices should be defined after network call',
+					telemetryData: mkBasicResultTelemetry(telemetryData),
+				};
+			}
+			const [choicesArray, resultType] = choices;
+
+			const postProcessedChoicesArray = choicesArray
 				.map(c =>
-					instantiationService.invokeFunction(postProcessChoiceInContext,
+					this.instantiationService.invokeFunction(postProcessChoiceInContext,
 						completionState.textDocument,
 						completionState.position,
 						c,
@@ -347,198 +530,93 @@ async function getGhostTextWithoutAbortHandling(
 					)
 				)
 				.filter(c => c !== undefined);
-		}
 
-		if (choices !== undefined && choices[0].length === 0) {
-			ghostTextLogger.debug(logTarget, `Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
-			return {
-				type: 'empty',
-				reason: 'cached results empty after post-processing',
-				telemetryData: mkBasicResultTelemetry(telemetryData),
-			};
-		}
-		if (
-			choices !== undefined &&
-			choices[0].length > 0 &&
-			// If it's a cycling request, need to show multiple choices
-			(!ghostTextOptions.isCycling || choices[0].length > 1)
-		) {
-			ghostTextLogger.debug(logTarget, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
-		} else {
-			// No local choices, go to network
-			const completionsFromNetwork = instantiationService.createInstance(CompletionsFromNetwork);
-			if (ghostTextOptions.isCycling) {
-				const networkChoices = await completionsFromNetwork.getAllCompletionsFromNetwork(
-					requestContext,
-					telemetryData,
-					cancellationToken,
-					ghostTextStrategy.finishedCb
-				);
-
-				// TODO: if we already had some choices cached from the initial non-cycling request,
-				// and then the cycling request returns no results for some reason, we need to still
-				// return the original choices to the editor to avoid the ghost text disappearing completely.
-				// However this should be telemetrised according to the result of the cycling request itself,
-				// i.e. failure/empty (or maybe canceled).
-				//
-				// Right now this is awkward to orchestrate in the code and we don't handle it, incorrectly
-				// returning `ghostText.produced` instead. Cycling is a manual action and hence uncommon,
-				// so this shouldn't cause much inaccuracy, but we still should fix this.
-				if (networkChoices.type === 'success') {
-					const resultChoices = choices?.[0] ?? [];
-					networkChoices.value[0].forEach(c => {
-						// Collect only unique displayTexts
-						if (resultChoices.findIndex(v => v.completionText.trim() === c.completionText.trim()) !== -1) {
-							return;
-						}
-						resultChoices.push(c);
-					});
-					choices = [resultChoices, ResultType.Cycling];
-				} else {
-					if (choices === undefined) {
-						return networkChoices;
-					}
-				}
-			} else {
-				// Wrap an observer around the finished callback to update the
-				// async manager as the request streams in.
-				const finishedCb: FinishedCallback = (text, delta) => {
-					asyncCompletionManager.updateCompletion(ourRequestId, text);
-					return ghostTextStrategy.finishedCb(text, delta);
-				};
-
-				const asyncCancellationTokenSource = new CancellationTokenSource();
-				const requestPromise = completionsFromNetwork.getCompletionsFromNetwork(
-					requestContext,
-					telemetryData,
-					asyncCancellationTokenSource.token,
-					finishedCb
-				);
-				void asyncCompletionManager.queueCompletionRequest(
-					ourRequestId,
-					prefix,
-					prompt.prompt,
-					asyncCancellationTokenSource,
-					requestPromise
-				);
-				const c = await asyncCompletionManager.getFirstMatchingRequest(ourRequestId, prefix, prompt.prompt, ghostTextOptions.isSpeculative);
-				if (c === undefined) {
+			// Delay response if needed. Note, this must come before the
+			// telemetryWithAddData call since the time_to_produce_ms is computed
+			// there
+			const completionsDelay =
+				this.instantiationService.invokeFunction((getConfig<number>), ConfigKey.CompletionsDelay) ??
+				this.completionsFeaturesService.completionsDelay(preIssuedTelemetryDataWithExp);
+			const elapsed = now() - preIssuedTelemetryDataWithExp.issuedTime;
+			const remainingDelay = Math.max(completionsDelay - elapsed, 0);
+			if (resultType !== ResultType.TypingAsSuggested && !ghostTextOptions.isCycling && remainingDelay > 0) {
+				ghostTextLogger.debug(this.logTarget, `Waiting ${remainingDelay}ms before returning completion`);
+				await delay(remainingDelay);
+				if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
+					ghostTextLogger.debug(this.logTarget, 'Cancelled after completions delay');
 					return {
-						type: 'empty',
-						reason: 'received no results from async completions',
-						telemetryData: mkBasicResultTelemetry(telemetryData),
+						type: 'canceled',
+						reason: 'after completions delay',
+						telemetryData: mkCanceledResultTelemetry(telemetryData),
 					};
 				}
-				choices = [[c[0]], ResultType.Async];
 			}
-			recordPerformance('network');
-		}
-		if (choices === undefined) {
-			return {
-				type: 'failed',
-				reason: 'internal error: choices should be defined after network call',
-				telemetryData: mkBasicResultTelemetry(telemetryData),
-			};
-		}
-		const [choicesArray, resultType] = choices;
 
-		const postProcessedChoicesArray = choicesArray
-			.map(c =>
-				instantiationService.invokeFunction(postProcessChoiceInContext,
+			const results: CompletionResult[] = [];
+			for (const choice of postProcessedChoicesArray) {
+				// Do this to get a new object for each choice
+				const choiceTelemetryData = telemetryWithAddData(
 					completionState.textDocument,
-					completionState.position,
-					c,
-					isMoreMultiline,
-					ghostTextLogger
-				)
-			)
-			.filter(c => c !== undefined);
+					requestContext,
+					choice,
+					telemetryData
+				);
 
-		// Delay response if needed. Note, this must come before the
-		// telemetryWithAddData call since the time_to_produce_ms is computed
-		// there
-		const completionsDelay =
-			instantiationService.invokeFunction(getConfig<number>, ConfigKey.CompletionsDelay) ??
-			featuresService.completionsDelay(preIssuedTelemetryDataWithExp);
-		const elapsed = now() - preIssuedTelemetryDataWithExp.issuedTime;
-		const remainingDelay = Math.max(completionsDelay - elapsed, 0);
-		if (resultType !== ResultType.TypingAsSuggested && !ghostTextOptions.isCycling && remainingDelay > 0) {
-			ghostTextLogger.debug(logTarget, `Waiting ${remainingDelay}ms before returning completion`);
-			await delay(remainingDelay);
-			if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
-				ghostTextLogger.debug(logTarget, 'Cancelled after completions delay');
+				const suffixCoverage = inlineSuggestion
+					? checkSuffix(completionState.textDocument, completionState.position, choice)
+					: 0;
+
+				// We want to use `newTrailingWs` as the trailing whitespace
+				const ghostCompletion = adjustLeadingWhitespace(
+					choice.choiceIndex,
+					choice.completionText,
+					prompt.trailingWs
+				);
+				const res: CompletionResult = {
+					completion: ghostCompletion,
+					telemetry: choiceTelemetryData,
+					isMiddleOfTheLine: inlineSuggestion,
+					suffixCoverage,
+					copilotAnnotations: choice.copilotAnnotations,
+					clientCompletionId: choice.clientCompletionId,
+				};
+				results.push(res);
+			}
+
+			// Lift clientCompletionId out of the result in order to include it in the telemetry payload computed by mkBasicResultTelemetry.
+			telemetryData.properties.clientCompletionId = results[0]?.clientCompletionId;
+			// If reading from the cache or async, capture the look back offset used
+			telemetryData.measurements.foundOffset = results?.[0]?.telemetry?.measurements?.foundOffset ?? -1;
+			ghostTextLogger.debug(
+				this.logTarget,
+				`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`
+			);
+
+			if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
 				return {
 					type: 'canceled',
-					reason: 'after completions delay',
+					reason: 'after post processing completions',
 					telemetryData: mkCanceledResultTelemetry(telemetryData),
 				};
 			}
-		}
 
-		const results: CompletionResult[] = [];
-		for (const choice of postProcessedChoicesArray) {
-			// Do this to get a new object for each choice
-			const choiceTelemetryData = telemetryWithAddData(
-				completionState.textDocument,
-				requestContext,
-				choice,
-				telemetryData
-			);
+			if (!ghostTextOptions.isSpeculative) {
+				// Update the current ghost text with the new response before returning for the "typing as suggested" UX
+				this.currentGhostText.setGhostText(prefix, prompt.prompt.suffix, postProcessedChoicesArray, resultType);
+			}
 
-			const suffixCoverage = inlineSuggestion
-				? checkSuffix(completionState.textDocument, completionState.position, choice)
-				: 0;
+			recordPerformance('complete');
 
-			// We want to use `newTrailingWs` as the trailing whitespace
-			const ghostCompletion = adjustLeadingWhitespace(
-				choice.choiceIndex,
-				choice.completionText,
-				prompt.trailingWs
-			);
-			const res: CompletionResult = {
-				completion: ghostCompletion,
-				telemetry: choiceTelemetryData,
-				isMiddleOfTheLine: inlineSuggestion,
-				suffixCoverage,
-				copilotAnnotations: choice.copilotAnnotations,
-				clientCompletionId: choice.clientCompletionId,
-			};
-			results.push(res);
-		}
-
-		// Lift clientCompletionId out of the result in order to include it in the telemetry payload computed by mkBasicResultTelemetry.
-		telemetryData.properties.clientCompletionId = results[0]?.clientCompletionId;
-		// If reading from the cache or async, capture the look back offset used
-		telemetryData.measurements.foundOffset = results?.[0]?.telemetry?.measurements?.foundOffset ?? -1;
-		ghostTextLogger.debug(
-			logTarget,
-			`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`
-		);
-
-		if (isCompletionRequestCancelled(currentGhostText, ourRequestId, cancellationToken)) {
 			return {
-				type: 'canceled',
-				reason: 'after post processing completions',
-				telemetryData: mkCanceledResultTelemetry(telemetryData),
+				type: 'success',
+				value: [results, resultType],
+				telemetryData: mkBasicResultTelemetry(telemetryData),
+				telemetryBlob: telemetryData,
+				resultType,
+				performanceMetrics,
 			};
-		}
-
-		if (!ghostTextOptions.isSpeculative) {
-			// Update the current ghost text with the new response before returning for the "typing as suggested" UX
-			currentGhostText.setGhostText(prefix, prompt.prompt.suffix, postProcessedChoicesArray, resultType);
-		}
-
-		recordPerformance('complete');
-
-		return {
-			type: 'success',
-			value: [results, resultType],
-			telemetryData: mkBasicResultTelemetry(telemetryData),
-			telemetryBlob: telemetryData,
-			resultType,
-			performanceMetrics,
-		};
-	});
+		});
+	}
 }
 
 export async function getGhostText(
@@ -547,76 +625,9 @@ export async function getGhostText(
 	token: ICancellationToken | undefined,
 	options: Partial<GetGhostTextOptions>
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
-	const id = generateUuid();
-	const instantiationService = accessor.get(IInstantiationService);
-	const telemetryService = accessor.get(ITelemetryService);
-	const notifierService = accessor.get(ICompletionsNotifierService);
-	const contextProviderBridge = accessor.get(ICompletionsContextProviderBridgeService);
-	const currentGhostText = accessor.get(ICompletionsCurrentGhostText);
-	const contextproviderStatistics = accessor.get(ICompletionsContextProviderService);
-	currentGhostText.currentRequestId = id;
-	const telemetryData = await createTelemetryWithExp(accessor, completionState.textDocument, id, options);
-	// A CLS consumer has an LSP bug where it erroneously makes method requests before `initialize` has returned, which
-	// means we can't use `initialize` to actually initialize anything expensive.  This the primary user of the
-	// tokenizer, so settle for initializing here instead.  We don't use waitForTokenizers() because in the event of a
-	// tokenizer load failure, that would spam handleException() on every request.
-	await initializeTokenizers.catch(() => { });
-	try {
-		contextProviderBridge.schedule(
-			completionState,
-			id,
-			options?.opportunityId ?? '',
-			telemetryData,
-			token,
-			options
-		);
-		notifierService.notifyRequest(completionState, id, telemetryData, token, options);
-		const result = await instantiationService.invokeFunction(getGhostTextWithoutAbortHandling, completionState, id, telemetryData, token, options);
-		const statistics = contextproviderStatistics.getStatisticsForCompletion(id);
-		const opportunityId = options?.opportunityId ?? 'unknown';
-		for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
-			/* __GDPR__
-				"context-provider.completion-stats" : {
-					"owner": "dirkb",
-					"comment": "Telemetry for copilot inline completion context",
-					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
-					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
-					"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The context provider id" },
-					"resolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The resolution of the context" },
-					"usage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the context was used" },
-					"usageDetails": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Additional details about the usage as a JSON string" }
-				}
-			*/
-			telemetryService.sendMSFTTelemetryEvent(
-				'context-provider.completion-stats',
-				{
-					requestId: id,
-					opportunityId,
-					providerId,
-					resolution: statistic.resolution,
-					usage: statistic.usage,
-					usageDetails: JSON.stringify(statistic.usageDetails),
-				},
-				{
-				}
-			);
-		}
-		return result;
-	} catch (e) {
-		// The cancellation token may be called after the request is done but while we still process data.
-		// The underlying implementation catches abort errors for specific scenarios but we still have uncovered paths.
-		// To avoid returning an error to the editor, this acts as an fault barrier here.
-		if (isAbortError(e)) {
-			return {
-				type: 'canceled',
-				reason: 'aborted at unknown location',
-				telemetryData: mkCanceledResultTelemetry(telemetryData, {
-					cancelledNetworkRequest: true,
-				}),
-			};
-		}
-		throw e;
-	}
+	const instaService = accessor.get(IInstantiationService);
+	const ghostTextComputer = instaService.createInstance(GhostTextComputer);
+	return ghostTextComputer.getGhostText(completionState, token, options);
 }
 
 /**
