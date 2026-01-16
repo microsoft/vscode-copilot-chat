@@ -136,7 +136,8 @@
 		"languageModelThinkingPart",
 		"chatSessionsProvider@3",
 		"devDeviceId",
-		"contribEditorContentMenu"
+		"contribEditorContentMenu",
+		"chatInlineCompletions"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -2848,6 +2849,14 @@
 							"preview"
 						],
 						"description": "%github.copilot.chat.copilotDebugCommand.enabled%"
+					},
+					"github.copilot.chat.chatInlineCompletions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"preview"
+						],
+						"markdownDescription": "%github.copilot.chat.chatInlineCompletions.enabled%"
 					},
 					"github.copilot.chat.codesearch.enabled": {
 						"type": "boolean",
