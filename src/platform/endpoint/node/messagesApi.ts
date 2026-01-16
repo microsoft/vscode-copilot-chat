@@ -85,7 +85,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (toolSearchEnabled) {
-		finalTools.push({ name: 'tool_search_tool_bm25', 'type': 'tool_search_tool_bm25_20251119', defer_loading: false });
+		finalTools.push({ name: 'tool_search_tool_bm25', type: 'tool_search_tool_bm25_20251119', defer_loading: false });
 	}
 
 	if (anthropicTools) {
