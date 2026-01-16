@@ -52,7 +52,7 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	handleShown(suggestion: T): void;
 	handleAcceptance(docId: DocumentId, suggestion: T): void;
 	handleRejection(docId: DocumentId, suggestion: T): void;
-	handleIgnored(docId: DocumentId, suggestion: T, supersededByRequestUuid: INextEditResult | undefined): void;
+	handleIgnored(docId: DocumentId, suggestion: T, wasShown: boolean, supersededBy: INextEditResult | undefined): void;
 	lastRejectionTime: number;
 	lastTriggerTime: number;
 }
@@ -767,9 +767,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
-		// TODO: Fix issue where this method is called twice in a row with the same edit (different requestIds).
-		this._statelessNextEditProvider.handleIgnored?.();
+	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, wasShown: boolean, supersededBy: INextEditResult | undefined): void {
+		if (wasShown && supersededBy === undefined) {
+			// Was shown to the user
+			this._statelessNextEditProvider.handleIgnored?.();
+		}
 	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
