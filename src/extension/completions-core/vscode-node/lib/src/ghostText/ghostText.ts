@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
+import { ILogService, ILogger } from '../../../../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../../../../platform/telemetry/common/telemetry';
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
@@ -13,7 +14,7 @@ import { ICompletionsNotifierService } from '../completionNotifier';
 import { CompletionState } from '../completionState';
 import { BlockMode, ConfigKey, getConfig } from '../config';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
-import { ICompletionsLogTargetService, Logger } from '../logger';
+import { ICompletionsLogTargetService } from '../logger';
 import { isAbortError } from '../networking';
 import { EngineRequestInfo, getEngineRequestInfo } from '../openai/config';
 import {
@@ -54,8 +55,6 @@ import {
 	mkCanceledResultTelemetry,
 	resultTypeToString,
 } from './telemetry';
-
-export const ghostTextLogger = new Logger('ghostText');
 
 export interface GhostCompletion {
 	completionIndex: number;
@@ -121,6 +120,9 @@ function isCompletionRequestCancelled(
 }
 
 export class GhostTextComputer {
+
+	private readonly logger: ILogger;
+
 	constructor(
 		@IInstantiationService public readonly instantiationService: IInstantiationService,
 		@ITelemetryService public readonly telemetryService: ITelemetryService,
@@ -131,8 +133,11 @@ export class GhostTextComputer {
 		@ICompletionsAsyncManagerService public readonly asyncCompletionManager: ICompletionsAsyncManagerService,
 		@ICompletionsFeaturesService public readonly completionsFeaturesService: ICompletionsFeaturesService,
 		@ICompletionsLogTargetService public readonly logTarget: ICompletionsLogTargetService,
-		@ICompletionsStatusReporter public readonly statusReporter: ICompletionsStatusReporter
-	) { }
+		@ICompletionsStatusReporter public readonly statusReporter: ICompletionsStatusReporter,
+		@ILogService public readonly logService: ILogService,
+	) {
+		this.logger = logService.createSubLogger(['ghostText', 'GhostTextComputer']);
+	}
 
 	public async getGhostText(
 		completionState: CompletionState,
@@ -231,7 +236,7 @@ export class GhostTextComputer {
 
 		const inlineSuggestion = isInlineSuggestion(completionState.textDocument, completionState.position);
 		if (inlineSuggestion === undefined) {
-			ghostTextLogger.debug(this.logTarget, 'Breaking, invalid middle of the line');
+			this.logger.debug('Breaking, invalid middle of the line');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Invalid middle of the line',
@@ -250,7 +255,7 @@ export class GhostTextComputer {
 		);
 		recordPerformance('prompt');
 		if (prompt.type === 'copilotContentExclusion') {
-			ghostTextLogger.debug(this.logTarget, 'Copilot not available, due to content exclusion');
+			this.logger.debug('Copilot not available, due to content exclusion');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Copilot not available due to content exclusion',
@@ -259,7 +264,7 @@ export class GhostTextComputer {
 		}
 
 		if (prompt.type === 'contextTooShort') {
-			ghostTextLogger.debug(this.logTarget, 'Breaking, not enough context');
+			this.logger.debug('Breaking, not enough context');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Not enough context',
@@ -268,7 +273,7 @@ export class GhostTextComputer {
 		}
 
 		if (prompt.type === 'promptError') {
-			ghostTextLogger.debug(this.logTarget, 'Error while building the prompt');
+			this.logger.debug('Error while building the prompt');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Error while building the prompt',
@@ -281,7 +286,7 @@ export class GhostTextComputer {
 		}
 
 		if (prompt.type === 'promptCancelled') {
-			ghostTextLogger.debug(this.logTarget, 'Cancelled during extractPrompt');
+			this.logger.debug('Cancelled during extractPrompt');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Cancelled during extractPrompt',
@@ -290,7 +295,7 @@ export class GhostTextComputer {
 		}
 
 		if (prompt.type === 'promptTimeout') {
-			ghostTextLogger.debug(this.logTarget, 'Timeout during extractPrompt');
+			this.logger.debug('Timeout during extractPrompt');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Timeout',
@@ -299,7 +304,7 @@ export class GhostTextComputer {
 		}
 
 		if (prompt.prompt.prefix.length === 0 && prompt.prompt.suffix.length === 0) {
-			ghostTextLogger.debug(this.logTarget, 'Error empty prompt');
+			this.logger.debug('Error empty prompt');
 			return {
 				type: 'abortedBeforeIssued',
 				reason: 'Empty prompt',
@@ -309,7 +314,7 @@ export class GhostTextComputer {
 
 		const debounce = this.instantiationService.invokeFunction(getRemainingDebounceMs, ghostTextOptions, preIssuedTelemetryDataWithExp);
 		if (debounce > 0) {
-			ghostTextLogger.debug(this.logTarget, `Debouncing ghost text request for ${debounce}ms`);
+			this.logger.debug(`Debouncing ghost text request for ${debounce}ms`);
 			await delay(debounce);
 			if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
 				return {
@@ -399,7 +404,7 @@ export class GhostTextComputer {
 					choices = [[trimmedChoice], ResultType.Async];
 				}
 				if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
-					ghostTextLogger.debug(this.logTarget, 'Cancelled before requesting a new completion');
+					this.logger.debug('Cancelled before requesting a new completion');
 					return {
 						type: 'abortedBeforeIssued',
 						reason: 'Cancelled after waiting for async completion',
@@ -420,14 +425,14 @@ export class GhostTextComputer {
 							completionState.position,
 							c,
 							isMoreMultiline,
-							ghostTextLogger
+							this.logger,
 						)
 					)
 					.filter(c => c !== undefined);
 			}
 
 			if (choices !== undefined && choices[0].length === 0) {
-				ghostTextLogger.debug(this.logTarget, `Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
+				this.logger.debug(`Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
 				return {
 					type: 'empty',
 					reason: 'cached results empty after post-processing',
@@ -440,7 +445,7 @@ export class GhostTextComputer {
 				// If it's a cycling request, need to show multiple choices
 				(!ghostTextOptions.isCycling || choices[0].length > 1)
 			) {
-				ghostTextLogger.debug(this.logTarget, `Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
+				this.logger.debug(`Found inline suggestions locally via ${resultTypeToString(choices[1])}`);
 			} else {
 				// No local choices, go to network
 				const completionsFromNetwork = this.instantiationService.createInstance(CompletionsFromNetwork);
@@ -526,7 +531,7 @@ export class GhostTextComputer {
 						completionState.position,
 						c,
 						isMoreMultiline,
-						ghostTextLogger
+						this.logger
 					)
 				)
 				.filter(c => c !== undefined);
@@ -540,10 +545,10 @@ export class GhostTextComputer {
 			const elapsed = now() - preIssuedTelemetryDataWithExp.issuedTime;
 			const remainingDelay = Math.max(completionsDelay - elapsed, 0);
 			if (resultType !== ResultType.TypingAsSuggested && !ghostTextOptions.isCycling && remainingDelay > 0) {
-				ghostTextLogger.debug(this.logTarget, `Waiting ${remainingDelay}ms before returning completion`);
+				this.logger.debug(`Waiting ${remainingDelay}ms before returning completion`);
 				await delay(remainingDelay);
 				if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
-					ghostTextLogger.debug(this.logTarget, 'Cancelled after completions delay');
+					this.logger.debug('Cancelled after completions delay');
 					return {
 						type: 'canceled',
 						reason: 'after completions delay',
@@ -587,10 +592,7 @@ export class GhostTextComputer {
 			telemetryData.properties.clientCompletionId = results[0]?.clientCompletionId;
 			// If reading from the cache or async, capture the look back offset used
 			telemetryData.measurements.foundOffset = results?.[0]?.telemetry?.measurements?.foundOffset ?? -1;
-			ghostTextLogger.debug(
-				this.logTarget,
-				`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`
-			);
+			this.logger.debug(`Produced ${results.length} results from ${resultTypeToString(resultType)} at ${telemetryData.measurements.foundOffset} offset`);
 
 			if (isCompletionRequestCancelled(this.currentGhostText, ourRequestId, cancellationToken)) {
 				return {
@@ -749,13 +751,13 @@ function getCompletionsFromCache(
 	suffix: string,
 	multiline: boolean
 ): APIChoice[] | undefined {
-	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const logger = accessor.get(ILogService).createSubLogger(['ghostText', 'getCompletionsFromCache']);
 	const choices = accessor.get(ICompletionsCacheService).findAll(prefix, suffix);
 	if (choices.length === 0) {
-		ghostTextLogger.debug(logTarget, `Found no completions in cache`);
+		logger.debug('Found no completions in cache');
 		return [];
 	}
-	ghostTextLogger.debug(logTarget, `Found ${choices.length} completions in cache`);
+	logger.debug(`Found ${choices.length} completions in cache`);
 	return choices.map(choice => makeGhostAPIChoice(choice, { forceSingleLine: !multiline }));
 }
 
