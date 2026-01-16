@@ -16,7 +16,7 @@ import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/commo
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
-import { ILogService } from '../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
@@ -25,7 +25,6 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
-import { createTracer, ITracer } from '../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
@@ -110,7 +109,7 @@ const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 export class InlineCompletionProviderImpl extends Disposable implements InlineCompletionItemProvider {
 	public readonly displayName = 'Inline Suggestion';
 
-	private readonly _tracer: ITracer;
+	private readonly _logger: ILogger;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
@@ -149,7 +148,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		@IInlineEditsModelService private readonly _modelService: IInlineEditsModelService,
 	) {
 		super();
-		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
+		this._logger = this._logService.createSubLogger(['NES', 'Provider']);
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.UseAlternativeNESNotebookFormat, this._expService);
 		this._renameSymbolSuggestions = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Advanced.InlineEditsRenameSymbolSuggestions, this._expService);
 
@@ -192,7 +191,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		context: NESInlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
+		const logger = this._logger.createSubLogger(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -203,20 +202,20 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const serveAsCompletionsProvider = unification && isCompletionsEnabled && !isInlineEditsEnabled;
 
 		if (!isInlineEditsEnabled && !serveAsCompletionsProvider) {
-			tracer.returns('inline edits disabled');
+			logger.trace('Return: inline edits disabled');
 			return undefined;
 		}
 
 		const ignoreWhenSuggestVisible = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsIgnoreWhenSuggestVisible, this._expService);
 
 		if (ignoreWhenSuggestVisible && context.selectedCompletionInfo && !unification) {
-			tracer.returns('suggest widget is showing, not providing NES');
+			logger.trace('Return: suggest widget is showing, not providing NES');
 			return undefined;
 		}
 
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {
-			tracer.returns('document not found in workspace');
+			logger.trace('Return: document not found in workspace');
 			return undefined;
 		}
 
@@ -232,7 +231,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
-			tracer.trace('invoking next edit provider');
+			logger.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder).then(r => ({ kind: 'llm' as const, val: r })),
@@ -254,7 +253,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 				if (llmSuggestion.val.result !== undefined || this.model.diagnosticsBasedProvider === undefined) {
 					suggestion = llmSuggestion;
 				} else {
-					tracer.trace('giving some more time to diagnostics provider');
+					logger.trace('giving some more time to diagnostics provider');
 					const remainingTime = clamp(1250 - (Date.now() - context.requestIssuedDateTime), 0, 1250);
 					timeout(remainingTime).then(() => requestCancellationTokenSource.cancel());
 					[, suggestion] = await all;
@@ -273,10 +272,16 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			requestCancellationTokenSource.cancel();
 
 			const emptyList = new NesCompletionList(context.requestUuid, undefined, [], telemetryBuilder);
-			const correlationId = createCorrelationId('nes');
+			const isFromCursorJump = suggestion.kind === 'llm' && (
+				// edit came using cursor jump
+				!!(suggestion.val.result?.isFromCursorJump) ||
+				// no edit but cursor jump suggested jumping to a certain position
+				!!(suggestion.val.result?.jumpToPosition)
+			);
+			const correlationId = createCorrelationId('nes', { isFromCursorJump });
 
 			if (token.isCancellationRequested) {
-				tracer.returns('lost race to cancellation');
+				logger.trace('Return: lost race to cancellation');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
 				return emptyList;
 			}
@@ -292,7 +297,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 
 			if (suggestionInfo.source === 'provider' && suggestionInfo.suggestion.result?.jumpToPosition !== undefined) {
-				tracer.trace('next edit suggestion only has jumpToPosition');
+				logger.trace('next edit suggestion only has jumpToPosition');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				const positionToJumpOneBased = suggestionInfo.suggestion.result.jumpToPosition;
 				const jumpToPosition = new Position(positionToJumpOneBased.lineNumber - 1, positionToJumpOneBased.column - 1);
@@ -310,12 +315,12 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			// Return and send telemetry if there is no result
 			const result = suggestionInfo.suggestion.result;
 			if (!result || !result.edit) {
-				tracer.trace('no next edit suggestion');
+				logger.trace('no next edit suggestion');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
 			}
 
-			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
+			logger.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
@@ -326,9 +331,9 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
 
 			if (!targetDocument) {
-				tracer.trace('no next edit suggestion');
+				logger.trace('no next edit suggestion');
 			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
-				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
+				logger.trace('no next edit suggestion, edits contain Notebook Cell Markers');
 			} else if (targetDocument === document) {
 				// nes is for this same document.
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
@@ -387,7 +392,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
 		} catch (e) {
-			tracer.trace('error', e);
+			logger.trace(`error: ${e}`);
 			logContext.setError(e);
 
 			try {
@@ -487,8 +492,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	}
 
 	public handleListEndOfLifetime(list: NesCompletionList, reason: InlineCompletionsDisposeReason): void {
-		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortenOpportunityId(list.requestUuid)]);
-		tracer.trace(`List ${list.requestUuid} disposed, reason: ${InlineCompletionsDisposeReasonKind[reason.kind]}`);
+		const logger = this._logger.createSubLogger(['handleListEndOfLifetime', shortenOpportunityId(list.requestUuid)]);
+		logger.trace(`List ${list.requestUuid} disposed, reason: ${InlineCompletionsDisposeReasonKind[reason.kind]}`);
 
 		const telemetryBuilder = list.telemetryBuilder;
 
@@ -500,8 +505,8 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 	}
 
 	public handleEndOfLifetime(item: NesCompletionItem, reason: InlineCompletionEndOfLifeReason): void {
-		const tracer = this._tracer.sub(['handleEndOfLifetime', shortenOpportunityId(item.info.requestUuid)]);
-		tracer.trace(`reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
+		const logger = this._logger.createSubLogger(['handleEndOfLifetime', shortenOpportunityId(item.info.requestUuid)]);
+		logger.trace(`reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
 
 		switch (reason.kind) {
 			case InlineCompletionEndOfLifeReasonKind.Accepted: {
@@ -514,7 +519,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
 				const supersededBy = reason.supersededBy ? (reason.supersededBy as NesCompletionItem) : undefined;
-				tracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
+				logger.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
 				if (supersededBy) {
 					/* __GDPR__
 						"supersededInlineEdit" : {

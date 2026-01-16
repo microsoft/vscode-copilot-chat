@@ -9,11 +9,10 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { ILogService } from '../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isNotebookCell } from '../../../util/common/notebooks';
-import { ITracer, createTracer } from '../../../util/common/tracing';
 import { Disposable, DisposableMap, IDisposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -89,7 +88,7 @@ export class InlineEditTriggerer extends Disposable {
 	private lastDocWithSelectionUri: string | undefined;
 	private lastEditTimestamp: number | undefined;
 
-	private readonly _tracer: ITracer;
+	private readonly _logger: ILogger;
 
 	constructor(
 		private readonly workspace: VSCodeWorkspace,
@@ -102,7 +101,7 @@ export class InlineEditTriggerer extends Disposable {
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.trace(s));
+		this._logger = this._logService.createSubLogger(['NES', 'Triggerer']);
 
 		this.registerListeners();
 	}
@@ -124,23 +123,23 @@ export class InlineEditTriggerer extends Disposable {
 
 			this.lastEditTimestamp = Date.now();
 
-			const tracer = this._tracer.sub('onDidChangeTextDocument');
+			const logger = this._logger.createSubLogger('onDidChangeTextDocument');
 
 			if (e.reason === TextDocumentChangeReason.Undo || e.reason === TextDocumentChangeReason.Redo) { // ignore
-				tracer.returns('undo/redo');
+				logger.trace('Return: undo/redo');
 				return;
 			}
 
 			const doc = this.workspace.getDocumentByTextDocument(e.document);
 
 			if (!doc) { // doc is likely copilot-ignored
-				tracer.returns('ignored document');
+				logger.trace('Return: ignored document');
 				return;
 			}
 
 			this.docToLastChangeMap.set(doc.id, new LastChange(e.document));
 
-			tracer.returns('setting last edited timestamp');
+			logger.trace('Return: setting last edited timestamp');
 		}));
 	}
 
@@ -153,15 +152,15 @@ export class InlineEditTriggerer extends Disposable {
 			const isSameDoc = this.lastDocWithSelectionUri === e.textEditor.document.uri.toString();
 			this.lastDocWithSelectionUri = e.textEditor.document.uri.toString();
 
-			const tracer = this._tracer.sub('onDidChangeTextEditorSelection');
+			const logger = this._logger.createSubLogger('onDidChangeTextEditorSelection');
 
 			if (e.selections.length !== 1) { // ignore multi-selection case
-				tracer.returns('multiple selections');
+				logger.trace('Return: multiple selections');
 				return;
 			}
 
 			if (!e.selections[0].isEmpty) { // ignore non-empty selection
-				tracer.returns('not empty selection');
+				logger.trace('Return: not empty selection');
 				return;
 			}
 
@@ -176,14 +175,14 @@ export class InlineEditTriggerer extends Disposable {
 			if (timeSince(this.nextEditProvider.lastRejectionTime) < TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN) {
 				// the cursor has moved within 5s of the last rejection, don't auto-trigger until another doc modification
 				this.docToLastChangeMap.deleteAndDispose(doc.id);
-				tracer.returns('rejection cooldown');
+				logger.trace('Return: rejection cooldown');
 				return;
 			}
 
 			const mostRecentChange = this.docToLastChangeMap.get(doc.id);
 			if (!mostRecentChange) {
-				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
-					tracer.returns('document not tracked - does not have recent changes');
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, logger)) {
+					logger.trace('Return: document not tracked - does not have recent changes');
 				}
 				return;
 			}
@@ -191,8 +190,8 @@ export class InlineEditTriggerer extends Disposable {
 			const hasRecentEdit = timeSince(mostRecentChange.lastEditedTimestamp) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
 
 			if (!hasRecentEdit) {
-				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
-					tracer.returns('no recent edit');
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, logger)) {
+					logger.trace('Return: no recent edit');
 				}
 				return;
 			}
@@ -201,15 +200,15 @@ export class InlineEditTriggerer extends Disposable {
 			if (!hasRecentTrigger) {
 				// the provider was not triggered recently, so we might be observing a cursor change event following
 				// a document edit caused outside of regular typing, otherwise the UI would have invoked us recently
-				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, tracer)) {
-					tracer.returns('no recent trigger');
+				if (!this._maybeTriggerOnDocumentSwitch(e, isSameDoc, logger)) {
+					logger.trace('Return: no recent trigger');
 				}
 				return;
 			}
 
 			const range = doc.toRange(e.textEditor.document, e.selections[0]);
 			if (!range) {
-				tracer.returns('no range');
+				logger.trace('Return: no range');
 				return;
 			}
 
@@ -223,7 +222,7 @@ export class InlineEditTriggerer extends Disposable {
 				(!isNotebookCell(e.textEditor.document.uri) || e.textEditor.document === mostRecentChange.documentTrigger)) {
 				const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
 				if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
-					tracer.returns('same line cooldown');
+					logger.trace('Return: same line cooldown');
 					return;
 				}
 			}
@@ -241,7 +240,7 @@ export class InlineEditTriggerer extends Disposable {
 
 			mostRecentChange.lineNumberTriggers.set(selectionLine, now);
 			mostRecentChange.documentTrigger = e.textEditor.document;
-			tracer.returns('triggering inline edit');
+			logger.trace('Return: triggering inline edit');
 
 			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounceOnSelectionChange, this._expService);
 			if (debounceOnSelectionChange === undefined) {
@@ -260,36 +259,36 @@ export class InlineEditTriggerer extends Disposable {
 		}));
 	}
 
-	private _maybeTriggerOnDocumentSwitch(e: vscode.TextEditorSelectionChangeEvent, isSameDoc: boolean, parentTracer: ITracer): boolean {
-		const tracer = parentTracer.subNoEntry('editorSwitch');
+	private _maybeTriggerOnDocumentSwitch(e: vscode.TextEditorSelectionChangeEvent, isSameDoc: boolean, parentLogger: ILogger): boolean {
+		const logger = parentLogger.createSubLogger('editorSwitch');
 		const triggerAfterSeconds = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, this._expService);
 		if (triggerAfterSeconds === undefined) {
-			tracer.trace('document switch disabled');
+			logger.trace('document switch disabled');
 			return false;
 		}
 		if (isSameDoc) {
-			tracer.returns(`document switch didn't happen`);
+			logger.trace(`Return: document switch didn't happen`);
 			return false;
 		}
 		if (this.lastEditTimestamp === undefined) {
-			tracer.returns('no last edit timestamp');
+			logger.trace('Return: no last edit timestamp');
 			return false;
 		}
 		const timeSinceLastEdit = Date.now() - this.lastEditTimestamp;
 		if (timeSinceLastEdit > triggerAfterSeconds * 1000) {
-			tracer.returns('too long since last edit');
+			logger.trace('Return: too long since last edit');
 			return false;
 		}
 
 		const doc = this.workspace.getDocumentByTextDocument(e.textEditor.document);
 		if (!doc) { // doc is likely copilot-ignored
-			tracer.returns('ignored document');
+			logger.trace('Return: ignored document');
 			return false;
 		}
 
 		const range = doc.toRange(e.textEditor.document, e.selections[0]);
 		if (!range) {
-			tracer.returns('no range');
+			logger.trace('Return: no range');
 			return false;
 		}
 
@@ -300,7 +299,7 @@ export class InlineEditTriggerer extends Disposable {
 		lastChange.lineNumberTriggers.set(selectionLine, Date.now());
 		this.docToLastChangeMap.set(doc.id, lastChange);
 
-		tracer.returns('triggering on document switch');
+		logger.trace('Return: triggering on document switch');
 		this._triggerInlineEdit();
 		return true;
 	}

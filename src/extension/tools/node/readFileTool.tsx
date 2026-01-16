@@ -171,7 +171,23 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		}
 
 		const { start, end } = getParamRanges(input, documentSnapshot);
+		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
+
 		if (start === 1 && end === documentSnapshot.lineCount) {
+			if (skillInfo) {
+				const { skillName } = skillInfo;
+				if (this.customInstructionsService.isSkillMdFile(uri)) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(uri, { vscodeLinkType: 'skill', linkText: skillName })}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(uri, { vscodeLinkType: 'skill', linkText: skillName })}`),
+					};
+				} else {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill \`${skillName}\`: ${formatUriForFileWidget(uri)}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill \`${skillName}\`: ${formatUriForFileWidget(uri)}`),
+					};
+				}
+			}
 			return {
 				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
 				pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),
@@ -180,6 +196,22 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		// Jump to the start of the range, don't select the whole range
 		const readLocation = new Location(uri, new Range(start - 1, 0, start - 1, 0));
+		if (this.customInstructionsService.isSkillFile(uri)) {
+			if (skillInfo) {
+				const { skillName } = skillInfo;
+				if (this.customInstructionsService.isSkillMdFile(uri)) {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill ${formatUriForFileWidget(readLocation, { vscodeLinkType: 'skill', linkText: skillName })}, lines ${start} to ${end}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill ${formatUriForFileWidget(readLocation, { vscodeLinkType: 'skill', linkText: skillName })}, lines ${start} to ${end}`),
+					};
+				} else {
+					return {
+						invocationMessage: new MarkdownString(l10n.t`Reading skill \`${skillName}\`: ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+						pastTenseMessage: new MarkdownString(l10n.t`Read skill \`${skillName}\`: ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
+					};
+				}
+			}
+		}
 		return {
 			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(readLocation)}, lines ${start} to ${end}`),

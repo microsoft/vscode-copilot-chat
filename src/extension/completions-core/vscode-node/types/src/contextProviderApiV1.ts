@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Diagnostic, Uri } from 'vscode';
 import {
 	CancellationToken,
 	Disposable,
@@ -195,6 +196,17 @@ export interface CodeSnippet extends ContextItem {
 	additionalUris?: string[];
 }
 
-export type SupportedContextItem = Trait | CodeSnippet;
-export type SupportedContextItemType = 'Trait' | 'CodeSnippet';
+// Relevant diagnostic from a given resource. The URI is used for content exclusion.
+export interface DiagnosticBag extends ContextItem {
+	uri: Uri;
+	values: Diagnostic[];
+}
+
+export type SupportedContextItem = Trait | CodeSnippet | DiagnosticBag;
+export type SupportedContextItemType = 'Trait' | 'CodeSnippet' | 'DiagnosticBag';
 export type ContextItemOrigin = 'request' | 'update';
+export namespace ContextItemOrigin {
+	export function is(value: string): value is ContextItemOrigin {
+		return value === 'request' || value === 'update';
+	}
+}

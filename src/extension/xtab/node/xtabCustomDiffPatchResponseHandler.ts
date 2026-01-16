@@ -68,6 +68,7 @@ export class XtabCustomDiffPatchResponseHandler {
 			pushEdit(Result.ok({
 				edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
 				window,
+				isFromCursorJump: true,
 				// targetDocument, // TODO@ulugbekna: implement target document resolution
 			} satisfies StreamedEdit));
 		}

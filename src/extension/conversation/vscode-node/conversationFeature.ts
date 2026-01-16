@@ -90,14 +90,16 @@ export class ConversationFeature implements IExtensionContribution {
 		const activationBlockerDeferred = new DeferredPromise<void>();
 		this.activationBlocker = activationBlockerDeferred.p;
 		if (authenticationService.copilotToken) {
-			this.logService.debug(`ConversationFeature: Copilot token already available`);
+			this.logService.info(`ConversationFeature: Copilot token already available`);
 			this.activated = true;
 			activationBlockerDeferred.complete();
+		} else {
+			this.logService.info(`ConversationFeature: Waiting for copilot token to activate conversation feature`);
 		}
 
 		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 			const hasSession = !!authenticationService.copilotToken;
-			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			this.logService.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
 				this.activated = true;
 			} else {
@@ -232,7 +234,7 @@ export class ConversationFeature implements IExtensionContribution {
 					return;
 				}
 
-				const repository = this.gitCommitMessageService.getRepository(uri);
+				const repository = await this.gitCommitMessageService.getRepository(uri);
 				if (!repository) {
 					return;
 				}
@@ -246,7 +248,7 @@ export class ConversationFeature implements IExtensionContribution {
 				}
 			}),
 			vscode.commands.registerCommand('github.copilot.git.generateCommitMessage', async (rootUri: vscode.Uri | undefined, _: vscode.SourceControlInputBoxValueProviderContext[], cancellationToken: vscode.CancellationToken | undefined) => {
-				const repository = this.gitCommitMessageService.getRepository(rootUri);
+				const repository = await this.gitCommitMessageService.getRepository(rootUri);
 				if (!repository) {
 					return;
 				}

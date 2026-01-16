@@ -44,7 +44,6 @@ export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart
 export import ChatResponseTextEditPart = vscode.ChatResponseTextEditPart;
 export import ChatResponseNotebookEditPart = vscode.ChatResponseNotebookEditPart;
 export import ChatResponseConfirmationPart = vscode.ChatResponseConfirmationPart;
-export import ChatPrepareToolInvocationPart = vscode.ChatPrepareToolInvocationPart;
 export import ChatRequest = vscode.ChatRequest;
 export import ChatRequestTurn = vscode.ChatRequestTurn;
 export import ChatResponseTurn = vscode.ChatResponseTurn;
@@ -99,6 +98,7 @@ export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
 export import ChatSessionStatus = vscode.ChatSessionStatus;
+export import CustomAgentChatResource = vscode.CustomAgentChatResource;
 
 export const l10n = {
 	/**

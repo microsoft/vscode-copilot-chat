@@ -119,7 +119,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 	) {
 		super();
@@ -379,7 +379,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (that.options.responseProcessor) {
 					chatResult = await that.options.responseProcessor.processResponse(this.context, inputStream, responseStream, token);
 				} else {
-					const responseProcessor = that._instantiationService.createInstance(PseudoStopStartResponseProcessor, [], undefined);
+					const responseProcessor = that._instantiationService.createInstance(PseudoStopStartResponseProcessor, [], undefined, { subagentInvocationId: that.options.request.subAgentInvocationId });
 					await responseProcessor.processResponse(this.context, inputStream, responseStream, token);
 				}
 				return chatResult;
@@ -453,6 +453,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
 				}
+				if (delta.serverToolCalls) {
+					for (const serverCall of delta.serverToolCalls) {
+						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.arguments);
+					}
+				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
 				}
@@ -471,7 +476,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.isSubagent,
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId,
 			disableThinking,
 		}, token);
 

@@ -347,6 +347,26 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getOrganizationRepositoriesWithToken(org, authToken);
 	}
 
+	async getUserRepositories(authOptions: { createIfNone?: boolean }, query?: string): Promise<{ owner: string; name: string }[]> {
+		// Use 'permissive' auth to ensure we have the 'repo' scope needed to list private repositories
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for getUserRepositories');
+			throw new PermissiveAuthRequiredError();
+		}
+		return this.getUserRepositoriesWithToken(authToken, query);
+	}
+
+	async getRecentlyCommittedRepositories(authOptions: { createIfNone?: boolean }): Promise<{ owner: string; name: string }[]> {
+		// Use 'permissive' auth to ensure we have access to private repository events
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for getRecentlyCommittedRepositories');
+			throw new PermissiveAuthRequiredError();
+		}
+		return this.getRecentlyCommittedReposWithToken(authToken);
+	}
+
 	async getCopilotAgentModels(authOptions: { createIfNone?: boolean }): Promise<CCAModel[]> {
 		try {
 			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
