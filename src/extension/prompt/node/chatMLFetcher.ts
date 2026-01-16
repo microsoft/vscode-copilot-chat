@@ -1041,10 +1041,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 	/**
 	 * Check for repetition in partial response deltas from a cancelled request.
-	 * 
+	 *
 	 * This method performs the same repetition detection as the `isRepetitive` method,
 	 * but operates on partial response data collected before the request was cancelled.
-	 * 
+	 *
 	 * Key differences from completed requests:
 	 * - Text is reconstructed from delta.text values instead of message.content
 	 * - Tokens are approximated by splitting text on whitespace instead of using
@@ -1060,13 +1060,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties
 	): void {
 		// Reconstruct the text content from deltas (filter out null, undefined, and empty text values)
-		const textContent = deltas.filter(delta => delta.text != null && delta.text !== '').map(delta => delta.text).join('');
-		
+		const textContent = deltas.filter(delta => delta.text !== null && delta.text !== '').map(delta => delta.text).join('');
+
 		// Early exit if no content
 		if (!textContent || textContent.trim().length === 0) {
 			return;
 		}
-		
+
 		// For cancelled requests, we don't have the actual token array (only available in ChatCompletion),
 		// so we approximate by splitting text content on whitespace. This is less precise than actual
 		// tokenization but sufficient for detecting obvious repetition patterns.
@@ -1074,10 +1074,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		// Check for line repetition
 		const lineRepetitionStats = calculateLineRepetitionStats(textContent);
-		
+
 		// Check for token-level repetition
 		const hasRepetition = isRepetitive(tokens);
-		
+
 		// Send telemetry if repetition is detected
 		if (hasRepetition) {
 			const telemetryData = TelemetryData.createAndMarkAsIssued();
@@ -1088,7 +1088,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			// completionId, created, deploymentId, or serverExperiments fields.
 			this._telemetryService.sendEnhancedGHTelemetryEvent('conversation.repetition.detected', extended.properties, extended.measurements);
 		}
-		
+
 		if (lineRepetitionStats.numberOfRepetitions >= 10) {
 			this._telemetryService.sendMSFTTelemetryEvent('conversation.repetition.detected', {
 				requestId: requestId,
