@@ -37,7 +37,6 @@ import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../c
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
-import { getRepoId } from '../vscode/copilotCodingAgentUtils';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
@@ -1092,31 +1091,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		copilotcliSessionItemProvider.notifySessionsChange();
 	};
 
-	const checkoutPullRequestReroute = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
-		const resource = sessionItemOrResource instanceof vscode.Uri
-			? sessionItemOrResource
-			: sessionItemOrResource?.resource;
-
-		if (!resource) {
-			return;
-		}
-
-		const pullRequestNumber = SessionIdForCLI.parse(resource);
-		if (!pullRequestNumber) {
-			return;
-		}
-		const repoId = await getRepoId(gitService);
-		if (!repoId) {
-			vscode.window.showErrorMessage(l10n.t('No active repository found to checkout pull request.'));
-			return;
-		}
-
-		const uri = vscode.Uri.parse(`${vscode.env.uriScheme}://github.vscode-pull-request-github/checkout-pull-request?uri=https://github.com/${repoId.org}/${repoId.repo}/pull/${pullRequestNumber}`);
-		return vscode.env.openExternal(uri);
-	};
-
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply', applyChanges));
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.checkoutPullRequestReroute', checkoutPullRequestReroute));
 	return disposableStore;
 }
