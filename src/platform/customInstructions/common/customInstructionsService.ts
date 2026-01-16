@@ -322,7 +322,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				return extensionPromptFiles.some(file => extUriBiasedIgnorePathCase.isEqual(file.uri, uri));
 			}
 		} catch (e) {
-			console.warn('Error checking for extension prompt files');
+			this.logService.warn('Error checking for extension prompt files');
 			// Command may not be available, ignore
 		}
 
