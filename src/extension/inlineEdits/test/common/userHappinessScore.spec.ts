@@ -5,16 +5,13 @@
 
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-
-type ActionKind = 'accepted' | 'rejected' | 'ignored';
+import { ActionKind, getUserHappinessScore, getWindowWithIgnoredLimit, MAX_INTERACTIONS_CONSIDERED } from '../../common/userInteractionMonitor';
 
 /**
- * Original algorithm from main branch (only accepted/rejected).
+ * v1 algorithm from main branch (only accepted/rejected).
  * Used as reference to verify the new configurable algorithm can mimic the original behavior.
  */
-function originalGetUserHappinessScore(actions: { kind: 'accepted' | 'rejected' }[]): number {
-	const MAX_INTERACTIONS_CONSIDERED = 10;
-
+function v1GetUserHappinessScore(actions: { kind: 'accepted' | 'rejected' }[]): number {
 	if (actions.length === 0) {
 		return 0.5; // neutral score when no data
 	}
@@ -44,9 +41,9 @@ function originalGetUserHappinessScore(actions: { kind: 'accepted' | 'rejected' 
 }
 
 /**
- * Configuration that mimics the original algorithm behavior.
+ * Configuration that mimics the v1 algorithm behavior.
  */
-const CONFIG_MIMICS_ORIGINAL: UserHappinessScoreConfiguration = {
+const CONFIG_MIMICS_V1: UserHappinessScoreConfiguration = {
 	acceptedScore: 1,
 	rejectedScore: 0,
 	ignoredScore: 0.5,
@@ -58,123 +55,8 @@ const CONFIG_MIMICS_ORIGINAL: UserHappinessScoreConfiguration = {
 	limitTotalIgnored: true,
 };
 
-/**
- * Implementation of the windowing logic with ignored limiting.
- * This mirrors the _getWindowWithIgnoredLimit method in UserInteractionMonitor.
- */
-function getWindowWithIgnoredLimit(
-	actions: { kind: ActionKind }[],
-	config: UserHappinessScoreConfiguration
-): { kind: ActionKind }[] {
-	const MAX_INTERACTIONS_CONSIDERED = 10;
-	const { limitConsecutiveIgnored, limitTotalIgnored, ignoredLimit } = config;
-
-	if (!limitConsecutiveIgnored && !limitTotalIgnored) {
-		// No limiting - just take last MAX_INTERACTIONS_CONSIDERED
-		return actions.slice(-MAX_INTERACTIONS_CONSIDERED);
-	}
-
-	const result: { kind: ActionKind }[] = [];
-	let consecutiveIgnored = 0;
-	let totalIgnored = 0;
-
-	// Walk backwards through history
-	for (let i = actions.length - 1; i >= 0 && result.length < MAX_INTERACTIONS_CONSIDERED; i--) {
-		const action = actions[i];
-
-		if (action.kind === 'ignored') {
-			let skip = false;
-			if (limitConsecutiveIgnored && consecutiveIgnored >= ignoredLimit) {
-				skip = true;
-			}
-			if (limitTotalIgnored && totalIgnored >= ignoredLimit) {
-				skip = true;
-			}
-
-			if (skip) {
-				continue;
-			}
-
-			consecutiveIgnored++;
-			totalIgnored++;
-		} else {
-			consecutiveIgnored = 0; // Reset consecutive count on accept/reject
-		}
-
-		result.push(action);
-	}
-
-	// Reverse to get chronological order
-	result.reverse();
-	return result;
-}
-
-/**
- * New configurable happiness score algorithm.
- * This mirrors the _getUserHappinessScore method in UserInteractionMonitor.
- */
-function newGetUserHappinessScore(
-	actions: { kind: ActionKind }[],
-	config: UserHappinessScoreConfiguration
-): number {
-	const MAX_INTERACTIONS_CONSIDERED = 10;
-
-	if (actions.length === 0) {
-		return 0.5; // neutral score when no data
-	}
-
-	// Get window of actions with ignored limiting
-	const window = getWindowWithIgnoredLimit(actions, config);
-
-	if (window.length === 0) {
-		return 0.5; // neutral score when no data after filtering
-	}
-
-	// Calculate weighted score
-	let weightedScore = 0;
-	let totalWeight = 0;
-
-	for (let i = 0; i < window.length; i++) {
-		const action = window[i];
-
-		// Skip ignored actions if not included in score calculation
-		if (action.kind === 'ignored' && !config.includeIgnored) {
-			continue;
-		}
-
-		// Calculate weight based on position (more recent = higher weight)
-		const weight = i + 1;
-
-		// Get score based on action kind from configuration
-		let score: number;
-		switch (action.kind) {
-			case 'accepted':
-				score = config.acceptedScore;
-				break;
-			case 'rejected':
-				score = config.rejectedScore;
-				break;
-			case 'ignored':
-				score = config.ignoredScore;
-				break;
-		}
-
-		// Normalize score to 0-1 range based on accept/reject weights
-		const normalized = (score - config.rejectedScore) / (config.acceptedScore - config.rejectedScore);
-
-		weightedScore += normalized * weight;
-		totalWeight += weight;
-	}
-
-	const rawScore = totalWeight > 0 ? weightedScore / totalWeight : 0.5;
-
-	// Adjust score towards neutral (0.5) when we have fewer data points
-	const dataConfidence = window.length / MAX_INTERACTIONS_CONSIDERED;
-	return 0.5 + (rawScore - 0.5) * dataConfidence;
-}
-
 describe('UserHappinessScore', () => {
-	describe('new algorithm mimics original', () => {
+	describe('v2 algorithm mimics v1', () => {
 		const testCases: { name: string; actions: ActionKind[] }[] = [
 			{ name: 'empty actions', actions: [] },
 			{ name: 'single accept', actions: ['accepted'] },
@@ -185,7 +67,7 @@ describe('UserHappinessScore', () => {
 			{ name: 'accepts then rejects', actions: ['accepted', 'accepted', 'accepted', 'rejected', 'rejected', 'rejected'] },
 			{ name: 'rejects then accepts', actions: ['rejected', 'rejected', 'rejected', 'accepted', 'accepted', 'accepted'] },
 			{ name: 'full 10 mixed', actions: ['accepted', 'rejected', 'accepted', 'accepted', 'rejected', 'accepted', 'rejected', 'accepted', 'rejected', 'accepted'] },
-			// Cases with ignored (should be filtered out when mimicking original)
+			// Cases with ignored (should be filtered out when mimicking v1)
 			{ name: 'accepts with ignored', actions: ['accepted', 'ignored', 'accepted', 'ignored', 'accepted'] },
 			{ name: 'rejects with ignored', actions: ['rejected', 'ignored', 'rejected', 'ignored', 'rejected'] },
 			{ name: 'mixed with many ignored', actions: ['accepted', 'ignored', 'ignored', 'ignored', 'rejected', 'ignored', 'accepted'] },
@@ -195,17 +77,17 @@ describe('UserHappinessScore', () => {
 
 		for (const testCase of testCases) {
 			test(testCase.name, () => {
-				// For original, filter out ignored actions (original didn't have them)
-				const originalActions = testCase.actions
+				// For v1, filter out ignored actions
+				const v1Actions = testCase.actions
 					.filter((a): a is 'accepted' | 'rejected' => a !== 'ignored')
 					.map(kind => ({ kind }));
 
 				const newActions = testCase.actions.map(kind => ({ kind }));
 
-				const originalScore = originalGetUserHappinessScore(originalActions);
-				const newScore = newGetUserHappinessScore(newActions, CONFIG_MIMICS_ORIGINAL);
+				const v1Score = v1GetUserHappinessScore(v1Actions);
+				const newScore = getUserHappinessScore(newActions, CONFIG_MIMICS_V1);
 
-				expect(newScore).toBeCloseTo(originalScore, 6);
+				expect(newScore).toBeCloseTo(v1Score, 6);
 			});
 		}
 	});
@@ -223,7 +105,7 @@ describe('UserHappinessScore', () => {
 				{ kind: 'rejected' as const },
 			];
 
-			const score = newGetUserHappinessScore(actions, config);
+			const score = getUserHappinessScore(actions, config);
 			// With ignored having score 0.5, it should pull the average towards middle
 			expect(score).toBeGreaterThan(0.4);
 			expect(score).toBeLessThan(0.6);
@@ -287,10 +169,12 @@ describe('UserHappinessScore', () => {
 			];
 
 			// Config where ignored is included but scores as neutral (0.5)
+			// Disable ignored limiting so the ignored action is included in the window
 			const configWithIgnoredNeutral: UserHappinessScoreConfiguration = {
 				...DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION,
 				includeIgnored: true,
 				ignoredScore: 0.5, // Neutral
+				limitTotalIgnored: false,
 			};
 
 			// Config where ignored is included but scores as positive (0.8)
@@ -298,10 +182,11 @@ describe('UserHappinessScore', () => {
 				...DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION,
 				includeIgnored: true,
 				ignoredScore: 0.8, // Higher than neutral
+				limitTotalIgnored: false,
 			};
 
-			const neutralScore = newGetUserHappinessScore(actions, configWithIgnoredNeutral);
-			const positiveScore = newGetUserHappinessScore(actions, configWithIgnoredPositive);
+			const neutralScore = getUserHappinessScore(actions, configWithIgnoredNeutral);
+			const positiveScore = getUserHappinessScore(actions, configWithIgnoredPositive);
 
 			// With higher ignored score, overall score should be higher
 			expect(positiveScore).toBeGreaterThan(neutralScore);
@@ -310,7 +195,7 @@ describe('UserHappinessScore', () => {
 
 	describe('edge cases', () => {
 		test('empty actions returns neutral score', () => {
-			const score = newGetUserHappinessScore([], DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+			const score = getUserHappinessScore([], DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
 			expect(score).toBe(0.5);
 		});
 
@@ -328,7 +213,7 @@ describe('UserHappinessScore', () => {
 				{ kind: 'ignored' as const },
 			];
 
-			const score = newGetUserHappinessScore(actions, config);
+			const score = getUserHappinessScore(actions, config);
 			expect(score).toBe(0.5);
 		});
 
@@ -336,12 +221,12 @@ describe('UserHappinessScore', () => {
 			const config = DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 
 			// Single accept should give score above 0.5 but not too high
-			const singleAccept = newGetUserHappinessScore([{ kind: 'accepted' }], config);
+			const singleAccept = getUserHappinessScore([{ kind: 'accepted' }], config);
 			expect(singleAccept).toBeGreaterThan(0.5);
 			expect(singleAccept).toBeLessThan(0.6); // Pulled towards neutral due to low confidence
 
 			// 10 accepts should give score closer to 1
-			const manyAccepts = newGetUserHappinessScore(
+			const manyAccepts = getUserHappinessScore(
 				Array(10).fill(null).map(() => ({ kind: 'accepted' as const })),
 				config
 			);
@@ -352,13 +237,13 @@ describe('UserHappinessScore', () => {
 			const config = DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 
 			// Accepts followed by rejects (recent rejects should lower score)
-			const acceptsThenRejects = newGetUserHappinessScore(
+			const acceptsThenRejects = getUserHappinessScore(
 				[{ kind: 'accepted' }, { kind: 'accepted' }, { kind: 'rejected' }, { kind: 'rejected' }],
 				config
 			);
 
 			// Rejects followed by accepts (recent accepts should raise score)
-			const rejectsThenAccepts = newGetUserHappinessScore(
+			const rejectsThenAccepts = getUserHappinessScore(
 				[{ kind: 'rejected' }, { kind: 'rejected' }, { kind: 'accepted' }, { kind: 'accepted' }],
 				config
 			);

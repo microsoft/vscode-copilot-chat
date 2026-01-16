@@ -9,7 +9,7 @@ import { DefaultsOnlyConfigurationService } from '../../../../platform/configura
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
-import { UserInteractionMonitor } from '../../common/userInteractionMonitor';
+import { MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
 
 /**
  * Test-friendly subclass of UserInteractionMonitor that exposes internal state for verification.
@@ -28,20 +28,6 @@ class TestUserInteractionMonitor extends UserInteractionMonitor {
 	 */
 	getActionsForTiming(): { time: number; kind: 'accepted' | 'rejected' }[] {
 		return [...(this as any)._recentUserActionsForTiming];
-	}
-
-	/**
-	 * Get the max interactions considered for timing.
-	 */
-	getMaxInteractionsConsidered(): number {
-		return UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED;
-	}
-
-	/**
-	 * Get the max interactions stored for aggressiveness.
-	 */
-	getMaxInteractionsStored(): number {
-		return UserInteractionMonitor.MAX_INTERACTIONS_STORED;
 	}
 }
 
@@ -138,22 +124,22 @@ describe('UserInteractionMonitor', () => {
 
 		test('aggressiveness history is limited to MAX_INTERACTIONS_STORED', () => {
 			// Record more than max actions
-			for (let i = 0; i < monitor.getMaxInteractionsStored() + 5; i++) {
+			for (let i = 0; i < MAX_INTERACTIONS_STORED + 5; i++) {
 				monitor.handleAcceptance();
 			}
 
 			const actions = monitor.getActionsForAggressiveness();
-			expect(actions).toHaveLength(monitor.getMaxInteractionsStored());
+			expect(actions).toHaveLength(MAX_INTERACTIONS_STORED);
 		});
 
 		test('timing history is limited to MAX_INTERACTIONS_CONSIDERED', () => {
 			// Record more than max actions
-			for (let i = 0; i < monitor.getMaxInteractionsConsidered() + 5; i++) {
+			for (let i = 0; i < MAX_INTERACTIONS_CONSIDERED + 5; i++) {
 				monitor.handleAcceptance();
 			}
 
 			const actions = monitor.getActionsForTiming();
-			expect(actions).toHaveLength(monitor.getMaxInteractionsConsidered());
+			expect(actions).toHaveLength(MAX_INTERACTIONS_CONSIDERED);
 		});
 
 		test('timing history does not include "ignored" events', () => {
