@@ -1214,6 +1214,75 @@
 				}
 			},
 			{
+				"name": "copilot_askQuestions",
+				"toolReferenceName": "askQuestions",
+				"displayName": "%copilot.tools.askQuestions.name%",
+				"userDescription": "%copilot.tools.askQuestions.description%",
+				"modelDescription": "Opens a Q&A dialog to clarify requirements before proceeding. Use when you need user input on approach, format, scope, or other decisions. Each question shows options with an optional recommended default. Returns structured answers.",
+				"icon": "$(question)",
+				"canBeReferencedInPrompt": false,
+				"when": "config.github.copilot.chat.askQuestions.enabled",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"questions": {
+							"type": "array",
+							"description": "Array of questions to ask the user",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the question"
+									},
+									"question": {
+										"type": "string",
+										"description": "The question text to display"
+									},
+									"header": {
+										"type": "string",
+										"description": "Short label displayed as picker title"
+									},
+									"multiSelect": {
+										"type": "boolean",
+										"description": "Allow multiple selections",
+										"default": false
+									},
+									"options": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"label": {
+													"type": "string"
+												},
+												"description": {
+													"type": "string"
+												},
+												"recommended": {
+													"type": "boolean"
+												}
+											},
+											"required": [
+												"label"
+											]
+										}
+									}
+								},
+								"required": [
+									"id",
+									"question",
+									"options"
+								]
+							}
+						}
+					},
+					"required": [
+						"questions"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -1276,6 +1345,7 @@
 				"name": "vscode",
 				"description": "",
 				"tools": [
+					"askQuestions",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
@@ -2895,6 +2965,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.askQuestions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
 						"tags": [
 							"experimental"
 						]
