@@ -48,8 +48,7 @@ describe('SearchSubagentToolCallingLoop', () => {
 
 		// Get and override the endpoint provider to return our mock endpoint
 		endpointProvider = accessor.get(IEndpointProvider);
-		const originalGetChatEndpoint = endpointProvider.getChatEndpoint.bind(endpointProvider);
-		endpointProvider.getChatEndpoint = vi.fn(async (requestOrModel: any) => {
+		endpointProvider.getChatEndpoint = vi.fn(async (_requestOrModel: any) => {
 			// Always return the same endpoint - this ensures we don't fallback to GPT-4.1
 			return mockEndpoint;
 		});
