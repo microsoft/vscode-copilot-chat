@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -11,7 +10,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
 import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
 import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, ICopilotToolCallStreamUpdate, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
-import { Response } from '../common/fetcherService';
+import { DestroyableStream, Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
 
 /** Gathers together many chunks of a single completion choice. */
@@ -213,7 +212,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
  * soon as it's finished.
  */
 export class SSEProcessor {
-	private requestId: RequestId = getRequestId(this.response);
+	private requestId: RequestId = getRequestId(this.response.headers);
 	/**
 	 * A key & value being here means at least one chunk with that choice index
 	 * has been received. A null value means we've already finished the given
@@ -231,7 +230,7 @@ export class SSEProcessor {
 		private readonly telemetryService: ITelemetryService,
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
-		private readonly body: NodeJS.ReadableStream,
+		private readonly body: DestroyableStream<string>,
 		private readonly cancellationToken?: CancellationToken
 	) { }
 
@@ -242,8 +241,7 @@ export class SSEProcessor {
 		response: Response,
 		cancellationToken?: CancellationToken
 	) {
-		const body = (await response.body()) as NodeJS.ReadableStream;
-		body.setEncoding('utf8');
+		const body = response.body.pipeThrough(new TextDecoderStream());
 		return new SSEProcessor(
 			logService,
 			telemetryService,
@@ -292,7 +290,7 @@ export class SSEProcessor {
 					}
 				}
 
-				if (this.maybeCancel('after receiving the completion, but maybe before we got the usage')) {
+				if (await this.maybeCancel('after receiving the completion, but maybe before we got the usage')) {
 					return;
 				}
 
@@ -302,7 +300,7 @@ export class SSEProcessor {
 				}
 			}
 		} finally {
-			this.cancel();
+			await this.cancel();
 			this.logService.info(
 				`request done: requestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
@@ -316,7 +314,7 @@ export class SSEProcessor {
 		let hadEarlyFinishedSolution = false;
 		// Iterate over arbitrarily sized chunks coming in from the network.
 		for await (const chunk of this.body) {
-			if (this.maybeCancel('after awaiting body chunk')) {
+			if (await this.maybeCancel('after awaiting body chunk')) {
 				return;
 			}
 
@@ -407,7 +405,7 @@ export class SSEProcessor {
 
 				if (this.requestId.created === 0) {
 					// Would only be 0 if we're the first actual response chunk
-					this.requestId = getRequestId(this.response, json);
+					this.requestId = getRequestId(this.response.headers, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
 						this.requestId.created = Math.floor(Date.now() / 1000);
 					}
@@ -464,7 +462,7 @@ export class SSEProcessor {
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
 						}
-						return this.maybeCancel('after awaiting finishedCb');
+						return await this.maybeCancel('after awaiting finishedCb');
 					};
 
 					let handled = true;
@@ -584,7 +582,7 @@ export class SSEProcessor {
 						index: choice.index,
 					};
 
-					if (this.maybeCancel('after yielding finished choice')) {
+					if (await this.maybeCancel('after yielding finished choice')) {
 						return;
 					}
 
@@ -610,7 +608,7 @@ export class SSEProcessor {
 				index: solutionIndex,
 			};
 
-			if (this.maybeCancel('after yielding after iteration done')) {
+			if (await this.maybeCancel('after yielding after iteration done')) {
 				return;
 			}
 		}
@@ -661,7 +659,7 @@ export class SSEProcessor {
 				index: solutionIndex,
 			};
 
-			if (this.maybeCancel('after yielding on DONE')) {
+			if (await this.maybeCancel('after yielding on DONE')) {
 				return;
 			}
 		}
@@ -671,17 +669,17 @@ export class SSEProcessor {
 	 * Returns whether the cancellation token was cancelled and closes the
 	 * stream if it was.
 	 */
-	private maybeCancel(description: string) {
+	private async maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
 			this.logService.debug('Cancelled: ' + description);
-			this.cancel();
+			await this.cancel();
 			return true;
 		}
 		return false;
 	}
 
-	private cancel() {
-		(this.body as ClientHttp2Stream).destroy();
+	private async cancel() {
+		await this.response.body.destroy();
 	}
 
 	private logChoice(choice: ExtendedChoiceJSON) {

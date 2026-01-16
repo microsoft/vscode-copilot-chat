@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -19,23 +19,25 @@ import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, handleAPIKeyUpdate, LMResponsePart } from '../common/byokProvider';
+import { BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, LMResponsePart } from '../common/byokProvider';
+import { AbstractLanguageModelChatProvider, ExtendedLanguageModelChatInformation, LanguageModelChatConfiguration } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
-import { promptForAPIKey } from './byokUIService';
 
-export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
+export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
+
 	public static readonly providerName = 'Anthropic';
-	public readonly authType: BYOKAuthType = BYOKAuthType.GlobalApiKey;
-	private _anthropicAPIClient: Anthropic | undefined;
-	private _apiKey: string | undefined;
+
 	constructor(
-		private readonly _knownModels: BYOKKnownModels | undefined,
-		private readonly _byokStorageService: IBYOKStorageService,
-		@ILogService private readonly _logService: ILogService,
+		knownModels: BYOKKnownModels | undefined,
+		byokStorageService: IBYOKStorageService,
+		@ILogService logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService
-	) { }
+	) {
+		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
+
+	}
 
 	private _getThinkingBudget(modelId: string, maxOutputTokens: number): number | undefined {
 		const configuredBudget = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, this._experimentationService);
@@ -72,12 +74,13 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	}
 
 	// Filters the byok known models based on what the anthropic API knows as well
-	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
-		if (!this._anthropicAPIClient) {
-			this._anthropicAPIClient = new Anthropic({ apiKey });
+	protected async getAllModels(silent: boolean, apiKey: string | undefined): Promise<ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>[]> {
+		if (!apiKey && silent) {
+			return [];
 		}
+
 		try {
-			const response = await this._anthropicAPIClient.models.list();
+			const response = await new Anthropic({ apiKey }).models.list();
 			const modelList: Record<string, BYOKModelCapabilities> = {};
 			for (const model of response.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
@@ -94,80 +97,21 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					};
 				}
 			}
-			return modelList;
+			return byokKnownModelsToAPIInfo(this._name, modelList);
 		} catch (error) {
 			this._logService.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
 
-	async updateAPIKey(): Promise<void> {
-		const result = await handleAPIKeyUpdate(AnthropicLMProvider.providerName, this._byokStorageService, promptForAPIKey);
-		if (!result.cancelled) {
-			this._apiKey = result.apiKey;
-			this._anthropicAPIClient = undefined;
-		}
-	}
-
-	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
-		if (action === 'remove') {
-			this._apiKey = undefined;
-			this._anthropicAPIClient = undefined;
-			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
-			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
-			return;
-		}
-
-		const apiKey = process.env[envVarName];
+	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+		const apiKey = model.configuration?.apiKey;
 		if (!apiKey) {
-			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
+			throw new Error('API key not found for the model');
 		}
 
-		this._apiKey = apiKey;
-		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
-		this._anthropicAPIClient = undefined;
-		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
-	}
+		const anthropicClient = new Anthropic({ apiKey });
 
-	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
-		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
-			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);
-		}
-		try {
-			if (this._apiKey) {
-				return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-			} else if (options.silent && !this._apiKey) {
-				return [];
-			} else { // Not silent, and no api key = good to prompt user for api key
-				await this.updateAPIKey();
-				if (this._apiKey) {
-					return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-				} else {
-					return [];
-				}
-			}
-		} catch (error) {
-			if (error instanceof Error && error.message.includes('invalid x-api-key')) {
-				if (options.silent) {
-					return [];
-				}
-				await this.updateAPIKey();
-				if (this._apiKey) {
-					try {
-						return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
-					} catch (retryError) {
-						this._logService.error(`Error after re-prompting for API key: ${toErrorMessage(retryError, true)}`);
-					}
-				}
-			}
-			return [];
-		}
-	}
-
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
-		if (!this._anthropicAPIClient) {
-			return;
-		}
 		// Convert the messages from the API format into messages that we can use against anthropic
 		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages as LanguageModelChatMessage[]);
 
@@ -177,7 +121,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			{
 				model: model.id,
 				modelMaxPromptTokens: model.maxInputTokens,
-				urlOrRequestMetadata: this._anthropicAPIClient.baseURL,
+				urlOrRequestMetadata: anthropicClient.baseURL,
 			},
 			{
 				model: model.id,
@@ -198,31 +142,49 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 		let hasMemoryTool = false;
 
-		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+		const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._experimentationService);
 
+		// Build tools array, handling both standard tools and native Anthropic tools
+		const tools: Anthropic.Beta.BetaToolUnion[] = [];
+
+		// Add tool search tool if enabled (must be first in the array)
+		if (toolSearchEnabled) {
+			tools.push({
+				name: 'tool_search_tool_bm25',
+				type: 'tool_search_tool_bm25_20251119',
+				defer_loading: false
+			} as Anthropic.Beta.BetaToolUnion);
+		}
+
+		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
 			if (tool.name === 'memory' && this._enableMemory(model.id)) {
 				hasMemoryTool = true;
-				return {
+				tools.push({
 					name: 'memory',
 					type: 'memory_20250818'
-				} as Anthropic.Beta.BetaMemoryTool20250818;
+				} as Anthropic.Beta.BetaMemoryTool20250818);
+				continue;
 			}
 
+			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
+			const shouldDefer = toolSearchEnabled && !nonDeferredToolNames.has(tool.name);
+
 			if (!tool.inputSchema) {
-				return {
+				tools.push({
 					name: tool.name,
 					description: tool.description,
 					input_schema: {
 						type: 'object',
 						properties: {},
 						required: []
-					}
-				};
+					},
+					...(shouldDefer ? { defer_loading: true } : {})
+				});
+				continue;
 			}
 
-			return {
+			tools.push({
 				name: tool.name,
 				description: tool.description,
 				input_schema: {
@@ -230,9 +192,10 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
 					required: (tool.inputSchema as { required?: string[] }).required ?? [],
 					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
-				}
-			};
-		});
+				},
+				...(shouldDefer ? { defer_loading: true } : {})
+			});
+		}
 
 		// Check if web search is enabled and append web_search tool if not already present.
 		// We need to do this because there is no local web_search tool definition we can replace.
@@ -305,7 +268,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(wrappedProgress, params, betas, token);
+			const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -384,14 +347,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
-		if (!this._anthropicAPIClient) {
-			return { ttft: undefined, usage: undefined, contextManagement: undefined };
-		}
+	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
 
-		const stream = await this._anthropicAPIClient.beta.messages.create({
+		const stream = await anthropicClient.beta.messages.create({
 			...params,
 			...(betas.length > 0 && { betas })
 		});
@@ -490,6 +450,33 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 						[new LanguageModelTextPart(searchResults)]
 					));
 					pendingServerToolCall = undefined;
+				} else if ('content_block' in chunk && chunk.content_block.type === 'tool_search_tool_result') {
+					const toolSearchResult = chunk.content_block as unknown as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const searchResult = toolSearchResult.content as ToolSearchToolSearchResult;
+						const toolNames = searchResult.tool_references.map(ref => ref.tool_name);
+
+						this._logService.trace(`Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						let query: string | undefined;
+						if (pendingServerToolCall) {
+							try {
+								const parsed = JSON.parse(pendingServerToolCall.jsonInput || '{}');
+								query = parsed.query;
+							} catch {
+								// Ignore parse errors
+							}
+						}
+
+						progress.report(new LanguageModelToolResultPart(
+							toolSearchResult.tool_use_id,
+							[new LanguageModelTextPart(JSON.stringify({ query, discovered_tools: toolNames }))]
+						));
+						pendingServerToolCall = undefined;
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this._logService.warn(`Tool search error: ${toolSearchResult.content.error_code}`);
+						pendingServerToolCall = undefined;
+					}
 				}
 				continue;
 			}

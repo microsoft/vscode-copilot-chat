@@ -13,6 +13,7 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
+import { ClaudeToolPermissionService, IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeModels, IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
@@ -77,6 +78,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
 				[IClaudeCodeModels, new SyncDescriptor(ClaudeCodeModels)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+				[IClaudeToolPermissionService, new SyncDescriptor(ClaudeToolPermissionService)],
 			));
 
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));

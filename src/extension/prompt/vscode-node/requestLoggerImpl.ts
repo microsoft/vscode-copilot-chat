@@ -349,6 +349,20 @@ export class RequestLogger extends AbstractRequestLogger {
 		));
 	}
 
+	public override logServerToolCall(id: string, name: string, args: unknown): void {
+		const syntheticResponse: LanguageModelToolResult2 = {
+			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
+		};
+		this._addEntry(new LoggedToolCall(
+			id,
+			`${name} [server]`,
+			args,
+			syntheticResponse,
+			this.currentRequest,
+			Date.now()
+		));
+	}
+
 	/** Start tracking edits made to the workspace for every tool call. */
 	public override enableWorkspaceEditTracing(): void {
 		if (!this._workspaceEditRecorder) {

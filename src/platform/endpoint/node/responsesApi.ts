@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -346,7 +345,6 @@ function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.R
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
@@ -363,11 +361,11 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
 }
 

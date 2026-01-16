@@ -185,6 +185,12 @@ export class ChatEndpoint implements IChatEndpoint {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 
+			// Add tool search beta if enabled
+			const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._expService);
+			if (toolSearchEnabled) {
+				betaFeatures.push('advanced-tool-use-2025-11-20');
+			}
+
 			if (betaFeatures.length > 0) {
 				headers['anthropic-beta'] = betaFeatures.join(',');
 			}

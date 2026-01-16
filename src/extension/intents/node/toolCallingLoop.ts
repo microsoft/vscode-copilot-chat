@@ -453,6 +453,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
 				}
+				if (delta.serverToolCalls) {
+					for (const serverCall of delta.serverToolCalls) {
+						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.arguments);
+					}
+				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
 				}

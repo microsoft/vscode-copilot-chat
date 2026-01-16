@@ -522,3 +522,14 @@ export class LanguageModelError extends Error {
 		this.code = code ?? '';
 	}
 }
+
+/**
+ * Represents a custom agent resource file (e.g., .agent.md).
+ */
+export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
+	readonly resource: vscode.ChatResourceDescriptor;
+
+	constructor(resource: vscode.ChatResourceDescriptor) {
+		this.resource = resource;
+	}
+}

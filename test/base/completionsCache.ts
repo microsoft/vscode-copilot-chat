@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { FetchResponse } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
+import { getRequestId } from '../../src/platform/networking/common/fetch';
+import { IHeaders, Response } from '../../src/platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../src/util/vs/base/common/async';
 import { SQLiteSlottedCache } from './cache';
 import { CachedResponseMetadata } from './cachingChatMLFetcher';
@@ -45,11 +47,17 @@ export namespace ICacheableCompletionsResponse {
 		// 	but we want to be able to capture edits proposed before the error
 		const bodyStream = stringToChunkedStream(v.body, 512 /* arbitrary chunk size to hit fast/correct balance */);
 
+		const headers = new Headers(); // @ulugbekna: we don't use headers, so this should be ok for now
+
+		const response = emptyFetcherResponse(headers);
+
 		return {
 			status: v.status,
 			statusText: v.statusText,
 			body: bodyStream,
-			headers: {} // @ulugbekna: we don't use headers, so this should be ok for now
+			headers,
+			requestId: getRequestId(headers),
+			response,
 		};
 	}
 
@@ -71,4 +79,14 @@ export class CompletionsSQLiteCache extends SQLiteSlottedCache<CacheableCompleti
 	constructor(salt: string, info: CurrentTestRunInfo) {
 		super('completions', salt, info);
 	}
+}
+
+export function emptyFetcherResponse(headers: IHeaders): Response {
+	return new Response(
+		200,
+		'',
+		headers,
+		null,
+		'electron-fetch',
+	);
 }

@@ -162,7 +162,7 @@ export function postRequest(
 	return requestPromise;
 }
 
-function isInterruptedNetworkError(error: unknown): boolean {
+export function isInterruptedNetworkError(error: unknown): boolean {
 	if (!(error instanceof Error)) { return false; }
 	if (error.message === 'ERR_HTTP2_GOAWAY_SESSION') { return true; }
 	if (!('code' in error)) { return false; }

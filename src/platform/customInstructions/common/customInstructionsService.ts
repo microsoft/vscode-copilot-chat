@@ -15,6 +15,7 @@ import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resourc
 import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
+import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
 import { CodeGenerationImportInstruction, CodeGenerationTextInstruction, Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { INativeEnvService } from '../../env/common/envService';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
@@ -53,7 +54,7 @@ export interface ICustomInstructionsService {
 
 	getAgentInstructions(): Promise<URI[]>;
 
-	isExternalInstructionsFile(uri: URI): boolean;
+	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
 	isSkillFile(uri: URI): boolean;
 	isSkillMdFile(uri: URI): boolean;
@@ -102,6 +103,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@ILogService private readonly logService: ILogService,
 		@IExtensionsService private readonly extensionService: IExtensionsService,
+		@IRunCommandExecutionService private readonly runCommandExecutionService: IRunCommandExecutionService,
 	) {
 		super();
 
@@ -303,13 +305,37 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		}
 	}
 
-	public isExternalInstructionsFile(uri: URI): boolean {
+	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
 		}
-		return this._matchInstructionLocationsFromConfig.get()(uri)
+		if (this._matchInstructionLocationsFromConfig.get()(uri)
 			|| this._matchInstructionLocationsFromExtensions.get()(uri)
-			|| this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
+			|| this._matchInstructionLocationsFromSkills.get()(uri)) {
+			return true;
+		}
+
+		// Check for external extension-contributed prompt files
+		try {
+			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as {
+				uri: URI; type: 'instructions' | 'prompt' | 'agent' | 'skill';
+			}[] | undefined;
+			if (extensionPromptFiles) {
+				return extensionPromptFiles.some(file => {
+					if (file.type === 'skill') {
+						// For skills, the URI points to SKILL.md - allow everything under the parent folder
+						const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+						return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
+					}
+					return extUriBiasedIgnorePathCase.isEqual(file.uri, uri);
+				});
+			}
+		} catch (e) {
+			this.logService.warn('Error checking for extension prompt files');
+			// Command may not be available, ignore
+		}
+
+		return false;
 	}
 
 	public isExternalInstructionsFolder(uri: URI): boolean {

@@ -230,6 +230,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (session) {
 					this.logService.trace(`[CopilotCLISession] Reusing CopilotCLI session ${sessionId}.`);
 					session.acquire();
+					if (!readonly) {
+						if (agent) {
+							await session.object.sdkSession.selectCustomAgent(agent.name);
+						} else {
+							session.object.sdkSession.clearCustomAgent();
+						}
+					}
 					return session;
 				}
 			}
@@ -396,10 +403,8 @@ export class CopilotCLISessionWorkspaceTracker {
 }
 
 function labelFromPrompt(prompt: string): string {
-	// Strip system reminders and return first line or first 50 characters, whichever is shorter
-	const cleanContent = stripReminders(prompt);
-	const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
-	return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
+	// Strip system reminders from the prompt
+	return stripReminders(prompt);
 }
 
 export class Mutex {
@@ -431,7 +436,8 @@ export class Mutex {
 
 	private _release(): void {
 		if (!this._locked) {
-			throw new Error('Mutex: release called while not locked');
+			// already unlocked
+			return;
 		}
 		this._locked = false;
 		const next = this._acquireQueue.shift();

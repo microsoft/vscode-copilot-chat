@@ -79,8 +79,8 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return { skillName, skillFolderUri };
 	}
 
-	isExternalInstructionsFile(uri: URI): boolean {
-		return this.externalFiles.has(uri.toString());
+	isExternalInstructionsFile(uri: URI): Promise<boolean> {
+		return Promise.resolve(this.externalFiles.has(uri.toString()));
 	}
 
 	isExternalInstructionsFolder(uri: URI): boolean {
