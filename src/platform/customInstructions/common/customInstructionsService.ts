@@ -317,9 +317,18 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 		// Check for external extension-contributed prompt files
 		try {
-			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as { uri: URI }[] | undefined;
+			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as {
+				uri: URI; type: 'instructions' | 'prompt' | 'agent' | 'skill';
+			}[] | undefined;
 			if (extensionPromptFiles) {
-				return extensionPromptFiles.some(file => extUriBiasedIgnorePathCase.isEqual(file.uri, uri));
+				return extensionPromptFiles.some(file => {
+					if (file.type === 'skill') {
+						// For skills, the URI points to SKILL.md - allow everything under the parent folder
+						const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+						return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
+					}
+					return extUriBiasedIgnorePathCase.isEqual(file.uri, uri);
+				});
 			}
 		} catch (e) {
 			this.logService.warn('Error checking for extension prompt files');
