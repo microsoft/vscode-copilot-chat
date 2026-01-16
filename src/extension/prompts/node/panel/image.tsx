@@ -8,7 +8,7 @@ import * as l10n from '@vscode/l10n';
 import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelCanUseImageURL, modelSupportsImageMimeType } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { GEMINI_SUPPORTED_IMAGE_MIME_TYPES, modelCanUseImageURL, modelSupportsImageMimeType } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -59,9 +59,14 @@ export class Image extends PromptElement<ImageProps, unknown> {
 
 			// Check if the model supports this image format
 			if (imageMimeType && !modelSupportsImageMimeType(this.promptEndpoint, imageMimeType)) {
+				// Generate user-friendly format names from MIME types
+				const supportedFormats = GEMINI_SUPPORTED_IMAGE_MIME_TYPES
+					.map(mimeType => mimeType.split('/')[1]?.toUpperCase())
+					.join(', ');
+
 				const unsupportedOptions = {
 					status: {
-						description: l10n.t("{0} does not support {1} images. Supported formats: PNG, JPEG, WEBP, HEIC, HEIF.", this.promptEndpoint.model, imageMimeType.split('/')[1]?.toUpperCase() || 'this'),
+						description: l10n.t("{0} does not support {1} images. Supported formats: {2}.", this.promptEndpoint.model, imageMimeType.split('/')[1]?.toUpperCase() || 'this', supportedFormats),
 						kind: ChatResponseReferencePartStatusKind.Omitted
 					}
 				};

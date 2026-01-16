@@ -5,6 +5,7 @@
 import type { Content, FunctionCall, FunctionResponse, Part } from '@google/genai';
 import { Raw } from '@vscode/prompt-tsx';
 import type { LanguageModelChatMessage } from 'vscode';
+import { GEMINI_SUPPORTED_IMAGE_MIME_TYPES } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 
@@ -40,11 +41,11 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 			convertedContent.push(functionCallPart);
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType !== CustomDataPartMimeTypes.StatefulMarker && part.mimeType !== CustomDataPartMimeTypes.CacheControl) {
-				// Filter out GIF images as Gemini doesn't support them
+				// Filter out images not supported by Gemini
 				// Gemini supports: PNG, JPEG, WEBP, HEIC, HEIF (but NOT GIF)
 				// See: https://ai.google.dev/gemini-api/docs/image-understanding#supported-formats
-				const isUnsupportedImage = part.mimeType === 'image/gif';
-				if (!isUnsupportedImage) {
+				const isImageSupported = !part.mimeType.startsWith('image/') || GEMINI_SUPPORTED_IMAGE_MIME_TYPES.includes(part.mimeType as any);
+				if (isImageSupported) {
 					convertedContent.push({
 						inlineData: {
 							data: Buffer.from(part.data).toString('base64'),
@@ -60,12 +61,13 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				.map(p => p.value)
 				.join('');
 
-			// Handle image parts in tool results, filtering out GIF images
+			// Handle image parts in tool results, filtering out images not supported by Gemini
 			const imageParts = part.content.filter((p): p is LanguageModelDataPart =>
 				p instanceof LanguageModelDataPart &&
 				p.mimeType !== CustomDataPartMimeTypes.StatefulMarker &&
 				p.mimeType !== CustomDataPartMimeTypes.CacheControl &&
-				p.mimeType !== 'image/gif' // Filter out GIF images
+				// Filter out images not supported by Gemini (e.g., GIF)
+				(!p.mimeType.startsWith('image/') || GEMINI_SUPPORTED_IMAGE_MIME_TYPES.includes(p.mimeType as any))
 			);
 
 			// If there are images, we need to handle them differently
