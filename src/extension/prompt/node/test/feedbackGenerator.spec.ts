@@ -5,7 +5,120 @@
 
 import assert from 'assert';
 import { describe, suite, test } from 'vitest';
-import { parseFeedbackResponse } from '../feedbackGenerator';
+import type { EndOfLine, TextDocument, TextLine } from 'vscode';
+import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { ReviewRequest } from '../../../../platform/review/common/reviewService';
+import { Position, Range, Uri } from '../../../../vscodeTypes';
+import { CurrentChangeInput } from '../../../prompts/node/feedback/currentChange';
+import { parseFeedbackResponse, parseReviewComments } from '../feedbackGenerator';
+
+class MockTextDocument implements TextDocument {
+	readonly uri: Uri;
+	readonly fileName: string;
+	readonly isUntitled = false;
+	readonly languageId: string;
+	readonly version = 1;
+	readonly isDirty = false;
+	readonly isClosed = false;
+	readonly eol: EndOfLine = 1;
+	private readonly _lines: string[];
+
+	constructor(uri: Uri, content: string, languageId = 'typescript') {
+		this.uri = uri;
+		this.fileName = uri.fsPath;
+		this.languageId = languageId;
+		this._lines = content.split('\n');
+	}
+
+	get lineCount(): number {
+		return this._lines.length;
+	}
+
+	lineAt(lineOrPosition: number | Position): TextLine {
+		const lineNumber = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
+		if (lineNumber < 0 || lineNumber >= this._lines.length) {
+			throw new Error('Invalid line number');
+		}
+		const text = this._lines[lineNumber];
+		return {
+			lineNumber,
+			text,
+			range: new Range(lineNumber, 0, lineNumber, text.length),
+			rangeIncludingLineBreak: new Range(lineNumber, 0, lineNumber + 1, 0),
+			firstNonWhitespaceCharacterIndex: text.match(/^\s*/)?.[0].length ?? 0,
+			isEmptyOrWhitespace: text.trim().length === 0,
+		};
+	}
+
+	getText(range?: Range): string {
+		if (!range) {
+			return this._lines.join('\n');
+		}
+		const start = range.start;
+		const end = range.end;
+		if (start.line === end.line) {
+			return this._lines[start.line].substring(start.character, end.character);
+		}
+		const lines: string[] = [];
+		lines.push(this._lines[start.line].substring(start.character));
+		for (let i = start.line + 1; i < end.line; i++) {
+			lines.push(this._lines[i]);
+		}
+		lines.push(this._lines[end.line].substring(0, end.character));
+		return lines.join('\n');
+	}
+
+	offsetAt(position: Position): number {
+		let offset = 0;
+		for (let i = 0; i < position.line; i++) {
+			offset += this._lines[i].length + 1;
+		}
+		return offset + position.character;
+	}
+
+	positionAt(offset: number): Position {
+		let remaining = offset;
+		for (let line = 0; line < this._lines.length; line++) {
+			if (remaining <= this._lines[line].length) {
+				return new Position(line, remaining);
+			}
+			remaining -= this._lines[line].length + 1;
+		}
+		return new Position(this._lines.length - 1, this._lines[this._lines.length - 1].length);
+	}
+
+	getWordRangeAtPosition(_position: Position): Range | undefined {
+		return undefined;
+	}
+
+	validateRange(range: Range): Range {
+		return range;
+	}
+
+	validatePosition(position: Position): Position {
+		return position;
+	}
+
+	save(): Thenable<boolean> {
+		return Promise.resolve(true);
+	}
+}
+
+function createTestSnapshot(uri: Uri, content: string, languageId = 'typescript'): TextDocumentSnapshot {
+	const mockDoc = new MockTextDocument(uri, content, languageId);
+	return TextDocumentSnapshot.create(mockDoc);
+}
+
+function createReviewRequest(overrides?: Partial<ReviewRequest>): ReviewRequest {
+	return {
+		source: 'vscodeCopilotChat',
+		promptCount: 1,
+		messageId: 'test-message-id',
+		inputType: 'change',
+		inputRanges: [],
+		...overrides,
+	};
+}
 
 suite('parseFeedbackResponse', function () {
 
@@ -224,6 +337,471 @@ multiple lines.
 			assert.strictEqual(matches.length, 1);
 			// linkOffset = match.index + num.length + 2 = 0 + 2 + 2 = 4
 			assert.strictEqual(matches[0].linkOffset, 4);
+		});
+	});
+});
+
+suite('parseReviewComments', function () {
+
+	describe('basic parsing', function () {
+		test('parses valid comment and creates ReviewComment', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 4, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 2 in `file.ts`, bug, high severity: This is a bug.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			assert.strictEqual(comments[0].kind, 'bug');
+			assert.strictEqual(comments[0].severity, 'high');
+			assert.strictEqual(comments[0].body.value, 'This is a bug.');
+			assert.strictEqual(comments[0].uri, uri);
+			assert.strictEqual(comments[0].languageId, 'typescript');
+			assert.strictEqual(comments[0].originalIndex, 0);
+			assert.strictEqual(comments[0].actionCount, 0);
+			assert.strictEqual(comments[0].request, request);
+		});
+
+		test('parses multiple comments from same input', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4\nline 5';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 5, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = `1. Line 2 in \`file.ts\`, bug: First issue.
+
+2. Line 4 in \`file.ts\`, performance: Second issue.
+
+`;
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 2);
+			assert.strictEqual(comments[0].body.value, 'First issue.');
+			assert.strictEqual(comments[0].originalIndex, 0);
+			assert.strictEqual(comments[1].body.value, 'Second issue.');
+			assert.strictEqual(comments[1].originalIndex, 1);
+		});
+	});
+
+	describe('kind filtering', function () {
+		test('filters out unknown kind', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 2, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 2 in `file.ts`, unknownKind: Should be filtered.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 0);
+		});
+
+		test('accepts all known kinds', function () {
+			const knownKinds = ['bug', 'performance', 'consistency', 'documentation', 'naming', 'readability', 'style', 'other'];
+			const uri = Uri.file('/test/file.ts');
+			const content = Array.from({ length: 20 }, (_, i) => `line ${i}`).join('\n');
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 19, 7), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = knownKinds.map((kind, i) => `${i + 1}. Line ${i + 1} in \`file.ts\`, ${kind}: Issue ${i + 1}.`).join('\n\n') + '\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, knownKinds.length);
+			knownKinds.forEach((kind, i) => {
+				assert.strictEqual(comments[i].kind, kind);
+			});
+		});
+	});
+
+	describe('input matching', function () {
+		test('skips comment when relativeDocumentPath does not match any input', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'different.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `file.ts`, bug: Should be skipped.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 0);
+		});
+
+		test('matches correct input from multiple inputs', function () {
+			const uri1 = Uri.file('/test/first.ts');
+			const uri2 = Uri.file('/test/second.ts');
+			const content = 'line 0\nline 1';
+			const snapshot1 = createTestSnapshot(uri1, content);
+			const snapshot2 = createTestSnapshot(uri2, content);
+			const input: CurrentChangeInput[] = [
+				{
+					document: snapshot1,
+					relativeDocumentPath: 'first.ts',
+					change: {
+						repository: {} as any,
+						uri: uri1,
+						hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+					}
+				},
+				{
+					document: snapshot2,
+					relativeDocumentPath: 'second.ts',
+					change: {
+						repository: {} as any,
+						uri: uri2,
+						hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+					}
+				}
+			];
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `second.ts`, bug: Found in second file.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			assert.strictEqual(comments[0].uri, uri2);
+		});
+	});
+
+	describe('line clamping', function () {
+		test('uses line 0 correctly when Line 1 is specified (0-indexed)', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = '  indented line\nline 1';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			// Line 1 in the message becomes 0 after 0-indexing
+			const message = '1. Line 1 in `file.ts`, bug: First line.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			// Range should start at line 0
+			assert.strictEqual(comments[0].range.start.line, 0);
+			// firstNonWhitespaceCharacterIndex for "  indented line" is 2
+			assert.strictEqual(comments[0].range.start.character, 2);
+		});
+
+		test('clamps line number exceeding lineCount', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nlast line';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 2, 9), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			// Line 100 is way beyond lineCount of 3
+			const message = '1. Line 1-100 in `file.ts`, bug: Should clamp to end.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			// End line should be clamped to lineCount-1 = 2
+			assert.strictEqual(comments[0].range.end.line, 2);
+		});
+	});
+
+	describe('range intersection filtering', function () {
+		test('filters out comment outside change hunk range', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					// Change only affects lines 0-1
+					hunks: [{ range: new Range(0, 0, 1, 6), text: 'line 0\nline 1' }]
+				}
+			}];
+			const request = createReviewRequest();
+			// Comment on line 4 which is outside the hunk range
+			const message = '1. Line 5 in `file.ts`, bug: Outside hunk range.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 0);
+		});
+
+		test('includes comment inside change hunk range', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 2, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 2 in `file.ts`, bug: Inside hunk range.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+		});
+
+		test('uses selection range for filtering when selection is provided', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const snapshot = createTestSnapshot(uri, content);
+			const selection = new Range(2, 0, 3, 6);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				selection
+			}];
+			const request = createReviewRequest({ inputType: 'selection' });
+
+			// Comment on line 1 (outside selection)
+			const messageOutside = '1. Line 1 in `file.ts`, bug: Outside selection.\n\n';
+			const commentsOutside = parseReviewComments(request, input, messageOutside);
+			assert.strictEqual(commentsOutside.length, 0);
+
+			// Comment on line 3 (inside selection)
+			const messageInside = '1. Line 3 in `file.ts`, bug: Inside selection.\n\n';
+			const commentsInside = parseReviewComments(request, input, messageInside);
+			assert.strictEqual(commentsInside.length, 1);
+		});
+
+		test('includes comment when no filterRanges (no selection or change)', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts'
+				// No selection or change
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `file.ts`, bug: No filter ranges.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+		});
+
+		test('includes comment when intersecting any of multiple hunks', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4\nline 5';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [
+						{ range: new Range(0, 0, 1, 6), text: 'line 0\nline 1' },
+						{ range: new Range(4, 0, 5, 6), text: 'line 4\nline 5' }
+					]
+				}
+			}];
+			const request = createReviewRequest();
+
+			// Comment on line 5 intersects second hunk
+			const message = '1. Line 5 in `file.ts`, bug: In second hunk.\n\n';
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+		});
+	});
+
+	describe('dropPartial parameter', function () {
+		test('passes dropPartial to parseFeedbackResponse', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			// Partial response (no terminating newline)
+			const partialMessage = '1. Line 1 in `file.ts`, bug: Partial';
+
+			// dropPartial = false keeps the partial comment
+			const commentsKept = parseReviewComments(request, input, partialMessage, false);
+			assert.strictEqual(commentsKept.length, 1);
+
+			// dropPartial = true drops the partial comment
+			const commentsDropped = parseReviewComments(request, input, partialMessage, true);
+			assert.strictEqual(commentsDropped.length, 0);
+		});
+	});
+
+	describe('edge cases', function () {
+		test('returns empty array for empty message', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 0, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+
+			const comments = parseReviewComments(request, input, '');
+
+			assert.strictEqual(comments.length, 0);
+		});
+
+		test('returns empty array when no inputs provided', function () {
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `file.ts`, bug: No inputs.\n\n';
+
+			const comments = parseReviewComments(request, [], message);
+
+			assert.strictEqual(comments.length, 0);
+		});
+
+		test('sets correct range with firstNonWhitespaceCharacterIndex', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = '    indented content here';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 0, 25), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `file.ts`, bug: Indented line.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			// Start character should be firstNonWhitespaceCharacterIndex (4 spaces)
+			assert.strictEqual(comments[0].range.start.character, 4);
+			// End character should be lastNonWhitespaceCharacterIndex (25 - no trailing whitespace)
+			assert.strictEqual(comments[0].range.end.character, 25);
+		});
+
+		test('handles line range spanning multiple lines', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = '  line 0\nline 1\n  line 2 with trailing  ';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 2, 27), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 1-3 in `file.ts`, bug: Multi-line issue.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			// Start: line 0, firstNonWhitespaceCharacterIndex = 2
+			assert.strictEqual(comments[0].range.start.line, 0);
+			assert.strictEqual(comments[0].range.start.character, 2);
+			// End: line 2, lastNonWhitespaceCharacterIndex for "  line 2 with trailing  " is 22 (trimEnd removes trailing spaces)
+			assert.strictEqual(comments[0].range.end.line, 2);
+			assert.strictEqual(comments[0].range.end.character, 22);
+		});
+
+		test('preserves document reference in comment', function () {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0';
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput[] = [{
+				document: snapshot,
+				relativeDocumentPath: 'file.ts',
+				change: {
+					repository: {} as any,
+					uri,
+					hunks: [{ range: new Range(0, 0, 0, 6), text: content }]
+				}
+			}];
+			const request = createReviewRequest();
+			const message = '1. Line 1 in `file.ts`, bug: Check document.\n\n';
+
+			const comments = parseReviewComments(request, input, message);
+
+			assert.strictEqual(comments.length, 1);
+			assert.strictEqual(comments[0].document, snapshot);
 		});
 	});
 });
