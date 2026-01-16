@@ -61,7 +61,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			if (imageMimeType && !modelSupportsImageMimeType(this.promptEndpoint, imageMimeType)) {
 				const unsupportedOptions = {
 					status: {
-						description: l10n.t("{0} does not support {1} images. Supported formats: PNG, JPEG, WEBP.", this.promptEndpoint.model, imageMimeType.split('/')[1]?.toUpperCase() || 'this'),
+						description: l10n.t("{0} does not support {1} images. Supported formats: PNG, JPEG, WEBP, HEIC, HEIF.", this.promptEndpoint.model, imageMimeType.split('/')[1]?.toUpperCase() || 'this'),
 						kind: ChatResponseReferencePartStatusKind.Omitted
 					}
 				};
@@ -79,7 +79,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 
 			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
-			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint)) {
+			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint) && imageMimeType) {
 				try {
 					const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, imageMimeType, githubToken);
