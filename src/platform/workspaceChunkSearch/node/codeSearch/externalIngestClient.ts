@@ -97,11 +97,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	private getHeaders(authToken: string): Record<string, string> {
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
-			'X-GitHub-Staff-Request': '1',
 		};
-		// if (staffRequest) {
-		// 	headers["X-GitHub-Staff-Request"] = '1';
-		// }
 
 		headers['Authorization'] = `Bearer ${authToken}`;
 
