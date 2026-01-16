@@ -50,10 +50,10 @@ export async function getGhostTextStrategy(
 	completionState: CompletionState,
 	prefix: string,
 	prompt: PromptResponsePresent,
-	isCycling: boolean,
 	inlineSuggestion: boolean,
 	hasAcceptedCurrentCompletion: boolean,
-	preIssuedTelemetryData: TelemetryWithExp): Promise<GhostTextStrategy> {
+	preIssuedTelemetryData: TelemetryWithExp,
+): Promise<GhostTextStrategy> {
 	const instantiationService = accessor.get(IInstantiationService);
 	const featuresService = accessor.get(ICompletionsFeaturesService);
 	const blockModeConfig = accessor.get(ICompletionsBlockModeConfig);
