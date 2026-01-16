@@ -23,6 +23,19 @@ export interface ImageProps extends BasePromptElementProps {
 	reference?: Uri;
 }
 
+/**
+ * Extract the format name from a MIME type string
+ * @param mimeType The MIME type (e.g., 'image/png')
+ * @returns The format name in uppercase (e.g., 'PNG'), or 'UNKNOWN' if invalid
+ */
+function getFormatFromMimeType(mimeType: string | undefined): string {
+	if (!mimeType) {
+		return 'UNKNOWN';
+	}
+	const parts = mimeType.split('/');
+	return parts.length === 2 && parts[1] ? parts[1].toUpperCase() : 'UNKNOWN';
+}
+
 export class Image extends PromptElement<ImageProps, unknown> {
 	constructor(
 		props: ImageProps,
@@ -61,12 +74,12 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			if (imageMimeType && !modelSupportsImageMimeType(this.promptEndpoint, imageMimeType)) {
 				// Generate user-friendly format names from MIME types
 				const supportedFormats = GEMINI_SUPPORTED_IMAGE_MIME_TYPES
-					.map(mimeType => mimeType.split('/')[1]?.toUpperCase())
+					.map(getFormatFromMimeType)
 					.join(', ');
 
 				const unsupportedOptions = {
 					status: {
-						description: l10n.t("{0} does not support {1} images. Supported formats: {2}.", this.promptEndpoint.model, imageMimeType.split('/')[1]?.toUpperCase() || 'this', supportedFormats),
+						description: l10n.t("{0} does not support {1} images. Supported formats: {2}.", this.promptEndpoint.model, getFormatFromMimeType(imageMimeType), supportedFormats),
 						kind: ChatResponseReferencePartStatusKind.Omitted
 					}
 				};

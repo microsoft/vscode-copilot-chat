@@ -263,7 +263,9 @@ export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint | string
 	}
 
 	const family = typeof model === 'string' ? model : model.family;
-	return family?.toLowerCase().includes('gemini') ?? false;
+	// Use case-insensitive startsWith to match Gemini models more precisely
+	// This matches: gemini, Gemini, gemini-1.5-pro, etc.
+	return family?.toLowerCase().startsWith('gemini') ?? false;
 }
 
 /**
