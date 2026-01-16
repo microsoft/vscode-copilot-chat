@@ -213,13 +213,13 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 });
 
 export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
-	acceptedScore: 1.0,
-	rejectedScore: 0.2,
+	acceptedScore: 1,
+	rejectedScore: 0,
 	ignoredScore: 0.5,
-	highThreshold: 0.6,
+	highThreshold: 0.7,
 	mediumThreshold: 0.4,
 	includeIgnored: false,
-	ignoredLimit: 5,
+	ignoredLimit: 0,
 	limitConsecutiveIgnored: false,
 	limitTotalIgnored: true,
 };
