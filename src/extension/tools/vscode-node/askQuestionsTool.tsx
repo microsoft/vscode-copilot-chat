@@ -39,31 +39,11 @@ interface IQuickPickOptionItem extends vscode.QuickPickItem {
 	originalLabel: string;
 }
 
-class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
+export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	public static readonly toolName = ToolName.AskQuestions;
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IAskQuestionsParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const { questions } = options.input;
-
-		// Validate input
-		if (!questions || questions.length === 0) {
-			return new LanguageModelToolResult([
-				new LanguageModelTextPart(JSON.stringify({
-					error: 'No questions provided. The questions array must contain at least one question.'
-				}))
-			]);
-		}
-
-		for (const question of questions) {
-			if (!question.options || question.options.length === 0) {
-				return new LanguageModelToolResult([
-					new LanguageModelTextPart(JSON.stringify({
-						error: `Question "${question.id}" has no options. Each question must have at least one option.`
-					}))
-				]);
-			}
-		}
-
 		const result: IAnswerResult = { answers: {} };
 		let currentStep = 0;
 
@@ -102,11 +82,11 @@ class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				break;
 			}
 
-			result.answers[question.id] = answer === 'back' ? {
-				selected: [],
-				freeText: null,
-				skipped: true
-			} : answer;
+			// At this point, answer is always a valid response object
+			// (back case handled above with continue, skipped case handled with break)
+			if (answer !== 'back') {
+				result.answers[question.id] = answer;
+			}
 
 			currentStep++;
 		}
@@ -127,6 +107,11 @@ class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		totalSteps: number,
 		token: CancellationToken
 	): Promise<{ selected: string[]; freeText: string | null; skipped: boolean } | 'back' | 'skipped'> {
+		// Check cancellation before showing UI to avoid creating unnecessary QuickPick
+		if (token.isCancellationRequested) {
+			return 'skipped';
+		}
+
 		return new Promise((resolve) => {
 			// Track resolution state to prevent race conditions (e.g., onDidHide firing after onDidAccept)
 			let resolved = false;
@@ -237,12 +222,16 @@ class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 							.map(item => item.originalLabel);
 
 						if (freeTextInput === undefined) {
-							// User cancelled input box, preserve other selections if any
-							resolve({
-								selected: otherSelections.length > 0 ? otherSelections : [defaultOption.label],
-								freeText: null,
-								skipped: false
-							});
+							// User cancelled input box: preserve other selections if any, otherwise treat as skipped
+							if (otherSelections.length > 0) {
+								resolve({
+									selected: otherSelections,
+									freeText: null,
+									skipped: false
+								});
+							} else {
+								resolve('skipped');
+							}
 						} else {
 							resolve({
 								selected: otherSelections.length > 0 ? otherSelections : [freeTextItem.originalLabel],
@@ -277,7 +266,20 @@ class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IAskQuestionsParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		const questionCount = options.input.questions?.length ?? 0;
+		const { questions } = options.input;
+
+		// Validate input early before showing UI
+		if (!questions || questions.length === 0) {
+			throw new Error(l10n.t('No questions provided. The questions array must contain at least one question.'));
+		}
+
+		for (const question of questions) {
+			if (!question.options || question.options.length === 0) {
+				throw new Error(l10n.t('Question "{0}" has no options. Each question must have at least one option.', question.id));
+			}
+		}
+
+		const questionCount = questions.length;
 		const message = questionCount === 1
 			? l10n.t('Asking a question')
 			: l10n.t('Asking {0} questions', questionCount);
