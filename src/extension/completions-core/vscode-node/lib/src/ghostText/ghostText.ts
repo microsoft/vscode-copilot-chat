@@ -338,7 +338,6 @@ export class GhostTextComputer {
 				completionState,
 				prefix,
 				prompt,
-				ghostTextOptions.isCycling,
 				inlineSuggestion,
 				hasAcceptedCurrentCompletion,
 				preIssuedTelemetryDataWithExp
