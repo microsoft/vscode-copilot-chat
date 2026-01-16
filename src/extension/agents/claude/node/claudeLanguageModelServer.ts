@@ -7,7 +7,6 @@ import { MessageParam } from '@anthropic-ai/sdk/resources';
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import { ClientHttp2Stream } from 'http2';
 import { IChatMLFetcher, Source } from '../../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { CustomModel, EndpointEditToolName, IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
@@ -528,7 +527,7 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		telemetryData: TelemetryData,
 		cancellationToken?: CancellationToken
 	): Promise<AsyncIterableObject<ChatCompletion>> {
-		const body = (await response.body()) as ClientHttp2Stream;
+		const body = response.body;
 		return new AsyncIterableObject<ChatCompletion>(async feed => {
 			// We parse the stream just to return a correct ChatCompletion for logging the response and token usage details.
 			const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
@@ -566,9 +565,7 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 					parser.feed(chunk);
 				}
 			} finally {
-				if (!body.destroyed) {
-					body.destroy();
-				}
+				await body.destroy();
 			}
 		});
 	}
@@ -604,7 +601,13 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 	public createRequestBody(
 		options: ICreateEndpointBodyOptions
 	): IEndpointBody {
-		return this.requestBody;
+		const base = this.base.createRequestBody(options);
+		// Merge with original request body to preserve any additional properties
+		// i.e. default thinking budget.
+		return {
+			...base,
+			...this.requestBody
+		};
 	}
 
 	public cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

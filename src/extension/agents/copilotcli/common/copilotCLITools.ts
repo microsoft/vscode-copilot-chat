@@ -403,11 +403,15 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
-			case 'assistant.message': {
-				if (typeof event.data.chunkContent === 'string') {
+			case 'assistant.message_delta': {
+				if (typeof event.data.deltaContent === 'string') {
 					processedMessages.add(event.data.messageId);
-					currentAssistantMessage.chunks.push(event.data.chunkContent);
-				} else if (event.data.content && !processedMessages.has(event.data.messageId)) {
+					currentAssistantMessage.chunks.push(event.data.deltaContent);
+				}
+				break;
+			}
+			case 'assistant.message': {
+				if (event.data.content && !processedMessages.has(event.data.messageId)) {
 					processAssistantMessage(event.data.content);
 				}
 				break;
@@ -564,6 +568,7 @@ function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCa
 		invocation.originMessage = `Commit: ${args.commitMessage}`;
 	}
 }
+
 
 
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {

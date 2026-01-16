@@ -37,11 +37,12 @@ export function register(accessor: ServicesAccessor): IDisposable {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
 			title: t`Building remote workspace index`,
-		}, async (progress) => {
+		}, async (progress, token) => {
 			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing(
-				(message) => progress.report({ message }),
 				'manual',
-				new TelemetryCorrelationId('BuildRemoteIndexCommand')
+				(message) => progress.report({ message }),
+				new TelemetryCorrelationId('BuildRemoteIndexCommand'),
+				token
 			);
 			if (triggerResult.isError()) {
 				if (triggerResult.err.id === TriggerRemoteIndexingError.alreadyIndexed.id) {

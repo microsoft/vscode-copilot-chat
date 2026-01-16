@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0",
+		"vscode": "^1.109.0-20260115",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -84,7 +84,7 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentsProvider"
+		"onCustomAgentProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -136,7 +136,8 @@
 		"languageModelThinkingPart",
 		"chatSessionsProvider@3",
 		"devDeviceId",
-		"contribEditorContentMenu"
+		"contribEditorContentMenu",
+		"chatPromptFiles"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -161,6 +162,40 @@
 					},
 					"required": [
 						"query"
+					]
+				}
+			},
+			{
+				"name": "search_subagent",
+				"toolReferenceName": "searchSubagent",
+				"displayName": "%copilot.tools.searchSubagent.name%",
+				"icon": "$(search)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "%copilot.tools.searchSubagent.description%",
+				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
+				"tags": [
+					"vscode_codesearch"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Natural language description of what to search for."
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the task."
+						},
+						"details": {
+							"type": "string",
+							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose."
+						}
+					},
+					"required": [
+						"query",
+						"description",
+						"details"
 					]
 				}
 			},
@@ -1234,7 +1269,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"usages"
+					"usages",
+					"searchSubagent"
 				]
 			},
 			{
@@ -1685,49 +1721,273 @@
 				"displayName": "Copilot"
 			},
 			{
-				"vendor": "azure",
-				"displayName": "Azure",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for Anthropic",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "xai",
 				"displayName": "xAI",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "ollama",
-				"displayName": "Ollama"
-			},
-			{
-				"vendor": "openai",
-				"displayName": "OpenAI",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for xAI",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "gemini",
 				"displayName": "Google",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "groq",
-				"displayName": "Groq",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for Google Gemini",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for OpenRouter",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
+			},
+			{
+				"vendor": "openai",
+				"displayName": "OpenAI",
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for OpenAI",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
+			},
+			{
+				"vendor": "ollama",
+				"displayName": "Ollama",
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"url": {
+							"type": "string",
+							"description": "The endpoint URL for the Ollama server",
+							"default": "http://localhost:11434",
+							"title": "URL"
+						}
+					},
+					"required": [
+						"url"
+					]
+				}
 			},
 			{
 				"vendor": "customoai",
 				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for the models",
+							"title": "API Key"
+						},
+						"models": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
+									"name": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"url": {
+										"type": "string",
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+									},
+									"toolCalling": {
+										"type": "boolean",
+										"description": "Whether the model supports tool calling"
+									},
+									"vision": {
+										"type": "boolean",
+										"description": "Whether the model supports vision capabilities"
+									},
+									"maxInputTokens": {
+										"type": "number",
+										"description": "Maximum number of input tokens supported by the model"
+									},
+									"maxOutputTokens": {
+										"type": "number",
+										"description": "Maximum number of output tokens supported by the model"
+									},
+									"editTools": {
+										"type": "array",
+										"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
+										"items": {
+											"type": "string",
+											"enum": [
+												"find-replace",
+												"multi-find-replace",
+												"apply-patch",
+												"code-rewrite"
+											]
+										}
+									},
+									"thinking": {
+										"type": "boolean",
+										"default": false,
+										"description": "Whether the model supports thinking capabilities"
+									},
+									"zeroDataRetentionEnabled": {
+										"type": "boolean",
+										"default": false,
+										"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+									},
+									"requestHeaders": {
+										"type": "object",
+										"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+										"additionalProperties": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"name",
+									"url",
+									"toolCalling",
+									"vision",
+									"maxInputTokens",
+									"maxOutputTokens"
+								]
+							}
+						}
+					}
+				}
+			},
+			{
+				"vendor": "azure",
+				"displayName": "Azure",
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for the models. If not set then Entra ID (Azure AD) authentication with your Microsoft account credentials will be used.",
+							"title": "API Key"
+						},
+						"models": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
+									"name": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"url": {
+										"type": "string",
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+									},
+									"toolCalling": {
+										"type": "boolean",
+										"description": "Whether the model supports tool calling"
+									},
+									"vision": {
+										"type": "boolean",
+										"description": "Whether the model supports vision capabilities"
+									},
+									"maxInputTokens": {
+										"type": "number",
+										"description": "Maximum number of input tokens supported by the model"
+									},
+									"maxOutputTokens": {
+										"type": "number",
+										"description": "Maximum number of output tokens supported by the model"
+									},
+									"thinking": {
+										"type": "boolean",
+										"default": false,
+										"description": "Whether the model supports thinking capabilities"
+									},
+									"zeroDataRetentionEnabled": {
+										"type": "boolean",
+										"default": false,
+										"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+									},
+									"requestHeaders": {
+										"type": "object",
+										"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+										"additionalProperties": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"name",
+									"url",
+									"toolCalling",
+									"vision",
+									"maxInputTokens",
+									"maxOutputTokens"
+								]
+							}
+						}
+					}
+				}
 			}
 		],
 		"interactiveSession": [
@@ -2252,16 +2512,6 @@
 				"icon": "$(pinned-dirty)"
 			},
 			{
-				"command": "github.copilot.chat.manageBYOK",
-				"title": "Manage Bring Your Own Key Vendor",
-				"enablement": "false"
-			},
-			{
-				"command": "github.copilot.chat.manageBYOKAPIKey",
-				"title": "Manage Bring Your Own Key API Key",
-				"enablement": "false"
-			},
-			{
 				"command": "github.copilot.cloud.resetWorkspaceConfirmations",
 				"title": "%github.copilot.command.resetCloudAgentWorkspaceConfirmations%"
 			},
@@ -2318,12 +2568,14 @@
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
+				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
+				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			}
@@ -2605,14 +2857,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.byok.ollamaEndpoint": {
-						"type": "string",
-						"default": "http://localhost:11434",
-						"tags": [
-							"preview"
-						],
-						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
 					}
 				}
 			},
@@ -3087,167 +3331,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
-					"github.copilot.chat.azureAuthType": {
-						"type": "string",
-						"enum": [
-							"entraId",
-							"apiKey"
-						],
-						"enumDescriptions": [
-							"%github.copilot.config.azureAuthType.entraId%",
-							"%github.copilot.config.azureAuthType.apiKey%"
-						],
-						"default": "entraId",
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.azureAuthType%"
-					},
-					"github.copilot.chat.azureModels": {
-						"type": "object",
-						"default": {},
-						"tags": [
-							"experimental"
-						],
-						"additionalProperties": {
-							"type": "object",
-							"properties": {
-								"name": {
-									"type": "string",
-									"description": "Display name of the Azure model"
-								},
-								"url": {
-									"type": "string",
-									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
-								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
-								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
-								},
-								"maxInputTokens": {
-									"type": "number",
-									"description": "Maximum number of input tokens supported by the model"
-								},
-								"maxOutputTokens": {
-									"type": "number",
-									"description": "Maximum number of output tokens supported by the model"
-								},
-								"thinking": {
-									"type": "boolean",
-									"default": false,
-									"description": "Whether the model supports thinking capabilities"
-								},
-								"zeroDataRetentionEnabled": {
-									"type": "boolean",
-									"default": false,
-									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
-								},
-								"requestHeaders": {
-									"type": "object",
-									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
-									"additionalProperties": {
-										"type": "string"
-									}
-								}
-							},
-							"required": [
-								"name",
-								"url",
-								"toolCalling",
-								"vision",
-								"maxInputTokens",
-								"maxOutputTokens"
-							],
-							"additionalProperties": false
-						},
-						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
-					},
-					"github.copilot.chat.customOAIModels": {
-						"type": "object",
-						"default": {},
-						"tags": [
-							"experimental"
-						],
-						"additionalProperties": {
-							"type": "object",
-							"properties": {
-								"name": {
-									"type": "string",
-									"description": "Display name of the custom OpenAI model"
-								},
-								"url": {
-									"type": "string",
-									"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
-								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
-								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
-								},
-								"maxInputTokens": {
-									"type": "number",
-									"description": "Maximum number of input tokens supported by the model"
-								},
-								"maxOutputTokens": {
-									"type": "number",
-									"description": "Maximum number of output tokens supported by the model"
-								},
-								"requiresAPIKey": {
-									"type": "boolean",
-									"description": "Whether the model requires an API key for authentication",
-									"default": true
-								},
-								"editTools": {
-									"type": "array",
-									"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
-									"items": {
-										"type": "string",
-										"enum": [
-											"find-replace",
-											"multi-find-replace",
-											"apply-patch",
-											"code-rewrite"
-										]
-									}
-								},
-								"thinking": {
-									"type": "boolean",
-									"default": false,
-									"description": "Whether the model supports thinking capabilities"
-								},
-								"zeroDataRetentionEnabled": {
-									"type": "boolean",
-									"default": false,
-									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
-								},
-								"requestHeaders": {
-									"type": "object",
-									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
-									"additionalProperties": {
-										"type": "string"
-									}
-								}
-							},
-							"required": [
-								"name",
-								"url",
-								"toolCalling",
-								"vision",
-								"maxInputTokens",
-								"maxOutputTokens",
-								"requiresAPIKey"
-							],
-							"additionalProperties": false
-						},
-						"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
-					},
 					"github.copilot.chat.alternateGptPrompt.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3276,8 +3359,17 @@
 					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -3928,6 +4020,16 @@
 						"tags": [
 							"advanced",
 							"experimental"
+						]
+					},
+					"github.copilot.chat.searchSubagent.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.searchSubagent.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
 						]
 					}
 				}
@@ -5199,7 +5301,7 @@
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.366",
+		"@github/copilot": "^0.0.381",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -5213,6 +5315,7 @@
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
+		"best-effort-json-parser": "^1.2.1",
 		"diff": "^8.0.2",
 		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
