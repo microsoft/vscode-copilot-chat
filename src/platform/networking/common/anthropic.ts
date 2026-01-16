@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { isAnthropicFamily } from '../../endpoint/common/chatModelCapabilities';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { IChatEndpoint } from './networking';
 
@@ -140,41 +139,102 @@ export interface ContextManagementResponse {
 }
 
 /**
- * Checks if Anthropic context editing is enabled.
- * This requires both the Messages API to be enabled and context editing to be enabled.
- * @param configurationService The configuration service
- * @param experimentationService The experimentation service
- * @returns true if Anthropic context editing is enabled
+ * Context editing is supported by:
+ * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
+ * - Claude Opus 4 (claude-opus-4-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports context editing
  */
-export function isAnthropicContextEditingEnabled(
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService
-): boolean {
-	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
-	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
-	return !!(useMessagesApi && contextEditingEnabled);
+export function modelSupportsContextEditing(modelId: string): boolean {
+	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-5') ||
+		normalized.startsWith('claude-opus-4-1') ||
+		normalized.startsWith('claude-opus-4');
 }
 
 /**
- * Checks if Anthropic tool search is enabled for the given endpoint.
- * This requires the endpoint to be Anthropic, Messages API to be enabled,
- * and tool search to be enabled.
- * @param endpoint The chat endpoint to check
- * @param configurationService The configuration service
- * @param experimentationService The experimentation service
- * @returns true if Anthropic tool search is enabled for this endpoint
+ * Tool search is only supported by:
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports tool search
  */
-export function isAnthropicToolSearchEnabled(
-	endpoint: IChatEndpoint,
+export function modelSupportsToolSearch(modelId: string): boolean {
+	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-opus-4-5');
+}
+
+/**
+ * Memory is supported by:
+ * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
+ * - Claude Opus 4 (claude-opus-4-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports memory
+ */
+export function modelSupportsMemory(modelId: string): boolean {
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-5') ||
+		normalized.startsWith('claude-opus-4-1') ||
+		normalized.startsWith('claude-opus-4');
+}
+
+
+export function isAnthropicMemoryEnabled(
+	endpoint: IChatEndpoint | string,
 	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService
+	experimentationService: IExperimentationService,
 ): boolean {
-	if (!isAnthropicFamily(endpoint)) {
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
 		return false;
 	}
-	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
-	const toolSearchEnabled = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
-	return !!(useMessagesApi && toolSearchEnabled);
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
+}
+
+export function isAnthropicToolSearchEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsToolSearch(effectiveModelId)) {
+		return false;
+	}
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+}
+
+export function isAnthropicContextEditingEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsContextEditing(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
 }
 
 export interface ContextEditingConfig {
@@ -239,15 +299,10 @@ export function buildContextManagement(
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
-	configurationService: IConfigurationService,
 	experimentationService: IExperimentationService,
 	thinkingBudget: number | undefined,
 	modelMaxInputTokens: number
 ): ContextManagement | undefined {
-	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
-	if (!contextEditingEnabled) {
-		return undefined;
-	}
 
 	const contextEditingConfig: ContextEditingConfig = {
 		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',

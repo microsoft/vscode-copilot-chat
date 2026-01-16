@@ -17,6 +17,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
@@ -180,14 +181,12 @@ export class ChatEndpoint implements IChatEndpoint {
 			}
 
 			// Add context management beta if enabled
-			const contextEditingEnabled = this._configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
-			if (contextEditingEnabled) {
+			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 
 			// Add tool search beta if enabled
-			const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._expService);
-			if (toolSearchEnabled) {
+			if (isAnthropicToolSearchEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('advanced-tool-use-2025-11-20');
 			}
 
