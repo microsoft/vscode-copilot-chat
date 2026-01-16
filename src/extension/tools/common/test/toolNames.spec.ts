@@ -19,6 +19,11 @@ describe('ToolNames', () => {
 		expect(mapped).toBe(unmapped);
 	});
 
+	it('Can map AskQuestions tool', () => {
+		expect(getContributedToolName(ToolName.AskQuestions)).toBe(ContributedToolName.AskQuestions);
+		expect(getToolName(ContributedToolName.AskQuestions)).toBe(ToolName.AskQuestions);
+	});
+
 	it('mapContributedToolNamesInString replaces all contributed tool names with core names', () => {
 		const input = `Use ${ContributedToolName.ReplaceString} and ${ContributedToolName.ReadFile} in sequence.`;
 		const output = mapContributedToolNamesInString(input);
