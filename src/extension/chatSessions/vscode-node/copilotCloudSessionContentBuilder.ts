@@ -96,6 +96,10 @@ export interface ParsedToolCallDetails {
 }
 
 export class ChatSessionContentBuilder {
+	// Constants for summary generation
+	private static readonly SUMMARY_DESCRIPTION_MAX_LINES = 3;
+	private static readonly SUMMARY_DESCRIPTION_MAX_LENGTH = 300;
+
 	constructor(
 		private type: string,
 		@IGitService private readonly _gitService: IGitService
@@ -213,9 +217,11 @@ export class ChatSessionContentBuilder {
 		if (pullRequest.body) {
 			// Extract first few lines of PR body as description
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
-			const description = lines.slice(0, 3).join(' ').substring(0, 300);
+			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES).join(' ');
+			const description = fullDescription.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH);
 			if (description) {
-				summaryParts.push(`**What it does:** ${description}${description.length === 300 ? '...' : ''}\n\n`);
+				const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
+				summaryParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
 			}
 		}
 
