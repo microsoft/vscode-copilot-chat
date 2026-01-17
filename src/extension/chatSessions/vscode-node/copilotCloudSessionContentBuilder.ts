@@ -176,32 +176,38 @@ export class ChatSessionContentBuilder {
 		const summaryParts: string[] = [];
 
 		// Add the goal/purpose section
-		summaryParts.push('## 📋 Session Summary\n');
+		summaryParts.push('## 📋 Session Summary\n\n');
 
 		if (problemStatement) {
-			summaryParts.push(`**Goal:** ${problemStatement}\n`);
+			summaryParts.push(`**Goal:** ${problemStatement}\n\n`);
 		}
 
 		// Add status information
 		const latestSession = sessions[sessions.length - 1];
 		let statusText = '';
+		let statusEmoji = '';
 		switch (latestSession.state) {
 			case 'completed':
-				statusText = '✅ **Status:** Completed';
+				statusEmoji = '✅';
+				statusText = 'Completed';
 				break;
 			case 'failed':
-				statusText = '❌ **Status:** Failed';
+				statusEmoji = '❌';
+				statusText = 'Failed';
 				break;
 			case 'in_progress':
-				statusText = '⏳ **Status:** In Progress';
+				statusEmoji = '⏳';
+				statusText = 'In Progress';
 				break;
 			case 'queued':
-				statusText = '⏸️ **Status:** Queued';
+				statusEmoji = '⏸️';
+				statusText = 'Queued';
 				break;
 			default:
-				statusText = `**Status:** ${latestSession.state}`;
+				statusEmoji = '📝';
+				statusText = latestSession.state;
 		}
-		summaryParts.push(`${statusText}\n`);
+		summaryParts.push(`${statusEmoji} **Status:** ${statusText}\n\n`);
 
 		// Add PR information
 		if (pullRequest.body) {
@@ -209,23 +215,26 @@ export class ChatSessionContentBuilder {
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
 			const description = lines.slice(0, 3).join(' ').substring(0, 300);
 			if (description) {
-				summaryParts.push(`\n**Description:** ${description}${description.length === 300 ? '...' : ''}\n`);
+				summaryParts.push(`**What it does:** ${description}${description.length === 300 ? '...' : ''}\n\n`);
 			}
 		}
 
 		// Add high-level metrics
 		if (pullRequest.files && pullRequest.additions !== undefined && pullRequest.deletions !== undefined) {
-			summaryParts.push(`\n**Changes:** ${pullRequest.files.totalCount} file${pullRequest.files.totalCount !== 1 ? 's' : ''} changed (+${pullRequest.additions} / -${pullRequest.deletions})\n`);
+			const fileCount = pullRequest.files.totalCount;
+			const additions = pullRequest.additions;
+			const deletions = pullRequest.deletions;
+			summaryParts.push(`**Changes Made:** ${fileCount} file${fileCount !== 1 ? 's' : ''} modified (+${additions} / -${deletions} lines)\n\n`);
 		}
 
 		// Add session count if multiple
 		if (sessions.length > 1) {
-			summaryParts.push(`\n**Sessions:** ${sessions.length} session${sessions.length !== 1 ? 's' : ''} in this conversation\n`);
+			summaryParts.push(`**Sessions:** ${sessions.length} iteration${sessions.length !== 1 ? 's' : ''}\n\n`);
 		}
 
 		// Add button/link to view detailed logs
-		summaryParts.push('\n---\n');
-		summaryParts.push('*Scroll down to view the detailed session log with all tool calls and interactions.*\n');
+		summaryParts.push('---\n\n');
+		summaryParts.push('💡 **View Session Log:** Scroll down to see the detailed execution log with all tool calls, commands, and agent interactions.\n');
 
 		const summaryMarkdown = summaryParts.join('');
 		const responseResult: ChatResult = {};
