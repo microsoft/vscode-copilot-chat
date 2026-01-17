@@ -90,6 +90,11 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 			return;
 		}
 
+		// Don't linkify common escape sequences like \r, \n, \t, etc.
+		if (/^\\[rntbfv0'"\\]$|^\\r\\n$/.test(symbolText)) {
+			return;
+		}
+
 		return this.resolver.resolve(symbolText, context.references, token);
 	}
 }
