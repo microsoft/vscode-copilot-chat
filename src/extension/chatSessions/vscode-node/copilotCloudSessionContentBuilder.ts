@@ -217,10 +217,10 @@ export class ChatSessionContentBuilder {
 		if (pullRequest.body) {
 			// Extract first few lines of PR body as description
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
-			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES).join(' ');
+			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES).join('. ');
 			const description = fullDescription.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH);
 			if (description) {
-				const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
+				const wasTruncated = description.length < fullDescription.length;
 				summaryParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
 			}
 		}
