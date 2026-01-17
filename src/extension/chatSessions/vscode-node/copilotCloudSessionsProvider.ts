@@ -161,7 +161,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
-		this.logService.info(`[VARIANTS DEBUG] provideHandleOptionsChange called - Resource: ${resource}, Updates: ${JSON.stringify(updates)}`);
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_GROUP_ID) {
 				if (update.value) {
@@ -174,10 +173,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			} else if (update.optionId === VARIATIONS_OPTION_GROUP_ID) {
 				if (update.value) {
 					this.sessionVariationsMap.set(resource.toString(), update.value);
-					this.logService.info(`[VARIANTS DEBUG] Variations changed for session ${resource}: ${update.value}`);
 				} else {
 					this.sessionVariationsMap.delete(resource.toString());
-					this.logService.info(`Variations cleared for session ${resource}`);
 				}
 			}
 		}
@@ -388,8 +385,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	private createEmptySession(resource: Uri): vscode.ChatSession {
 		const sessionId = resource ? resource.path.slice(1) : undefined;
 		const variationsValue = this.sessionVariationsMap.get(resource.toString());
-		this.logService.info(`[VARIANTS DEBUG] createEmptySession called - Resource: ${resource}, sessionId: ${sessionId}, variationsValue: ${variationsValue}`);
-		
+
 		return {
 			history: [],
 			...(sessionId && sessionId.startsWith('untitled-')
@@ -524,7 +520,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		// Notify user about creating multiple variants
 		if (variationsCount > 1) {
-			this.logService.info(`[VARIANTS DEBUG] Creating ${variationsCount} PR variants...`);
 			stream.markdown(vscode.l10n.t('Creating {0} PR variants...', variationsCount));
 			stream.markdown('\n\n');
 		}
@@ -607,7 +602,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		this.logService.info(`[VARIANTS DEBUG] chatParticipantImpl called - hasSessionContext: ${!!context.chatSessionContext}, isUntitled: ${context.chatSessionContext?.isUntitled}, hasConfirmation: ${!!(request.acceptedConfirmationData || request.rejectedConfirmationData)}`);
-		
+
 		if (request.acceptedConfirmationData || request.rejectedConfirmationData) {
 			return await this.handleConfirmationData(request, stream, token);
 		}
@@ -624,7 +619,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 			// For untitled sessions with multiple variants, show confirmation first
 			if (variationsCount > 1) {
-				this.logService.info(`[VARIANTS DEBUG] Showing confirmation for ${variationsCount} variants`);
 				// Show confirmation modal with premium request cost warning
 				const confirmationDetails = vscode.l10n.t('The agent will work asynchronously to create {0} pull request variants with your requested changes. This will use {0} premium requests.', variationsCount);
 
