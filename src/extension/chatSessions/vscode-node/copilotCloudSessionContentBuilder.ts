@@ -217,15 +217,15 @@ export class ChatSessionContentBuilder {
 		if (pullRequest.body) {
 			// Extract first few lines of PR body as description
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
-			// Join lines with '. ' but avoid double punctuation
+			// Join lines with proper punctuation, avoiding double punctuation
 			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES)
 				.map((line, index, array) => {
 					// Don't add separator after last line
 					if (index === array.length - 1) {
 						return line;
 					}
-					// Add '. ' if line doesn't already end with punctuation
-					return line.match(/[.!?]$/) ? line : line + '.';
+					// Add '.' if line doesn't already end with sentence-ending punctuation
+					return line.match(/[.!?:;…]$/) ? line : line + '.';
 				})
 				.join(' ');
 			const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
