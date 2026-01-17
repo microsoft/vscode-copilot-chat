@@ -91,7 +91,12 @@ export class RouterDecisionFetcher extends Disposable {
 				throw error;
 			}
 
-			const json = await response.json();
+			let json: unknown;
+			try {
+				json = await response.json();
+			} catch {
+				throw new Error('Invalid router decision response: malformed JSON');
+			}
 			const { content: result, error: validationError } = routerDecisionResponseValidator.validate(json);
 			if (validationError) {
 				throw new Error(`Invalid router decision response: ${validationError.message}`);

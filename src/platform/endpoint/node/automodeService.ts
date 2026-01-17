@@ -11,7 +11,7 @@ import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycl
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -107,7 +107,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoints: IChatEndpoint[]; tokenBank: AutoModeTokenBank }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -153,8 +153,20 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		const conversationId = getConversationId(chatRequest);
+		const usingRouterModel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+		if (usingRouterModel) {
+			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
+		}
+		return this._resolveWithoutRouterModel(chatRequest, knownEndpoints);
+	}
 
+	/**
+	 * Router model path: Uses the router decision fetcher to select the best model based on the prompt.
+	 * This is an experimental feature that can be removed once the experiment is complete.
+	 */
+	private async _resolveWithRouterModel(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
+		const conversationId = getConversationId(chatRequest);
+		const entry = this._autoModelCache.get(conversationId);
 		const location = chatRequest?.location ?? ChatLocation.Panel;
 		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
 		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
@@ -166,8 +178,16 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		let selectedModel: IChatEndpoint | undefined = undefined;
 		const availableModels = reserveToken.available_models;
-		const cachedModels = this._autoModelCache.get(conversationId)?.endpoints.map(e => e.model) || [];
-		const preferredModels = [...new Set([reserveToken.selected_model, ...cachedModels])];
+		const cachedModels = entry?.endpoints.map(e => e.model) || [];
+		// preferredModels is an ordered list used to express routing preference:
+		//  - the reserved model is always first
+		//  - followed by any cached models in their original order, without duplicates
+		const preferredModels = [reserveToken.selected_model];
+		for (const cachedModel of cachedModels) {
+			if (!preferredModels.includes(cachedModel)) {
+				preferredModels.push(cachedModel);
+			}
+		}
 
 		const prompt = chatRequest?.prompt?.trim();
 		if (prompt?.length) {
@@ -181,13 +201,45 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		if (!selectedModel) {
 			selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
 		}
-		const existingEndpoints = this._autoModelCache.get(conversationId)?.endpoints || [];
-		let autoEndpoint = existingEndpoints.find(e => e instanceof AutoChatEndpoint && e.model === selectedModel.model);
+		const existingEndpoints = entry?.endpoints || [];
+		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
 		if (!autoEndpoint) {
 			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 			existingEndpoints.push(autoEndpoint);
 		}
 		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank });
+		return autoEndpoint;
+	}
+
+	/**
+	 * Non-router model path: Uses the cached endpoint if available, or falls back to the reserved token's selected model.
+	 */
+	private async _resolveWithoutRouterModel(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
+		const conversationId = getConversationId(chatRequest);
+		const entry = this._autoModelCache.get(conversationId);
+
+		// If we have a cached entry, use it (refreshing if the model changed)
+		if (entry) {
+			const entryToken = await entry.tokenBank.getToken();
+			if (entry.endpoints.length && entry.endpoints[0].model !== entryToken.selected_model) {
+				// Model changed during a token refresh -> map to new endpoint
+				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model) || knownEndpoints[0];
+				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
+			}
+			return entry.endpoints[0];
+		}
+
+		// No cached entry, use the reserve token
+		const location = chatRequest?.location ?? ChatLocation.Panel;
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+		reserveTokenBank.debugName = conversationId;
+
+		const reserveToken = await reserveTokenBank.getToken();
+		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
+		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
+
+		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank });
 		return autoEndpoint;
 	}
 
