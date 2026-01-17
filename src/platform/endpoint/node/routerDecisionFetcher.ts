@@ -74,20 +74,20 @@ export class RouterDecisionFetcher extends Disposable {
 			} catch (error) {
 				// Network error - retry
 				lastError = error instanceof Error ? error : new Error(String(error));
-				this._logService.warn(`Router API network error, retrying (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
+				this._logService.warn(`[RouterDecisionFetcher] Network error, retrying (attempt ${attempt + 1}/${MAX_RETRIES}): ${lastError.message}`);
 				continue;
 			}
 
 			if (RETRYABLE_STATUS_CODES.includes(response.status)) {
-				lastError = new Error(`Reasoning classifier API request failed: ${response.statusText} (status: ${response.status})`);
-				this._logService.warn(`Router API returned ${response.status}, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
+				lastError = new Error(`[RouterDecisionFetcher] API request failed: ${response.statusText} (status: ${response.status})`);
+				this._logService.warn(`[RouterDecisionFetcher] Returned ${response.status}, retrying (attempt ${attempt + 1}/${MAX_RETRIES})`);
 				continue;
 			}
 
 			if (!response.ok) {
 				// Non-retryable HTTP error (e.g. 404, 400, 401) - fail immediately
-				const error = new Error(`Reasoning classifier API request failed: ${response.status}`);
-				this._logService.error('Reasoning classification failed: ', error.message);
+				const error = new Error(`[RouterDecisionFetcher] API request failed: ${response.status}`);
+				this._logService.error('[RouterDecisionFetcher] Request failed: ', error.message);
 				throw error;
 			}
 
@@ -102,12 +102,12 @@ export class RouterDecisionFetcher extends Disposable {
 				throw new Error(`Invalid router decision response: ${validationError.message}`);
 			}
 
-			this._logService.trace(`Reasoning classifier prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
+			this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
 
 			return result.chosen_model;
 		}
 
-		this._logService.error('Reasoning classification failed after retries: ', lastError?.message);
+		this._logService.error('[RouterDecisionFetcher] Failed after retries: ', lastError?.message);
 		throw lastError;
 	}
 }
