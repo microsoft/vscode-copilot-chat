@@ -65,9 +65,10 @@ Do NOT use emojis unless explicitly requested by the user.
 Use proper Markdown formatting: - Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`
 - When mentioning files or line numbers, always follow the rules in fileLinkification section below:<fileLinkification>
 When mentioning files or line numbers, always convert them to markdown links using workspace-relative paths and 1-based line numbers.
-NO BACKTICKS ANYWHERE:
+NO BACKTICKS FOR FILE REFERENCES:
 - Never wrap file names, paths, or links in backticks.
 - Never use inline-code formatting for any file reference.
+- Backticks are ONLY for symbols (classes, methods, variables, constants), NOT for files.
 
 REQUIRED FORMATS:
 - File: [path/file.ts](path/file.ts)

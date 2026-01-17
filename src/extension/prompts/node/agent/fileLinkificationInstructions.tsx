@@ -10,9 +10,10 @@ export class FileLinkificationInstructions extends PromptElement<{}> {
 	render() {
 		return <Tag name='fileLinkification'>
 			When mentioning files or line numbers, always convert them to markdown links using workspace-relative paths and 1-based line numbers.<br />
-			NO BACKTICKS ANYWHERE:<br />
+			NO BACKTICKS FOR FILE REFERENCES:<br />
 			- Never wrap file names, paths, or links in backticks.<br />
 			- Never use inline-code formatting for any file reference.<br />
+			- Backticks are ONLY for symbols (classes, methods, variables, constants), NOT for files.<br />
 			<br />
 
 			REQUIRED FORMATS:<br />
