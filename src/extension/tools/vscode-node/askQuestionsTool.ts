@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -211,8 +210,8 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 			// Always add free text option
 			items.push({
-				label: l10n.t('Other...'),
-				description: l10n.t('Enter custom answer'),
+				label: vscode.l10n.t('Other...'),
+				description: vscode.l10n.t('Enter custom answer'),
 				isFreeText: true,
 				originalLabel: 'Other'
 			});
@@ -282,7 +281,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 						const freeTextInput = await vscode.window.showInputBox({
 							prompt: question.question,
-							placeHolder: l10n.t('Enter your answer'),
+							placeHolder: vscode.l10n.t('Enter your answer'),
 							ignoreFocusOut: true
 						}, token);
 
@@ -339,22 +338,22 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 		// Validate input early before showing UI
 		if (!questions || questions.length === 0) {
-			throw new Error(l10n.t('No questions provided. The questions array must contain at least one question.'));
+			throw new Error(vscode.l10n.t('No questions provided. The questions array must contain at least one question.'));
 		}
 
 		for (const question of questions) {
 			if (!question.options || question.options.length < 2) {
-				throw new Error(l10n.t('Question "{0}" must have at least two options.', question.header));
+				throw new Error(vscode.l10n.t('Question "{0}" must have at least two options.', question.header));
 			}
 		}
 
 		const questionCount = questions.length;
 		const message = questionCount === 1
-			? l10n.t('Asking a question')
-			: l10n.t('Asking {0} questions', questionCount);
+			? vscode.l10n.t('Asking a question')
+			: vscode.l10n.t('Asking {0} questions', questionCount);
 		const pastMessage = questionCount === 1
-			? l10n.t('Asked a question')
-			: l10n.t('Asked {0} questions', questionCount);
+			? vscode.l10n.t('Asked a question')
+			: vscode.l10n.t('Asked {0} questions', questionCount);
 
 		return {
 			invocationMessage: new MarkdownString(message),
