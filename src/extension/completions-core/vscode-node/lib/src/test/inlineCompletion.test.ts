@@ -7,7 +7,7 @@ import assert from 'assert';
 import Sinon from 'sinon';
 import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ResultType } from '../ghostText/ghostText';
+import { ResultType } from '../ghostText/resultType';
 import { telemetryShown } from '../ghostText/telemetry';
 import { GhostText } from '../inlineCompletion';
 import { FetchOptions, ICompletionsFetcherService, Response } from '../networking';

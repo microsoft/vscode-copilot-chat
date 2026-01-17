@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { APIChoice } from '../openai/openai';
-import { ResultType } from './ghostText';
+import { ResultType } from './resultType';
 
 export const ICompletionsCurrentGhostText = createServiceIdentifier<ICompletionsCurrentGhostText>('ICompletionsCurrentGhostText');
 export interface ICompletionsCurrentGhostText {
