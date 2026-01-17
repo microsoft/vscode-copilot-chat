@@ -820,7 +820,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		});
 
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(pr.repository.owner.login, pr.repository.name, sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
+		const history = await sessionContentBuilder.buildSessionHistory(
+			getProblemStatement(pr.repository.owner.login, pr.repository.name, sortedSessions),
+			sortedSessions,
+			pr,
+			(sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }),
+			storedReferences,
+			{ includeSummary: true } // Enable summary view for background/cloud sessions
+		);
 
 		// const selectedCustomAgent = undefined; /* TODO: Needs API to support this. */
 		// const selectedModel = undefined; /* TODO: Needs API to support this. */
