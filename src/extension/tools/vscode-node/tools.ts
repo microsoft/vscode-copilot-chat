@@ -6,13 +6,13 @@
 import * as vscode from 'vscode';
 import { l10n } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
+import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../util/vs/base/common/uri';
 import { getContributedToolName } from '../common/toolNames';
+import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IToolGroupingCache, IToolGroupingService } from '../common/virtualTools/virtualToolTypes';
-import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import '../node/allTools';
 import './allTools';
 
@@ -30,6 +30,22 @@ export class ToolsContribution extends Disposable {
 				this._register(vscode.lm.registerTool(getContributedToolName(name), tool));
 			}
 		}
+
+		const modelSpecificTools = this._register(new DisposableMap<string>());
+		this._register(autorunIterableDelta(
+			reader => toolsService.modelSpecificTools.read(reader),
+			({ addedValues, removedValues }) => {
+				for (const { definition } of removedValues) {
+					modelSpecificTools.deleteAndDispose(definition.name);
+				}
+				for (const { definition, tool } of addedValues) {
+					if (isVscodeLanguageModelTool(tool)) {
+						modelSpecificTools.set(definition.name, vscode.lm.registerToolDefinition(definition, tool));
+					}
+				}
+			},
+			v => v.definition,
+		));
 
 		this._register(vscode.commands.registerCommand('github.copilot.debug.resetVirtualToolGroups', async () => {
 			await toolGrouping.clear();

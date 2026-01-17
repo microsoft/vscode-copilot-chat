@@ -20,10 +20,10 @@ export interface IReplaceStringToolParams {
 	newString: string;
 }
 
-export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringToolParams> {
+export class ReplaceStringTool<T extends IReplaceStringToolParams = IReplaceStringToolParams> extends AbstractReplaceStringTool<T> {
 	public static toolName = ToolName.ReplaceString;
 
-	protected extractReplaceInputs(input: IReplaceStringToolParams): IAbstractReplaceStringInput[] {
+	protected extractReplaceInputs(input: T): IAbstractReplaceStringInput[] {
 		return [{
 			filePath: input.filePath,
 			oldString: input.oldString,
@@ -71,7 +71,7 @@ export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringT
 	}
 
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReplaceStringToolParams>, token: vscode.CancellationToken) {
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken) {
 		const prepared = await this.prepareEdits(options, token);
 		return this.applyAllEdits(options, prepared, token);
 	}

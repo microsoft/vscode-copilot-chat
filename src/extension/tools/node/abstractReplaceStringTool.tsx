@@ -73,7 +73,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IToolsService protected readonly toolsService: IToolsService,
 		@INotebookService protected readonly notebookService: INotebookService,
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
-		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
+		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
@@ -382,6 +382,18 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return result;
 	}
 
+	protected doGenerateEdit(uri: URI, oldString: string, newString: string, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>) {
+		return applyEdit(
+			uri,
+			oldString,
+			newString,
+			this.workspaceService,
+			this.notebookService,
+			this.alternativeNotebookContent,
+			this._promptContext?.request?.model
+		);
+	}
+
 	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T> | vscode.LanguageModelToolInvocationPrepareOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
 		const model = this.modelObjectForTelemetry(options);
 		const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
@@ -393,15 +405,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		let updatedFile: string;
 		let edits: vscode.TextEdit[] = [];
 		try {
-			const result = await applyEdit(
-				uri,
-				oldString,
-				newString,
-				this.workspaceService,
-				this.notebookService,
-				this.alternativeNotebookContent,
-				this._promptContext?.request?.model
-			);
+			const result = await this.doGenerateEdit(uri, oldString, newString, options);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
 			this.recordEditSuccess(options, true);
