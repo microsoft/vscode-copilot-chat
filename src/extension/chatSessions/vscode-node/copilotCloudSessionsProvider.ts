@@ -426,6 +426,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.map(agent => ({
 					id: agent.id,
 					name: agent.name,
+					...(agent.id === DEFAULT_PARTNER_AGENT_ID && { default: true }),
+					icon: new vscode.ThemeIcon('agent')
 				}));
 				optionGroups.push({
 					id: PARTNER_AGENTS_OPTION_GROUP_ID,
@@ -437,7 +439,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			if (customAgents.length > 0) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-					{ id: DEFAULT_CUSTOM_AGENT_ID, name: vscode.l10n.t('Default') },
+					{ id: DEFAULT_CUSTOM_AGENT_ID, default: true, name: vscode.l10n.t('Default'), icon: new vscode.ThemeIcon('file-text') },
 					...customAgents.map(agent => ({
 						id: agent.name,
 						name: agent.display_name || agent.name
