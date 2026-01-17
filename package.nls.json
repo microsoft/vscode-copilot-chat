@@ -374,6 +374,7 @@
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
 	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",
 	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes to Workspace",
+	"github.copilot.config.contextCounter.enabled": "Show a context usage indicator in the chat input area.",
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server. [Learn more](https://aka.ms/vscode-gh-mcp-toolsets).",
 	"github.copilot.config.githubMcpServer.readonly": "Enable read-only mode for the GitHub MCP Server. When enabled, only read tools are available. [Learn more](https://aka.ms/vscode-gh-mcp-readonly).",
