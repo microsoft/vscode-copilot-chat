@@ -217,10 +217,20 @@ export class ChatSessionContentBuilder {
 		if (pullRequest.body) {
 			// Extract first few lines of PR body as description
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
-			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES).join('. ');
+			// Join lines with '. ' but avoid double punctuation
+			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES)
+				.map((line, index, array) => {
+					// Don't add separator after last line
+					if (index === array.length - 1) {
+						return line;
+					}
+					// Add '. ' if line doesn't already end with punctuation
+					return line.match(/[.!?]$/) ? line : line + '.';
+				})
+				.join(' ');
+			const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
 			const description = fullDescription.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH);
 			if (description) {
-				const wasTruncated = description.length < fullDescription.length;
 				summaryParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
 			}
 		}
