@@ -5,7 +5,7 @@
 
 import { afterEach, assert, beforeEach, suite, test } from 'vitest';
 import { TextEditor, type TextDocument } from 'vscode';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -29,6 +29,7 @@ suite('InlineEditModel', () => {
 		let workspaceService: TestWorkspaceService;
 		let signalFiredCount = 0;
 		let nextEditProvider: { lastRejectionTime: number; lastTriggerTime: number };
+		let configurationService: IConfigurationService;
 
 		beforeEach(() => {
 			disposables = new DisposableStore();
@@ -41,8 +42,9 @@ suite('InlineEditModel', () => {
 			workspaceService = disposables.add(new TestWorkspaceService());
 			const services = disposables.add(createExtensionUnitTestingServices());
 			const accessor = disposables.add(services.createTestingAccessor());
+			configurationService = accessor.get(IConfigurationService);
 
-			disposables.add(new InlineEditTriggerer(vscWorkspace as any, nextEditProvider as any as NextEditProvider, signal, accessor.get(ILogService), accessor.get(IConfigurationService), accessor.get(IExperimentationService), workspaceService));
+			disposables.add(new InlineEditTriggerer(vscWorkspace as any, nextEditProvider as any as NextEditProvider, signal, accessor.get(ILogService), configurationService, accessor.get(IExperimentationService), workspaceService));
 		});
 
 		afterEach(() => {
@@ -73,6 +75,48 @@ suite('InlineEditModel', () => {
 			assert.isAtLeast(signalFiredCount, 1, 'Signal should have been fired');
 		});
 
+		test('No Signal on document switch when no recent NES trigger', async () => {
+			// Enable document switch trigger
+			await configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 60);
+
+			// Create first document and make a change
+			const doc1 = createTextDocument(new Selection(0, 0, 0, 0), Uri.file('file1.py'), 'print("file1")');
+			triggerTextChange(doc1.document);
+
+			// Set up stale trigger time - NES hasn't been triggered recently
+			nextEditProvider.lastRejectionTime = Date.now() - (10 * 1000);
+			nextEditProvider.lastTriggerTime = Date.now() - (15 * 1000); // 15s ago, outside 10s window
+
+			// Create second document and switch to it
+			const doc2 = createTextDocument(new Selection(0, 0, 0, 0), Uri.file('file2.py'), 'print("file2")');
+
+			// This should NOT trigger because lastTriggerTime is stale
+			triggerTextSelectionChange(doc2.textEditor, doc2.selection);
+
+			assert.strictEqual(signalFiredCount, 0, 'Signal should NOT fire on document switch when NES trigger is stale');
+		});
+
+		test('Signal on document switch when recent NES trigger', async () => {
+			// Enable document switch trigger
+			await configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 60);
+
+			// Create first document and make a change
+			const doc1 = createTextDocument(new Selection(0, 0, 0, 0), Uri.file('file1.py'), 'print("file1")');
+			triggerTextChange(doc1.document);
+
+			// Set up recent trigger time
+			nextEditProvider.lastRejectionTime = Date.now() - (10 * 1000);
+			nextEditProvider.lastTriggerTime = Date.now() - (5 * 1000); // 5s ago, within 10s window
+
+			// Create second document and switch to it
+			const doc2 = createTextDocument(new Selection(0, 0, 0, 0), Uri.file('file2.py'), 'print("file2")');
+
+			// This SHOULD trigger because lastTriggerTime is recent
+			triggerTextSelectionChange(doc2.textEditor, doc2.selection);
+
+			assert.isAtLeast(signalFiredCount, 1, 'Signal should fire on document switch when NES trigger is recent');
+		});
+
 		function triggerTextChange(document: TextDocument) {
 			workspaceService.didChangeTextDocumentEmitter.fire({
 				document,
@@ -81,8 +125,11 @@ suite('InlineEditModel', () => {
 			});
 		}
 		function triggerTextSelectionChange(textEditor: TextEditor, selection: Selection) {
+			triggerTextSelectionChangeWithKind(textEditor, selection, TextEditorSelectionChangeKind.Keyboard);
+		}
+		function triggerTextSelectionChangeWithKind(textEditor: TextEditor, selection: Selection, kind: TextEditorSelectionChangeKind) {
 			workspaceService.didChangeTextEditorSelectionEmitter.fire({
-				kind: TextEditorSelectionChangeKind.Keyboard,
+				kind,
 				selections: [selection],
 				textEditor,
 			});
@@ -104,7 +151,7 @@ suite('InlineEditModel', () => {
 		}
 
 		function createTextDocument(selection: Selection = new Selection(0, 0, 0, 0), uri: Uri = Uri.file('sample.py'), content = 'print("Hello World")') {
-			const doc = createTextDocumentData(Uri.file('sample.py'), 'print("Hello World")', 'python');
+			const doc = createTextDocumentData(uri, content, 'python');
 			const textEditor = new ExtHostTextEditor(doc.document, [selection], {}, [], undefined);
 			vscWorkspace.addDoc(doc.document, createObservableTextDoc(doc.document.uri));
 			return {

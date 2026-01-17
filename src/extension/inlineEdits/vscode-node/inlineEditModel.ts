@@ -280,6 +280,13 @@ export class InlineEditTriggerer extends Disposable {
 			return false;
 		}
 
+		// Require a recent NES trigger (within 10s) before triggering on document switch
+		const timeSinceLastTrigger = Date.now() - this.nextEditProvider.lastTriggerTime;
+		if (this.nextEditProvider.lastTriggerTime === 0 || timeSinceLastTrigger >= TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT) {
+			tracer.returns('no recent NES trigger');
+			return false;
+		}
+
 		const doc = this.workspace.getDocumentByTextDocument(e.textEditor.document);
 		if (!doc) { // doc is likely copilot-ignored
 			logger.trace('Return: ignored document');
