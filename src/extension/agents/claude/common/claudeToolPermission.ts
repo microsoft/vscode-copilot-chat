@@ -28,8 +28,6 @@ export interface ClaudeToolPermissionContext {
 export interface IClaudeToolConfirmationParams {
 	readonly title: string;
 	readonly message: string;
-	readonly confirmationType?: 'basic' | 'terminal';
-	readonly terminalCommand?: string;
 }
 
 /**

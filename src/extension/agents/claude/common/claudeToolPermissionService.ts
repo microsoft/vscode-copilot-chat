@@ -111,8 +111,7 @@ export class ClaudeToolPermissionService implements IClaudeToolPermissionService
 	private _getDefaultConfirmationParams(toolName: string, input: Record<string, unknown>): IClaudeToolConfirmationParams {
 		return {
 			title: l10n.t('Use {0}?', toolName),
-			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-			confirmationType: 'basic'
+			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``
 		};
 	}
 
