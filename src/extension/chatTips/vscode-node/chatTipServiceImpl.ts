@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DEFAULT_TIPS, IChatTipService } from '../common/chatTipService';
 
 /**
@@ -15,9 +14,7 @@ export class ChatTipService implements IChatTipService {
 	private _currentTipIndex = 0;
 	private readonly _tips: readonly string[];
 
-	constructor(
-		@IConfigurationService private readonly _configurationService: IConfigurationService
-	) {
+	constructor() {
 		// Use default tips - in the future this could be extended to load custom tips
 		this._tips = DEFAULT_TIPS;
 

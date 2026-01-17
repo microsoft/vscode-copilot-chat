@@ -32,6 +32,7 @@ export class ChatTipStreamParticipant {
 
 			// Show tip immediately as a progress message
 			// This appears while Copilot is working on the response
+			// Note: tips come from DEFAULT_TIPS (static trusted content), not user input
 			const tipMarkdown = new MarkdownString(`$(lightbulb) **Tip:** ${tip}`);
 			inStream.progress(tipMarkdown.value);
 

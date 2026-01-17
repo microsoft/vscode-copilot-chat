@@ -5,7 +5,6 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatResponseStream } from 'vscode';
-import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { ChatResponseStreamImpl } from '../../../../util/common/chatResponseStreamImpl';
 import { ChatResponseMarkdownPart } from '../../../../vscodeTypes';
 import { IChatTipService } from '../../common/chatTipService';
@@ -13,13 +12,11 @@ import { ChatTipService } from '../../vscode-node/chatTipServiceImpl';
 import { ChatTipStreamParticipant } from '../../vscode-node/chatTipStreamParticipant';
 
 describe('ChatTipStreamParticipant', () => {
-	let configService: InMemoryConfigurationService;
 	let tipService: IChatTipService;
 	let participant: ChatTipStreamParticipant;
 
 	beforeEach(() => {
-		configService = new InMemoryConfigurationService();
-		tipService = new ChatTipService(configService);
+		tipService = new ChatTipService();
 		participant = new ChatTipStreamParticipant(tipService);
 	});
 

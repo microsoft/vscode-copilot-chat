@@ -4,17 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { DEFAULT_TIPS } from '../../common/chatTipService';
 import { ChatTipService } from '../../vscode-node/chatTipServiceImpl';
 
 describe('ChatTipService', () => {
-	let configService: InMemoryConfigurationService;
 	let tipService: ChatTipService;
 
 	beforeEach(() => {
-		configService = new InMemoryConfigurationService();
-		tipService = new ChatTipService(configService);
+		tipService = new ChatTipService();
 	});
 
 	describe('shouldShowTips', () => {
@@ -52,7 +49,7 @@ describe('ChatTipService', () => {
 				shouldShowTips(): boolean {
 					return false;
 				}
-			})(configService);
+			})();
 
 			const tip = customTipService.getNextTip();
 			expect(tip).toBeUndefined();
