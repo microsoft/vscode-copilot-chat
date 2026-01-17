@@ -8,7 +8,3 @@ import './loggingHooks';
 import './sessionHooks';
 import './subagentHooks';
 import './toolHooks';
-
-// Re-export registry and build function
-export { buildHooksFromRegistry, claudeHookRegistry, registerClaudeHook } from './claudeHookRegistry';
-export type { ClaudeHookRegistryType, IClaudeHookHandlerCtor } from './claudeHookRegistry';
