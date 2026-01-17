@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ChatResponseStream } from 'vscode';
-import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { MarkdownString } from '../../../vscodeTypes';
 import { ResponseStreamParticipant } from '../../prompt/common/conversation';
 import { IChatTipService } from '../common/chatTipService';
@@ -31,22 +30,13 @@ export class ChatTipStreamParticipant {
 				return inStream;
 			}
 
-			// Create a wrapped stream that shows the tip as progress
-			let tipShown = false;
+			// Show tip immediately as a progress message
+			// This appears while Copilot is working on the response
+			const tipMarkdown = new MarkdownString(`$(lightbulb) **Tip:** ${tip}`);
+			inStream.progress(tipMarkdown.value);
 
-			return ChatResponseStreamImpl.spy(
-				inStream,
-				(part) => {
-					// Show tip once when we start receiving content
-					// This ensures the tip appears while Copilot is working
-					if (!tipShown) {
-						tipShown = true;
-						// Show tip as a progress message with a lightbulb icon
-						const tipMarkdown = new MarkdownString(`$(lightbulb) **Tip:** ${tip}`);
-						inStream.progress(tipMarkdown.value);
-					}
-				}
-			);
+			// Return the original stream - tip has already been shown
+			return inStream;
 		};
 	}
 }
