@@ -4099,7 +4099,7 @@
 					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.searchSubagent.enabled%",
 						"tags": [
 							"advanced",

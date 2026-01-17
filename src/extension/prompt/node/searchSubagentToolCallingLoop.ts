@@ -9,6 +9,7 @@ import { IAuthenticationChatUpgradeService } from '../../../platform/authenticat
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ProxyAgenticSearchEndpoint } from '../../../platform/endpoint/node/proxyAgenticSearchEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -38,7 +39,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 		@IRequestLogger requestLogger: IRequestLogger,
-		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
@@ -61,16 +62,12 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
-	private async getEndpoint(request: ChatRequest) {
-		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
-		}
-		return endpoint;
+	private async getEndpoint() {
+		return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -83,7 +80,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		const allTools = this.toolsService.getEnabledTools(this.options.request, endpoint);
 
 		// Only include tools relevant for search operations.
@@ -100,7 +97,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	}
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		return endpoint.makeChatRequest2({
 			debugName: SearchSubagentToolCallingLoop.ID,
 			messages,
