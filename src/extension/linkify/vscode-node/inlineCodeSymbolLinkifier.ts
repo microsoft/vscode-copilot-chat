@@ -90,7 +90,8 @@ export class InlineCodeSymbolLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		// Don't linkify common escape sequences like \r, \n, \t, etc.
+		// Don't linkify common escape sequences
+		// Matches: \r, \n, \t, \b, \f, \v, \0, \', \", \\, or \r\n
 		if (/^\\[rntbfv0'"\\]$|^\\r\\n$/.test(symbolText)) {
 			return;
 		}

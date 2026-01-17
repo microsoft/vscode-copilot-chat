@@ -6,6 +6,9 @@
 import { suite, test } from 'vitest';
 import { assertPartsEqual, createTestLinkifierService, linkify } from '../node/util';
 
+// Common escape sequences that should not be linkified
+const ESCAPE_SEQUENCES_TO_TEST = ['`\\0`', '`\\b`', '`\\f`', '`\\v`', '`\\\'`', '`\\"`', '`\\\\`'];
+
 suite('InlineCodeSymbolLinkifier - Escape Sequences', () => {
 
 	test('Should not linkify escape sequences like \\r', async () => {
@@ -39,9 +42,7 @@ suite('InlineCodeSymbolLinkifier - Escape Sequences', () => {
 	test('Should not linkify other common escape sequences', async () => {
 		const linkifier = createTestLinkifierService();
 		
-		const escapesToTest = ['`\\0`', '`\\b`', '`\\f`', '`\\v`', '`\\\'`', '`\\"`', '`\\\\`'];
-		
-		for (const escapeSeq of escapesToTest) {
+		for (const escapeSeq of ESCAPE_SEQUENCES_TO_TEST) {
 			const result = await linkify(linkifier, escapeSeq);
 			assertPartsEqual(result.parts, [escapeSeq]);
 		}
