@@ -18,9 +18,8 @@ interface IQuestionOption {
 }
 
 interface IQuestion {
-	id: string;
+	header: string;
 	question: string;
-	header?: string;
 	multiSelect?: boolean;
 	options: IQuestionOption[];
 }
@@ -52,7 +51,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				// Mark remaining questions as skipped
 				for (let i = currentStep; i < questions.length; i++) {
 					const q = questions[i];
-					result.answers[q.id] = {
+					result.answers[q.header] = {
 						selected: [],
 						freeText: null,
 						skipped: true
@@ -73,7 +72,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				// User pressed ESC - mark current and remaining questions as skipped
 				for (let i = currentStep; i < questions.length; i++) {
 					const q = questions[i];
-					result.answers[q.id] = {
+					result.answers[q.header] = {
 						selected: [],
 						freeText: null,
 						skipped: true
@@ -85,7 +84,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			// At this point, answer is always a valid response object
 			// (back case handled above with continue, skipped case handled with break)
 			if (answer !== 'back') {
-				result.answers[question.id] = answer;
+				result.answers[question.header] = answer;
 			}
 
 			currentStep++;
@@ -123,7 +122,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			};
 
 			const quickPick = vscode.window.createQuickPick<IQuickPickOptionItem>();
-			quickPick.title = question.header ?? question.question;
+			quickPick.title = question.header;
 			quickPick.placeholder = question.question;
 			quickPick.step = step + 1;
 			quickPick.totalSteps = totalSteps;
@@ -274,8 +273,8 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		}
 
 		for (const question of questions) {
-			if (!question.options || question.options.length === 0) {
-				throw new Error(l10n.t('Question "{0}" has no options. Each question must have at least one option.', question.id));
+			if (!question.options || question.options.length < 2) {
+				throw new Error(l10n.t('Question "{0}" must have at least two options.', question.header));
 			}
 		}
 
