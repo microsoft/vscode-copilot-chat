@@ -148,6 +148,14 @@ export interface IRequestLogger {
 
 	promptRendererTracing: boolean;
 
+	/**
+	 * Get the current capturing token from AsyncLocalStorage.
+	 * Returns undefined if called outside captureInvocation.
+	 * Useful for passing tokens explicitly to child operations (like subagents)
+	 * that may run outside the current async context.
+	 */
+	readonly currentToken: CapturingToken | undefined;
+
 	captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T>;
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
@@ -227,6 +235,14 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 
 	public get promptRendererTracing() {
 		return false;
+	}
+
+	/**
+	 * Get the current capturing token from AsyncLocalStorage.
+	 * Returns undefined if called outside captureInvocation.
+	 */
+	public get currentToken(): CapturingToken | undefined {
+		return requestLogStorage.getStore();
 	}
 
 	public captureInvocation<T>(request: CapturingToken, fn: () => Promise<T>): Promise<T> {
