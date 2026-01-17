@@ -108,8 +108,18 @@ export class ChatSessionContentBuilder {
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
 		initialReferences: Promise<vscode.ChatPromptReference[]>,
+		options?: { includeSummary?: boolean },
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
+
+		// Add summary view at the beginning if requested
+		if (options?.includeSummary && sessions.length > 0) {
+			const problemStatement = await problemStatementPromise;
+			const summaryTurn = await this.createSessionSummary(problemStatement, sessions, pullRequest);
+			if (summaryTurn) {
+				history.push(summaryTurn);
+			}
+		}
 
 		// Process all sessions concurrently and assemble results in order
 		const sessionResults = await Promise.all(
@@ -155,6 +165,71 @@ export class ChatSessionContentBuilder {
 			.forEach(result => history.push(...result.turns));
 
 		return history;
+	}
+
+	private async createSessionSummary(
+		problemStatement: string | undefined,
+		sessions: SessionInfo[],
+		pullRequest: PullRequestSearchItem
+	): Promise<ChatResponseTurn2 | undefined> {
+		// Build a high-level summary of what the session accomplished
+		const summaryParts: string[] = [];
+
+		// Add the goal/purpose section
+		summaryParts.push('## 📋 Session Summary\n');
+
+		if (problemStatement) {
+			summaryParts.push(`**Goal:** ${problemStatement}\n`);
+		}
+
+		// Add status information
+		const latestSession = sessions[sessions.length - 1];
+		let statusText = '';
+		switch (latestSession.state) {
+			case 'completed':
+				statusText = '✅ **Status:** Completed';
+				break;
+			case 'failed':
+				statusText = '❌ **Status:** Failed';
+				break;
+			case 'in_progress':
+				statusText = '⏳ **Status:** In Progress';
+				break;
+			case 'queued':
+				statusText = '⏸️ **Status:** Queued';
+				break;
+			default:
+				statusText = `**Status:** ${latestSession.state}`;
+		}
+		summaryParts.push(`${statusText}\n`);
+
+		// Add PR information
+		if (pullRequest.body) {
+			// Extract first few lines of PR body as description
+			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
+			const description = lines.slice(0, 3).join(' ').substring(0, 300);
+			if (description) {
+				summaryParts.push(`\n**Description:** ${description}${description.length === 300 ? '...' : ''}\n`);
+			}
+		}
+
+		// Add high-level metrics
+		if (pullRequest.files && pullRequest.additions !== undefined && pullRequest.deletions !== undefined) {
+			summaryParts.push(`\n**Changes:** ${pullRequest.files.totalCount} file${pullRequest.files.totalCount !== 1 ? 's' : ''} changed (+${pullRequest.additions} / -${pullRequest.deletions})\n`);
+		}
+
+		// Add session count if multiple
+		if (sessions.length > 1) {
+			summaryParts.push(`\n**Sessions:** ${sessions.length} session${sessions.length !== 1 ? 's' : ''} in this conversation\n`);
+		}
+
+		// Add button/link to view detailed logs
+		summaryParts.push('\n---\n');
+		summaryParts.push('*Scroll down to view the detailed session log with all tool calls and interactions.*\n');
+
+		const summaryMarkdown = summaryParts.join('');
+		const responseResult: ChatResult = {};
+		return new ChatResponseTurn2([new ChatResponseMarkdownPart(summaryMarkdown)], responseResult, this.type);
 	}
 
 	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
