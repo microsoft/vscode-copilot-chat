@@ -5,8 +5,11 @@
 
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
@@ -41,8 +44,15 @@ interface IQuickPickOptionItem extends vscode.QuickPickItem {
 export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	public static readonly toolName = ToolName.AskQuestions;
 
+	constructor(
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@ILogService private readonly _logService: ILogService,
+	) { }
+
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IAskQuestionsParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+		const stopWatch = StopWatch.create();
 		const { questions } = options.input;
+		this._logService.trace(`[AskQuestionsTool] Invoking with ${questions.length} question(s)`);
 		const result: IAnswerResult = { answers: {} };
 		let currentStep = 0;
 
@@ -81,21 +91,82 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				break;
 			}
 
-			// At this point, answer is always a valid response object
-			// (back case handled above with continue, skipped case handled with break)
-			if (answer !== 'back') {
-				result.answers[question.header] = answer;
-			}
-
+			// answer is guaranteed to be the answer object here:
+			// - 'back' case already executed `continue` above
+			// - 'skipped' case already executed `break` above
+			result.answers[question.header] = answer as { selected: string[]; freeText: string | null; skipped: boolean };
 			currentStep++;
 		}
+
+		// Calculate telemetry metrics from results
+		const answers = Object.values(result.answers);
+		const answeredCount = answers.filter(a => !a.skipped).length;
+		const skippedCount = answers.filter(a => a.skipped).length;
+		const freeTextCount = answers.filter(a => a.freeText !== null).length;
+		const recommendedAvailableCount = questions.filter(q => q.options.some(opt => opt.recommended)).length;
+		const recommendedSelectedCount = questions.filter(q => {
+			const answer = result.answers[q.header];
+			const recommendedOption = q.options.find(opt => opt.recommended);
+			return answer && !answer.skipped && recommendedOption && answer.selected.includes(recommendedOption.label);
+		}).length;
+
+		this._sendTelemetry(
+			options.chatRequestId,
+			questions.length,
+			answeredCount,
+			skippedCount,
+			freeTextCount,
+			recommendedAvailableCount,
+			recommendedSelectedCount,
+			stopWatch.elapsed()
+		);
 
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(JSON.stringify(result))
 		]);
 	}
 
-	private getDefaultOption(question: IQuestion): IQuestionOption {
+	private _sendTelemetry(
+		requestId: string | undefined,
+		questionCount: number,
+		answeredCount: number,
+		skippedCount: number,
+		freeTextCount: number,
+		recommendedAvailableCount: number,
+		recommendedSelectedCount: number,
+		duration: number
+	): void {
+		/* __GDPR__
+			"askQuestionsToolInvoked" : {
+				"owner": "digitarald",
+				"comment": "Tracks usage of the AskQuestions tool for agent clarifications",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"questionCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of questions asked" },
+				"answeredCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of questions that were answered" },
+				"skippedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of questions that were skipped" },
+				"freeTextCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of questions answered with free text input" },
+				"recommendedAvailableCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of questions that had a recommended option" },
+				"recommendedSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of questions where the user selected the recommended option" },
+				"duration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The total time in milliseconds to complete all questions" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('askQuestionsToolInvoked',
+			{
+				requestId,
+			},
+			{
+				questionCount,
+				answeredCount,
+				skippedCount,
+				freeTextCount,
+				recommendedAvailableCount,
+				recommendedSelectedCount,
+				duration,
+			}
+		);
+	}
+
+	private _getDefaultOption(question: IQuestion): IQuestionOption {
 		const recommended = question.options.find(opt => opt.recommended);
 		return recommended ?? question.options[0];
 	}
@@ -149,7 +220,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			quickPick.items = items;
 
 			// Set default selection
-			const defaultOption = this.getDefaultOption(question);
+			const defaultOption = this._getDefaultOption(question);
 			const defaultItem = items.find(item =>
 				item.originalLabel === defaultOption.label || item.isRecommended
 			);
@@ -253,10 +324,9 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 			store.add(
 				quickPick.onDidHide(() => {
-					store.dispose();
-
-					// If we get here without resolving, user pressed ESC - signal skip
+					// Resolve first before disposal to prevent race conditions
 					safeResolve('skipped');
+					store.dispose();
 				})
 			);
 
