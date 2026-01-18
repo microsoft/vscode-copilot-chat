@@ -3959,20 +3959,6 @@
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
 				}
-			],
-			"agentSessions": [
-				{
-					"id": "codex-placeholder",
-					"name": "OpenAI Codex",
-					"when": "github.copilot.chat.codex.showPlaceholder && config.chat.experimental.codex.enabled",
-					"icon": "$(file)"
-				},
-				{
-					"id": "copilot-agents-placeholder",
-					"name": "GitHub Copilot Agents",
-					"when": "chatEntitlementSignedOut || !chatIsEnabled",
-					"icon": "$(copilot)"
-				}
 			]
 		},
 		"viewsContainers": {
