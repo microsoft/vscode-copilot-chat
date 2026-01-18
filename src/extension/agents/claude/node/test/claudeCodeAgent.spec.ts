@@ -161,10 +161,11 @@ describe('ClaudeCodeSession', () => {
 		expect(stream.output.join('\n')).toContain('Hello from mock!');
 	});
 
-	it('restarts session when model changes', async () => {
+	it('calls setModel when model changes instead of restarting session', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
 		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
 		mockService.queryCallCount = 0;
+		mockService.setModelCallCount = 0;
 
 		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', 'claude-3-sonnet', undefined));
 
@@ -173,10 +174,12 @@ describe('ClaudeCodeSession', () => {
 		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None);
 		expect(mockService.queryCallCount).toBe(1);
 
-		// Second request with different model should restart session
+		// Second request with different model should call setModel on existing session
 		const stream2 = new MockChatResponseStream();
 		await session.invoke('Hello again', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-opus');
-		expect(mockService.queryCallCount).toBe(2); // New query was started due to model change
+		expect(mockService.queryCallCount).toBe(1); // Same query reused
+		expect(mockService.setModelCallCount).toBe(1); // setModel was called
+		expect(mockService.lastSetModel).toBe('claude-3-opus');
 	});
 
 	it('does not restart session when same model is used', async () => {
