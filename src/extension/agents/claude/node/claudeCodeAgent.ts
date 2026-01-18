@@ -299,6 +299,9 @@ export class ClaudeCodeSession extends Disposable {
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
+			// TODO: CAPI does not yet support the WebSearch tool
+			// Once it does, we can re-enable it.
+			disallowedTools: ['WebSearch'],
 			env: {
 				...process.env,
 				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
