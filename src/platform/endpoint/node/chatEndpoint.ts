@@ -236,6 +236,11 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected get useMessagesApi(): boolean {
+		// TODO: Messages API is temporarily disabled for Sonnet models due to quality issues
+		if (this.model.toLowerCase().startsWith('claude-sonnet-4')) {
+			return false;
+		}
+
 		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, this._expService);
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
