@@ -112,7 +112,7 @@ export class ChatSessionContentBuilder {
 		pullRequest: PullRequestSearchItem | undefined,
 		getLogsForSession: (id: string) => Promise<string>,
 		initialReferences: Promise<vscode.ChatPromptReference[]>,
-		options?: { includeSummary?: boolean; sessionId?: string },
+		options?: { includeSummary?: boolean; sessionId?: string; includeDetailedLogs?: boolean },
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
@@ -124,6 +124,11 @@ export class ChatSessionContentBuilder {
 			const summaryTurn = await this.createSessionSummary(problemStatement, sessions, pullRequest, logs, options.sessionId);
 			if (summaryTurn) {
 				history.push(summaryTurn);
+			}
+			
+			// If not including detailed logs, return just the summary
+			if (!options.includeDetailedLogs) {
+				return history;
 			}
 		}
 

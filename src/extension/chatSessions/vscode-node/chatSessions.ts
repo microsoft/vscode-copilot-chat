@@ -206,10 +206,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand('github.copilot.session.viewDetailedLog', async (sessionId?: string) => {
 				// This command is triggered by the "View Session Log" button
-				// The detailed log is already in the history below the summary
-				// We can use VS Code's command to scroll or focus on the chat
-				await vscode.commands.executeCommand('workbench.action.chat.open');
-				// The user will see the full log below the summary when they interact with the session
+				// Tell the provider to show full logs for this session
+				if (sessionId) {
+					cloudSessionsProvider.showFullLogs(sessionId);
+				}
 			})
 		);
 		return cloudSessionsProvider;
