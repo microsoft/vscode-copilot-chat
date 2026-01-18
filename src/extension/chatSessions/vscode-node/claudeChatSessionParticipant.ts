@@ -44,9 +44,6 @@ export class ClaudeChatSessionParticipant {
 				/* New, empty session */
 				const claudeSessionId = await create(modelId, permissionMode);
 				if (claudeSessionId) {
-					// Track the model and permission mode for the new session
-					this.contentProvider.setModelIdForSession(claudeSessionId, modelId);
-					this.contentProvider.setPermissionModeForSession(claudeSessionId, permissionMode);
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
 						resource: ClaudeSessionUri.forSessionId(claudeSessionId),

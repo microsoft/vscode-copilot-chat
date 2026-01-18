@@ -31,12 +31,20 @@ export interface ExitPlanModeInput extends SDKExitPlanModeInput {
 	readonly plan?: string;
 }
 
+/**
+ * EnterPlanMode tool input - empty as the tool takes no parameters
+ */
+export interface EnterPlanModeInput {
+	// EnterPlanMode takes no input parameters
+}
+
 export enum ClaudeToolNames {
 	Task = 'Task',
 	Bash = 'Bash',
 	Glob = 'Glob',
 	Grep = 'Grep',
 	LS = 'LS',
+	EnterPlanMode = 'EnterPlanMode',
 	ExitPlanMode = 'ExitPlanMode',
 	Read = 'Read',
 	Edit = 'Edit',
@@ -69,6 +77,7 @@ export interface ClaudeToolInputMap {
 	[ClaudeToolNames.Glob]: GlobInput;
 	[ClaudeToolNames.Grep]: GrepInput;
 	[ClaudeToolNames.LS]: LSInput;
+	[ClaudeToolNames.EnterPlanMode]: EnterPlanModeInput;
 	[ClaudeToolNames.ExitPlanMode]: ExitPlanModeInput;
 	[ClaudeToolNames.Read]: FileReadInput;
 	[ClaudeToolNames.Edit]: FileEditInput;

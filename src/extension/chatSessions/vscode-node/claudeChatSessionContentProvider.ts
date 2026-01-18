@@ -14,6 +14,7 @@ import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 const MODELS_OPTION_ID = 'model';
@@ -28,68 +29,59 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
 	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 
-	/**
-	 * Track session models - when we start new sessions, we don't have the real session id yet.
-	 * We also need this when we open a session and later run it.
-	 * Instance-level to allow cleanup on dispose.
-	 */
-	private readonly _sessionModels = new Map<string, string | undefined>();
-
-	/**
-	 * Track permission modes per session.
-	 * Instance-level to allow cleanup on dispose.
-	 */
-	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
+	// Track the last known option values for each session to detect actual changes
+	private readonly _lastKnownOptions = new Map<string, { modelId?: string; permissionMode?: PermissionMode }>();
 
 	constructor(
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 	) {
 		super();
+
+		// Listen for state changes and notify UI only if value actually changed
+		this._register(this.sessionStateService.onDidChangeSessionState(e => {
+			const lastKnown = this._lastKnownOptions.get(e.sessionId);
+			const updates: { optionId: string; value: string }[] = [];
+
+			if (e.modelId !== undefined && e.modelId !== lastKnown?.modelId) {
+				updates.push({ optionId: MODELS_OPTION_ID, value: e.modelId });
+				this._updateLastKnown(e.sessionId, { modelId: e.modelId });
+			}
+			if (e.permissionMode !== undefined && e.permissionMode !== lastKnown?.permissionMode) {
+				updates.push({ optionId: PERMISSION_MODE_OPTION_ID, value: e.permissionMode });
+				this._updateLastKnown(e.sessionId, { permissionMode: e.permissionMode });
+			}
+
+			if (updates.length > 0) {
+				const resource = ClaudeSessionUri.forSessionId(e.sessionId);
+				this._onDidChangeChatSessionOptions.fire({ resource, updates });
+			}
+		}));
+	}
+
+	private _updateLastKnown(sessionId: string, update: { modelId?: string; permissionMode?: PermissionMode }): void {
+		const existing = this._lastKnownOptions.get(sessionId) ?? {};
+		this._lastKnownOptions.set(sessionId, { ...existing, ...update });
 	}
 
 	public override dispose(): void {
-		this._sessionModels.clear();
-		this._sessionPermissionModes.clear();
+		this._lastKnownOptions.clear();
 		super.dispose();
 	}
 
 	/**
-	 * Gets the model ID for a session, checking in-memory cache first, then stored preference
+	 * Gets the model ID for a session, delegating to state service
 	 */
 	public async getModelIdForSession(sessionId: string): Promise<string | undefined> {
-		// Check in-memory cache first
-		if (this._sessionModels.has(sessionId)) {
-			return this._sessionModels.get(sessionId);
-		}
-
-		// Fall back to default model
-		return this.claudeCodeModels.getDefaultModel();
-	}
-
-	/**
-	 * Sets the model ID for a session
-	 */
-	public setModelIdForSession(sessionId: string, modelId: string | undefined): void {
-		this._sessionModels.set(sessionId, modelId);
+		return this.sessionStateService.getModelIdForSession(sessionId);
 	}
 
 	/**
 	 * Gets the permission mode for a session
 	 */
 	public getPermissionModeForSession(sessionId: string): PermissionMode {
-		return this._sessionPermissionModes.get(sessionId) ?? 'acceptEdits';
-	}
-
-	/**
-	 * Sets the permission mode for a session
-	 */
-	public setPermissionModeForSession(sessionId: string, mode: PermissionMode): void {
-		this._sessionPermissionModes.set(sessionId, mode);
-	}
-
-	public notifySessionOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void {
-		this._onDidChangeChatSessionOptions.fire({ resource, updates });
+		return this.sessionStateService.getPermissionModeForSession(sessionId);
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
@@ -128,10 +120,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		const sessionId = ClaudeSessionUri.getId(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
+				// Update last known first so the event listener won't fire back to UI
+				this._updateLastKnown(sessionId, { modelId: update.value });
 				void this.claudeCodeModels.setDefaultModel(update.value);
-				this._sessionModels.set(sessionId, update.value);
+				this.sessionStateService.setModelIdForSession(sessionId, update.value);
 			} else if (update.optionId === PERMISSION_MODE_OPTION_ID) {
-				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
+				// Update last known first so the event listener won't fire back to UI
+				this._updateLastKnown(sessionId, { permissionMode: update.value as PermissionMode });
+				this.sessionStateService.setPermissionModeForSession(sessionId, update.value as PermissionMode);
 			}
 		}
 	}
@@ -144,22 +140,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this._buildChatHistory(existingSession, toolContext) :
 			[];
 
-		// Get model for session
-		const [defaultModel, model] = await Promise.all([
-			this.claudeCodeModels.getDefaultModel(),
-			this.getModelIdForSession(sessionId)
-		]);
+		// Get model and permission mode from state service (queries session if active)
+		const model = await this.sessionStateService.getModelIdForSession(sessionId);
+		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string> = {};
-		const selectedModel = model ?? defaultModel;
-		if (selectedModel) {
-			options[MODELS_OPTION_ID] = selectedModel;
-			// Keep track of model in memory
-			this._sessionModels.set(sessionId, selectedModel);
+		if (model) {
+			options[MODELS_OPTION_ID] = model;
 		}
-
-		// Set permission mode option
-		const permissionMode = this.getPermissionModeForSession(sessionId);
 		options[PERMISSION_MODE_OPTION_ID] = permissionMode;
 
 		return {

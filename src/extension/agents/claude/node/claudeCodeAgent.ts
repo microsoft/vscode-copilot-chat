@@ -174,7 +174,28 @@ export class ClaudeCodeSession extends Disposable {
 	private _editTracker = new ExternalEditTracker();
 	private _currentModelId: string | undefined;
 	private _currentPermissionMode: PermissionMode;
-	private _sessionVersion = 0; // Used to detect stale abort handlers
+
+	/**
+	 * Sets the model on the active SDK session.
+	 */
+	private async _setModel(modelId: string): Promise<void> {
+		if (this._queryGenerator && modelId !== this._currentModelId) {
+			this.logService.trace(`[ClaudeCodeSession] Setting model to ${modelId} on active session`);
+			await this._queryGenerator.setModel(modelId);
+			this._currentModelId = modelId;
+		}
+	}
+
+	/**
+	 * Sets the permission mode on the active SDK session.
+	 */
+	private async _setPermissionMode(mode: PermissionMode): Promise<void> {
+		if (this._queryGenerator && mode !== this._currentPermissionMode) {
+			this.logService.trace(`[ClaudeCodeSession] Setting permission mode to ${mode} on active session`);
+			await this._queryGenerator.setPermissionMode(mode);
+			this._currentPermissionMode = mode;
+		}
+	}
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
@@ -224,36 +245,16 @@ export class ClaudeCodeSession extends Disposable {
 			throw new Error('Session disposed');
 		}
 
-		// Check if model changed - if so, restart the session with new model
-		const modelChanged = modelId !== undefined && modelId !== this._currentModelId;
-		const permissionModeChanged = permissionMode !== undefined && permissionMode !== this._currentPermissionMode;
-		if (modelChanged || permissionModeChanged) {
-			if (modelChanged) {
-				this.logService.trace(`[ClaudeCodeSession] Model changed from ${this._currentModelId} to ${modelId}, restarting session`);
-				this._currentModelId = modelId;
-			}
-			if (permissionModeChanged) {
-				this.logService.trace(`[ClaudeCodeSession] Permission mode changed from ${this._currentPermissionMode} to ${permissionMode}, restarting session`);
-				this._currentPermissionMode = permissionMode;
-			}
-			// Abort current query and restart with new settings
-			if (this._queryGenerator) {
-				this._sessionVersion++; // Increment so old catch handlers know to ignore
-				this._abortController.abort();
-				this._abortController = new AbortController();
-				this._queryGenerator = undefined;
-				// Clear state from old session - these will be rejected by the old _cleanup() anyway
-				// but doing it here prevents race conditions
-				this._currentRequest = undefined;
-				this._promptQueue.forEach(req => req.deferred.error(new Error('Session restarted due to settings change')));
-				this._promptQueue = [];
-				this._pendingPrompt?.error(new Error('Session restarted due to settings change'));
-				this._pendingPrompt = undefined;
-			}
-		}
-
 		if (!this._queryGenerator) {
 			await this._startSession(token);
+		}
+
+		// Update model and permission mode on active session if they changed
+		if (modelId !== undefined) {
+			await this._setModel(modelId);
+		}
+		if (permissionMode !== undefined) {
+			await this._setPermissionMode(permissionMode);
 		}
 
 		// Add this request to the queue and wait for completion
@@ -338,7 +339,7 @@ export class ClaudeCodeSession extends Disposable {
 			})
 		};
 
-		this.logService.trace(`claude-agent-sdk: Starting query with options: ${JSON.stringify(options)}`);
+		this.logService.trace(`claude-agent-sdk: Starting query`);
 		this._queryGenerator = await this.claudeCodeService.query({
 			prompt: this._createPromptIterable(),
 			options
@@ -444,7 +445,6 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
-		const mySessionVersion = this._sessionVersion;
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -473,18 +473,13 @@ export class ClaudeCodeSession extends Disposable {
 				}
 			}
 			// Generator ended normally - clean up so next invoke starts fresh
-			this._cleanup(mySessionVersion, new Error('Session ended unexpectedly'));
+			this._cleanup(new Error('Session ended unexpectedly'));
 		} catch (error) {
-			this._cleanup(mySessionVersion, error as Error);
+			this._cleanup(error as Error);
 		}
 	}
 
-	private _cleanup(sessionVersion: number, error: Error): void {
-		// Only clean up if this is still the active session (not stale from model change)
-		if (sessionVersion !== this._sessionVersion) {
-			this.logService.trace('[ClaudeCodeSession] Ignoring stale session cleanup after model change');
-			return;
-		}
+	private _cleanup(error: Error): void {
 		// Reset session state so the next invoke() can start a fresh session
 		this._queryGenerator = undefined;
 		this._abortController.abort();
