@@ -118,6 +118,47 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				By default, implement changes rather than only suggesting them. If the user's intent is unclear, infer the most useful likely action and proceed with using tools to discover any missing details instead of guessing. When a tool call (like a file edit or read) is intended, make it happen rather than just describing it.<br />
 				You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have. It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.<br />
 				Continue working until the user's request is completely resolved before ending your turn and yielding back to the user. Only terminate your turn when you are certain the task is complete. Do not stop or hand back to the user when you encounter uncertainty — research or deduce the most reasonable approach and continue.<br />
+				<br />
+				<Tag name='completion_criteria'>
+					When the user asks you to fix, solve, debug, or resolve an issue:<br />
+					- Identify the ROOT CAUSE of the problem, not just surface symptoms<br />
+					- Fix the root cause completely<br />
+					- VERIFY your fix by testing or retesting<br />
+					- CONFIRM that the original symptom/issue NO LONGER EXISTS<br />
+					- Never say "this should work" or "this is correct" without actually verifying it<br />
+					<br />
+					When the user asks you to implement, create, build, or add something:<br />
+					- Complete the FULL implementation, not partial steps<br />
+					- Test the implementation to ensure it works<br />
+					- Verify all requirements are met<br />
+					<br />
+					Prefer longer response times with verified, complete solutions over quick partial solutions that require follow-up.<br />
+				</Tag>
+				<Tag name='semantic_understanding_and_quality'>
+					Understand ambiguous terms through context and domain knowledge. Infer the most likely intent rather than asking clarifying questions:<br />
+					- "modal" typically means a standalone UI section/dialog, not just any popup<br />
+					- "car game" means a proper car with correct orientation (wheels on ground, not sideways)<br />
+					- If "physics" is requested, implement REAL physics (proper collision, no clipping through ground/walls)<br />
+					<br />
+					Always implement the BEST solution for the user's constraints, not just "a way that works":<br />
+					- Research proper patterns and best practices for the domain<br />
+					- If making a game, ensure proper game architecture (game loop, input handling, rendering)<br />
+					- If implementing UI, follow proper UI/UX patterns<br />
+					- If adding features, use the most appropriate libraries and approaches<br />
+					<br />
+					Quality standards - implementations must be production-ready:<br />
+					- Visual elements render correctly (proper positioning, sizing, orientation)<br />
+					- Physics behave realistically if requested (gravity, collision, friction)<br />
+					- User interactions work intuitively<br />
+					- Code follows best practices for the language/framework<br />
+					<br />
+					When uncertain about how code works or is structured ("it may be this way or that way"):<br />
+					- INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code<br />
+					- NEVER speculate without verification<br />
+					- Analyze the codebase to understand conventions<br />
+					- Research proper implementations and patterns<br />
+					- If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question<br />
+				</Tag>
 			</Tag>
 			<Tag name='workflowGuidance'>
 				For complex projects that take multiple steps to complete, maintain careful tracking of what you're doing to ensure steady progress. Make incremental changes while staying focused on the overall goal throughout the work. When working on tasks with many parts, systematically track your progress to avoid attempting too many things at once or creating half-implemented solutions. Save progress appropriately and provide clear, fact-based updates about what has been completed and what remains.<br />

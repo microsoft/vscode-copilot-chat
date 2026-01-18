@@ -94,6 +94,7 @@ import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { MergeConflictServiceImpl } from '../../git/vscode/mergeConflictServiceImpl';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
+import { ActionWordService, IActionWordService } from '../../prompt/common/actionWordService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolEmbeddingsComputer, ToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
@@ -173,4 +174,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 	builder.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
+	builder.define(IActionWordService, new SyncDescriptor(ActionWordService));
 }
