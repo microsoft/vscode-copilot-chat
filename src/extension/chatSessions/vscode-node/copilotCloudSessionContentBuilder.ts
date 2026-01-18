@@ -99,6 +99,8 @@ export class ChatSessionContentBuilder {
 	// Constants for summary generation
 	private static readonly SUMMARY_DESCRIPTION_MAX_LINES = 3;
 	private static readonly SUMMARY_DESCRIPTION_MAX_LENGTH = 300;
+	private static readonly LLM_SUMMARY_MAX_TOOL_CALLS = 10;
+	private static readonly LLM_SUMMARY_MAX_CONTENT_LENGTH = 500;
 
 	constructor(
 		private type: string,
@@ -283,55 +285,73 @@ export class ChatSessionContentBuilder {
 
 	private async generateLLMSummary(logs: string, problemStatement?: string): Promise<string | undefined> {
 		try {
-			// Select a chat model
+			// Select a chat model with fallback
 			const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
 			if (models.length === 0) {
-				return undefined;
+				// Try fallback to any copilot model
+				const fallbackModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+				if (fallbackModels.length === 0) {
+					return undefined;
+				}
+				return await this.generateSummaryWithModel(fallbackModels[0], logs, problemStatement);
 			}
 
-			const model = models[0];
+			return await this.generateSummaryWithModel(models[0], logs, problemStatement);
+		} catch (error) {
+			console.error('Failed to generate LLM summary:', error);
+			return undefined;
+		}
+	}
 
-			// Parse logs to extract key information
-			const logChunks = this.parseSessionLogs(logs);
-			const toolCalls: string[] = [];
-			let assistantContent = '';
+	private async generateSummaryWithModel(
+		model: vscode.LanguageModelChat,
+		logs: string,
+		problemStatement?: string
+	): Promise<string | undefined> {
+		// Parse logs to extract key information
+		const logChunks = this.parseSessionLogs(logs);
+		const toolCalls: string[] = [];
+		let assistantContent = '';
 
-			for (const chunk of logChunks) {
-				if (!chunk.choices || !Array.isArray(chunk.choices)) {
-					continue;
-				}
+		for (const chunk of logChunks) {
+			if (!chunk.choices || !Array.isArray(chunk.choices)) {
+				continue;
+			}
 
-				for (const choice of chunk.choices) {
-					const delta = choice.delta;
-					if (delta.role === 'assistant') {
-						if (delta.content) {
-							assistantContent += delta.content;
-						}
-						if (delta.tool_calls) {
-							for (const toolCall of delta.tool_calls) {
-								if (toolCall.function?.name) {
-									toolCalls.push(toolCall.function.name);
-								}
+			for (const choice of chunk.choices) {
+				const delta = choice.delta;
+				if (delta.role === 'assistant') {
+					if (delta.content) {
+						assistantContent += delta.content;
+					}
+					if (delta.tool_calls) {
+						for (const toolCall of delta.tool_calls) {
+							if (toolCall.function?.name) {
+								toolCalls.push(toolCall.function.name);
 							}
 						}
 					}
 				}
 			}
+		}
 
-			// Create a concise prompt for the LLM
-			const prompt = `Summarize what this coding session accomplished in 1-2 sentences from a user's perspective.
+		// Create a concise prompt for the LLM
+		const prompt = `Summarize what this coding session accomplished in 1-2 sentences from a user's perspective.
 
 ${problemStatement ? `Goal: ${problemStatement}\n` : ''}
-Tools used: ${toolCalls.slice(0, 10).join(', ')}
-Agent output sample: ${assistantContent.substring(0, 500)}
+Tools used: ${toolCalls.slice(0, ChatSessionContentBuilder.LLM_SUMMARY_MAX_TOOL_CALLS).join(', ')}
+Agent output sample: ${assistantContent.substring(0, ChatSessionContentBuilder.LLM_SUMMARY_MAX_CONTENT_LENGTH)}
 
 Summary (1-2 sentences, user-focused):`;
 
-			const messages = [
-				vscode.LanguageModelChatMessage.User(prompt)
-			];
+		const messages = [
+			vscode.LanguageModelChatMessage.User(prompt)
+		];
 
-			const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+		// Use a cancellation token that we control
+		const cancellationTokenSource = new vscode.CancellationTokenSource();
+		try {
+			const response = await model.sendRequest(messages, {}, cancellationTokenSource.token);
 			let summary = '';
 			for await (const chunk of response.text) {
 				summary += chunk;
@@ -344,9 +364,8 @@ Summary (1-2 sentences, user-focused):`;
 			}
 
 			return summary;
-		} catch (error) {
-			console.error('Failed to generate LLM summary:', error);
-			return undefined;
+		} finally {
+			cancellationTokenSource.dispose();
 		}
 	}
 

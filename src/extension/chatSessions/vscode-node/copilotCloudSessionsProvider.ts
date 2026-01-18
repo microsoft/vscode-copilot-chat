@@ -862,10 +862,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	showFullLogs(sessionResourceUri: string) {
 		const resource = vscode.Uri.parse(sessionResourceUri);
 		this.sessionShowFullLogsMap.set(resource, true);
-		// Trigger content refresh by firing the options change event
+		// Trigger content refresh by firing the options change event.
+		// Note: VS Code's ChatSessionContentProvider API doesn't provide a dedicated
+		// content refresh method, so we use onDidChangeChatSessionOptions which
+		// causes VS Code to call provideChatSessionContent again.
 		this._onDidChangeChatSessionOptions.fire({
 			resource,
-			updates: [] // No option changes, just content refresh
+			updates: [] // Empty updates array signals content refresh without option changes
 		});
 	}
 
