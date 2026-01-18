@@ -5,7 +5,7 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
-import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
+import { ChatRequestTurn, ChatRequestTurn2, ChatResponseCommandButtonPart, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
@@ -109,17 +109,19 @@ export class ChatSessionContentBuilder {
 	public async buildSessionHistory(
 		problemStatementPromise: Promise<string | undefined>,
 		sessions: SessionInfo[],
-		pullRequest: PullRequestSearchItem,
+		pullRequest: PullRequestSearchItem | undefined,
 		getLogsForSession: (id: string) => Promise<string>,
 		initialReferences: Promise<vscode.ChatPromptReference[]>,
-		options?: { includeSummary?: boolean },
+		options?: { includeSummary?: boolean; sessionId?: string },
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
 
 		// Add summary view at the beginning if requested
 		if (options?.includeSummary && sessions.length > 0) {
 			const problemStatement = await problemStatementPromise;
-			const summaryTurn = await this.createSessionSummary(problemStatement, sessions, pullRequest);
+			// Get logs for LLM-based summary if no PR available
+			const logs = !pullRequest && sessions.length > 0 ? await getLogsForSession(sessions[0].id) : undefined;
+			const summaryTurn = await this.createSessionSummary(problemStatement, sessions, pullRequest, logs, options.sessionId);
 			if (summaryTurn) {
 				history.push(summaryTurn);
 			}
@@ -144,8 +146,8 @@ export class ChatSessionContentBuilder {
 					undefined
 				));
 
-				// Create the PR card right after problem statement for first session
-				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+				// Create the PR card right after problem statement for first session (only if PR exists)
+				if (pullRequest && sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 					const plaintextBody = pullRequest.body;
 
@@ -174,16 +176,19 @@ export class ChatSessionContentBuilder {
 	private async createSessionSummary(
 		problemStatement: string | undefined,
 		sessions: SessionInfo[],
-		pullRequest: PullRequestSearchItem
+		pullRequest: PullRequestSearchItem | undefined,
+		logs?: string,
+		sessionId?: string
 	): Promise<ChatResponseTurn2 | undefined> {
 		// Build a high-level summary of what the session accomplished
-		const summaryParts: string[] = [];
+		const summaryParts: (ChatResponseMarkdownPart | ChatResponseCommandButtonPart)[] = [];
 
 		// Add the goal/purpose section
-		summaryParts.push('## 📋 Session Summary\n\n');
+		const markdownParts: string[] = [];
+		markdownParts.push('## 📋 Session Summary\n\n');
 
 		if (problemStatement) {
-			summaryParts.push(`**Goal:** ${problemStatement}\n\n`);
+			markdownParts.push(`**Goal:** ${problemStatement}\n\n`);
 		}
 
 		// Add status information
@@ -211,10 +216,10 @@ export class ChatSessionContentBuilder {
 				statusEmoji = '📝';
 				statusText = latestSession.state;
 		}
-		summaryParts.push(`${statusEmoji} **Status:** ${statusText}\n\n`);
+		markdownParts.push(`${statusEmoji} **Status:** ${statusText}\n\n`);
 
-		// Add PR information
-		if (pullRequest.body) {
+		// Generate description from PR body or use LLM for logs
+		if (pullRequest?.body) {
 			// Extract first few lines of PR body as description
 			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
 			// Join lines with proper punctuation, avoiding double punctuation
@@ -231,33 +236,116 @@ export class ChatSessionContentBuilder {
 			const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
 			const description = fullDescription.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH);
 			if (description) {
-				summaryParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
+				markdownParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
+			}
+		} else if (logs) {
+			// Use LLM to generate summary from logs
+			const llmSummary = await this.generateLLMSummary(logs, problemStatement);
+			if (llmSummary) {
+				markdownParts.push(`**What it does:** ${llmSummary}\n\n`);
 			}
 		}
 
-		// Add high-level metrics
-		if (pullRequest.files && pullRequest.additions !== undefined && pullRequest.deletions !== undefined) {
+		// Add high-level metrics if PR available
+		if (pullRequest?.files && pullRequest.additions !== undefined && pullRequest.deletions !== undefined) {
 			const fileCount = pullRequest.files.totalCount;
 			const additions = pullRequest.additions;
 			const deletions = pullRequest.deletions;
-			summaryParts.push(`**Changes Made:** ${fileCount} file${fileCount !== 1 ? 's' : ''} modified (+${additions} / -${deletions} lines)\n\n`);
+			markdownParts.push(`**Changes Made:** ${fileCount} file${fileCount !== 1 ? 's' : ''} modified (+${additions} / -${deletions} lines)\n\n`);
 		}
 
 		// Add session count if multiple
 		if (sessions.length > 1) {
-			summaryParts.push(`**Sessions:** ${sessions.length} iteration${sessions.length !== 1 ? 's' : ''}\n\n`);
+			markdownParts.push(`**Sessions:** ${sessions.length} iteration${sessions.length !== 1 ? 's' : ''}\n\n`);
 		}
 
-		// Add button/link to view detailed logs
-		summaryParts.push('---\n\n');
-		summaryParts.push('💡 **View Session Log:** Scroll down to see the detailed execution log with all tool calls, commands, and agent interactions.\n');
+		markdownParts.push('---\n\n');
 
-		const summaryMarkdown = summaryParts.join('');
+		// Add markdown part
+		summaryParts.push(new ChatResponseMarkdownPart(markdownParts.join('')));
+
+		// Add button to view detailed logs
+		const viewLogsCommand: vscode.Command = {
+			title: 'View Session Log',
+			command: 'github.copilot.session.viewDetailedLog',
+			arguments: [sessionId || this.type]
+		};
+		summaryParts.push(new ChatResponseCommandButtonPart(viewLogsCommand));
+
 		const responseResult: ChatResult = {};
-		return new ChatResponseTurn2([new ChatResponseMarkdownPart(summaryMarkdown)], responseResult, this.type);
+		return new ChatResponseTurn2(summaryParts, responseResult, this.type);
 	}
 
-	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
+	private async generateLLMSummary(logs: string, problemStatement?: string): Promise<string | undefined> {
+		try {
+			// Select a chat model
+			const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+			if (models.length === 0) {
+				return undefined;
+			}
+
+			const model = models[0];
+
+			// Parse logs to extract key information
+			const logChunks = this.parseSessionLogs(logs);
+			const toolCalls: string[] = [];
+			let assistantContent = '';
+
+			for (const chunk of logChunks) {
+				if (!chunk.choices || !Array.isArray(chunk.choices)) {
+					continue;
+				}
+
+				for (const choice of chunk.choices) {
+					const delta = choice.delta;
+					if (delta.role === 'assistant') {
+						if (delta.content) {
+							assistantContent += delta.content;
+						}
+						if (delta.tool_calls) {
+							for (const toolCall of delta.tool_calls) {
+								if (toolCall.function?.name) {
+									toolCalls.push(toolCall.function.name);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Create a concise prompt for the LLM
+			const prompt = `Summarize what this coding session accomplished in 1-2 sentences from a user's perspective.
+
+${problemStatement ? `Goal: ${problemStatement}\n` : ''}
+Tools used: ${toolCalls.slice(0, 10).join(', ')}
+Agent output sample: ${assistantContent.substring(0, 500)}
+
+Summary (1-2 sentences, user-focused):`;
+
+			const messages = [
+				vscode.LanguageModelChatMessage.User(prompt)
+			];
+
+			const response = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
+			let summary = '';
+			for await (const chunk of response.text) {
+				summary += chunk;
+			}
+
+			// Trim and limit length
+			summary = summary.trim();
+			if (summary.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH) {
+				summary = summary.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH) + '...';
+			}
+
+			return summary;
+		} catch (error) {
+			console.error('Failed to generate LLM summary:', error);
+			return undefined;
+		}
+	}
+
+	private async createResponseTurn(pullRequest: PullRequestSearchItem | undefined, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		if (logs.trim().length > 0) {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
 		} else if (session.state === 'in_progress' || session.state === 'queued') {
@@ -273,7 +361,7 @@ export class ChatSessionContentBuilder {
 		}
 	}
 
-	private async parseSessionLogsIntoResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
+	private async parseSessionLogsIntoResponseTurn(pullRequest: PullRequestSearchItem | undefined, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		try {
 			const logChunks = this.parseSessionLogs(logs);
 			const responseParts: Array<ChatResponseMarkdownPart | ChatToolInvocationPart | ChatResponseMultiDiffPart> = [];
@@ -316,7 +404,7 @@ export class ChatSessionContentBuilder {
 	private processAssistantDelta(
 		delta: AssistantDelta,
 		choice: Choice,
-		pullRequest: PullRequestSearchItem,
+		pullRequest: PullRequestSearchItem | undefined,
 		responseParts: Array<ChatResponseMarkdownPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart>,
 	): string {
 		let currentResponseContent = '';
@@ -395,7 +483,7 @@ export class ChatSessionContentBuilder {
 		return currentResponseContent;
 	}
 
-	public createToolInvocationPart(pullRequest: PullRequestSearchItem, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	public createToolInvocationPart(pullRequest: PullRequestSearchItem | undefined, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 		if (!toolCall.function?.name || !toolCall.id) {
 			return undefined;
 		}

@@ -826,7 +826,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			pr,
 			(sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }),
 			storedReferences,
-			{ includeSummary: true } // Enable summary view for background/cloud sessions
+			{ includeSummary: true, sessionId: resource.toString() } // Enable summary view with session ID for button
 		);
 
 		// const selectedCustomAgent = undefined; /* TODO: Needs API to support this. */
