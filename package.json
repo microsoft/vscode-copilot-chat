@@ -5306,7 +5306,8 @@
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
 					}
-				]
+				],
+				"customAgentTarget": "github-copilot"
 			},
 			{
 				"type": "copilot-cloud-agent",

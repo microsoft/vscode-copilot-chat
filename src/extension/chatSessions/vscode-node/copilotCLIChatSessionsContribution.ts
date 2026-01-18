@@ -25,7 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
+import { ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -341,22 +341,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const [models, agents] = await Promise.all([
+		const [models,] = await Promise.all([
 			this.copilotCLIModels.getModels(),
 			this.copilotCLIAgents.getAgents()
 		]);
-		const hasAgents = agents.length > 0;
 		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
 			id: model.id,
 			name: model.name,
 			description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
 		}));
-		const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-			{ id: COPILOT_CLI_DEFAULT_AGENT_ID, name: l10n.t('Agent') }
-		];
-		agents.forEach(agent => {
-			agentItems.push({ id: agent.name, name: agent.displayName || agent.name, description: agent.description });
-		});
 
 		const options = {
 			optionGroups: [
@@ -379,14 +372,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			});
 		}
 
-		if (hasAgents) {
-			options.optionGroups.unshift({
-				id: AGENTS_OPTION_ID,
-				name: l10n.t('Agent'),
-				description: l10n.t('Set Agent'),
-				items: agentItems
-			});
-		}
 		return options;
 	}
 
@@ -460,7 +445,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			} else if (update.optionId === AGENTS_OPTION_ID) {
 				void this.copilotCLIAgents.setDefaultAgent(update.value);
 				void this.copilotCLIAgents.trackSessionAgent(sessionId, update.value);
-				const agent = update.value && update.value !== COPILOT_CLI_DEFAULT_AGENT_ID ? await this.copilotCLIAgents.resolveAgent(update.value) : undefined;
+				const agent = update.value ? await this.copilotCLIAgents.resolveAgent(update.value) : undefined;
 				if (agent?.name) {
 					await this.selectAgentModel(resource, agent, token);
 				}
@@ -482,7 +467,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async getCustomAgentModel(agentId: string, token: vscode.CancellationToken): Promise<string | undefined> {
-		const agent = agentId && agentId !== COPILOT_CLI_DEFAULT_AGENT_ID ? await this.copilotCLIAgents.resolveAgent(agentId) : undefined;
+		const agent = agentId ? await this.copilotCLIAgents.resolveAgent(agentId) : undefined;
 		if (!agent) {
 			return;
 		}
@@ -519,7 +504,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		if (agentModel) {
 			const sessionId = SessionIdForCLI.parse(resource);
 			_sessionModel.set(sessionId, agentModel);
-			this.notifySessionOptionsChange(resource, [{ optionId: MODELS_OPTION_ID, value: agentModel }]);
 		}
 	}
 }
@@ -656,6 +640,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					const changes: { optionId: string; value: string }[] = [];
 					if (agent) {
 						changes.push({ optionId: AGENTS_OPTION_ID, value: agent.name });
+					} else {
+						changes.push({ optionId: AGENTS_OPTION_ID, value: '' });
 					}
 					if (modelId) {
 						changes.push({ optionId: MODELS_OPTION_ID, value: modelId });
