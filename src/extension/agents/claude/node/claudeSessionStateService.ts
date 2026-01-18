@@ -61,6 +61,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 	readonly onDidChangeSessionState = this._onDidChangeSessionState.event;
 
 	// State for sessions (model and permission mode selections)
+	// TODO: What about expiration of state for old sessions?
 	private readonly _sessionState = new Map<string, SessionState>();
 
 	constructor(
@@ -80,6 +81,9 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 
 	setModelIdForSession(sessionId: string, modelId: string | undefined): void {
 		const existing = this._sessionState.get(sessionId);
+		if (existing?.modelId === modelId) {
+			return;
+		}
 		this._sessionState.set(sessionId, {
 			modelId,
 			permissionMode: existing?.permissionMode ?? 'acceptEdits'
@@ -93,6 +97,9 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 
 	setPermissionModeForSession(sessionId: string, mode: PermissionMode): void {
 		const existing = this._sessionState.get(sessionId);
+		if (existing?.permissionMode === mode) {
+			return;
+		}
 		this._sessionState.set(sessionId, {
 			modelId: existing?.modelId,
 			permissionMode: mode
