@@ -5,6 +5,7 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
+import * as vscode from 'vscode';
 import { ICompletionsLogTargetService, logger } from '../../logger';
 
 import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
@@ -23,6 +24,7 @@ import { CompletionsContext } from '../components/completionsContext';
 import { CompletionsPromptOk, CompletionsPromptRenderer } from '../components/completionsPromptRenderer';
 import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { CurrentFile } from '../components/currentFile';
+import { Diagnostics } from '../components/diagnostics';
 import { DocumentMarker } from '../components/marker';
 import { RecentEdits } from '../components/recentEdits';
 import { SimilarFiles } from '../components/similarFiles';
@@ -30,13 +32,15 @@ import { splitContextCompletionsPrompt } from '../components/splitContextPrompt'
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
 
-import { Diagnostics } from '../components/diagnostics';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import {
 	ContextProviderTelemetry,
+	getDefaultDiagnosticSettings,
 	matchContextItems,
 	ResolvedContextItem,
 	telemetrizeContextItems,
 	useContextProviderAPI,
+	type DefaultDiagnosticSettings,
 } from '../contextProviderRegistry';
 import { getCodeSnippetsFromContextItems } from '../contextProviders/codeSnippets';
 import {
@@ -355,6 +359,16 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 				matchedContextItems
 			);
 		}
+		const diagnosticSettings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
+		if (diagnosticSettings !== undefined) {
+			const defaultDiagnostics = this.getDefaultDiagnostics(diagnostics, completionState, diagnosticSettings);
+			if (defaultDiagnostics !== undefined) {
+				if (diagnostics === undefined) {
+					diagnostics = [];
+				}
+				diagnostics.push(defaultDiagnostics);
+			}
+		}
 		return { traits, codeSnippets, diagnostics, turnOffSimilarFiles, resolvedContextItems };
 	}
 
@@ -469,8 +483,48 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			availableDeclarativePrompts[this.promptOrdering] ?? availableDeclarativePrompts[PromptOrdering.Default];
 		return new promptInfo.renderer();
 	}
-}
 
+	private getDefaultDiagnostics(bags: DiagnosticBagWithId[] | undefined, completionState: CompletionState, settings: DefaultDiagnosticSettings): DiagnosticBagWithId | undefined {
+		const document = completionState.textDocument;
+		if (bags !== undefined && bags.some(bag => bag.uri.toString() === document.uri)) {
+			return undefined;
+		}
+		const diagnostics = vscode.languages.getDiagnostics(URI.parse(document.uri));
+		if (diagnostics.length === 0) {
+			return undefined;
+		}
+		const errors: vscode.Diagnostic[] = [];
+		const warnings: vscode.Diagnostic[] = [];
+		const captureWarnings = settings.warnings === 'yes' || settings.warnings === 'yesIfNoErrors';
+		const position = completionState.position;
+		for (const diag of diagnostics) {
+			const inRange = Math.abs(diag.range.start.line - position.line) <= settings.maxLineDistance;
+			if (!inRange) {
+				continue;
+			}
+			if (diag.severity === vscode.DiagnosticSeverity.Error) {
+				errors.push(diag);
+			} else if (diag.severity === vscode.DiagnosticSeverity.Warning && captureWarnings) {
+				warnings.push(diag);
+			}
+		}
+		const filterDiagnostics = [...errors, ...(settings.warnings === 'yes' ? warnings : (settings.warnings === 'yesIfNoErrors' && errors.length === 0 ? warnings : []))];
+		if (filterDiagnostics.length === 0) {
+			return undefined;
+		}
+		filterDiagnostics.sort((a, b) => {
+			const aDist = Math.abs(a.range.start.line - position.line);
+			const bDist = Math.abs(b.range.start.line - position.line);
+			return aDist - bDist;
+		});
+		return {
+			type: 'DiagnosticBag',
+			uri: URI.parse(document.uri),
+			values: filterDiagnostics.slice(0, settings.maxDiagnostics),
+			id: generateUuid()
+		};
+	}
+}
 export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletionsPromptFactory {
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
