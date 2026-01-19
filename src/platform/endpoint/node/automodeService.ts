@@ -107,7 +107,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank; lastRoutedPrompt?: string }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -189,10 +189,12 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}
 
-		// Only call the router for the first request in a turn (when there's no cached entry).
-		// Subsequent iterations (e.g., during tool calling) reuse the cached routing decision.
+		// Only call the router if the prompt has changed since the last routing decision.
+		// This ensures routing happens once per turn (user message), not on every iteration
+		// during tool calling where the prompt remains the same.
 		const prompt = chatRequest?.prompt?.trim();
-		if (!entry && prompt?.length) {
+		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
@@ -209,7 +211,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 			existingEndpoints.push(autoEndpoint);
 		}
-		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank });
+		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastRoutedPrompt: prompt });
 		return autoEndpoint;
 	}
 
