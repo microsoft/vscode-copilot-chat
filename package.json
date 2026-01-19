@@ -3664,7 +3664,7 @@
 							},
 							"clearInputs": {
 								"type": "boolean",
-								"description": "Whether to clear tool inputs (default: false)"
+								"description": "Whether to clear tool inputs (default: true)"
 							},
 							"thinkingKeepTurns": {
 								"type": "number",
