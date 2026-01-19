@@ -8,7 +8,7 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { DebugRecorderBookmark } from '../../../../platform/inlineEdits/common/debugRecorderBookmark';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { ISerializedEdit, LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -48,6 +48,7 @@ export class ExpectedEditCaptureController extends Disposable {
 	private _statusBarItem: StatusBarItem | undefined;
 	private _statusBarAnimationInterval: ReturnType<typeof setInterval> | undefined;
 	private readonly _feedbackSubmitter: NesFeedbackSubmitter;
+	private readonly _logger: ILogger;
 
 	constructor(
 		private readonly _debugRecorder: DebugRecorder,
@@ -57,6 +58,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 	) {
 		super();
+		this._logger = this._logService.createSubLogger(['NES', 'Capture']);
 		this._feedbackSubmitter = new NesFeedbackSubmitter(
 			this._logService,
 			this._authenticationService,
@@ -95,18 +97,18 @@ export class ExpectedEditCaptureController extends Disposable {
 		nesMetadata?: CaptureState['originalNesMetadata']
 	): Promise<void> {
 		if (!this.isEnabled) {
-			this._logService.trace('[NES Capture] Feature disabled, ignoring start request');
+			this._logger.trace('Feature disabled, ignoring start request');
 			return;
 		}
 
 		if (this._state?.active) {
-			this._logService.trace('[NES Capture] Capture already active, ignoring start request');
+			this._logger.trace('Capture already active, ignoring start request');
 			return;
 		}
 
 		const editor = window.activeTextEditor;
 		if (!editor) {
-			this._logService.trace('[NES Capture] No active editor, cannot start capture');
+			this._logger.trace('No active editor, cannot start capture');
 			return;
 		}
 
@@ -129,7 +131,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		// Show status bar message
 		this._createStatusBarItem();
 
-		this._logService.info(`[NES Capture] Started capture session: trigger=${trigger}, documentUri=${editor.document.uri.toString()}, hasMetadata=${!!nesMetadata}`);
+		this._logger.info(`Started capture session: trigger=${trigger}, documentUri=${editor.document.uri.toString()}, hasMetadata=${!!nesMetadata}`);
 	}
 
 	/**
@@ -137,7 +139,7 @@ export class ExpectedEditCaptureController extends Disposable {
 	 */
 	public async confirmCapture(): Promise<void> {
 		if (!this._state?.active) {
-			this._logService.trace('[NES Capture] No active capture to confirm');
+			this._logger.trace('No active capture to confirm');
 			return;
 		}
 
@@ -151,7 +153,7 @@ export class ExpectedEditCaptureController extends Disposable {
 			const logUpToEnd = this._debugRecorder.getRecentLog(endBookmark);
 
 			if (!logUpToStart || !logUpToEnd) {
-				this._logService.warn('[NES Capture] Failed to retrieve logs from debug recorder');
+				this._logger.warn('Failed to retrieve logs from debug recorder');
 				await this.abortCapture();
 				return;
 			}
@@ -176,7 +178,7 @@ export class ExpectedEditCaptureController extends Disposable {
 			await this._saveRecording(recording, this._state, noEditExpected);
 
 			const durationMs = Date.now() - this._state.startTime;
-			this._logService.info(`[NES Capture] Capture confirmed and saved: durationMs=${durationMs}, hasEdit=${!noEditExpected}, noEditExpected=${noEditExpected}, trigger=${this._state.trigger}`);
+			this._logger.info(`Capture confirmed and saved: durationMs=${durationMs}, hasEdit=${!noEditExpected}, noEditExpected=${noEditExpected}, trigger=${this._state.trigger}`);
 
 			if (noEditExpected) {
 				window.showInformationMessage('Captured: No edit expected (this is valid feedback!).');
@@ -184,7 +186,7 @@ export class ExpectedEditCaptureController extends Disposable {
 				window.showInformationMessage('Expected edit captured successfully!');
 			}
 		} catch (error) {
-			this._logService.error('[NES Capture] Error confirming capture', error);
+			this._logger.error(error instanceof Error ? error : String(error), 'Error confirming capture');
 			window.showErrorMessage('Failed to save expected edit capture');
 		} finally {
 			await this.cleanup();
@@ -199,7 +201,7 @@ export class ExpectedEditCaptureController extends Disposable {
 			return;
 		}
 
-		this._logService.info('[NES Capture] Capture aborted');
+		this._logger.info('Capture aborted');
 		await this.cleanup();
 	}
 
@@ -302,7 +304,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		}
 
 		if (docNumericId === undefined || !relativePath) {
-			this._logService.trace('[NES Capture] Could not find document in log');
+			this._logger.trace('Could not find document in log');
 			return undefined;
 		}
 
@@ -315,7 +317,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		);
 
 		if (editEntries.length === 0) {
-			this._logService.trace('[NES Capture] No edits found between bookmarks - marking as NO_EDIT_EXPECTED');
+			this._logger.trace('No edits found between bookmarks - marking as NO_EDIT_EXPECTED');
 			return {
 				relativePath: relativePath || '',
 				edit: { __marker__: 'NO_EDIT_EXPECTED' as const }
@@ -384,7 +386,7 @@ export class ExpectedEditCaptureController extends Disposable {
 			if (entry.kind === 'documentEncountered') {
 				if (!interactedDocIds.has(entry.id)) {
 					excludedDocIds.add(entry.id);
-					this._logService.trace(`[NES Capture] Filtering out background document: ${entry.relativePath}`);
+					this._logger.trace(`Filtering out background document: ${entry.relativePath}`);
 				}
 			}
 		}
@@ -434,7 +436,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		// Optionally save metadata
 		await this._saveMetadata(folderUri, filename, state, noEditExpected);
 
-		this._logService.info(`[NES Capture] Saved recording: path=${fileUri.fsPath}, noEditExpected=${noEditExpected}`);
+		this._logger.info(`Saved recording: path=${fileUri.fsPath}, noEditExpected=${noEditExpected}`);
 	}
 
 	/**

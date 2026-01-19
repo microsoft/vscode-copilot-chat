@@ -530,6 +530,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			}
 			case InlineCompletionEndOfLifeReasonKind.Rejected: {
 				this._handleDidRejectCompletionItem(item);
+
 				// Trigger expected edit capture if enabled
 				if (this.expectedEditCaptureController.isEnabled && this.expectedEditCaptureController.captureOnReject) {
 					// Get endpoint info from the log context if available (LLM suggestions only)
@@ -550,6 +551,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 					};
 					void this.expectedEditCaptureController.startCapture('rejection', metadata);
 				}
+
 				break;
 			}
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
