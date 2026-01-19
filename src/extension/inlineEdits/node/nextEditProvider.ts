@@ -35,6 +35,7 @@ import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/co
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
@@ -44,6 +45,7 @@ import { INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
 	enforceCacheDelay: boolean;
+	changeHint?: NesChangeHint;
 }
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
@@ -174,6 +176,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	): Promise<NextEditResult> {
 
 		const tracer = parentTracer.sub('_getNextEdit');
+		tracer.trace(`invoked with trigger id = ${context.changeHint?.data}`);
 
 		const doc = this._workspace.getDocument(docId);
 		if (!doc) {

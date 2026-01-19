@@ -11,9 +11,11 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isNotebookCell } from '../../../util/common/notebooks';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableMap, IDisposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
-import { IObservableSignal } from '../../../util/vs/base/common/observableInternal';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { createTimeout } from '../common/common';
+import { NesChangeHint, NesTriggerReason } from '../common/nesTriggerHint';
 import { NextEditProvider } from '../node/nextEditProvider';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 
@@ -44,6 +46,9 @@ class LastChange extends Disposable {
 
 export class InlineEditTriggerer extends Disposable {
 
+	private _onChangeEmitter = this._register(new Emitter<NesChangeHint>());
+	public readonly onChange = this._onChangeEmitter.event;
+
 	private readonly docToLastChangeMap = this._register(new DisposableMap<DocumentId, LastChange>());
 
 	private lastDocWithSelectionUri: string | undefined;
@@ -54,7 +59,6 @@ export class InlineEditTriggerer extends Disposable {
 	constructor(
 		private readonly workspace: VSCodeWorkspace,
 		private readonly nextEditProvider: NextEditProvider,
-		private readonly onChange: IObservableSignal<void>,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -204,15 +208,15 @@ export class InlineEditTriggerer extends Disposable {
 
 			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsDebounceOnSelectionChange, this._expService);
 			if (debounceOnSelectionChange === undefined) {
-				this._triggerInlineEdit();
+				this._triggerInlineEdit(NesTriggerReason.SelectionChange);
 			} else {
 				// this's 2 because first change is caused by the edit, 2nd one is potentially user intentionally to the next edit location
 				// further events would be multiple consecutive selection changes that we want to debounce
 				const N_ALLOWED_IMMEDIATE_SELECTION_CHANGE_EVENTS = 2;
 				if (mostRecentChange.nConsequtiveSelectionChanges < N_ALLOWED_IMMEDIATE_SELECTION_CHANGE_EVENTS) {
-					this._triggerInlineEdit();
+					this._triggerInlineEdit(NesTriggerReason.SelectionChange);
 				} else {
-					mostRecentChange.timeout.value = createTimeout(debounceOnSelectionChange, () => this._triggerInlineEdit());
+					mostRecentChange.timeout.value = createTimeout(debounceOnSelectionChange, () => this._triggerInlineEdit(NesTriggerReason.SelectionChange));
 				}
 				mostRecentChange.incrementSelectionChangeEventCount();
 			}
@@ -259,12 +263,13 @@ export class InlineEditTriggerer extends Disposable {
 		lastChange.lineNumberTriggers.set(selectionLine, Date.now());
 		this.docToLastChangeMap.set(doc.id, lastChange);
 
-		logger.trace('Return: triggering on document switch');
-		this._triggerInlineEdit();
+		this._triggerInlineEdit(NesTriggerReason.ActiveDocumentSwitch);
 		return true;
 	}
 
-	private _triggerInlineEdit() {
-		this.onChange.trigger(undefined);
+	private _triggerInlineEdit(reason: NesTriggerReason) {
+		const uuid = generateUuid();
+		this._logger.trace(`Triggering inline edit: ${reason}`);
+		this._onChangeEmitter.fire({ data: { uuid, reason } });
 	}
 }

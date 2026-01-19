@@ -8,9 +8,10 @@ import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
 import { NextEditProvider } from '../node/nextEditProvider';
@@ -23,10 +24,11 @@ export class InlineEditModel extends Disposable {
 	public readonly nextEditProvider: NextEditProvider;
 
 	private readonly _predictor: IStatelessNextEditProvider;
+	private _triggerer: InlineEditTriggerer;
 
 	public readonly inlineEditsInlineCompletionsEnabled = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsEnabled);
 
-	public readonly onChange = observableSignal(this);
+	public readonly onChange: Event<NesChangeHint>;
 
 	constructor(
 		private readonly _predictorId: string | undefined,
@@ -44,8 +46,7 @@ export class InlineEditModel extends Disposable {
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
 
-		if (this._predictor.dependsOnSelection) {
-			this._register(this._instantiationService.createInstance(InlineEditTriggerer, this.workspace, this.nextEditProvider, this.onChange));
-		}
+		this._triggerer = this._register(this._instantiationService.createInstance(InlineEditTriggerer, this.workspace, this.nextEditProvider));
+		this.onChange = this._triggerer.onChange;
 	}
 }
