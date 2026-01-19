@@ -503,10 +503,12 @@ export namespace PrepareNesRenameResult {
 	export type Yes = {
 		canRename: RenameKind.yes;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type Maybe = {
 		canRename: RenameKind.maybe;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type No = {
 		canRename: RenameKind.no;

@@ -503,10 +503,12 @@ export namespace PrepareNesRenameResult {
 	export type Yes = {
 		canRename: RenameKind.yes;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type Maybe = {
 		canRename: RenameKind.maybe;
 		oldName: string;
+		onOldState: boolean;
 	}
 	export type No = {
 		canRename: RenameKind.no;
@@ -532,7 +534,7 @@ export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLoca
 	timeBudget: number;
 }
 
-export type LastSymbolRename = PrepareNesRenameRequestArgs['lastSymbolRename'];
+export type LastSymbolRename = NonNullable<PrepareNesRenameRequestArgs['lastSymbolRename']>;
 
 export namespace PrepareNesRenameResponse {
 
