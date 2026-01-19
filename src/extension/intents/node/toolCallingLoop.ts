@@ -376,7 +376,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 		// Use the cached endpoint to avoid redundant auto model routing calls
 		if (!this._cachedEndpointForTurn) {
-			throw new Error('Endpoint cache not initialized. run() must be called before runOne().');
+			throw new Error('Chat endpoint not available. This could be due to endpoint resolution failure or incorrect call sequence (run() must be called before runOne()).');
 		}
 		const endpoint = this._cachedEndpointForTurn;
 		const promptTokenLength = await endpoint.acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
