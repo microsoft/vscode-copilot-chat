@@ -146,7 +146,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				Never claim "this should work" or "this is correct" without actually verifying - USER REPORTS many cases where you claim fixes work but they don't.<br />
 				<br />
 				**Semantic Understanding & Quality Standards:**<br />
-				Understand ambiguous terms through context and infer intent to minimize questions:<br />
+				Understand ambiguous terms through context and infer intent to minimize questions. The following are illustrative examples only; apply the same reasoning to similar but not identical cases:<br />
 				- "modal": standalone UI section/dialog, not generic popup<br />
 				- "car game": proper car with wheels on ground, correct orientation<br />
 				- "physics": real physics with proper collision detection, no clipping through surfaces<br />
