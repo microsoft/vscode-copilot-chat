@@ -87,6 +87,12 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 
 export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
+	/**
+	 * Delays (in ms) between connectivity check attempts before retrying a failed request.
+	 * Configurable for testing purposes.
+	 */
+	public connectivityCheckDelays = [1000, 10000, 10000];
+
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -397,7 +403,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<{ retryRequest: boolean; connectivityTestError?: string; connectivityTestErrorGitHubRequestId?: string }> {
 		// Ping CAPI to check network connectivity before retrying
-		const delays = [1000, 10000, 10000];
+		const delays = this.connectivityCheckDelays;
 		let connectivityTestError: string | undefined = undefined;
 		let connectivityTestErrorGitHubRequestId: string | undefined = undefined;
 		for (const delay of delays) {
