@@ -189,8 +189,10 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}
 
+		// Only call the router for the first request in a turn (when there's no cached entry).
+		// Subsequent iterations (e.g., during tool calling) reuse the cached routing decision.
 		const prompt = chatRequest?.prompt?.trim();
-		if (prompt?.length) {
+		if (!entry && prompt?.length) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
