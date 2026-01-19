@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken as ICancellationToken } from 'vscode-languageserver-protocol';
-import { IExperimentationService } from '../../../../../../lib/node/chatLibMain';
 import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { BlockMode, shouldDoServerTrimming } from '../config';
 import { ICompletionsUserErrorNotifierService } from '../error/userErrorNotifier';
