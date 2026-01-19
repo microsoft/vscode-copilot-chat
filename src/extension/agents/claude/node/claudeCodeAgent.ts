@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, RewindFilesResult, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
@@ -139,6 +139,28 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		return prompt;
+	}
+
+	/**
+	 * Rewinds tracked files in a Claude session to their state at a specific user message.
+	 * 
+	 * @param claudeSessionId - The session ID to rewind files in
+	 * @param userMessageId - UUID of the user message to rewind to
+	 * @param dryRun - If true, preview changes without modifying files
+	 * @returns Result containing whether rewind is possible, any errors, and file change statistics
+	 */
+	public async rewindFiles(claudeSessionId: string, userMessageId: string, dryRun?: boolean): Promise<RewindFilesResult> {
+		const session = this._sessions.get(claudeSessionId);
+		if (!session) {
+			this.logService.warn(`[ClaudeAgentManager] Cannot rewind files: session ${claudeSessionId} not found`);
+			return {
+				canRewind: false,
+				error: 'Session not found'
+			};
+		}
+
+		this.logService.trace(`[ClaudeAgentManager] Rewinding files in session ${claudeSessionId} to message ${userMessageId} (dryRun=${dryRun})`);
+		return session.rewindFiles(userMessageId, dryRun);
 	}
 }
 
@@ -334,6 +356,7 @@ export class ClaudeCodeSession extends Disposable {
 				preset: 'claude_code'
 			},
 			settingSources: ['user', 'project', 'local'],
+			enableFileCheckpointing: true,
 			...(isDebugEnabled && {
 				stderr: data => {
 					this.logService.trace(`claude-agent-sdk stderr: ${data}`);
@@ -609,6 +632,33 @@ export class ClaudeCodeSession extends Disposable {
 			stream.progress(l10n.t('Maximum turns reached ({0})', message.num_turns));
 		} else if (message.subtype === 'error_during_execution') {
 			throw new KnownClaudeError(l10n.t('Error during execution'));
+		}
+	}
+
+	/**
+	 * Rewinds tracked files to their state at a specific user message.
+	 * This allows reverting edits made after a particular point in the conversation.
+	 * 
+	 * @param userMessageId - UUID of the user message to rewind to
+	 * @param dryRun - If true, preview changes without modifying files
+	 * @returns Result containing whether rewind is possible, any errors, and file change statistics
+	 */
+	public async rewindFiles(userMessageId: string, dryRun?: boolean): Promise<RewindFilesResult> {
+		if (!this._queryGenerator) {
+			return {
+				canRewind: false,
+				error: 'No active session'
+			};
+		}
+
+		try {
+			return await this._queryGenerator.rewindFiles(userMessageId, { dryRun });
+		} catch (error) {
+			this.logService.error('[ClaudeCodeSession] Error rewinding files', error);
+			return {
+				canRewind: false,
+				error: error instanceof Error ? error.message : String(error)
+			};
 		}
 	}
 
