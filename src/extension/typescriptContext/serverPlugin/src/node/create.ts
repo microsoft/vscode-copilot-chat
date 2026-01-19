@@ -196,10 +196,15 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 
 	const { languageService, file, pos, timeBudget, startTime } = input;
 
+	// All the internal API is 0-based for both line and offset
+	const lastSymbolRename = request.arguments?.lastSymbolRename
+		? { start: { line: request.arguments.lastSymbolRename.start.line - 1, offset: request.arguments.lastSymbolRename.start.offset - 1 }, end: { line: request.arguments.lastSymbolRename.end.line - 1, offset: request.arguments.lastSymbolRename.end.offset - 1 } }
+		: undefined;
+
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
 	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
 	try {
-		prepareNesRename(result, languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, request.arguments?.lastSymbolRename, cancellationToken);
+		prepareNesRename(result, languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, lastSymbolRename, cancellationToken);
 	} catch (error) {
 		if (error instanceof ts.OperationCanceledException) {
 			result.setCanRename(RenameKind.no, 'Operation canceled');

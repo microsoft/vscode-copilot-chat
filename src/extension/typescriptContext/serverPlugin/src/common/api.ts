@@ -182,7 +182,7 @@ export function prepareNesRename(result: PrepareNesRenameResult, session: Comput
 		result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
 		return;
 	}
-
+	doPrepareNesRename(result, program, sourceFile, position, oldName, newName, token);
 }
 
 function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, token: tt.CancellationToken) {
@@ -198,13 +198,14 @@ function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program,
 
 function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: LastSymbolRename, token: tt.CancellationToken) {
 	const text = sourceFile.getFullText();
+	// The API is 0-based for both line and offset
 	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.offset);
 	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.offset);
 	const newText = text.substring(0, startPos) + oldName + text.substring(endPos);
 	const newPos = position < startPos ? position : position - (newName.length - oldName.length);
 
 	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (updatedProgram, _originalProgram, updatedSourceFile) => {
-		const renameInfo = languageService.getRenameInfo(sourceFile.fileName, newPos, {});
+		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, newPos, {});
 		if (!renameInfo.canRename) {
 			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
 			return;
@@ -214,5 +215,8 @@ function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: 
 			return;
 		}
 		doPrepareNesRename(result, updatedProgram, updatedSourceFile, newPos, oldName, newName, token);
+		if (result.getCanRename() === RenameKind.maybe || result.getCanRename() === RenameKind.yes) {
+			result.setOnOldState(true);
+		}
 	});
 }

@@ -44,6 +44,14 @@ export class PrepareNesRenameResult {
 		return this;
 	}
 
+	public setOnOldState(value: boolean): PrepareNesRenameResult {
+		if (this.canRename === RenameKind.no) {
+			throw new Error('Cannot set onOldState when canRename is no');
+		}
+		this.onOldState = value;
+		return this;
+	}
+
 	public setTimedOut(value: boolean): PrepareNesRenameResult {
 		this.timedOut = value;
 		return this;
