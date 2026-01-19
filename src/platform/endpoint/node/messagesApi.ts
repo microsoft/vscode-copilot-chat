@@ -107,7 +107,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Build context management configuration
 	const contextManagement = isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens)
+		? getContextManagementFromConfig(configurationService, thinkingBudget, endpoint.modelMaxPromptTokens)
 		: undefined;
 
 	return {

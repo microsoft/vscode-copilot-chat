@@ -219,7 +219,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		// Build context management configuration
 		const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
-			this._experimentationService,
+			this._configurationService,
 			thinkingBudget,
 			model.maxInputTokens
 		) : undefined;

@@ -698,6 +698,17 @@ export namespace ConfigKey {
 		export const DiagnosticsContextProvider = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.diagnosticsContextProvider.enabled', 'chat.inlineEdits.diagnosticsContextProvider.enabled', false);
 		export const Gemini3MultiReplaceString = defineSetting<boolean>('chat.edits.gemini3MultiReplaceString', ConfigType.ExperimentBased, false);
 		export const AgentOmitFileAttachmentContents = defineSetting<boolean>('chat.agent.omitFileAttachmentContents', ConfigType.ExperimentBased, false);
+
+		/** Context editing configuration for Anthropic Messages API */
+		export const AnthropicContextEditingConfig = defineSetting<{
+			triggerType?: 'input_tokens' | 'tool_uses';
+			triggerValue?: number;
+			keepCount?: number;
+			clearAtLeastTokens?: number;
+			excludeTools?: string[];
+			clearInputs?: boolean;
+			thinkingKeepTurns?: number;
+		}>('chat.anthropic.contextEditing.config', ConfigType.Simple, {});
 	}
 
 	/**

@@ -162,7 +162,6 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 
 /**
  * Tool search is only supported by:
- * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * @param modelId The model ID to check
  * @returns true if the model supports tool search
@@ -170,8 +169,9 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 export function modelSupportsToolSearch(modelId: string): boolean {
 	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
-	return normalized.startsWith('claude-sonnet-4-5') ||
-		normalized.startsWith('claude-opus-4-5');
+	// TODO: Enable sonnet tool search when supported by all providers
+	// return normalized.startsWith('claude-sonnet-4-5') ||
+	return normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -290,28 +290,42 @@ export function buildContextManagement(
 }
 
 /**
+ * Default values for context editing configuration.
+ */
+export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
+	triggerType: 'input_tokens',
+	triggerValue: 80000,
+	keepCount: 3,
+	clearAtLeastTokens: 10000,
+	excludeTools: [],
+	clearInputs: true,
+	thinkingKeepTurns: 1,
+};
+
+/**
  * Reads context editing configuration from settings and builds the context_management object.
  * This is a convenience function that combines reading configuration with buildContextManagement.
  * @param configurationService The configuration service to read settings from
- * @param experimentationService The experimentation service for experiment-based config
  * @param thinkingBudget The thinking budget value (undefined if thinking is disabled)
  * @param modelMaxInputTokens The maximum input tokens supported by the model
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
-	experimentationService: IExperimentationService,
+	configurationService: IConfigurationService,
 	thinkingBudget: number | undefined,
 	modelMaxInputTokens: number
 ): ContextManagement | undefined {
 
+	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
+
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',
-		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 75000,
-		keepCount: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.keepCount') ?? 5,
-		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 5000,
-		excludeTools: [],
-		clearInputs: experimentationService.getTreatmentVariable<boolean>('copilotchat.anthropic.contextEditing.toolResult.clearInputs') ?? true,
-		thinkingKeepTurns: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.thinking.keepTurns') ?? 1,
+		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
+		triggerValue: userConfig.triggerValue ?? CONTEXT_EDITING_DEFAULTS.triggerValue,
+		keepCount: userConfig.keepCount ?? CONTEXT_EDITING_DEFAULTS.keepCount,
+		clearAtLeastTokens: userConfig.clearAtLeastTokens ?? CONTEXT_EDITING_DEFAULTS.clearAtLeastTokens,
+		excludeTools: userConfig.excludeTools ?? CONTEXT_EDITING_DEFAULTS.excludeTools,
+		clearInputs: userConfig.clearInputs ?? CONTEXT_EDITING_DEFAULTS.clearInputs,
+		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
 	};
 
 	return buildContextManagement(contextEditingConfig, thinkingBudget, modelMaxInputTokens);
