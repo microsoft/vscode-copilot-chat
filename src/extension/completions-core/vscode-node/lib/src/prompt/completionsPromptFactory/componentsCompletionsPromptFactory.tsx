@@ -6,7 +6,7 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
 
-import { DiagnosticSeverity, languages, type Diagnostic } from 'vscode';
+import { DiagnosticSeverity, type Diagnostic } from 'vscode';
 import { ICompletionsLogTargetService, logger } from '../../logger';
 
 import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
@@ -33,6 +33,7 @@ import { splitContextCompletionsPrompt } from '../components/splitContextPrompt'
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
 
+import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import {
 	ContextProviderTelemetry,
@@ -168,6 +169,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		@ICompletionsContextProviderBridgeService private readonly contextProviderBridge: ICompletionsContextProviderBridgeService,
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService private readonly contextProviderStatistics: ICompletionsContextProviderService,
+		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -490,7 +492,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		if (bags !== undefined && bags.some(bag => bag.uri.toString() === document.uri)) {
 			return undefined;
 		}
-		const diagnostics = languages.getDiagnostics(URI.parse(document.uri));
+		const diagnostics = this.languageDiagnosticsService.getDiagnostics(URI.parse(document.uri));
 		if (diagnostics.length === 0) {
 			return undefined;
 		}
@@ -534,6 +536,7 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 		@ICompletionsContextProviderBridgeService contextProviderBridge: ICompletionsContextProviderBridgeService,
 		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService contextProviderStatistics: ICompletionsContextProviderService,
+		@ILanguageDiagnosticsService languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
 		super(
 			undefined,
@@ -543,7 +546,8 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 			ignoreService,
 			contextProviderBridge,
 			logTarget,
-			contextProviderStatistics
+			contextProviderStatistics,
+			languageDiagnosticsService
 		);
 	}
 }
