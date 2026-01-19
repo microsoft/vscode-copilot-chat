@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
 import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -54,7 +55,8 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 		@ILogService logService: ILogService,
 		@IFetcherService fetcherService: IFetcherService,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IExperimentationService expService: IExperimentationService
+		@IExperimentationService expService: IExperimentationService,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext
 	) {
 		super(
 			AzureBYOKModelProvider.providerName.toLowerCase(),
@@ -64,7 +66,8 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 			fetcherService,
 			instantiationService,
 			configurationService,
-			expService
+			expService,
+			extensionContext
 		);
 		this.migrateExistingConfigs();
 	}
