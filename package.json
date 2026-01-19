@@ -4072,7 +4072,7 @@
 					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
 						"tags": [
 							"advanced",
