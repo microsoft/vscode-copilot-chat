@@ -341,10 +341,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
-		const [models,] = await Promise.all([
-			this.copilotCLIModels.getModels(),
-			this.copilotCLIAgents.getAgents()
-		]);
+		const models = await this.copilotCLIModels.getModels();
 		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
 			id: model.id,
 			name: model.name,
