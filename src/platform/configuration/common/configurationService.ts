@@ -797,6 +797,9 @@ export namespace ConfigKey {
 		export const VerifyTextDocumentChanges = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', ConfigType.ExperimentBased, false);
 		export const AutoModeRouterUrl = defineTeamInternalSetting<string | undefined>('chat.advanced.autoModeRouter.url', ConfigType.ExperimentBased, undefined);
 
+		/** Inline Completions */
+		export const InlineCompletionsDefaultDiagnosticsOptions = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString', ConfigType.ExperimentBased, undefined);
+
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, false);
@@ -871,9 +874,6 @@ export namespace ConfigKey {
 	export const TypeScriptLanguageContextCacheTimeout = defineSetting<number>('chat.languageContext.typescript.cacheTimeout', ConfigType.ExperimentBased, 500);
 	export const TypeScriptLanguageContextFix = defineSetting<boolean>('chat.languageContext.fix.typescript.enabled', ConfigType.ExperimentBased, false);
 	export const TypeScriptLanguageContextInline = defineSetting<boolean>('chat.languageContext.inline.typescript.enabled', ConfigType.ExperimentBased, false);
-
-	/** Inline Completions */
-	export const InlineCompletionsDefaultDiagnosticsConfiguration = defineSetting<string>('chat.inlineCompletions.defaultDiagnosticsConfiguration', ConfigType.ExperimentBased, '');
 
 	export const UseInstructionFiles = defineSetting('chat.codeGeneration.useInstructionFiles', ConfigType.Simple, true);
 	export const ReviewAgent = defineSetting('chat.reviewAgent.enabled', ConfigType.Simple, true);

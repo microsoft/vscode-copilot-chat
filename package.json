@@ -5298,7 +5298,7 @@
 		"@keyv/sqlite": "^4.0.5",
 		"@octokit/types": "^14.1.0",
 		"@parcel/watcher": "^2.5.1",
-		"@stylischat.languageContext.fix.typescript.enabledtic/eslint-plugin": "^3.0.1",
+		"@stylistic/eslint-plugin": "^3.0.1",
 		"@types/eslint": "^9.0.0",
 		"@types/google-protobuf": "^3.15.12",
 		"@types/js-yaml": "^4.0.9",

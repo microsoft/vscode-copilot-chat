@@ -558,7 +558,7 @@ export namespace DefaultDiagnosticSettings {
 			const warnings = getWarnings(parsed);
 			const maxLineDistance = typeof parsed.maxLineDistance === 'number' && parsed.maxLineDistance >= 0
 				? parsed.maxLineDistance
-				: 50;
+				: 10;
 			const maxDiagnostics = typeof parsed.maxDiagnostics === 'number' && parsed.maxDiagnostics > 0
 				? parsed.maxDiagnostics
 				: 5;
@@ -584,7 +584,7 @@ export namespace DefaultDiagnosticSettings {
 export function getDefaultDiagnosticSettings(accessor: ServicesAccessor): DefaultDiagnosticSettings | undefined {
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
-	const value = configurationService.getExperimentBasedConfig(ChatConfigKey.InlineCompletionsDefaultDiagnosticsConfiguration, experimentationService);
+	const value = configurationService.getExperimentBasedConfig(ChatConfigKey.TeamInternal.InlineCompletionsDefaultDiagnosticsOptions, experimentationService);
 	if (typeof value !== 'string') {
 		return undefined;
 	}
