@@ -144,6 +144,9 @@ export class ClaudeAgentManager extends Disposable {
 	/**
 	 * Rewinds tracked files in a Claude session to their state at a specific user message.
 	 * 
+	 * This is a manager-level method that delegates to the session's rewindFiles method.
+	 * Use this when you have a session ID but not direct access to the session instance.
+	 * 
 	 * @param claudeSessionId - The session ID to rewind files in
 	 * @param userMessageId - UUID of the user message to rewind to
 	 * @param dryRun - If true, preview changes without modifying files
@@ -638,6 +641,9 @@ export class ClaudeCodeSession extends Disposable {
 	/**
 	 * Rewinds tracked files to their state at a specific user message.
 	 * This allows reverting edits made after a particular point in the conversation.
+	 * 
+	 * Note: Requires an active session created via invoke(). File checkpointing must be
+	 * enabled in the session options for this to work (which is done automatically).
 	 * 
 	 * @param userMessageId - UUID of the user message to rewind to
 	 * @param dryRun - If true, preview changes without modifying files

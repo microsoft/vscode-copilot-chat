@@ -7,7 +7,7 @@ import { Options, Query, RewindFilesResult, SDKAssistantMessage, SDKResultMessag
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 
 /**
- * Mock implementation of IClaudeCodeService for testing
+ * Mock implementation of IClaudeCodeSdkService for testing
  */
 export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	readonly _serviceBrand: undefined;
