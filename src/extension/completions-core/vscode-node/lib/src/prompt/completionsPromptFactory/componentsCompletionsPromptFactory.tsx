@@ -5,7 +5,8 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
-import * as vscode from 'vscode';
+
+import { DiagnosticSeverity, languages, type Diagnostic } from 'vscode';
 import { ICompletionsLogTargetService, logger } from '../../logger';
 
 import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
@@ -489,12 +490,12 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		if (bags !== undefined && bags.some(bag => bag.uri.toString() === document.uri)) {
 			return undefined;
 		}
-		const diagnostics = vscode.languages.getDiagnostics(URI.parse(document.uri));
+		const diagnostics = languages.getDiagnostics(URI.parse(document.uri));
 		if (diagnostics.length === 0) {
 			return undefined;
 		}
-		const errors: vscode.Diagnostic[] = [];
-		const warnings: vscode.Diagnostic[] = [];
+		const errors: Diagnostic[] = [];
+		const warnings: Diagnostic[] = [];
 		const captureWarnings = settings.warnings === 'yes' || settings.warnings === 'yesIfNoErrors';
 		const position = completionState.position;
 		for (const diag of diagnostics) {
@@ -502,9 +503,9 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			if (!inRange) {
 				continue;
 			}
-			if (diag.severity === vscode.DiagnosticSeverity.Error) {
+			if (diag.severity === DiagnosticSeverity.Error) {
 				errors.push(diag);
-			} else if (diag.severity === vscode.DiagnosticSeverity.Warning && captureWarnings) {
+			} else if (diag.severity === DiagnosticSeverity.Warning && captureWarnings) {
 				warnings.push(diag);
 			}
 		}
