@@ -12,8 +12,8 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
-import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { Event } from '../../../../../util/vs/base/common/event';
@@ -136,7 +136,8 @@ describe('CopilotCLISessionService', () => {
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
+		const nullMcpServer = disposables.add(new NullMcpService());
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 

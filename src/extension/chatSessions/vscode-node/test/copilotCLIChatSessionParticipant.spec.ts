@@ -202,7 +202,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const logger = accessor.get(ILogService);
 		const logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
-			override loadMcpConfig = vi.fn(async (_workingDirectory: Uri | undefined) => {
+			override loadMcpConfig = vi.fn(async () => {
 				return undefined;
 			});
 		}();
@@ -303,7 +303,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].options.isolationEnabled).toBe(true);
 		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}worktree`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
-		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}worktree`);
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
 		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}worktree`);
@@ -325,7 +324,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].options.isolationEnabled).toBe(false);
 		expect(cliSessions[0].options.workingDirectory?.fsPath).toBe(`${sep}workspace`);
 		expect(mcpHandler.loadMcpConfig).toHaveBeenCalled();
-		expect((mcpHandler.loadMcpConfig as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]?.fsPath).toBe(`${sep}workspace`);
 		// Prompt resolver should receive the effective workingDirectory.
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
 		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][4]?.fsPath).toBe(`${sep}workspace`);

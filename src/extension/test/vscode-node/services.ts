@@ -48,6 +48,7 @@ import { InlineEditsModelService, UndesiredModels } from '../../../platform/inli
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../../platform/languages/common/languageFeaturesService';
 import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vscode/languageDiagnosticsServiceImpl';
+import { IMcpService, NullMcpService } from '../../../platform/mcp/common/mcpService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
@@ -140,6 +141,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	testingServiceCollection.define(IRemoteRepositoriesService, new SyncDescriptor(RemoteRepositoriesService));
 	testingServiceCollection.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	testingServiceCollection.define(IImageService, nullImageService);

@@ -198,7 +198,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async createSession({ model, workingDirectory, isolationEnabled, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession> {
-		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
+		const mcpServers = await this.mcpHandler.loadMcpConfig();
 		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
@@ -242,7 +242,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 			const [sessionManager, mcpServers] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
-				this.mcpHandler.loadMcpConfig(workingDirectory),
+				this.mcpHandler.loadMcpConfig(),
 			]);
 			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers });
 
