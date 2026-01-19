@@ -5,7 +5,7 @@
 
 import { env, Uri, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
 
@@ -38,12 +38,16 @@ export class NesFeedbackSubmitter {
 		apiUrl: 'https://api.github.com'
 	};
 
+	private readonly _logger: ILogger;
+
 	constructor(
-		private readonly _logService: ILogService,
+		logService: ILogService,
 		private readonly _authenticationService: IAuthenticationService,
 		private readonly _fetcherService: IFetcherService,
 		private readonly _repoConfig: FeedbackRepoConfig = NesFeedbackSubmitter.DEFAULT_REPO_CONFIG
-	) { }
+	) {
+		this._logger = logService.createSubLogger(['NES', 'FeedbackSubmitter']);
+	}
 
 	/**
 	 * Submit feedback files from the given folder to the private GitHub repository.
@@ -97,10 +101,10 @@ export class NesFeedbackSubmitter {
 
 			if (folderUrl) {
 				await this._showSuccessDialog(folderUrl);
-				this._logService.info(`[NES Feedback] Uploaded feedback to private repo: ${folderUrl}`);
+				this._logger.info(`Uploaded feedback to private repo: ${folderUrl}`);
 			}
 		} catch (error) {
-			this._logService.error('[NES Feedback] Error submitting feedback', error);
+			this._logger.error(error instanceof Error ? error : String(error), 'Error submitting feedback');
 			window.showErrorMessage(`Failed to submit NES feedback: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
@@ -153,7 +157,7 @@ export class NesFeedbackSubmitter {
 					content: textContent
 				});
 			} catch (e) {
-				this._logService.warn(`[NES Feedback] Failed to read file: ${fileUri.fsPath}: ${e}`);
+				this._logger.warn(`Failed to read file: ${fileUri.fsPath}: ${e}`);
 			}
 		}
 
@@ -405,7 +409,7 @@ export class NesFeedbackSubmitter {
 				// Skip this recording - no nextUserEdit or it's excluded
 				const prefix = file.name.replace('.recording.w.json', '');
 				skippedRecordingPrefixes.add(prefix);
-				this._logService.debug(`[NES Feedback] Skipping recording ${file.name}: nextUserEdit excluded or missing`);
+				this._logger.debug(`Skipping recording ${file.name}: nextUserEdit excluded or missing`);
 				continue;
 			}
 
@@ -426,7 +430,7 @@ export class NesFeedbackSubmitter {
 				if (!skippedRecordingPrefixes.has(prefix)) {
 					result.push(file);
 				} else {
-					this._logService.debug(`[NES Feedback] Skipping metadata ${file.name}: associated recording was skipped`);
+					this._logger.debug(`Skipping metadata ${file.name}: associated recording was skipped`);
 				}
 			}
 		}
@@ -539,7 +543,7 @@ export class NesFeedbackSubmitter {
 				return data.object.sha;
 			}
 		} catch (e) {
-			this._logService.error(`[NES Feedback] Failed to get branch SHA: ${e}`);
+			this._logger.error(e instanceof Error ? e : String(e), 'Failed to get branch SHA');
 		}
 		return undefined;
 	}
@@ -569,7 +573,7 @@ export class NesFeedbackSubmitter {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			this._logService.error(`[NES Feedback] Failed to create branch ${branchName}: ${response.status} ${response.statusText} - ${errorText}`);
+			this._logger.error(`Failed to create branch ${branchName}: ${response.status} ${response.statusText} - ${errorText}`);
 			throw new Error(`Failed to create branch: ${response.statusText}`);
 		}
 	}
@@ -612,7 +616,7 @@ export class NesFeedbackSubmitter {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			this._logService.error(`[NES Feedback] Failed to create pull request: ${response.status} ${response.statusText} - ${errorText}`);
+			this._logger.error(`Failed to create pull request: ${response.status} ${response.statusText} - ${errorText}`);
 			throw new Error(`Failed to create pull request: ${response.statusText}`);
 		}
 
@@ -656,7 +660,7 @@ export class NesFeedbackSubmitter {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			this._logService.error(`[NES Feedback] Failed to create file ${path}: ${response.status} ${response.statusText} - ${errorText}`);
+			this._logger.error(`Failed to create file ${path}: ${response.status} ${response.statusText} - ${errorText}`);
 			throw new Error(`Failed to upload file: ${response.statusText}`);
 		}
 	}
@@ -683,7 +687,7 @@ export class NesFeedbackSubmitter {
 				return await response.json();
 			}
 		} catch (e) {
-			this._logService.warn(`[NES Feedback] Failed to get current user: ${e}`);
+			this._logger.warn(`Failed to get current user: ${e}`);
 		}
 		return undefined;
 	}
