@@ -135,10 +135,10 @@ describe('ExP Service Tests', () => {
 	let copilotTokenService: ICopilotTokenStore;
 	let extensionContext: IVSCodeExtensionContext;
 
-	const GitHubProToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-pro', username: 'fake', chat_enabled: true, sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
-	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-msft-enterprise', username: 'fake', chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] }));
-	const MicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-msft-enterprise', username: 'fake', chat_enabled: true, sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] }));
-	const NoOrgFreeToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-no-org-free', username: 'fake', chat_enabled: true, sku: 'free', copilot_plan: 'unknown' }));
+	const GitHubProToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-pro', username: 'fake', sku: 'pro', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'] }));
+	const GitHubAndMicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-gh-msft-enterprise', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const MicrosoftEnterpriseToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-msft-enterprise', username: 'fake', sku: 'enterprise', copilot_plan: 'unknown', organization_list: ['a5db0bcaae94032fe715fb34a5e4bce2'] }));
+	const NoOrgFreeToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token-no-org-free', username: 'fake', sku: 'free', copilot_plan: 'unknown' }));
 
 	beforeAll(() => {
 		const testingServiceCollection = createPlatformServices();
@@ -296,7 +296,7 @@ describe('ExP Service Tests', () => {
 		// We need a separate token just to make sure we get passed the copilot token change guard
 		const newGitHubProToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'github-test', username: 'fake',
-			chat_enabled: true, sku: 'pro', copilot_plan: 'unknown',
+			sku: 'pro', copilot_plan: 'unknown',
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a']
 		}));
 		copilotTokenService.copilotToken = newGitHubProToken; // Same token
