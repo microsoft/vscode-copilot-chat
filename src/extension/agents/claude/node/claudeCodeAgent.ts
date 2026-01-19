@@ -576,7 +576,10 @@ export class ClaudeCodeSession extends Disposable {
 				stream.push(invocation);
 			}
 		} else {
-			// Tool invocation was already pushed, just mark it as processed
+			// Tool invocation was already pushed in handleAssistantMessage.
+			// We cannot update the invocation's error or confirmation status after it's been pushed,
+			// as the ChatToolInvocationPart is immutable once in the stream.
+			// This means denied tools will show as confirmed, but this is preferable to duplicate invocations.
 			pushedToolInvocationIds.delete(toolUse.id);
 		}
 
