@@ -250,19 +250,17 @@ export interface ContextEditingConfig {
 /**
  * Builds the context_management configuration object for the Messages API request.
  * @param config The context editing configuration from individual settings
- * @param hasThinking Whether extended thinking is enabled (the thinking budget value)
- * @param modelMaxTokens The maximum input tokens supported by the model
+ * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if no edits
  */
 export function buildContextManagement(
 	config: ContextEditingConfig,
-	hasThinking: number | undefined,
-	modelMaxTokens: number
+	thinkingEnabled: boolean
 ): ContextManagement | undefined {
 	const edits: ContextManagementEdit[] = [];
 
 	// Add thinking block clearing if extended thinking is enabled
-	if (hasThinking) {
+	if (thinkingEnabled) {
 		const thinkingKeepTurns = config.thinkingKeepTurns;
 		edits.push({
 			type: 'clear_thinking_20251015',
@@ -306,17 +304,18 @@ export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
  * Reads context editing configuration from settings and builds the context_management object.
  * This is a convenience function that combines reading configuration with buildContextManagement.
  * @param configurationService The configuration service to read settings from
- * @param thinkingBudget The thinking budget value (undefined if thinking is disabled)
- * @param modelMaxInputTokens The maximum input tokens supported by the model
+ * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
-	thinkingBudget: number | undefined,
-	modelMaxInputTokens: number
+	thinkingEnabled: boolean,
 ): ContextManagement | undefined {
 
 	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
+	if (!userConfig) {
+		return buildContextManagement(CONTEXT_EDITING_DEFAULTS, thinkingEnabled);
+	}
 
 	const contextEditingConfig: ContextEditingConfig = {
 		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
@@ -328,5 +327,5 @@ export function getContextManagementFromConfig(
 		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
 	};
 
-	return buildContextManagement(contextEditingConfig, thinkingBudget, modelMaxInputTokens);
+	return buildContextManagement(contextEditingConfig, thinkingEnabled);
 }
