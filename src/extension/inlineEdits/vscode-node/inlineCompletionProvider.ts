@@ -204,7 +204,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 		// Disable NES while capture mode is active to avoid interference
 		if (this.expectedEditCaptureController?.isCaptureActive) {
-			tracer.returns('capture mode active');
+			logger.trace('Return: capture mode active');
 			return undefined;
 		}
 
