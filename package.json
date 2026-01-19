@@ -3345,16 +3345,6 @@
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.fix.typescript.enabled%"
 					},
-					"github.copilot.chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString": {
-						"type": "string",
-						"default": "",
-						"scope": "resource",
-						"tags": [
-							"experimental",
-							"onExP"
-						],
-						"markdownDescription": "%github.copilot.chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString%"
-					},
 					"github.copilot.chat.languageContext.inline.typescript.enabled": {
 						"type": "boolean",
 						"default": false,
