@@ -443,6 +443,87 @@ suite('InlineEditModel', () => {
 				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
 				assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch when disabled');
 			});
+
+			test('Does not trigger on document switch when there is no recent NES trigger (lastTriggerTime is 0)', () => {
+				const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+				const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+				nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+				nextEditProvider.lastTriggerTime = 0; // No previous trigger
+
+				// Configure to trigger on document switch
+				void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, 30);
+
+				// Make a change in doc1
+				triggerTextChange(doc1.document);
+				triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+
+				const initialCount = firedEvents.length;
+
+				// Switch to doc2
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				// Should not trigger document switch because lastTriggerTime is 0
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch when lastTriggerTime is 0');
+				assert.strictEqual(firedEvents.length, initialCount, 'No new events should fire');
+			});
+
+			test('Does not trigger on document switch when NES trigger was too long ago', () => {
+				const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+				const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+				nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+				const triggerAfterSeconds = 30;
+				// Configure to trigger on document switch
+				void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, triggerAfterSeconds);
+
+				// Make a change in doc1
+				triggerTextChange(doc1.document);
+				triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+
+				const initialCount = firedEvents.length;
+
+				// Set lastTriggerTime to be older than the configured threshold
+				nextEditProvider.lastTriggerTime = Date.now() - (triggerAfterSeconds * 1000) - 1;
+
+				// Switch to doc2
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				// Should not trigger document switch because last trigger was too long ago
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 0, 'Should not trigger document switch when last trigger was too long ago');
+				assert.strictEqual(firedEvents.length, initialCount, 'No new events should fire');
+			});
+
+			test('Triggers on document switch when NES trigger was recent', () => {
+				const doc1 = createTextDocument(undefined, Uri.file('file1.py'));
+				const doc2 = createTextDocument(undefined, Uri.file('file2.py'));
+
+				nextEditProvider.lastRejectionTime = Date.now() - TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN - 1;
+
+				const triggerAfterSeconds = 30;
+				// Configure to trigger on document switch
+				void configurationService.setConfig(ConfigKey.Advanced.InlineEditsTriggerOnEditorChangeAfterSeconds, triggerAfterSeconds);
+
+				// Make a change in doc1
+				triggerTextChange(doc1.document);
+				triggerTextSelectionChange(doc1.textEditor, new Selection(0, 5, 0, 5));
+
+				const initialCount = firedEvents.length;
+
+				// Set lastTriggerTime to be within the configured threshold
+				nextEditProvider.lastTriggerTime = Date.now() - (triggerAfterSeconds * 1000) + 5000; // 5 seconds within the threshold
+
+				// Switch to doc2
+				triggerTextSelectionChange(doc2.textEditor, new Selection(0, 0, 0, 0));
+
+				// Should trigger document switch because last trigger was recent
+				const switchEvents = firedEvents.filter(e => e.data.reason === NesTriggerReason.ActiveDocumentSwitch);
+				assert.strictEqual(switchEvents.length, 1, 'Should trigger document switch when last trigger was recent');
+				assert.isAtLeast(firedEvents.length, initialCount + 1, 'Should have fired an additional event');
+			});
 		});
 
 		// #endregion
