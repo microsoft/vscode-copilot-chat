@@ -140,7 +140,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Confirm the original symptom/issue no longer exists after your fix.<br />
 				- Understand ambiguous terms through context; infer their meaning from surrounding code, documentation, and user instructions rather than relying on hardcoded example mappings.<br />
 				- Implement the BEST solution for user constraints, not just a working solution. Research proper patterns.<br />
-				- When uncertain about how code works or is structured ("it may be this way or that way"), INVESTIGATE immediately - read files, search codebase, grep patterns, test code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
+				- When uncertain about implementation details or code structure, INVESTIGATE immediately - read files, search codebase, grep patterns, test code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
 				- Avoid unneeded complexity in your solution.<br />
 				- Do not attempt to fix unrelated bugs or broken tests. It is not your responsibility to fix them.<br />
 				- Update documentation as necessary.<br />
