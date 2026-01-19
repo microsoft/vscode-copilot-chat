@@ -138,7 +138,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		private readonly logContextRecorder: LogContextRecorder | undefined,
 		private readonly inlineEditDebugComponent: InlineEditDebugComponent | undefined,
 		private readonly telemetrySender: TelemetrySender,
-		private readonly expectedEditCaptureController: ExpectedEditCaptureController | undefined,
+		private readonly expectedEditCaptureController: ExpectedEditCaptureController,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IDiffService private readonly _diffService: IDiffService,
@@ -203,7 +203,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const logger = this._logger.createSubLogger(['provideInlineCompletionItems', shortenOpportunityId(context.requestUuid)]);
 
 		// Disable NES while capture mode is active to avoid interference
-		if (this.expectedEditCaptureController?.isCaptureActive) {
+		if (this.expectedEditCaptureController.isCaptureActive) {
 			logger.trace('Return: capture mode active');
 			return undefined;
 		}
@@ -531,7 +531,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 			case InlineCompletionEndOfLifeReasonKind.Rejected: {
 				this._handleDidRejectCompletionItem(item);
 				// Trigger expected edit capture if enabled
-				if (this.expectedEditCaptureController?.isEnabled && this.expectedEditCaptureController?.captureOnReject) {
+				if (this.expectedEditCaptureController.isEnabled && this.expectedEditCaptureController.captureOnReject) {
 					// Get endpoint info from the log context if available (LLM suggestions only)
 					const endpointInfo = isLlmCompletionInfo(item.info) ? item.info.suggestion.source.log.endpointInfo : undefined;
 					const metadata = {
