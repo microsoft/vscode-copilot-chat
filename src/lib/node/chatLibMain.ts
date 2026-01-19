@@ -853,6 +853,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
+	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 
 	return builder.seal();
 }
