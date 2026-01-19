@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -52,25 +52,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		}
 		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
 		return Math.min(32000, maxOutputTokens - 1, normalizedBudget);
-	}
-
-	/**
-	 * Checks if a model supports memory based on its model ID.
-	 * Memory is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
-	 */
-	private _enableMemory(modelId: string): boolean {
-		const normalized = modelId.toLowerCase();
-		return normalized.startsWith('claude-sonnet-4-5') ||
-			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-haiku-4-5') ||
-			normalized.startsWith('claude-opus-4-1') ||
-			normalized.startsWith('claude-opus-4');
 	}
 
 	// Filters the byok known models based on what the anthropic API knows as well
@@ -142,7 +123,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		let hasMemoryTool = false;
 
-		const toolSearchEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, this._experimentationService);
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
 
 		// Build tools array, handling both standard tools and native Anthropic tools
 		const tools: Anthropic.Beta.BetaToolUnion[] = [];
@@ -158,7 +139,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory' && this._enableMemory(model.id)) {
+			if (tool.name === 'memory' && isAnthropicMemoryEnabled(model.id, this._configurationService, this._experimentationService)) {
 				hasMemoryTool = true;
 				tools.push({
 					name: 'memory',
@@ -168,7 +149,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 
 			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
-			const shouldDefer = toolSearchEnabled && !nonDeferredToolNames.has(tool.name);
+			const shouldDefer = toolSearchEnabled ? !nonDeferredToolNames.has(tool.name) : undefined;
 
 			if (!tool.inputSchema) {
 				tools.push({
@@ -179,7 +160,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 						properties: {},
 						required: []
 					},
-					...(shouldDefer ? { defer_loading: true } : {})
+					...(shouldDefer ? { defer_loading: shouldDefer } : {})
 				});
 				continue;
 			}
@@ -193,7 +174,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					required: (tool.inputSchema as { required?: string[] }).required ?? [],
 					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
 				},
-				...(shouldDefer ? { defer_loading: true } : {})
+				...(shouldDefer ? { defer_loading: shouldDefer } : {})
 			});
 		}
 
@@ -205,11 +186,13 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
 			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
 			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+			const shouldDeferWebSearch = toolSearchEnabled ? !nonDeferredToolNames.has('web_search') : undefined;
 
 			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
 				name: 'web_search',
 				type: 'web_search_20250305',
-				max_uses: maxUses
+				max_uses: maxUses,
+				...(shouldDeferWebSearch ? { defer_loading: shouldDeferWebSearch } : {})
 			};
 
 			// Add domain filtering if configured
@@ -235,12 +218,11 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
 		// Build context management configuration
-		const contextManagement = getContextManagementFromConfig(
-			this._configurationService,
+		const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 			this._experimentationService,
 			thinkingBudget,
 			model.maxInputTokens
-		);
+		) : undefined;
 
 		// Build betas array for beta API features
 		const betas: string[] = [];
@@ -249,6 +231,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		}
 		if (hasMemoryTool || contextManagement) {
 			betas.push('context-management-2025-06-27');
+		}
+		if (toolSearchEnabled) {
+			betas.push('advanced-tool-use-2025-11-20');
 		}
 
 		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {

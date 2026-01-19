@@ -697,6 +697,7 @@ export namespace ConfigKey {
 		export const InlineEditsPreferredModel = defineSetting<string | 'none'>('nextEditSuggestions.preferredModel', ConfigType.ExperimentBased, 'none');
 		export const DiagnosticsContextProvider = defineAndMigrateExpSetting<boolean>('chat.advanced.inlineEdits.diagnosticsContextProvider.enabled', 'chat.inlineEdits.diagnosticsContextProvider.enabled', false);
 		export const Gemini3MultiReplaceString = defineSetting<boolean>('chat.edits.gemini3MultiReplaceString', ConfigType.ExperimentBased, false);
+		export const AgentOmitFileAttachmentContents = defineSetting<boolean>('chat.agent.omitFileAttachmentContents', ConfigType.ExperimentBased, false);
 	}
 
 	/**
@@ -715,7 +716,7 @@ export namespace ConfigKey {
 		 */
 		export const DebugReportFeedback = defineTeamInternalSetting<boolean>('chat.advanced.debug.reportFeedback', ConfigType.Simple, false);
 		export const InlineEditsIgnoreCompletionsDisablement = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', ConfigType.Simple, false, vBoolean());
-		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, owner: 'ulugbekna', expirationDate: '2026-01-18' }, vBoolean());
+		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, owner: 'ulugbekna', expirationDate: '2026-02-01' }, vBoolean());
 		export const InlineEditsUseSlashModels = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.useSlashModels', ConfigType.ExperimentBased, false);
 		export const InlineEditsLogContextRecorderEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.logContextRecorder.enabled', ConfigType.Simple, false);
 		export const InlineEditsHideInternalInterface = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', ConfigType.Simple, false, vBoolean());
@@ -795,11 +796,13 @@ export namespace ConfigKey {
 		export const InstantApplyModelName = defineTeamInternalSetting<string>('chat.advanced.instantApply.modelName', ConfigType.ExperimentBased, CHAT_MODEL.GPT4OPROXY);
 		export const UseProxyModelsServiceForInstantApply = defineTeamInternalSetting<boolean>('chat.advanced.instantApply.useProxyModelsService', ConfigType.ExperimentBased, false);
 		export const VerifyTextDocumentChanges = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', ConfigType.ExperimentBased, false);
+		export const AutoModeRouterUrl = defineTeamInternalSetting<string | undefined>('chat.advanced.autoModeRouter.url', ConfigType.ExperimentBased, undefined);
 
 		// TODO: @sandy081 - These should be moved away from this namespace
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, false);
 		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, true);
+		export const RetryServerErrorStatusCodes = defineSetting<string>('chat.advanced.retryServerErrorStatusCodes', ConfigType.ExperimentBased, '500,502');
 		export const WorkspaceEnableCodeSearchExternalIngest = defineTeamInternalSetting<boolean>('chat.advanced.workspace.codeSearchExternalIngest.enabled', ConfigType.ExperimentBased, false);
 	}
 
@@ -824,7 +827,7 @@ export namespace ConfigKey {
 	/** Use the Messages API instead of Chat Completions when supported */
 	export const UseAnthropicMessagesApi = defineSetting<boolean | undefined>('chat.anthropic.useMessagesApi', ConfigType.ExperimentBased, true);
 	/** Context editing for Anthropic Messages API */
-	export const AnthropicContextEditingEnabled = defineSetting<boolean>('chat.anthropic.contextEditing.enabled', ConfigType.Simple, true);
+	export const AnthropicContextEditingEnabled = defineSetting<boolean>('chat.anthropic.contextEditing.enabled', ConfigType.ExperimentBased, true);
 	/** Enable tool search for Anthropic Messages API (deferred tool loading). Uses BM25 for natural language search. */
 	export const AnthropicToolSearchEnabled = defineSetting<boolean>('chat.anthropic.toolSearchTool.enabled', ConfigType.ExperimentBased, false);
 	/** Use the Responses API instead of Chat Completions when supported */
@@ -917,6 +920,7 @@ export namespace ConfigKey {
 
 	export const BackgroundAgentEnabled = defineSetting<boolean>('chat.backgroundAgent.enabled', ConfigType.Simple, true);
 	export const CloudAgentEnabled = defineSetting<boolean>('chat.cloudAgent.enabled', ConfigType.Simple, true);
+	export const AskQuestionsEnabled = defineSetting<boolean>('chat.askQuestions.enabled', ConfigType.Simple, true);
 }
 
 export function getAllConfigKeys(): string[] {

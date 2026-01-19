@@ -146,7 +146,7 @@ export interface IResponseDelta {
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
 	thinking?: ThinkingDelta | EncryptedThinkingDelta;
-	retryReason?: FilterReason | 'network_error';
+	retryReason?: FilterReason | 'network_error' | 'server_error';
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 	/** Context management information from Anthropic Messages API */

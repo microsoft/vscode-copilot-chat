@@ -12,7 +12,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
@@ -66,7 +66,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const configurationService = accessor.get(IConfigurationService);
 	const experimentationService = accessor.get(IExperimentationService);
 
-	const toolSearchEnabled = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
 
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
@@ -106,7 +106,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Build context management configuration
-	const contextManagement = getContextManagementFromConfig(configurationService, experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
+	const contextManagement = getContextManagementFromConfig(experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
 
 	return {
 		model,
@@ -375,6 +375,9 @@ export class AnthropicMessagesProcessor {
 						name: chunk.content_block.name || '',
 						arguments: '',
 					});
+					if (this.textAccumulator.length) {
+						onProgress({ text: ' ' });
+					}
 					onProgress({
 						text: '',
 						beginToolCalls: [{ name: chunk.content_block.name || '', id: toolCallId }]
@@ -438,11 +441,17 @@ export class AnthropicMessagesProcessor {
 						});
 					}
 				} else if (chunk.content_block?.type === 'thinking' && chunk.index !== undefined) {
+					if (this.textAccumulator.length) {
+						onProgress({ text: ' ' });
+					}
 					this.thinkingAccumulator.set(chunk.index, {
 						thinking: '',
 						signature: '',
 					});
 				} else if (chunk.content_block?.type === 'redacted_thinking' && chunk.index !== undefined) {
+					if (this.textAccumulator.length) {
+						onProgress({ text: ' ' });
+					}
 					const data = (chunk.content_block as { type: 'redacted_thinking'; data: string }).data;
 					onProgress({
 						text: '',

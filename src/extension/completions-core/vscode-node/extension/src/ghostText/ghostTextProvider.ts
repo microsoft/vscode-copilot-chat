@@ -83,7 +83,7 @@ export class GhostTextProvider {
 				insertText: completion.insertText,
 				range: newRange,
 				copilotCompletion: completion,
-				correlationId: createCorrelationId('completions'),
+				correlationId: createCorrelationId('completions', {}),
 			} satisfies GhostTextCompletionItem;
 		});
 

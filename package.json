@@ -170,7 +170,6 @@
 				"toolReferenceName": "searchSubagent",
 				"displayName": "%copilot.tools.searchSubagent.name%",
 				"icon": "$(search)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.tools.searchSubagent.description%",
 				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
 				"tags": [
@@ -1215,6 +1214,80 @@
 				}
 			},
 			{
+				"name": "copilot_askQuestions",
+				"toolReferenceName": "askQuestions",
+				"displayName": "%copilot.tools.askQuestions.name%",
+				"userDescription": "%copilot.tools.askQuestions.description%",
+				"modelDescription": "Ask the user questions when progress is blocked or a decision carries significant risk. Prefer proposing a sensible default so users can confirm quickly.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm high-impact decisions\n\nQuestion guidelines:\n- Batch related questions into a single call to minimize interruption\n- Provide brief context explaining what is being decided and why it matters\n- Mark one option as `recommended` with a short justification\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive\n\nAfter receiving answers:\n- Restate the chosen decisions briefly and proceed\n- Do not re-ask unless requirements change\n\n- An \"Other\" option is automatically shown to users for custom input—do not add your own \"Something else\" or similar option.",
+				"icon": "$(question)",
+				"canBeReferencedInPrompt": true,
+				"when": "config.github.copilot.chat.askQuestions.enabled",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"questions": {
+							"type": "array",
+							"description": "Array of 1-4 questions to ask the user",
+							"minItems": 1,
+							"maxItems": 4,
+							"items": {
+								"type": "object",
+								"properties": {
+									"header": {
+										"type": "string",
+										"description": "A short label (max 12 chars) displayed as a quick pick header, also used as the unique identifier for the question",
+										"maxLength": 12
+									},
+									"question": {
+										"type": "string",
+										"description": "The complete question text to display"
+									},
+									"multiSelect": {
+										"type": "boolean",
+										"description": "Allow multiple selections",
+										"default": false
+									},
+									"options": {
+										"type": "array",
+										"description": "2-4 options for the user to choose from",
+										"minItems": 2,
+										"maxItems": 4,
+										"items": {
+											"type": "object",
+											"properties": {
+												"label": {
+													"type": "string",
+													"description": "Option label text"
+												},
+												"description": {
+													"type": "string",
+													"description": "Optional description for the option"
+												},
+												"recommended": {
+													"type": "boolean",
+													"description": "Mark this option as recommended"
+												}
+											},
+											"required": [
+												"label"
+											]
+										}
+									}
+								},
+								"required": [
+									"header",
+									"question",
+									"options"
+								]
+							}
+						}
+					},
+					"required": [
+						"questions"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -1277,6 +1350,7 @@
 				"name": "vscode",
 				"description": "",
 				"tools": [
+					"askQuestions",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
@@ -2900,6 +2974,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.askQuestions.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3781,6 +3864,15 @@
 							"null"
 						],
 						"markdownDescription": "%github.copilot.config.agent.temperature%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agent.omitFileAttachmentContents": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.omitFileAttachmentContents%",
 						"tags": [
 							"advanced",
 							"experimental"
