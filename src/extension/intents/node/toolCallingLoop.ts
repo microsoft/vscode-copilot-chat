@@ -15,7 +15,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
-import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IMakeChatRequestOptions, IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -106,6 +106,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private readonly _onDidReceiveResponse = this._register(new Emitter<IToolCallingResponseEvent>());
 	public readonly onDidReceiveResponse = this._onDidReceiveResponse.event;
 
+	/**
+	 * Cached endpoint for the current turn. This ensures auto model routing happens only once per turn
+	 * instead of multiple times per iteration.
+	 */
+	private _cachedEndpointForTurn: IChatEndpoint | undefined;
+
 	private get turn() {
 		return this.options.conversation.getLatestTurn();
 	}
@@ -179,35 +185,43 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 
-		while (true) {
-			if (lastResult && i++ >= this.options.toolCallLimit) {
-				lastResult = this.hitToolCallLimit(outputStream, lastResult);
-				break;
-			}
+		// Resolve the endpoint once per turn and cache it for all iterations
+		this._cachedEndpointForTurn = await this._endpointProvider.getChatEndpoint(this.options.request);
 
-			try {
-				const result = await this.runOne(outputStream, i, token);
-				if (lastRequestMessagesStartingIndexForRun === undefined) {
-					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
-				}
-				lastResult = {
-					...result,
-					hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
-				};
-
-				this.toolCallRounds.push(result.round);
-				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-					lastResult = lastResult;
-					break;
-				}
-			} catch (e) {
-				if (isCancellationError(e) && lastResult) {
-					lastResult = lastResult;
+		try {
+			while (true) {
+				if (lastResult && i++ >= this.options.toolCallLimit) {
+					lastResult = this.hitToolCallLimit(outputStream, lastResult);
 					break;
 				}
 
-				throw e;
+				try {
+					const result = await this.runOne(outputStream, i, token);
+					if (lastRequestMessagesStartingIndexForRun === undefined) {
+						lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
+					}
+					lastResult = {
+						...result,
+						hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
+					};
+
+					this.toolCallRounds.push(result.round);
+					if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+						lastResult = lastResult;
+						break;
+					}
+				} catch (e) {
+					if (isCancellationError(e) && lastResult) {
+						lastResult = lastResult;
+						break;
+					}
+
+					throw e;
+				}
 			}
+		} finally {
+			// Clear the cached endpoint after the turn is complete
+			this._cachedEndpointForTurn = undefined;
 		}
 
 		this.emitReadFileTrajectories().catch(err => {
@@ -360,7 +374,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
-		const promptTokenLength = await (await this._endpointProvider.getChatEndpoint(this.options.request)).acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
+		// Use the cached endpoint to avoid redundant auto model routing calls
+		const endpoint = this._cachedEndpointForTurn!;
+		const promptTokenLength = await endpoint.acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
 		this._logService.trace('Built prompt');
@@ -439,7 +455,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		// Reuse the cached endpoint (already assigned earlier in this method)
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
