@@ -26,7 +26,7 @@ export class DefaultOpenAIKeepGoingReminder extends PromptElement {
 			<br />
 			When uncertain about how code works or is structured ("it may be this way or that way"), INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
 			<br />
-			Understand ambiguous terms through context. "Modal" means standalone UI section. "Car game" means proper car orientation. "Physics" means real physics (no clipping). Always implement the BEST solution for constraints, not just a working one. Research proper patterns.<br />
+			Resolve ambiguous terms based on the surrounding code, documentation, and user description, rather than on assumptions or past conversations. Always implement the BEST solution for the given constraints, not just a working one, and research proper patterns when needed.<br />
 		</>;
 	}
 }
