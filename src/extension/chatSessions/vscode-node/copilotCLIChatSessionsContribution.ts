@@ -635,11 +635,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const promptFile = await this.getPromptInfoFromRequest(request, token);
 				if (promptFile) {
 					const changes: { optionId: string; value: string }[] = [];
-					if (agent) {
-						changes.push({ optionId: AGENTS_OPTION_ID, value: agent.name });
-					} else {
-						changes.push({ optionId: AGENTS_OPTION_ID, value: '' });
-					}
+					changes.push({ optionId: AGENTS_OPTION_ID, value: agent?.name ?? '' });
 					if (modelId) {
 						changes.push({ optionId: MODELS_OPTION_ID, value: modelId });
 					}
