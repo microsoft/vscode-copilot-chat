@@ -108,7 +108,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		try {
 			// Override only if no GitHub MCP server is already configured
 			if (config['github'] && config['github'].type === 'http') {
-				// We heave headers, do not override
+				// We have headers, do not override
 				if (Object.keys(config['github'].headers || {}).length > 0) {
 					return;
 				}
