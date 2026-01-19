@@ -26,6 +26,7 @@ import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -431,6 +432,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 									query: request.prompt,
 									chatVariables: new ChatVariablesCollection([...request.references]),
 									history: [],
+									allowedEditUris: request.location2 instanceof ChatRequestEditorData ? new ResourceSet([request.location2.document.uri]) : undefined,
 								}, CopilotToolMode.FullContext);
 							}
 
