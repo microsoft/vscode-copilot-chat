@@ -181,6 +181,7 @@ export class ClaudeCodeSession extends Disposable {
 	private async _setModel(modelId: string): Promise<void> {
 		if (this._queryGenerator && modelId !== this._currentModelId) {
 			this.logService.trace(`[ClaudeCodeSession] Setting model to ${modelId} on active session`);
+			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setModel(modelId);
 			this._currentModelId = modelId;
 		}
@@ -192,6 +193,7 @@ export class ClaudeCodeSession extends Disposable {
 	private async _setPermissionMode(mode: PermissionMode): Promise<void> {
 		if (this._queryGenerator && mode !== this._currentPermissionMode) {
 			this.logService.trace(`[ClaudeCodeSession] Setting permission mode to ${mode} on active session`);
+			// TODO: Does this throw? How would we handle errors here?
 			await this._queryGenerator.setPermissionMode(mode);
 			this._currentPermissionMode = mode;
 		}

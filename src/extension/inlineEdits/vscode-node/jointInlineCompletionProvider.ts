@@ -38,6 +38,7 @@ import { CopilotInlineCompletionItemProvider } from '../../completions-core/vsco
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
@@ -254,8 +255,8 @@ type LastNesSuggestion = {
 
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
-	private readonly _onDidChangeEmitter = this._register(new vscode.EventEmitter<void>());
-	public readonly onDidChange?: vscode.Event<void> | undefined = this._onDidChangeEmitter.event;
+	private readonly _onDidChangeEmitter: vscode.EventEmitter<NesChangeHint> | undefined;
+	public readonly onDidChange?: vscode.Event<NesChangeHint> | undefined;
 
 	private _requestsInFlight = new Set<CancellationToken>();
 	private _completionsRequestsInFlight = new Set<CancellationToken>();
@@ -287,31 +288,34 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	) {
 		super();
 
-		const disp = this._inlineEditProvider?.onDidChange?.(() => {
-			const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderTriggerChangeStrategy, this._expService);
-			switch (strategy) {
-				case JointCompletionsProviderTriggerChangeStrategy.AlwaysTrigger:
-					break;
-				case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnRequestInFlight:
-					if (this._isRequestInFlight) {
-						this._tracer.trace('Skipping onDidChange event firing because request is in flight');
-						return;
-					}
-					break;
-				case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnCompletionsRequestInFlight:
-					if (this._isCompletionsRequestInFlight) {
-						this._tracer.trace('Skipping onDidChange event firing because completions request is in flight');
-						return;
-					}
-					break;
-				default:
-					assertNever(strategy);
-			}
-			this._tracer.trace('Firing onDidChange event');
-			this._onDidChangeEmitter.fire();
-		});
-		if (disp) {
-			this._register(disp);
+		// Only set up the onDidChange emitter if the inlineEditProvider has one to channel
+		if (this._inlineEditProvider?.onDidChange) {
+			this._onDidChangeEmitter = this._register(new vscode.EventEmitter<NesChangeHint>());
+			this.onDidChange = this._onDidChangeEmitter.event;
+
+			this._register(this._inlineEditProvider.onDidChange((changeHint) => {
+				const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderTriggerChangeStrategy, this._expService);
+				switch (strategy) {
+					case JointCompletionsProviderTriggerChangeStrategy.AlwaysTrigger:
+						break;
+					case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnRequestInFlight:
+						if (this._isRequestInFlight) {
+							this._tracer.trace('Skipping onDidChange event firing because request is in flight');
+							return;
+						}
+						break;
+					case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnCompletionsRequestInFlight:
+						if (this._isCompletionsRequestInFlight) {
+							this._tracer.trace('Skipping onDidChange event firing because completions request is in flight');
+							return;
+						}
+						break;
+					default:
+						assertNever(strategy);
+				}
+				this._tracer.trace('Firing onDidChange event');
+				this._onDidChangeEmitter!.fire(changeHint);
+			}));
 		}
 
 		softAssert(
@@ -556,7 +560,8 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, enforceCacheDelay: boolean, context: vscode.InlineCompletionContext, ct: CancellationToken, sw: StopWatch) {
-		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay };
+		const changeHint = context.changeHint === undefined || NesChangeHint.is(context.changeHint) ? context.changeHint as NesChangeHint | undefined : undefined;
+		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay, changeHint };
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);

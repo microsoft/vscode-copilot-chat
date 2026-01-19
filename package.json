@@ -2652,6 +2652,12 @@
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.checkoutPullRequestReroute",
+				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
+				"icon": "$(git-pull-request)",
+				"category": "GitHub Pull Request"
 			}
 		],
 		"configuration": [
@@ -3869,6 +3875,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.agent.omitFileAttachmentContents": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.omitFileAttachmentContents%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.instantApply.shortContextModelName": {
 						"type": "string",
 						"default": "gpt-4o-instant-apply-full-ft-v66-short",
@@ -4207,6 +4222,11 @@
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "chatSessionType == copilotcli",
 					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
+					"group": "navigation@0"
 				}
 			],
 			"testing/item/result": [
@@ -4446,6 +4466,10 @@
 				},
 				{
 					"command": "github.copilot.chat.showAsChatSession",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "false"
 				}
 			],

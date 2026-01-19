@@ -78,7 +78,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	public readonly ID = XtabProvider.ID;
 
-	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
