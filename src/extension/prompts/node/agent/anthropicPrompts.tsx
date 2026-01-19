@@ -152,7 +152,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 					- User interactions work intuitively<br />
 					- Code follows best practices for the language/framework<br />
 					<br />
-					When uncertain about how code works or is structured ("it may be this way or that way"):<br />
+					When uncertain about implementation details or code structure:<br />
 					- INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code<br />
 					- NEVER speculate without verification<br />
 					- Analyze the codebase to understand conventions<br />
