@@ -24,7 +24,7 @@ export class DefaultOpenAIKeepGoingReminder extends PromptElement {
 			When fixing bugs or issues: (1) identify the ROOT CAUSE, (2) fix it completely, (3) VERIFY the fix works, (4) CONFIRM the original symptom is gone. Never claim something is fixed without actually testing it.<br />
 			When implementing features: complete the FULL implementation and verify all requirements are met before stopping.<br />
 			<br />
-			When uncertain about how code works or is structured ("it may be this way or that way"), INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
+			When uncertain about implementation details or code structure, INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
 			<br />
 			Resolve ambiguous terms based on the surrounding code, documentation, and user description, rather than on assumptions or past conversations. Always implement the BEST solution for the given constraints, not just a working one, and research proper patterns when needed.<br />
 		</>;
