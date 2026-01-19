@@ -375,7 +375,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this.turn.setMetadata(conversationSummary);
 		}
 		// Use the cached endpoint to avoid redundant auto model routing calls
-		const endpoint = this._cachedEndpointForTurn!;
+		if (!this._cachedEndpointForTurn) {
+			throw new Error('Endpoint cache not initialized. run() must be called before runOne().');
+		}
+		const endpoint = this._cachedEndpointForTurn;
 		const promptTokenLength = await endpoint.acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
