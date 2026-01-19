@@ -319,7 +319,7 @@ export class ExpectedEditCaptureController extends Disposable {
 		if (editEntries.length === 0) {
 			this._logger.trace('No edits found between bookmarks - marking as NO_EDIT_EXPECTED');
 			return {
-				relativePath: relativePath || '',
+				relativePath,
 				edit: { __marker__: 'NO_EDIT_EXPECTED' as const }
 			};
 		}
