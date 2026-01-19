@@ -708,7 +708,7 @@ export namespace ConfigKey {
 			excludeTools?: string[];
 			clearInputs?: boolean;
 			thinkingKeepTurns?: number;
-		}>('chat.anthropic.contextEditing.config', ConfigType.Simple, {});
+		} | null>('chat.anthropic.contextEditing.config', ConfigType.Simple, null);
 	}
 
 	/**
