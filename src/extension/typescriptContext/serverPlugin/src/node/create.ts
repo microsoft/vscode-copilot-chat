@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
-import { computeContext, prepareNesRename } from '../common/api';
+import { computeContext, nesRename, prepareNesRename } from '../common/api';
 import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, TokenBudgetExhaustedError, type Logger } from '../common/contextProvider';
-import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
+import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type LastSymbolRename, type NesRenameRequest, type NesRenameResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
 import { CancellationTokenWithTimer, Sessions } from '../common/typescripts';
 const ts = TS();
 
@@ -97,6 +97,10 @@ interface PrepareNesRenameHandlerResponse extends tt.server.HandlerResponse {
 	response: PrepareNesRenameResponse.OK | PrepareNesRenameResponse.Failed;
 }
 
+interface NesRenameHandlerResponse extends tt.server.HandlerResponse {
+	response: NesRenameResponse.OK | NesRenameResponse.Failed;
+}
+
 let installAttempted: boolean = false;
 let languageServerSession: LanguageServerSession | undefined = undefined;
 let languageServiceHost: tt.LanguageServiceHost | undefined = undefined;
@@ -150,6 +154,16 @@ const resolveInput = <T extends tt.server.protocol.FileRequestArgs & tt.server.p
 	return { languageService, program, file, pos, timeBudget, startTime, requestStartTime };
 };
 
+const getLastSymbolRename = (args: { lastSymbolRename?: LastSymbolRename } | undefined): LastSymbolRename | undefined => {
+	if (args === undefined || args.lastSymbolRename === undefined) {
+		return undefined;
+	}
+	return {
+		start: { line: args.lastSymbolRename.start.line - 1, offset: args.lastSymbolRename.start.offset - 1 },
+		end: { line: args.lastSymbolRename.end.line - 1, offset: args.lastSymbolRename.end.offset - 1 }
+	};
+};
+
 const computeContextHandler = (request: ComputeContextRequest): ComputeContextHandlerResponse => {
 	const input = resolveInput(request.arguments, 100);
 	if (FailedHandlerResponse.is(input)) {
@@ -197,9 +211,7 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	const { languageService, file, pos, timeBudget, startTime } = input;
 
 	// All the internal API is 0-based for both line and offset
-	const lastSymbolRename = request.arguments?.lastSymbolRename
-		? { start: { line: request.arguments.lastSymbolRename.start.line - 1, offset: request.arguments.lastSymbolRename.start.offset - 1 }, end: { line: request.arguments.lastSymbolRename.end.line - 1, offset: request.arguments.lastSymbolRename.end.offset - 1 } }
-		: undefined;
+	const lastSymbolRename = getLastSymbolRename(request.arguments);
 
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, languageServerSession?.host.isDebugging() ?? false);
 	const result: PrepareNesRenameResult = new PrepareNesRenameResult();
@@ -220,6 +232,28 @@ const prepareNesRenameHandler = (request: PrepareNesRenameRequest): PrepareNesRe
 	return { response: result.toJsonResponse(), responseRequired: true };
 };
 
+const nesRenameHandler = (request: NesRenameRequest): NesRenameHandlerResponse => {
+	const input = resolveInput(request.arguments, 0);
+	if (FailedHandlerResponse.is(input)) {
+		return input;
+	}
+
+	const { languageService, file, pos } = input;
+
+	const lastSymbolRename = getLastSymbolRename(request.arguments);
+	const cancellationToken = languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined;
+	try {
+		nesRename(languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, lastSymbolRename, cancellationToken);
+	} catch (error) {
+		if (error instanceof Error) {
+			return { response: { error: ErrorCode.exception, message: error.message, stack: error.stack }, responseRequired: true };
+		} else {
+			return { response: { error: ErrorCode.exception, message: 'Unknown error' }, responseRequired: true };
+		}
+	}
+	return { response: { changes: [] }, responseRequired: true };
+};
+
 export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
 	if (installAttempted) {
 		return info.languageService;
@@ -238,6 +272,7 @@ export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
 					languageServiceHost = info.languageServiceHost;
 					info.session.addProtocolHandler('_.copilot.context', computeContextHandler);
 					info.session.addProtocolHandler('_.copilot.prepareNesRename', prepareNesRenameHandler);
+					info.session.addProtocolHandler('_.copilot.newRename', nesRenameHandler);
 				}
 
 			} catch (e) {

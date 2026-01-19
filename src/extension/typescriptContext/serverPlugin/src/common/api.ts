@@ -197,12 +197,7 @@ function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program,
 }
 
 function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: LastSymbolRename, token: tt.CancellationToken) {
-	const text = sourceFile.getFullText();
-	// The API is 0-based for both line and offset
-	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.offset);
-	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.offset);
-	const newText = text.substring(0, startPos) + oldName + text.substring(endPos);
-	const newPos = position < startPos ? position : position - (newName.length - oldName.length);
+	const [newText, newPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
 
 	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (updatedProgram, _originalProgram, updatedSourceFile) => {
 		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, newPos, {});
@@ -219,4 +214,34 @@ function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: 
 			result.setOnOldState(true);
 		}
 	});
+}
+
+export function nesRename(session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: LastSymbolRename | undefined, token: tt.CancellationToken): void {
+	if (oldName === undefined || newName === undefined || lastSymbolRename === undefined) {
+		return;
+	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		return;
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return;
+	}
+
+	const [newText, newPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+
+	let renameLocations: readonly tt.RenameLocation[] | undefined;
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (_updatedProgram, _originalProgram, updatedSourceFile) => {
+		renameLocations = languageService.findRenameLocations(updatedSourceFile.fileName, newPos, false, false, {});
+	});
+}
+
+function getOldText(sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: LastSymbolRename): [string, number] {
+	const text = sourceFile.getFullText();
+	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.offset);
+	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.offset);
+	return [text.substring(0, startPos) + oldName + text.substring(endPos), position < startPos ? position : position - (newName.length - oldName.length)];
 }
