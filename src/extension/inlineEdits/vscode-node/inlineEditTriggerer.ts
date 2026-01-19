@@ -5,10 +5,10 @@
 
 import type * as vscode from 'vscode';
 import { TextDocumentChangeReason } from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { Emitter } from '../../../util/vs/base/common/event';

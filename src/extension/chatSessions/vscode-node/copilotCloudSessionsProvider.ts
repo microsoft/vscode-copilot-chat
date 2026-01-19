@@ -8,7 +8,6 @@ import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { l10n, Uri } from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -16,6 +15,7 @@ import { GithubRepoId, IGitService } from '../../../platform/git/common/gitServi
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';

@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { byokKnownModelToAPIInfo, resolveModelInfo } from '../common/byokProvider';
