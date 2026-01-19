@@ -3345,7 +3345,7 @@
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.fix.typescript.enabled%"
 					},
-					"github.copilot.chat.inlineCompletions.defaultDiagnosticsConfiguration": {
+					"github.copilot.chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString": {
 						"type": "string",
 						"default": "",
 						"scope": "resource",
