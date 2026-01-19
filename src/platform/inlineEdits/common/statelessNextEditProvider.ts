@@ -42,7 +42,6 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	readonly dependsOnSelection?: boolean;
 	readonly showNextEditPreference?: ShowNextEditPreference;
 	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
 	handleAcceptance?(): void;
@@ -355,6 +354,10 @@ export interface IStatelessNextEditTelemetry {
 		/** nextCursorLineNumber - currentCursorLineNumber */
 		nextCursorLineDistance: number | undefined;
 	};
+
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness) */
+	readonly xtabAggressivenessLevel: string | undefined;
+	readonly xtabUserHappinessScore: number | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -425,6 +428,8 @@ export class StatelessNextEditTelemetryBuilder {
 			nextEditLogprob: this._nextEditLogProb,
 			nextCursorPrediction: this._nextCursorPrediction,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
+			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
+			xtabUserHappinessScore: this._xtabUserHappinessScore,
 		};
 	}
 
@@ -543,6 +548,18 @@ export class StatelessNextEditTelemetryBuilder {
 	 */
 	public setNextCursorLineDistance(distance: number): this {
 		this._nextCursorPrediction.nextCursorLineDistance = distance;
+		return this;
+	}
+
+	private _xtabAggressivenessLevel: string | undefined;
+	public setXtabAggressivenessLevel(level: string): this {
+		this._xtabAggressivenessLevel = level;
+		return this;
+	}
+
+	private _xtabUserHappinessScore: number | undefined;
+	public setXtabUserHappinessScore(score: number): this {
+		this._xtabUserHappinessScore = score;
 		return this;
 	}
 }

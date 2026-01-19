@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ILogService } from '../../../../../../../platform/log/common/logService';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { asyncIterableMapFilter } from '../../../../lib/src/helpers/iterableHelpers';
-import { ICompletionsLogTargetService, Logger } from '../../../../lib/src/logger';
+import { Logger } from '../../../../lib/src/logger';
 import { CopilotUiKind, ICompletionsOpenAIFetcherService } from '../../../../lib/src/openai/fetch';
 import { APIChoice } from '../../../../lib/src/openai/openai';
 import { ICompletionsStatusReporter } from '../../../../lib/src/progress';
@@ -32,7 +33,7 @@ const solutionsLogger = new Logger('solutions');
 export async function launchSolutions(accessor: ServicesAccessor, solutionManager: SolutionManager): Promise<SolutionsStream> {
 	const instantiationService = accessor.get(IInstantiationService);
 	const fetcherService = accessor.get(ICompletionsOpenAIFetcherService);
-	const logTarget = accessor.get(ICompletionsLogTargetService);
+	const logger = accessor.get(ILogService).createSubLogger('solutions');
 	const position = solutionManager.targetPosition;
 	const document = solutionManager.textDocument;
 
@@ -77,11 +78,11 @@ export async function launchSolutions(accessor: ServicesAccessor, solutionManage
 
 	let choices: AsyncIterable<APIChoice> = res.choices;
 	choices = trimChoices(choices);
-	choices = asyncIterableMapFilter(choices, choice => instantiationService.invokeFunction(postProcessChoiceInContext, document, position, choice, false, solutionsLogger));
+	choices = asyncIterableMapFilter(choices, choice => instantiationService.invokeFunction(postProcessChoiceInContext, document, position, choice, false, logger));
 
 	const solutions = asyncIterableMapFilter(choices, async (apiChoice: APIChoice) => {
 		let display = apiChoice.completionText;
-		solutionsLogger.info(logTarget, `Open Copilot completion: [${apiChoice.completionText}]`);
+		logger.info(`Open Copilot completion: [${apiChoice.completionText}]`);
 
 		// For completions that can happen in any location in the middle of the code we try to find the existing code
 		// that should be displayed in the OpenCopilot panel so the code is nicely formatted/highlighted.

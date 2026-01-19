@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
 import { IFetchMLOptions } from '../../../../platform/chat/common/chatMLFetcher';
@@ -41,7 +41,6 @@ describe('ChatMLFetcherImpl retry logic', () => {
 	let endpoint: IChatEndpoint;
 
 	beforeEach(() => {
-		vi.useFakeTimers();
 		disposables = new DisposableStore();
 		cancellationTokenSource = disposables.add(new CancellationTokenSource());
 
@@ -69,23 +68,14 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			configurationService,
 			experimentationService,
 		);
+
+		// Skip delays in tests for faster execution
+		fetcher.connectivityCheckDelays = [0, 0, 0];
 	});
 
 	afterEach(() => {
 		disposables.dispose();
-		vi.useRealTimers();
-		vi.restoreAllMocks();
 	});
-
-	/**
-	 * Advances fake timers in small increments, allowing microtasks to settle between advances.
-	 * This is more reliable than a single large advanceTimersByTimeAsync call for complex async chains.
-	 */
-	async function advanceTimersWithMicrotasks(totalMs: number, stepMs = 100): Promise<void> {
-		for (let elapsed = 0; elapsed < totalMs; elapsed += stepMs) {
-			await vi.advanceTimersByTimeAsync(Math.min(stepMs, totalMs - elapsed));
-		}
-	}
 
 	function createBaseOpts(): IFetchMLOptions {
 		return {
@@ -106,10 +96,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
 			mockFetcherService.queueResponse(createSuccessResponse('Hello!')); // retry
 
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			// Advance timers to skip the 1000ms delay before connectivity check
-			await advanceTimersWithMicrotasks(1000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
 			expect(mockFetcherService.fetchCallCount).toBeGreaterThanOrEqual(2);
@@ -121,9 +108,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await advanceTimersWithMicrotasks(1000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
 		});
@@ -172,9 +157,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await advanceTimersWithMicrotasks(1000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
 		});
@@ -200,9 +183,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('{}')); // connectivity check
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await advanceTimersWithMicrotasks(1000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
 		});
@@ -215,9 +196,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
 			// Should still retry on 500 even with invalid entry in config
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await advanceTimersWithMicrotasks(1000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
 		});
@@ -251,17 +230,14 @@ describe('ChatMLFetcherImpl retry logic', () => {
 		it('does not retry server error when connectivity check fails', async () => {
 			configurationService.setConfig(ConfigKey.TeamInternal.RetryServerErrorStatusCodes, '500,502');
 
-			// Order: 1) initial fetch → 500, 2) connectivity checks fail (3 attempts with delays)
+			// Order: 1) initial fetch → 500, 2) connectivity checks fail (3 attempts)
 			mockFetcherService.queueResponse(createErrorResponse(500, 'Internal Server Error'));
-			// Connectivity check retries 3 times with delays [1000, 10000, 10000]
+			// Connectivity check retries 3 times (with 0ms delays in tests)
 			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 1st connectivity check
 			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 2nd connectivity check
 			mockFetcherService.queueError(createNetworkError('ENOTFOUND')); // 3rd connectivity check
 
-			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			// Advance through all connectivity check delays: 1000 + 10000 + 10000 = 21000ms
-			await advanceTimersWithMicrotasks(21000);
-			const result = await resultPromise;
+			const result = await fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 
 			// Should fail because connectivity check never succeeded
 			expect(result.type).toBe(ChatFetchResponseType.Failed);

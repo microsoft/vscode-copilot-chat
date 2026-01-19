@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 // General utility functions for all kinds of suggestions (Ghost Text, Open Copilot)
 
+import { ILogger } from '../../../../../../platform/log/common/logService';
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { getBlockCloseToken } from '../../../prompt/src/parse';
-import { ICompletionsLogTargetService, Logger } from '../logger';
 import { APIChoice } from '../openai/openai';
 import { TelemetryData, TelemetryStore, telemetry } from '../telemetry';
 import { IPosition, TextDocumentContents } from '../textDocument';
@@ -166,15 +166,14 @@ export function postProcessChoiceInContext(
 	position: IPosition,
 	choice: APIChoice,
 	isMoreMultiline: boolean,
-	logger: Logger
+	logger: ILogger
 ): APIChoice | undefined {
-	const logTarget = accessor.get(ICompletionsLogTargetService);
 	if (isRepetitive(choice.tokens)) {
 		const telemetryData = TelemetryData.createAndMarkAsIssued();
 		telemetryData.extendWithRequestId(choice.requestId);
 		telemetry(accessor, 'repetition.detected', telemetryData, TelemetryStore.Enhanced);
 		// FIXME: trim request at start of repetitive block? for now we just skip
-		logger.info(logTarget, 'Filtered out repetitive solution');
+		logger.info('Filtered out repetitive solution');
 		return undefined;
 	}
 
@@ -193,7 +192,7 @@ export function postProcessChoiceInContext(
 			}),
 			TelemetryStore.Enhanced
 		);
-		logger.info(logTarget, 'Filtered out solution matching next line');
+		logger.info('Filtered out solution matching next line');
 		return undefined;
 	}
 

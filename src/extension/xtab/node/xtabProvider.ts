@@ -78,7 +78,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	public readonly ID = XtabProvider.ID;
 
-	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
@@ -292,7 +291,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
-		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
+		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
+
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness prompting strategy
+		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness) {
+			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
+			if (userHappinessScore !== undefined) {
+				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
+			}
+		}
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
