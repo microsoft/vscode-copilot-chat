@@ -3353,7 +3353,7 @@
 							"experimental",
 							"onExP"
 						],
-						"markdownDescription": "%github.copilot.chat.inlineCompletions.defaultDiagnosticsConfiguration%"
+						"markdownDescription": "%github.copilot.chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString%"
 					},
 					"github.copilot.chat.languageContext.inline.typescript.enabled": {
 						"type": "boolean",
