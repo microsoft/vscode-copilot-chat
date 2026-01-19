@@ -77,6 +77,16 @@ describe('ChatMLFetcherImpl retry logic', () => {
 		vi.restoreAllMocks();
 	});
 
+	/**
+	 * Advances fake timers in small increments, allowing microtasks to settle between advances.
+	 * This is more reliable than a single large advanceTimersByTimeAsync call for complex async chains.
+	 */
+	async function advanceTimersWithMicrotasks(totalMs: number, stepMs = 100): Promise<void> {
+		for (let elapsed = 0; elapsed < totalMs; elapsed += stepMs) {
+			await vi.advanceTimersByTimeAsync(Math.min(stepMs, totalMs - elapsed));
+		}
+	}
+
 	function createBaseOpts(): IFetchMLOptions {
 		return {
 			debugName: 'test',
@@ -98,7 +108,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 			// Advance timers to skip the 1000ms delay before connectivity check
-			await vi.advanceTimersByTimeAsync(1000);
+			await advanceTimersWithMicrotasks(1000);
 			const result = await resultPromise;
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
@@ -112,7 +122,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await vi.advanceTimersByTimeAsync(1000);
+			await advanceTimersWithMicrotasks(1000);
 			const result = await resultPromise;
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
@@ -163,7 +173,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await vi.advanceTimersByTimeAsync(1000);
+			await advanceTimersWithMicrotasks(1000);
 			const result = await resultPromise;
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
@@ -191,7 +201,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 			mockFetcherService.queueResponse(createSuccessResponse('Success!')); // retry
 
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await vi.advanceTimersByTimeAsync(1000);
+			await advanceTimersWithMicrotasks(1000);
 			const result = await resultPromise;
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
@@ -206,7 +216,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 
 			// Should still retry on 500 even with invalid entry in config
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
-			await vi.advanceTimersByTimeAsync(1000);
+			await advanceTimersWithMicrotasks(1000);
 			const result = await resultPromise;
 
 			expect(result.type).toBe(ChatFetchResponseType.Success);
@@ -250,7 +260,7 @@ describe('ChatMLFetcherImpl retry logic', () => {
 
 			const resultPromise = fetcher.fetchMany(createBaseOpts(), cancellationTokenSource.token);
 			// Advance through all connectivity check delays: 1000 + 10000 + 10000 = 21000ms
-			await vi.advanceTimersByTimeAsync(21000);
+			await advanceTimersWithMicrotasks(21000);
 			const result = await resultPromise;
 
 			// Should fail because connectivity check never succeeded
