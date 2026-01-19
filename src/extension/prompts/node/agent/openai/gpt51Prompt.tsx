@@ -163,7 +163,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				- Interactions: intuitive and responsive<br />
 				- Code: follows best practices for the tech stack<br />
 				<br />
-				When uncertain about how code works or is structured ("it may be this way or that way"), INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code. NEVER speculate without verification. Analyze codebase context and research patterns. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
+				When uncertain about implementation details or code structure, INVESTIGATE immediately using available tools - read files, search codebase, grep for patterns, test the code. NEVER speculate without verification. Analyze codebase context and research patterns. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
 				<br />
 				You MUST adhere to the following criteria when solving queries:<br />
 				- Working on the repo(s) in the current environment is allowed, even if they are proprietary.<br />
