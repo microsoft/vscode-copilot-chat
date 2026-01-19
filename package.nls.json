@@ -227,7 +227,7 @@
 	"github.copilot.chat.languageContext.typescript.cacheTimeout": "The cache population timeout for the TypeScript language context provider in milliseconds. The default is 500 milliseconds.",
 	"github.copilot.chat.languageContext.fix.typescript.enabled": "Enables the TypeScript language context provider for /fix commands",
 	"github.copilot.chat.languageContext.inline.typescript.enabled": "Enables the TypeScript language context provider for inline chats (both generate and edit)",
-	"github.copilot.chat.inlineCompletions.defaultDiagnosticsConfiguration": "The configuration for default diagnostics to include in inline completion's prompt.",
+	"github.copilot.chat.advanced.inlineCompletions.defaultDiagnosticsOptionsString": "The options for default diagnostics to include in the inline completion prompt.",
 	"github.copilot.command.rerunWithCopilotDebug": "Debug Last Terminal Command",
 	"github.copilot.config.enableUserPreferences": "Enable remembering user preferences in agent mode.",
 	"github.copilot.tools.createAndRunTask.name": "Create and Run Task",
