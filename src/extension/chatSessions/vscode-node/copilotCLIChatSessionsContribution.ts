@@ -444,8 +444,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
 			const isUntitled = chatSessionContext.isUntitled;
+			const uncommittedChangesAction = confirmationResults.length > 0 ? this.getConfirmationResult(request) : undefined;
+
+			// Handle untitled sessions with uncommitted changes
 			if (isUntitled && hasUncommittedChanges) {
-				return this.handleDelegationFromAnotherChat(request, context, confirmationResults, hasUncommittedChanges, stream, token);
+				if (confirmationResults.length === 0) {
+					// Show confirmation prompt
+					return this.generateUncommittedChangesConfirmation(request, context, stream, true);
+				}
+				// Check if user cancelled
+				if (uncommittedChangesAction === 'cancel') {
+					return {};
+				}
 			}
 
 			const [modelId, agent] = await Promise.all([
@@ -467,7 +477,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					}
 				}
 			}
-			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, undefined, stream, disposables, token);
+			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommittedChangesAction !== 'cancel' ? uncommittedChangesAction : undefined, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
 			}
@@ -500,8 +510,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			} else {
+				// Get the original prompt from confirmation metadata if this is a confirmation response
+				const originalPrompt = this.getUncommittedChangesConfirmationData(confirmationResults)?.metadata?.prompt;
+
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, undefined, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, originalPrompt, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
@@ -512,7 +525,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				_sessionModel.set(session.object.sessionId, modelId);
 				this.untitledSessionIdMapping.delete(id);
 				_untitledSessionIdMap.delete(session.object.sessionId);
-				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: request.prompt });
+				// Use original prompt from confirmation metadata if available, otherwise use request.prompt
+				const labelPrompt = this.getUncommittedChangesConfirmationData(confirmationResults)?.metadata?.prompt ?? request.prompt;
+				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { resource: SessionIdForCLI.getResource(session.object.sessionId), label: labelPrompt });
 			}
 			return {};
 		} catch (ex) {
@@ -703,7 +718,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	): Promise<vscode.ChatResult | void> {
 		// Check if this is a confirmation response
 		if (confirmationResults.length > 0) {
-			const uncommittedChangesData = confirmationResults.find(data => data.step === UncommittedChangesStep);
+			const uncommittedChangesData = this.getUncommittedChangesConfirmationData(confirmationResults);
 			if (!uncommittedChangesData || !uncommittedChangesData.metadata) {
 				stream.warning(l10n.t('Invalid confirmation data.'));
 				return {};
@@ -724,15 +739,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, stream, token);
 		}
 
-		return this.generateUncommittedChangesConfirmation(request, context, stream);
+		return this.generateUncommittedChangesConfirmation(request, context, stream, false);
 	}
 
 	private generateUncommittedChangesConfirmation(
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
+		isUntitled: boolean,
 	): vscode.ChatResult | void {
-		const message =
+		const message = isUntitled ?
+			l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?') :
 			l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
 			+ l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?');
@@ -744,8 +761,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			CLI_CANCEL
 		];
 
+		const title = isUntitled
+			? l10n.t('Uncommitted Changes')
+			: l10n.t('Delegate to Background Agent');
+
 		stream.confirmation(
-			l10n.t('Delegate to Background Agent'),
+			title,
 			message,
 			{
 				step: UncommittedChangesStep,
@@ -773,6 +794,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			default:
 				return 'cancel';
 		}
+	}
+
+	private getUncommittedChangesConfirmationData(confirmationResults: ConfirmationResult[]): ConfirmationResult | undefined {
+		return confirmationResults.find(data => data.step === UncommittedChangesStep);
 	}
 
 	private async getOrInitializeWorkingDirectory(
