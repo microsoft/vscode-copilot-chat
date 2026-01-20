@@ -271,7 +271,7 @@ To add new functionality:
 
 2. **New Slash Command:**
    - Create a class implementing `IClaudeSlashCommandHandler`
-   - Call `registerClaudeSlashCommand(new YourCommand(...))` at module load time
+   - Call `registerClaudeSlashCommand(YourHandler)` at module load time
    - Import your command module in `vscode-node/slashCommands/index.ts`
    - If providing a `commandId`, register the command in `package.json`:
      ```json
