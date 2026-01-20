@@ -63,6 +63,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	}
 
 	private async getEndpoint() {
+		// return this.endpointProvider.getChatEndpoint(this.options.request);
 		return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
 	}
 
