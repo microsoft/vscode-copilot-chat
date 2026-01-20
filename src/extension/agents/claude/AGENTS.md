@@ -194,12 +194,12 @@ The hook registry allows registering custom hooks that execute at key points in 
 - Multiple handlers can be registered for the same event
 
 **Example Hook Events:**
-- `'onPreToolUse'` - Before a tool is executed
-- `'onPostToolUse'` - After a tool completes
-- `'onSubagentStart'` - When a subagent starts
-- `'onSubagentEnd'` - When a subagent completes
-- `'onSessionStart'` - When a session begins
-- `'onSessionEnd'` - When a session ends
+- `'PreToolUse'` - Before a tool is executed
+- `'PostToolUse'` - After a tool completes
+- `'SubagentStart'` - When a subagent starts
+- `'SubagentEnd'` - When a subagent completes
+- `'SessionStart'` - When a session begins
+- `'SessionEnd'` - When a session ends
 
 **Current Hook Handlers:**
 - `loggingHooks.ts` - Logging hooks for debugging and telemetry
