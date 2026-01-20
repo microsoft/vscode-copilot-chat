@@ -240,7 +240,7 @@ suite('NES Post Rename Test Suite', function () {
 				{ line: testCase.line, character: testCase.character },
 				testCase.oldName,
 				testCase.newName,
-				{ start: { line: start.line, offset: start.character }, end: { line: end.line, offset: end.character } },
+				{ start: { line: start.line, character: start.character }, end: { line: end.line, character: end.character } },
 			);
 			assert.strictEqual(trackedRenameKind, RenameKind.fromString(testCase.expected));
 		});

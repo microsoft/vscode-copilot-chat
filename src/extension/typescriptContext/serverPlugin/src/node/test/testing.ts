@@ -12,7 +12,7 @@ import { computeContext as _computeContext, prepareNesRename as _prepareNesRenam
 import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, type Logger, type Search } from '../../common/contextProvider';
 import type { Host } from '../../common/host';
 import { PrepareNesRenameResult } from '../../common/nesRenameValidator';
-import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type LastSymbolRename, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
+import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type Range, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -185,7 +185,7 @@ export function computeContext(session: TestSession, document: string, position:
 	return result.items().filter((item) => item.kind === contextKind);
 }
 
-export function prepareNesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string, lastSymbolRename?: LastSymbolRename): RenameKind | undefined {
+export function prepareNesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string, lastSymbolRename?: Range): RenameKind | undefined {
 	const program = session.service.getProgram();
 	if (program === undefined) {
 		return;

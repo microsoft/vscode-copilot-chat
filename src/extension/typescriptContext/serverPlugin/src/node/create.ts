@@ -5,7 +5,7 @@
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext, nesRename, prepareNesRename } from '../common/api';
 import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, TokenBudgetExhaustedError, type Logger } from '../common/contextProvider';
-import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type LastSymbolRename, type NesRenameRequest, type NesRenameResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse } from '../common/protocol';
+import { ErrorCode, RenameKind, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type CustomResponse, type NesRenameRequest, type NesRenameResponse, type PingResponse, type PrepareNesRenameRequest, type PrepareNesRenameResponse, type Range, type RenameGroup } from '../common/protocol';
 import { CancellationTokenWithTimer, Sessions } from '../common/typescripts';
 const ts = TS();
 
@@ -154,13 +154,13 @@ const resolveInput = <T extends tt.server.protocol.FileRequestArgs & tt.server.p
 	return { languageService, program, file, pos, timeBudget, startTime, requestStartTime };
 };
 
-const getLastSymbolRename = (args: { lastSymbolRename?: LastSymbolRename } | undefined): LastSymbolRename | undefined => {
+const getLastSymbolRename = (args: { lastSymbolRename?: Range } | undefined): Range | undefined => {
 	if (args === undefined || args.lastSymbolRename === undefined) {
 		return undefined;
 	}
 	return {
-		start: { line: args.lastSymbolRename.start.line - 1, offset: args.lastSymbolRename.start.offset - 1 },
-		end: { line: args.lastSymbolRename.end.line - 1, offset: args.lastSymbolRename.end.offset - 1 }
+		start: { line: args.lastSymbolRename.start.line - 1, character: args.lastSymbolRename.start.character - 1 },
+		end: { line: args.lastSymbolRename.end.line - 1, character: args.lastSymbolRename.end.character - 1 }
 	};
 };
 
@@ -241,9 +241,9 @@ const nesRenameHandler = (request: NesRenameRequest): NesRenameHandlerResponse =
 	const { languageService, file, pos } = input;
 
 	const lastSymbolRename = getLastSymbolRename(request.arguments);
-	const cancellationToken = languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined;
+	let result: RenameGroup[];
 	try {
-		nesRename(languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, lastSymbolRename, cancellationToken);
+		result = nesRename(languageServerSession!, languageService, file, pos, request.arguments?.oldName, request.arguments?.newName, lastSymbolRename);
 	} catch (error) {
 		if (error instanceof Error) {
 			return { response: { error: ErrorCode.exception, message: error.message, stack: error.stack }, responseRequired: true };
@@ -251,7 +251,7 @@ const nesRenameHandler = (request: NesRenameRequest): NesRenameHandlerResponse =
 			return { response: { error: ErrorCode.exception, message: 'Unknown error' }, responseRequired: true };
 		}
 	}
-	return { response: { changes: [] }, responseRequired: true };
+	return { response: { groups: result }, responseRequired: true };
 };
 
 export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
