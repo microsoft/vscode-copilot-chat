@@ -201,23 +201,19 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			seenFamilies.add(endpoint.family);
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
-			let modelDescription: string | undefined;
+			let modelTooltip: string | undefined;
 			if (endpoint.degradationReason) {
-				modelDescription = endpoint.degradationReason;
+				modelTooltip = endpoint.degradationReason;
 			} else if (endpoint instanceof AutoChatEndpoint) {
 				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
 				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
 				} else {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
 				}
-			} else if (endpoint.multiplier) {
-				modelDescription = vscode.l10n.t('{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
-			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
-				modelDescription = vscode.l10n.t('{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
 			} else {
-				modelDescription = `${sanitizedModelName} (${endpoint.version})`;
+				modelTooltip = getModelCapabilitiesDescription(endpoint);
 			}
 
 			let modelCategory: { label: string; order: number } | undefined;
@@ -246,7 +242,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
 				modelDetail = customModel.owner_name;
-				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
+				modelTooltip = vscode.l10n.t('{0} is contributed by {1} using {2}.', sanitizedModelName, customModel.owner_name, customModel.key_name);
 				modelCategory = { label: vscode.l10n.t("Custom Models"), order: 2 };
 			}
 
@@ -257,11 +253,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
 				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
-				tooltip: modelDescription,
+				tooltip: modelTooltip,
 				detail: modelDetail,
-				description: endpoint instanceof AutoChatEndpoint
-					? vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.')
-					: getModelCapabilitiesDescription(endpoint),
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,
