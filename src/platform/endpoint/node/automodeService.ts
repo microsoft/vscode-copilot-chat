@@ -153,11 +153,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		// Skip router for inline chat (ChatLocation.Editor) to avoid 200ms latency penalty.
-		// Inline chat already resolves to fast models, so classification is not needed.
-		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const isInlineChat = location === ChatLocation.Editor;
-		const usingRouterModel = !isInlineChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+		const usingRouterModel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
 		if (usingRouterModel) {
 			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
 		}
@@ -196,8 +192,11 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// Only call the router if the prompt has changed since the last routing decision.
 		// This ensures routing happens once per turn (user message), not on every iteration
 		// during tool calling where the prompt remains the same.
+		// For inline chat (ChatLocation.Editor), skip router fetching if there's already a cached entry
+		// to avoid 200ms latency penalty.
 		const prompt = chatRequest?.prompt?.trim();
-		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		const isInlineChat = location === ChatLocation.Editor;
+		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt) && !(isInlineChat && entry);
 		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
