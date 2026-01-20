@@ -4988,7 +4988,8 @@
 			},
 			{
 				"command": "github.copilot.nes.captureExpected.confirm",
-				"key": "enter",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
 				"when": "copilotNesCaptureMode && editorTextFocus"
 			},
 			{

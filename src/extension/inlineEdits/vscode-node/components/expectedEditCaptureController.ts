@@ -229,12 +229,12 @@ export class ExpectedEditCaptureController extends Disposable {
 		this._statusBarItem.backgroundColor = new ThemeColor('statusBarItem.errorBackground');
 
 		// Rich markdown tooltip
+		const ctrlOrCmd = process.platform === 'darwin' ? 'Cmd' : 'Ctrl';
 		const tooltip = new MarkdownString();
 		tooltip.appendMarkdown('### 🔴 NES CAPTURE MODE ACTIVE\n\n');
 		tooltip.appendMarkdown('Type your expected edit, then:\n\n');
-		tooltip.appendMarkdown('- ⏎ **Enter** — Save your edits\n');
-		tooltip.appendMarkdown('- ⏎ **Enter (empty)** — No edit expected\n');
-		tooltip.appendMarkdown('- ⇧⏎ **Shift+Enter** — Insert newline\n');
+		tooltip.appendMarkdown(`- **${ctrlOrCmd}+Enter** — Save your edits\n`);
+		tooltip.appendMarkdown(`- **${ctrlOrCmd}+Enter (empty)** — No edit expected\n`);
 		tooltip.appendMarkdown('- **Esc** — Cancel capture\n');
 		tooltip.isTrusted = true;
 		this._statusBarItem.tooltip = tooltip;
@@ -250,7 +250,7 @@ export class ExpectedEditCaptureController extends Disposable {
 			}
 			const icon = icons[iconIndex];
 			if (isExpanded) {
-				this._statusBarItem.text = `${icon} NES CAPTURE MODE: Enter=save, Esc=cancel ${icon}`;
+				this._statusBarItem.text = `${icon} NES CAPTURE MODE: ${ctrlOrCmd}+Enter=Save, Esc=Cancel ${icon}`;
 			} else {
 				this._statusBarItem.text = `${icon} NES CAPTURE MODE ACTIVE ${icon}`;
 			}
