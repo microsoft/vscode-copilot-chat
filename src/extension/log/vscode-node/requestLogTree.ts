@@ -700,7 +700,7 @@ type TreeChildItem = ChatRequestItem | ChatElementItem | ToolCallItem | ChatProm
 class ChatPromptItem extends vscode.TreeItem {
 	private static readonly ids = new WeakMap<LoggedInfo, ChatPromptItem>();
 	override readonly contextValue = 'chatprompt';
-	public children: (TreeChildItem | ChatPromptItem)[] = [];
+	public children: TreeChildItem[] = [];
 	public override id: string | undefined;
 	/**
 	 * The ID of the main entry that was promoted to this parent item.
@@ -763,7 +763,7 @@ class ChatPromptItem extends vscode.TreeItem {
 		};
 	}
 
-	public withFilteredChildren(filter: (child: TreeChildItem | ChatPromptItem) => boolean): ChatPromptItem {
+	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
 		const item = new ChatPromptItem(this.token, this.hasSeen, this.mainEntryId);
 		item.children = this.children.filter(filter).map(child => {
 			// Recursively filter nested ChatPromptItems
