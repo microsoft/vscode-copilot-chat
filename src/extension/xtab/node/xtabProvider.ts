@@ -501,7 +501,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	public async streamEdits(
+	private async streamEdits(
 		request: StatelessNextEditRequest,
 		pushEdit: PushEdit,
 		endpoint: IChatEndpoint,
@@ -523,7 +523,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
-	) {
+	): Promise<Result<void, NoNextEditReason> | void> {
 		const tracer = parentTracer.sub('streamEdits');
 
 		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
@@ -831,7 +831,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState.t,
-	) {
+	): Promise<void> {
 		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
 		if (nextCursorLinePrediction !== undefined && retryState instanceof RetryState.NotRetrying) {
 			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
