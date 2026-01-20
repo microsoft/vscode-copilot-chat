@@ -832,14 +832,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState.t,
 	) {
-		const allowRetryWithExpandedWindow = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService);
-
-		// if allowed to retry and not retrying already, flip the retry state and try again
-		if (allowRetryWithExpandedWindow && retryState instanceof RetryState.NotRetrying && request.expandedEditWindowNLines === undefined) {
-			this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, new RetryState.Retrying('expandedWindow'));
-			return;
-		}
-
 		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
 		if (nextCursorLinePrediction !== undefined && retryState instanceof RetryState.NotRetrying) {
 			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
@@ -950,10 +942,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				tracer.trace(`Using default nLinesBelow: ${N_LINES_BELOW}`);
 				nLinesBelow = N_LINES_BELOW; // default
 			}
-		}
-
-		if (retryState instanceof RetryState.Retrying) {
-			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
 		}
 
 		let codeToEditStart = Math.max(0, cursorLineOffset - nLinesAbove);
