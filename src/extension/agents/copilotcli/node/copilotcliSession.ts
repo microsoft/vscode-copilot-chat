@@ -512,7 +512,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				result.push(`## Write Permission Details`);
 				result.push(`~~~`);
 				result.push(`path         : ${permissionRequest.fileName}`);
-				result.push(`path         : ${permissionRequest.intention}`);
+				result.push(`intention    : ${permissionRequest.intention}`);
 				result.push(`diff         : ${permissionRequest.diff}`);
 				result.push(`~~~`);
 				break;
