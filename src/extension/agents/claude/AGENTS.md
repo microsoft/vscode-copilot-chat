@@ -273,6 +273,14 @@ To add new functionality:
    - Create a class implementing `IClaudeSlashCommandHandler`
    - Call `registerClaudeSlashCommand(new YourCommand(...))` at module load time
    - Import your command module in `vscode-node/slashCommands/index.ts`
+   - If providing a `commandId`, register the command in `package.json`:
+     ```json
+     {
+       "command": "copilot.claude.yourCommand",
+       "title": "Your Command Title",
+       "category": "Claude Agent"
+     }
+     ```
 
 3. **New Tool Permission Handler:**
    - Create handler in appropriate directory (common/node/vscode-node)

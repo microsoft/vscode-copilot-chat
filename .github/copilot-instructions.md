@@ -275,7 +275,7 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **GitHub**: Authentication and API access
 - **Azure**: Cloud services and experimentation
 - **OpenAI**: Language model API
-- **Anthropic**: Claude model integration
+- **Anthropic**: Claude model integration - See **[src/extension/agents/claude/AGENTS.md](../src/extension/agents/claude/AGENTS.md)** for complete Claude Agent SDK integration documentation including architecture, components, and registries
 - **Telemetry**: Usage analytics and performance monitoring
 
 ## Development Workflow
@@ -337,12 +337,6 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **Configuration**: Modify `package.json` contributions for VS Code integration
 
 This extension is a complex, multi-layered system that provides comprehensive AI assistance within VS Code. Understanding the service architecture, contribution system, and separation between platform and extension layers is crucial for making effective changes.
-
-## Claude Agent Integration
-
-The extension integrates with the Claude Agent SDK to provide agentic coding assistance powered by Anthropic's Claude models. For comprehensive documentation on the Claude agent integration architecture, components, registries, and usage patterns, see:
-
-**[src/extension/agents/claude/AGENTS.md](../src/extension/agents/claude/AGENTS.md)** - Complete Claude agent integration documentation
 
 ## Best Practices
 - Use services and dependency injection whenever possible instead of using node or vscode APIs directly. For example, use `IFileSystemService` instead of node's `fs`.
