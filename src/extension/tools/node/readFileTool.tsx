@@ -18,6 +18,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { clamp } from '../../../util/vs/base/common/numbers';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
@@ -172,7 +173,10 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 		const { start, end } = getParamRanges(input, documentSnapshot);
 
-		await this.customInstructionsService.refreshExtensionPromptFiles();
+		// Refresh available extension prompt files only if reading a skill.md file (can be file or virtual URI)
+		if (extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md') {
+			await this.customInstructionsService.refreshExtensionPromptFiles();
+		}
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {

@@ -333,7 +333,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as IExtensionPromptFile[] | undefined;
 			this._extensionPromptFilesCache = extensionPromptFiles ?? [];
 		} catch (e) {
-			this.logService.warn('Error fetching extension prompt files', e);
+			this.logService.warn(`Error fetching extension prompt files: ${e}`);
 			this._extensionPromptFilesCache = [];
 		}
 		this._onDidChangeExtensionPromptFilesCache.fire();
