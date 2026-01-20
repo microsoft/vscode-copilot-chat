@@ -177,7 +177,7 @@ const jsonSchemaRules: ((family: string, node: JsonSchema, didFix: (message: str
 				const types = n.type as string[];
 				const hasNull = types.includes('null');
 				const nonNullTypes = types.filter(t => t !== 'null');
-				
+
 				if (hasNull && nonNullTypes.length === 1) {
 					// Convert ["string", "null"] to { type: "string", nullable: true }
 					(n as any).type = nonNullTypes[0];

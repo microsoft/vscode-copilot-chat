@@ -93,6 +93,11 @@ declare module 'vscode' {
 		 * Pass this to tool invocations when calling tools from within a subagent context.
 		 */
 		readonly subAgentInvocationId?: string;
+
+		/**
+		 * The name of the subagent, used for logging and debugging purposes.
+		 */
+		readonly subAgentName?: string;
 	}
 
 	export enum ChatRequestEditedFileEventKind {
@@ -232,6 +237,7 @@ declare module 'vscode' {
 		chatInteractionId?: string;
 		terminalCommand?: string;
 		subAgentInvocationId?: string;
+		subAgentName?: string;
 	}
 
 	export interface LanguageModelToolInvocationPrepareOptions<T> {

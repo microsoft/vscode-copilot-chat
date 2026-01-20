@@ -660,7 +660,7 @@ export namespace ConfigKey {
 		export const ClaudeCodeDebugEnabled = defineAndMigrateSetting<boolean>('chat.advanced.claudeCode.debug', 'chat.claudeCode.debug', false);
 		export const GitHistoryRelatedFilesUsingEmbeddings = defineAndMigrateSetting('chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings', 'chat.suggestRelatedFilesFromGitHistory.useEmbeddings', false);
 		export const CLIAutoCommitEnabled = defineSetting<boolean>('chat.cli.autoCommit.enabled', ConfigType.Simple, true);
-		export const CLICustomAgentsEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.customAgents.enabled', 'chat.cli.customAgents.enabled', false);
+		export const CLICustomAgentsEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.customAgents.enabled', 'chat.cli.customAgents.enabled', true);
 		export const CLIMCPServerEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.mcp.enabled', 'chat.cli.mcp.enabled', false);
 		export const EnableClaudeCodeAgent = defineAndMigrateSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', 'chat.claudeCode.enabled', false);
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
@@ -805,7 +805,7 @@ export namespace ConfigKey {
 		export const EnableReadFileV2 = defineSetting<boolean>('chat.advanced.enableReadFileV2', ConfigType.ExperimentBased, isPreRelease);
 		export const AskAgent = defineSetting<boolean>('chat.advanced.enableAskAgent', ConfigType.ExperimentBased, false);
 		export const RetryNetworkErrors = defineSetting<boolean>('chat.advanced.enableRetryNetworkErrors', ConfigType.ExperimentBased, true);
-		export const RetryServerErrorStatusCodes = defineSetting<string>('chat.advanced.retryServerErrorStatusCodes', ConfigType.ExperimentBased, '500,502');
+		export const RetryServerErrorStatusCodes = defineSetting<string>('chat.advanced.retryServerErrorStatusCodes', ConfigType.ExperimentBased, '');
 		export const WorkspaceEnableCodeSearchExternalIngest = defineTeamInternalSetting<boolean>('chat.advanced.workspace.codeSearchExternalIngest.enabled', ConfigType.ExperimentBased, false);
 	}
 

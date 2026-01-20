@@ -4,7 +4,12 @@ pr: none
 
 schedules:
   - cron: '0 4 * * Mon-Fri'
-    displayName: Nightly Release Schedule
+    displayName: Mon-Fri at 4:00 UTC
+    branches:
+      include:
+        - main
+  - cron: '0 16 * * Mon-Fri'
+    displayName: Mon-Fri at 16:00 UTC
     branches:
       include:
         - main

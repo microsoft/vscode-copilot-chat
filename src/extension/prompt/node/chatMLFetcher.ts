@@ -160,6 +160,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
 		const enableRetryOnError = opts.enableRetryOnError ?? opts.enableRetryOnFilter;
+		const canRetryOnce = opts.canRetryOnceWithoutRollback ?? !(opts.enableRetryOnFilter || opts.enableRetryOnError);
 		let usernameToScrub: string | undefined;
 		let actualFetcher: FetcherId | undefined;
 		let actualBytesReceived: number | undefined;
@@ -191,6 +192,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					userInitiatedRequest,
 					telemetryProperties,
 					opts.useFetcher,
+					canRetryOnce,
 				);
 				response = fetchResult.result;
 				actualFetcher = fetchResult.fetcher;
@@ -243,6 +245,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
 									enableRetryOnFilter: false,
+									canRetryOnceWithoutRollback: false,
 									enableRetryOnError,
 								}, token);
 
@@ -552,7 +555,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties | undefined,
-		useFetcher?: FetcherId
+		useFetcher?: FetcherId,
+		canRetryOnce?: boolean,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 
 		if (cancellationToken.isCancellationRequested) {
@@ -591,7 +595,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			cancellationToken,
 			userInitiatedRequest,
 			{ ...telemetryProperties, modelCallId },
-			useFetcher
+			useFetcher,
+			canRetryOnce,
 		);
 
 		if (cancellationToken.isCancellationRequested) {
@@ -686,7 +691,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		useFetcher?: FetcherId
+		useFetcher?: FetcherId,
+		canRetryOnce?: boolean,
 	): Promise<Response> {
 
 		// If request contains an image, we include this header.
@@ -736,7 +742,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			request,
 			additionalHeaders,
 			cancellationToken,
-			useFetcher
+			useFetcher,
+			canRetryOnce,
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {

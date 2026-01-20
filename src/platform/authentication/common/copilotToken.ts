@@ -175,10 +175,6 @@ export class CopilotToken {
 		return this._isPublicSuggestionsEnabled;
 	}
 
-	isChatEnabled(): boolean {
-		return this._info.chat_enabled ?? false;
-	}
-
 	isCopilotIgnoreEnabled(): boolean {
 		return this._info.copilotignore_enabled ?? false;
 	}
@@ -285,8 +281,6 @@ export interface TokenEnvelope {
 	// Feature flags
 	/** Whether client-side indexing for Blackbird is enabled. */
 	blackbird_clientside_indexing: boolean;
-	/** Whether chat features are enabled. */
-	chat_enabled: boolean;
 	/** Whether code quote/citation is enabled. */
 	code_quote_enabled: boolean;
 	/** Whether Copilot code review is enabled. */
@@ -365,7 +359,6 @@ const tokenEnvelopeValidator = vObj({
 	sku: vString(),
 	individual: vBoolean(),
 	blackbird_clientside_indexing: vBoolean(),
-	chat_enabled: vBoolean(),
 	code_quote_enabled: vBoolean(),
 	code_review_enabled: vBoolean(),
 	codesearch: vBoolean(),
@@ -479,7 +472,6 @@ export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 	analytics_tracking_id: string;
 	assigned_date: string;
 	can_signup_for_limited: boolean;
-	chat_enabled: boolean;
 	copilot_plan: string;
 	organization_login_list: string[];
 	organization_list: Array<{
@@ -513,7 +505,6 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		individual: true,
 		// Feature flags
 		blackbird_clientside_indexing: false,
-		chat_enabled: true,
 		code_quote_enabled: false,
 		code_review_enabled: false,
 		codesearch: false,

@@ -6,7 +6,7 @@
 import { join } from 'path';
 import * as vscode from 'vscode';
 import { InlineCompletionModelInfo } from 'vscode';
-import { IAuthenticationService, IExperimentationService } from '../../../lib/node/chatLibMain';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -16,6 +16,7 @@ import { ObservableGit } from '../../../platform/inlineEdits/common/observableGi
 import { checkIfCursorAtEndOfLine, shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import * as errors from '../../../util/common/errors';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { createTracer, ITracer } from '../../../util/common/tracing';

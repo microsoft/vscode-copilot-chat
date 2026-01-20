@@ -327,8 +327,8 @@ export class ConversationFeature implements IExtensionContribution {
 
 	private registerCopilotTokenListener() {
 		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
-			const chatEnabled = this.authenticationService.copilotToken?.isChatEnabled();
-			this.logService.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
+			const chatEnabled = this.authenticationService.copilotToken !== undefined;
+			this.logService.info(`copilot token sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
 			this.enabled = chatEnabled ?? false;
 		}));
 	}

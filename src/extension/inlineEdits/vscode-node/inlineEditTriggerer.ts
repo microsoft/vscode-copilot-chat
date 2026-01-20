@@ -5,10 +5,10 @@
 
 import type * as vscode from 'vscode';
 import { TextDocumentChangeReason } from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { ILogger, ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -238,9 +238,19 @@ export class InlineEditTriggerer extends Disposable {
 			logger.trace('Return: no last edit timestamp');
 			return false;
 		}
-		const timeSinceLastEdit = Date.now() - this.lastEditTimestamp;
-		if (timeSinceLastEdit > triggerAfterSeconds * 1000) {
+		const now = Date.now();
+		const triggerThresholdMs = triggerAfterSeconds * 1000;
+		const timeSinceLastEdit = now - this.lastEditTimestamp;
+		if (timeSinceLastEdit > triggerThresholdMs) {
 			logger.trace('Return: too long since last edit');
+			return false;
+		}
+
+		// Require a recent NES trigger before triggering on document switch.
+		// lastTriggerTime === 0 means NES was never triggered in this session.
+		const timeSinceLastTrigger = now - this.nextEditProvider.lastTriggerTime;
+		if (this.nextEditProvider.lastTriggerTime === 0 || timeSinceLastTrigger > triggerThresholdMs) {
+			logger.trace('Return: no recent NES trigger');
 			return false;
 		}
 
