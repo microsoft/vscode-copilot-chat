@@ -153,7 +153,11 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		const usingRouterModel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+		// Skip router for inline chat (ChatLocation.Editor) to avoid 200ms latency penalty.
+		// Inline chat already resolves to fast models, so classification is not needed.
+		const location = chatRequest?.location ?? ChatLocation.Panel;
+		const isInlineChat = location === ChatLocation.Editor;
+		const usingRouterModel = !isInlineChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
 		if (usingRouterModel) {
 			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
 		}
