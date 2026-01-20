@@ -258,8 +258,8 @@ export default tseslint.config(
 							from: ['**/vscode-node/**', '**/vscode-worker/**']
 						},
 						{
-							target: './src/',
-							from: './src/lib/node'
+							target: 'src/!(lib)/**',
+							from: './src/lib'
 						}
 					]
 				}
