@@ -232,8 +232,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
 			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
 
-			// Append rate info to tooltip if this model has a multiplier > 1
-			if (endpoint.multiplier !== undefined && endpoint.multiplier > 1 && !(endpoint instanceof AutoChatEndpoint)) {
+			// Append rate info to tooltip for all non-Auto models with a multiplier
+			if (endpoint.multiplier !== undefined && !(endpoint instanceof AutoChatEndpoint)) {
 				if (modelTooltip) {
 					modelTooltip = vscode.l10n.t('{0} Rate is counted at {1}x.', modelTooltip, endpoint.multiplier);
 				} else {
