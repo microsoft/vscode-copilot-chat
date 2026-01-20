@@ -103,7 +103,7 @@ suite('Completions Prompt Factory', function () {
 		NeighborSource.reset();
 	});
 
-	test('prompt should include document marker', function () {
+	test('prompt should include document marker', async function () {
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -113,7 +113,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffixTokens, 6);
 	});
 
-	test('prompt should include neighboring files', function () {
+	test('prompt should include neighboring files', async function () {
 		const tdm = accessor.get(ICompletionsTextDocumentManagerService) as TestTextDocumentManager;
 		tdm.setTextDocument('file:///something.ts', 'typescript', '// match function f\nfunction foo() {}');
 
@@ -136,7 +136,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffixTokens, 6);
 	});
 
-	test('prompt should include recent edits', function () {
+	test('prompt should include recent edits', async function () {
 		const serviceCollectionClone = serviceCollection.clone();
 		const workspace = new CompletionsMutableObservableWorkspace();
 		serviceCollectionClone.define(ICompletionsObservableWorkspace, workspace);
@@ -186,7 +186,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffix, 'const b = 2;');
 	});
 
-	test('recent edits are removed as a chunk', function () {
+	test('recent edits are removed as a chunk', async function () {
 		const serviceCollectionClone = serviceCollection.clone();
 		const workspace = new CompletionsMutableObservableWorkspace();
 		serviceCollectionClone.define(ICompletionsObservableWorkspace, workspace);
@@ -227,7 +227,7 @@ suite('Completions Prompt Factory', function () {
 		);
 	});
 
-	test('prompt should include context and prefix', function () {
+	test('prompt should include context and prefix', async function () {
 		const result = await invokePromptFactory({ separateContext: true });
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -236,7 +236,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffix, 'const b = 2;');
 	});
 
-	test('prompt should include prefix and suffix tokens', function () {
+	test('prompt should include prefix and suffix tokens', async function () {
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'prompt');
@@ -244,7 +244,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffixTokens, 6);
 	});
 
-	test('suffix should be cached if similar enough', function () {
+	test('suffix should be cached if similar enough', async function () {
 		telemetryData.filtersAndExp.exp.variables.copilotsuffixmatchthreshold = 20;
 		// Call it once to cache
 		await invokePromptFactory();
@@ -266,7 +266,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.suffix, 'const b = 2;');
 	});
 
-	test('produces timeout prompt if timeout is exceeded', function () {
+	test('produces timeout prompt if timeout is exceeded', async function () {
 		clock = sinon.useFakeTimers();
 		const TimeoutComponent = (_: PromptElementProps, context: ComponentContext) => {
 			context.useData(isCompletionRequestData, async _ => {
@@ -290,7 +290,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.type, 'promptTimeout');
 	});
 
-	test('produces valid prompts with multiple promises racing', function () {
+	test('produces valid prompts with multiple promises racing', async function () {
 		const promises = [];
 		for (let i = 0; i < 3; i++) {
 			const textDocument = createTextDocument(`file:///path/basename${i}`, 'typescript', 0, `const a = ${i}|;`);
@@ -307,7 +307,7 @@ suite('Completions Prompt Factory', function () {
 		}
 	});
 
-	test('handles errors with multiple promises racing', function () {
+	test('handles errors with multiple promises racing', async function () {
 		sinon
 			.stub(TestComponentsCompletionsPromptFactory.prototype, 'createPromptUnsafe')
 			.callThrough()
@@ -332,7 +332,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(firstResult.prompt.prefix, `// Path: basename\nconst a = 1`);
 	});
 
-	test('produces valid prompts with sequential context provider calls', function () {
+	test('produces valid prompts with sequential context provider calls', async function () {
 		const featuresService = accessor.get(ICompletionsFeaturesService);
 		featuresService.contextProviders = () => ['traitsProvider'];
 
@@ -373,7 +373,7 @@ suite('Completions Prompt Factory', function () {
 		}
 	});
 
-	test('produces valid prompts with multiple promises racing, one blocking', function () {
+	test('produces valid prompts with multiple promises racing, one blocking', async function () {
 		clock = sinon.useFakeTimers();
 		let timeoutMs = DEFAULT_PROMPT_TIMEOUT + 1;
 		const TimeoutComponent = (_: PromptElementProps, context: ComponentContext) => {
@@ -411,7 +411,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(results[1].prompt.prefix, '// A really cool prompt\nconst a = 1');
 	});
 
-	test('token limits can be controlled via EXP', function () {
+	test('token limits can be controlled via EXP', async function () {
 		const tokenizer = getTokenizer();
 		const longText = Array.from({ length: 1000 }, (_, i) => `const a${i} = ${i};`).join('\n');
 		const longTextDocument = createTextDocument(
@@ -440,14 +440,14 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(tokenizer.tokenLength(expLimitsPrompt.prompt.suffix), 2);
 	});
 
-	test('produces context too short', function () {
+	test('produces context too short', async function () {
 		const tinyTextDocument = createTextDocument('file:///path/basename', 'typescript', 0, '');
 		const result = await invokePromptFactory({ textDocument: tinyTextDocument });
 
 		assert.deepStrictEqual(result, _contextTooShort);
 	});
 
-	test('errors when hitting fault barrier', function () {
+	test('errors when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
 		promptFactory = accessor.get(IInstantiationService).createInstance(TestCompletionsPromptFactory, virtualPrompt, undefined);
@@ -457,7 +457,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result, _promptError);
 	});
 
-	test('recovers from error when hitting fault barrier', function () {
+	test('recovers from error when hitting fault barrier', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon.stub().throws(new Error('Intentional snapshot error'));
 		promptFactory = accessor.get(IInstantiationService).createInstance(TestCompletionsPromptFactory, virtualPrompt, undefined);
@@ -469,7 +469,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.type, 'prompt');
 	});
 
-	test('errors on snapshot error', function () {
+	test('errors on snapshot error', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon
 			.stub()
@@ -481,7 +481,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result, _promptError);
 	});
 
-	test('recovers from error on snapshot error', function () {
+	test('recovers from error on snapshot error', async function () {
 		const virtualPrompt = new VirtualPrompt(<></>);
 		virtualPrompt.snapshot = sinon
 			.stub()
@@ -495,14 +495,14 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.type, 'prompt');
 	});
 
-	test('handles cancellation', function () {
+	test('handles cancellation', async function () {
 		cts.cancel();
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result, _promptCancelled);
 	});
 
-	test('handles cancellation during update data', function () {
+	test('handles cancellation during update data', async function () {
 		const CancellationComponent = (_: PromptElementProps, context: ComponentContext) => {
 			context.useData(isCompletionRequestData, _ => {
 				cts.cancel();
@@ -523,7 +523,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result, _promptCancelled);
 	});
 
-	test('error in snapshot leads to prompt error', function () {
+	test('error in snapshot leads to prompt error', async function () {
 		let outerSetShouldThrowError: Dispatch<StateUpdater<boolean>> = () => { };
 		const ErrorThrowingComponent = (_props: PromptElementProps, context: ComponentContext) => {
 			const [shouldThrowError, setShouldThrowError] = context.useState(false);
@@ -543,7 +543,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result, _promptError);
 	});
 
-	test('prompt should not include context provider info if the context provider API is not enabled', function () {
+	test('prompt should not include context provider info if the context provider API is not enabled', async function () {
 		const configProvider = accessor.get(ICompletionsConfigProvider) as InMemoryConfigProvider;
 		configProvider.setConfig(ConfigKey.ContextProviders, []);
 
@@ -554,7 +554,7 @@ suite('Completions Prompt Factory', function () {
 		assert.ok(result.prompt.prefix.includes('Consider this related information:') === false);
 	});
 
-	test('prompt should include traits, diagnostics and code snippets if the context provider API is enabled', function () {
+	test('prompt should include traits, diagnostics and code snippets if the context provider API is enabled', async function () {
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,diagnosticsProvider,codeSnippetsProvider';
 
 		const traitsProvider: ContextProvider<Trait> = {
@@ -611,7 +611,7 @@ suite('Completions Prompt Factory', function () {
 		);
 	});
 
-	test('should still produce a prompt if a context provider errors', function () {
+	test('should still produce a prompt if a context provider errors', async function () {
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'errorProvider,codeSnippetsProvider';
 
 		const errorProvider: ContextProvider<SupportedContextItem> = {
@@ -648,14 +648,14 @@ suite('Completions Prompt Factory', function () {
 		);
 	});
 
-	test('prompt should include compute time', function () {
+	test('prompt should include compute time', async function () {
 		const result = await invokePromptFactory();
 
 		assert.deepStrictEqual(result.type, 'prompt');
 		assert.ok(result.computeTimeMs > 0);
 	});
 
-	test('prompt should trim prefix and include trailingWs', function () {
+	test('prompt should trim prefix and include trailingWs', async function () {
 		const textDocument = createTextDocument(
 			'file:///path/basename',
 			'typescript',
@@ -669,7 +669,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.trailingWs, '    ');
 	});
 
-	test('prompt respects context blocks if separateContext is true', function () {
+	test('prompt respects context blocks if separateContext is true', async function () {
 		function splitContextPrompt() {
 			return (
 				<>
@@ -693,7 +693,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.context, ['First context block', 'Second context block']);
 	});
 
-	test('prompt does not output separate context blocks if separateContext is not specified', function () {
+	test('prompt does not output separate context blocks if separateContext is not specified', async function () {
 		function splitContextPrompt() {
 			return (
 				<>
@@ -717,7 +717,7 @@ suite('Completions Prompt Factory', function () {
 		assert.deepStrictEqual(result.prompt.context, undefined);
 	});
 
-	test('produces metadata', function () {
+	test('produces metadata', async function () {
 		const result = await invokePromptFactory();
 		assert.deepStrictEqual(result.type, 'prompt');
 
@@ -789,7 +789,7 @@ suite('Completions Prompt Factory', function () {
 		]);
 	});
 
-	test('telemetry should include context providers', function () {
+	test('telemetry should include context providers', async function () {
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,codeSnippetsProvider';
 
 		const traitsContextProvider: ContextProvider<Trait> = {
@@ -875,7 +875,7 @@ suite('Completions Prompt Factory', function () {
 		);
 	});
 
-	test('Test only sanctioned traits are included in telemetry', function () {
+	test('Test only sanctioned traits are included in telemetry', async function () {
 		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider';
 
 		const traitsProvider: ContextProvider<Trait> = {
