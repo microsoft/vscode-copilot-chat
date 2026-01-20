@@ -497,7 +497,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`~~~`);
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`kind         : ${permissionRequest.kind}`);
-		result.push(`toolcallid   : ${permissionRequest.toolCallId || ''}`);
+		result.push(`toolCallId   : ${permissionRequest.toolCallId || ''}`);
 		result.push(`~~~`);
 		result.push(``);
 		switch (permissionRequest.kind) {
