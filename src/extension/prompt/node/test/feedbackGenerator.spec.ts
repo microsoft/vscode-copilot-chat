@@ -11,17 +11,18 @@ import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/c
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../platform/telemetry/common/telemetry';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Position, Range, Uri } from '../../../../vscodeTypes';
+import { MarkdownString, Position, Range, Uri } from '../../../../vscodeTypes';
 import { CurrentChangeInput } from '../../../prompts/node/feedback/currentChange';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { FeedbackGenerator, parseFeedbackResponse, parseReviewComments } from '../feedbackGenerator';
+import { FeedbackGenerator, parseFeedbackResponse, parseReviewComments, sendReviewActionTelemetry } from '../feedbackGenerator';
 
 class MockTextDocument implements TextDocument {
 	readonly uri: Uri;
@@ -1264,6 +1265,284 @@ suite('FeedbackGenerator.generateComments', () => {
 			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
 
 			assert.strictEqual(result.type, 'success');
+		});
+	});
+});
+
+class MockLogService implements ILogService {
+	declare _serviceBrand: undefined;
+
+	readonly debugMessages: string[] = [];
+	readonly warnMessages: string[] = [];
+
+	trace(_message: string): void { }
+	debug(message: string): void { this.debugMessages.push(message); }
+	info(_message: string): void { }
+	warn(message: string): void { this.warnMessages.push(message); }
+	error(_error: string | Error, _message?: string): void { }
+	show(_preserveFocus?: boolean): void { }
+
+	reset(): void {
+		this.debugMessages.length = 0;
+		this.warnMessages.length = 0;
+	}
+}
+
+interface TelemetryCall {
+	eventName: string;
+	properties?: TelemetryEventProperties;
+	measurements?: TelemetryEventMeasurements;
+}
+
+class MockTelemetryService implements ITelemetryService {
+	declare readonly _serviceBrand: undefined;
+
+	readonly msftEvents: TelemetryCall[] = [];
+	readonly internalMsftEvents: TelemetryCall[] = [];
+
+	dispose(): void { }
+
+	sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+		this.msftEvents.push({ eventName, properties, measurements });
+	}
+
+	sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+		this.internalMsftEvents.push({ eventName, properties, measurements });
+	}
+
+	sendMSFTTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	sendGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	sendGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	sendGHTelemetryException(_maybeError: unknown, _origin: string): void { }
+	sendTelemetryEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	sendTelemetryErrorEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	setSharedProperty(_name: string, _value: string): void { }
+	setAdditionalExpAssignments(_expAssignments: string[]): void { }
+	postEvent(_eventName: string, _props: Map<string, string>): void { }
+	sendEnhancedGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	sendEnhancedGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+
+	reset(): void {
+		this.msftEvents.length = 0;
+		this.internalMsftEvents.length = 0;
+	}
+}
+
+suite('sendReviewActionTelemetry', () => {
+	let mockLogService: MockLogService;
+	let mockTelemetryService: MockTelemetryService;
+	let mockInstantiationService: IInstantiationService;
+	let disposables: DisposableStore;
+
+	function createTestReviewComment(overrides?: Partial<ReviewComment>): ReviewComment {
+		const uri = Uri.file('/test/file.ts');
+		const content = 'line 0\nline 1\nline 2';
+		const mockDoc = new MockTextDocument(uri, content);
+		const snapshot = TextDocumentSnapshot.create(mockDoc);
+
+		return {
+			request: {
+				source: 'vscodeCopilotChat',
+				promptCount: 1,
+				messageId: 'test-message-id',
+				inputType: 'change',
+				inputRanges: [{ uri, ranges: [new Range(0, 0, 2, 6)] }],
+			},
+			document: snapshot,
+			uri,
+			languageId: 'typescript',
+			range: new Range(1, 0, 1, 6),
+			body: new MarkdownString('Test comment body'),
+			kind: 'bug',
+			severity: 'high',
+			originalIndex: 0,
+			actionCount: 0,
+			...overrides,
+		};
+	}
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		mockLogService = new MockLogService();
+		mockTelemetryService = new MockTelemetryService();
+
+		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+		mockInstantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
+	});
+
+	afterEach(() => {
+		disposables.dispose();
+	});
+
+	describe('helpful/unhelpful actions', () => {
+		test('sends review.comment.vote telemetry for helpful action', () => {
+			const comment = createTestReviewComment();
+
+			sendReviewActionTelemetry(comment, 5, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockLogService.debugMessages.length, 1);
+			assert.ok(mockLogService.debugMessages[0].includes('user feedback received'));
+
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.msftEvents[0].eventName, 'review.comment.vote');
+			assert.strictEqual(mockTelemetryService.msftEvents[0].properties?.userAction, 'helpful');
+			assert.strictEqual(mockTelemetryService.msftEvents[0].properties?.commentType, 'bug');
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.totalComments, 5);
+
+			assert.strictEqual(mockTelemetryService.internalMsftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.internalMsftEvents[0].eventName, 'review.comment.vote');
+		});
+
+		test('sends review.comment.vote telemetry for unhelpful action', () => {
+			const comment = createTestReviewComment();
+
+			sendReviewActionTelemetry(comment, 3, 'unhelpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.msftEvents[0].eventName, 'review.comment.vote');
+			assert.strictEqual(mockTelemetryService.msftEvents[0].properties?.userAction, 'unhelpful');
+		});
+
+		test('does not increment actionCount for vote actions', () => {
+			const comment = createTestReviewComment({ actionCount: 2 });
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(comment.actionCount, 2);
+		});
+	});
+
+	describe('other actions', () => {
+		test('sends review.comment.action telemetry for apply action', () => {
+			const comment = createTestReviewComment();
+
+			sendReviewActionTelemetry(comment, 2, 'apply', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.msftEvents[0].eventName, 'review.comment.action');
+			assert.strictEqual(mockTelemetryService.msftEvents[0].properties?.userAction, 'apply');
+		});
+
+		test('increments actionCount for non-vote actions', () => {
+			const comment = createTestReviewComment({ actionCount: 0 });
+
+			sendReviewActionTelemetry(comment, 1, 'apply', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(comment.actionCount, 1);
+		});
+
+		test('increments actionCount multiple times for multiple actions', () => {
+			const comment = createTestReviewComment({ actionCount: 0 });
+
+			sendReviewActionTelemetry(comment, 1, 'apply', mockLogService, mockTelemetryService, mockInstantiationService);
+			sendReviewActionTelemetry(comment, 1, 'discard', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(comment.actionCount, 2);
+		});
+	});
+
+	describe('edge cases', () => {
+		test('returns early and warns when no comments provided', () => {
+			sendReviewActionTelemetry([], 0, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockLogService.warnMessages.length, 1);
+			assert.ok(mockLogService.warnMessages[0].includes('No review comment found'));
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 0);
+		});
+
+		test('handles single comment (not array)', () => {
+			const comment = createTestReviewComment();
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.comments, 1);
+		});
+
+		test('handles array of comments', () => {
+			const comment1 = createTestReviewComment({ originalIndex: 0 });
+			const comment2 = createTestReviewComment({ originalIndex: 1, body: new MarkdownString('Second comment') });
+
+			sendReviewActionTelemetry([comment1, comment2], 3, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents.length, 1);
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.comments, 2);
+		});
+
+		test('uses unknown for unrecognized comment kind', () => {
+			const comment = createTestReviewComment({ kind: 'unknownKind' });
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents[0].properties?.commentType, 'unknown');
+		});
+
+		test('calculates commentLength correctly for MarkdownString body', () => {
+			const comment = createTestReviewComment({ body: new MarkdownString('Hello world') });
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.commentLength, 11);
+		});
+
+		test('calculates commentLength correctly for string body', () => {
+			const comment = createTestReviewComment({ body: 'Plain text body' });
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.commentLength, 15);
+		});
+
+		test('calculates inputLineCount correctly from multiple ranges', () => {
+			const uri = Uri.file('/test/file.ts');
+			const comment = createTestReviewComment({
+				request: {
+					source: 'vscodeCopilotChat',
+					promptCount: 1,
+					messageId: 'test-message-id',
+					inputType: 'change',
+					inputRanges: [
+						{ uri, ranges: [new Range(0, 0, 5, 0), new Range(10, 0, 15, 0)] },
+						{ uri, ranges: [new Range(20, 0, 25, 0)] },
+					],
+				},
+			});
+
+			sendReviewActionTelemetry(comment, 1, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			// (5-0) + (15-10) + (25-20) = 5 + 5 + 5 = 15
+			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.inputLineCount, 15);
+		});
+	});
+
+	describe('telemetry properties', () => {
+		test('includes all expected properties', () => {
+			const comment = createTestReviewComment();
+
+			sendReviewActionTelemetry(comment, 2, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			const props = mockTelemetryService.msftEvents[0].properties;
+			assert.strictEqual(props?.source, 'vscodeCopilotChat');
+			assert.strictEqual(props?.requestId, 'test-message-id');
+			assert.strictEqual(props?.documentType, 'text');
+			assert.strictEqual(props?.languageId, 'typescript');
+			assert.strictEqual(props?.inputType, 'change');
+			assert.strictEqual(props?.commentType, 'bug');
+			assert.strictEqual(props?.userAction, 'helpful');
+		});
+
+		test('includes all expected measurements', () => {
+			const comment = createTestReviewComment({ originalIndex: 3, actionCount: 2 });
+
+			sendReviewActionTelemetry(comment, 10, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
+
+			const measures = mockTelemetryService.msftEvents[0].measurements;
+			assert.strictEqual(measures?.commentIndex, 3);
+			assert.strictEqual(measures?.actionCount, 2);
+			assert.strictEqual(measures?.inputDocumentCount, 1);
+			assert.strictEqual(measures?.promptCount, 1);
+			assert.strictEqual(measures?.totalComments, 10);
+			assert.strictEqual(measures?.comments, 1);
 		});
 	});
 });
