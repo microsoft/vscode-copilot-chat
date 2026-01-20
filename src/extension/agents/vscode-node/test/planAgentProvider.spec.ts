@@ -4,12 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert } from 'chai';
-import { afterEach, beforeEach, describe, suite, test } from 'vitest';
+import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
-import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { buildAgentMarkdown, PlanAgentProvider } from '../planAgentProvider';
 
@@ -24,14 +25,17 @@ function getAgentContent(agent: vscode.CustomAgentChatResource): string {
 suite('PlanAgentProvider', () => {
 	let disposables: DisposableStore;
 	let mockConfigurationService: InMemoryConfigurationService;
-	let accessor: any;
+	let accessor: ITestingServicesAccessor;
+	let instantiationService: IInstantiationService;
 
 	beforeEach(() => {
 		disposables = new DisposableStore();
 
 		// Set up testing services
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
-		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+		accessor = testingServiceCollection.createTestingAccessor();
+		disposables.add(accessor);
+		instantiationService = accessor.get(IInstantiationService);
 
 		mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
 	});
@@ -41,10 +45,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	function createProvider() {
-		const provider = new PlanAgentProvider(
-			mockConfigurationService,
-			accessor.get(ILogService),
-		);
+		const provider = instantiationService.createInstance(PlanAgentProvider);
 		disposables.add(provider);
 		return provider;
 	}
@@ -110,11 +111,10 @@ suite('PlanAgentProvider', () => {
 		// Count occurrences of 'agent' in tools list (flow-style array)
 		// Should appear only once due to deduplication
 		const toolsMatch = content.match(/tools: \[([^\]]+)\]/);
-		if (toolsMatch) {
-			const toolsSection = toolsMatch[1];
-			const agentCount = (toolsSection.match(/'agent'/g) || []).length;
-			assert.equal(agentCount, 1, 'agent tool should appear only once after deduplication');
-		}
+		assert.ok(toolsMatch, 'Tools list not found in agent content');
+		const toolsSection = toolsMatch[1];
+		const agentCount = (toolsSection.match(/'agent'/g) || []).length;
+		assert.equal(agentCount, 1, 'agent tool should appear only once after deduplication');
 
 		// Should contain new tool
 		assert.ok(content.includes('newTool'));
@@ -330,9 +330,10 @@ suite('buildAgentMarkdown', () => {
 		assert.ok(result.includes('handoffs:'));
 		assert.ok(result.includes('  - label: Continue'));
 		assert.ok(result.includes('    agent: agent'));
-		assert.ok(result.includes('    prompt: Do the thing'));
+		assert.ok(result.includes('    prompt: \'Do the thing\''));
 		assert.ok(result.includes('    send: true'));
 		assert.ok(result.includes('  - label: Save'));
+		assert.ok(result.includes('    prompt: \'Save it\''));
 		assert.ok(result.includes('    showContinueOn: false'));
 	});
 
@@ -365,5 +366,43 @@ suite('buildAgentMarkdown', () => {
 		const result = buildAgentMarkdown(config);
 
 		assert.ok(result.includes('tools: [\'github/issue_read\', \'mcp_server/custom_tool\']'));
+	});
+
+	test('escapes single quotes in tool names', () => {
+		const config = {
+			name: 'TestAgent',
+			description: 'Test',
+			argumentHint: 'Test',
+			tools: ['tool\'s_name', 'another'],
+			handoffs: [],
+			body: 'Body'
+		};
+
+		const result = buildAgentMarkdown(config);
+
+		// Single quotes should be doubled for YAML escaping
+		assert.ok(result.includes('\'tool\'\'s_name\''), 'Single quote should be escaped by doubling');
+	});
+
+	test('escapes single quotes in handoff prompts', () => {
+		const config = {
+			name: 'TestAgent',
+			description: 'Test',
+			argumentHint: 'Test',
+			tools: [],
+			handoffs: [
+				{
+					label: 'Test',
+					agent: 'agent',
+					prompt: 'It\'s a test prompt with \'quotes\''
+				}
+			],
+			body: 'Body'
+		};
+
+		const result = buildAgentMarkdown(config);
+
+		// Single quotes in prompt should be doubled for YAML escaping
+		assert.ok(result.includes('prompt: \'It\'\'s a test prompt with \'\'quotes\'\'\''), 'Single quotes should be escaped by doubling');
 	});
 });

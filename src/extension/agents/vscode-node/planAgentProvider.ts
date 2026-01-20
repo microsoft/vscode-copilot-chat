@@ -150,18 +150,20 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	}
 
 	// Tools array - flow style for readability
+	// Escape single quotes by doubling them (YAML spec)
 	if (config.tools.length > 0) {
-		const quotedTools = config.tools.map(t => `'${t}'`).join(', ');
+		const quotedTools = config.tools.map(t => `'${t.replace(/'/g, '\'\'')}'`).join(', ');
 		lines.push(`tools: [${quotedTools}]`);
 	}
 
 	// Handoffs - block style for complex nested objects
+	// Escape prompts using single quotes (with doubled single quotes for internal quotes)
 	if (config.handoffs.length > 0) {
 		lines.push('handoffs:');
 		for (const handoff of config.handoffs) {
 			lines.push(`  - label: ${handoff.label}`);
 			lines.push(`    agent: ${handoff.agent}`);
-			lines.push(`    prompt: ${handoff.prompt}`);
+			lines.push(`    prompt: '${handoff.prompt.replace(/'/g, '\'\'')}'`);
 			if (handoff.send !== undefined) {
 				lines.push(`    send: ${handoff.send}`);
 			}
