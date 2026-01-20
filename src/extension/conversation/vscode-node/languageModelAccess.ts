@@ -259,7 +259,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
-				description: endpoint instanceof AutoChatEndpoint ? undefined : getModelCapabilitiesDescription(endpoint),
+				description: endpoint instanceof AutoChatEndpoint
+					? vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.')
+					: getModelCapabilitiesDescription(endpoint),
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,
