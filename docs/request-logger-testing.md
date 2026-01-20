@@ -114,8 +114,8 @@ export class CapturingToken {
   /**
    * Create a child token that references this as its parent.
    */
-  createChild(label: string, icon?: string): CapturingToken {
-    return new CapturingToken(label, icon, false, false, this);
+  createChild(label: string, icon?: string, flattenSingleChild: boolean = false): CapturingToken {
+    return new CapturingToken(label, icon, flattenSingleChild, false, this);
   }
 }
 ```

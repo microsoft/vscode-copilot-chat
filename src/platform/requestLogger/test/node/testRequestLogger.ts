@@ -117,21 +117,29 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 			};
 		}
 
-		// Build metadata similar to the real RequestLogger
-		const metadata = {
-			model: this.entry.chatParams?.model,
-			location: this.entry.chatParams?.location,
-			startTime: this.entry.startTime.toISOString(),
-			endTime: this.entry.endTime.toISOString(),
-			duration: this.entry.endTime.getTime() - this.entry.startTime.getTime(),
-			maxResponseTokens: this.entry.chatParams?.body?.max_tokens ?? this.entry.chatParams?.body?.max_output_tokens,
-		};
+		// Handle ChatML request types (Success, Failure, Cancellation)
+		// These all have startTime/endTime as Date objects
+		if (this.entry.type === LoggedRequestKind.ChatMLSuccess ||
+			this.entry.type === LoggedRequestKind.ChatMLFailure ||
+			this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+			const metadata = {
+				model: this.entry.chatParams?.model,
+				location: this.entry.chatParams?.location,
+				startTime: this.entry.startTime.toISOString(),
+				endTime: this.entry.endTime.toISOString(),
+				duration: this.entry.endTime.getTime() - this.entry.startTime.getTime(),
+				maxResponseTokens: this.entry.chatParams?.body?.max_tokens ?? this.entry.chatParams?.body?.max_output_tokens,
+			};
 
-		return {
-			...baseInfo,
-			metadata,
-			isConversationRequest: this.entry.isConversationRequest
-		};
+			return {
+				...baseInfo,
+				metadata,
+				isConversationRequest: this.entry.isConversationRequest
+			};
+		}
+
+		// Fallback for any unknown types
+		return baseInfo;
 	}
 }
 

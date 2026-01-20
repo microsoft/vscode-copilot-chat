@@ -85,6 +85,7 @@ The `CapturingToken` includes:
 - `icon`: Optional icon
 - `flattenSingleChild`: Whether to flatten single-child groups
 - `promoteMainEntry`: Whether to make the parent item clickable
+- `parentToken`: Optional parent `CapturingToken` used to build hierarchical groupings of related requests in the tree
 
 ### 3. Entry Storage and Event Flow
 
@@ -111,29 +112,52 @@ private async _addEntry(entry: LoggedInfo): Promise<boolean> {
 
 ## TreeView Grouping Logic
 
-The TreeView groups entries by their `CapturingToken`:
+The TreeView builds a hierarchical tree structure using the `buildHierarchicalTree()` method:
 
 ```typescript
-// Simplified logic from getChildren()
-for (const currReq of this.requestLogger.getRequests()) {
-    if (currReq.token !== lastPrompt?.token) {
-        // Token changed - start new group
-        pushLastPrompt();
-        lastPrompt = ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token));
+// Simplified logic from buildHierarchicalTree()
+private buildHierarchicalTree(): (ChatPromptItem | TreeChildItem)[] {
+    // First pass: Create ChatPromptItems for all tokens and collect entries
+    for (const currReq of this.requestLogger.getRequests()) {
+        if (currReq.token) {
+            // Get or create ChatPromptItem for this token
+            let promptItem = tokenToPromptItem.get(currReq.token);
+            if (!promptItem) {
+                promptItem = ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token));
+                tokenToPromptItem.set(currReq.token, promptItem);
+            }
+            promptItem.children.push(this.logToTreeItem(currReq));
+        }
     }
 
-    // Add current request to the group
-    lastPrompt.children.push(currReqTreeItem);
+    // Second pass: Build hierarchy using parentToken relationships
+    for (const [token, promptItem] of tokenToPromptItem) {
+        if (token.parentToken) {
+            const parentPromptItem = tokenToPromptItem.get(token.parentToken);
+            if (parentPromptItem) {
+                parentPromptItem.children.push(promptItem); // Nest under parent
+            }
+        }
+    }
+
+    // Third pass: Collect root-level items (those without parents)
+    // ...
 }
 ```
 
+### Hierarchical Grouping
+
+Tokens with a `parentToken` are nested under their parent's `ChatPromptItem`, creating a tree structure that reflects the logical hierarchy of requests (e.g., subagent requests nested under the parent conversation).
+
 ### Grouping Edge Cases
 
-1. **Same token, different order** - Entries with the same token will be grouped together, but their internal order follows insertion order
+1. **Token hierarchy** - Child tokens (created via `createChild()`) are nested under their parent token's tree item
 
 2. **Token reuse** - If the same `CapturingToken` is used in different contexts, entries get grouped together (marked with "Continued...")
 
 3. **No token** - Entries without a token appear as top-level items
+
+4. **Orphan parent tokens** - If a token has a `parentToken` but that parent isn't in the entry set, the token appears at the root level
 
 ---
 
