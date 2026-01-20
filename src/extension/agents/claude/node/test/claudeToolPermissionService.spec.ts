@@ -54,7 +54,7 @@ class MockToolsService implements IToolsService {
 	): Promise<vscode.LanguageModelToolResult2> {
 		this._invokeToolCalls.push({ name, input: options.input });
 
-		if (name === ToolName.CoreConfirmationTool) {
+		if (name === ToolName.CoreConfirmationTool || name === ToolName.CoreTerminalConfirmationTool) {
 			return {
 				content: [new LanguageModelTextPart(this._confirmationResult)]
 			};
@@ -167,21 +167,22 @@ describe('ClaudeToolPermissionService', () => {
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
 				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
 				expect(confirmParams.title).toContain('UnknownTool');
-				expect(confirmParams.confirmationType).toBe('basic');
 			});
 		});
 
 		describe('with registered handler', () => {
-			it('uses handler getConfirmationParams when available', async () => {
+			it('uses handler handle method for Bash tool with terminal confirmation', async () => {
 				const input = { command: 'npm test' };
 				const context = createMockContext();
 
 				await service.canUseTool(ClaudeToolNames.Bash, input, context);
 
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
-				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
-				expect(confirmParams.confirmationType).toBe('terminal');
-				expect(confirmParams.terminalCommand).toBe('npm test');
+				// Bash handler uses CoreTerminalConfirmationTool directly via its handle method
+				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreTerminalConfirmationTool);
+				const terminalInput = mockToolsService.invokeToolCalls[0].input as { message: string; command: string; isBackground: boolean };
+				expect(terminalInput.command).toBe('npm test');
+				expect(terminalInput.isBackground).toBe(false);
 			});
 
 			it('bypasses confirmation when canAutoApprove returns true', async () => {
@@ -245,8 +246,10 @@ describe('ClaudeToolPermissionService', () => {
 
 				// Both calls should succeed
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
-				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
-				expect(confirmParams.terminalCommand).toBe('pwd');
+				// Bash handler uses CoreTerminalConfirmationTool directly via its handle method
+				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreTerminalConfirmationTool);
+				const terminalInput = mockToolsService.invokeToolCalls[0].input as { message: string; command: string; isBackground: boolean };
+				expect(terminalInput.command).toBe('pwd');
 			});
 		});
 

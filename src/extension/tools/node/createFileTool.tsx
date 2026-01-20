@@ -165,6 +165,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		const confirmation = await this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			[uri],
+			this._promptContext?.allowedEditUris,
 			async () => this.instantiationService.invokeFunction(
 				formatDiffAsUnified,
 				uri,
@@ -191,15 +192,10 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			const filePath = partialInput.filePath;
 			const content = partialInput.content;
 
-			if (filePath) {
+			if (filePath && content !== undefined) {
 				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
-
-				if (content !== undefined) {
-					const lineCount = count(content, '\n') + 1;
-					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${lineCount} lines)`);
-				} else {
-					invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`);
-				}
+				const lineCount = count(content, '\n') + 1;
+				invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${lineCount} lines)`);
 			} else if (content !== undefined) {
 				const lineCount = count(content, '\n') + 1;
 				invocationMessage = new MarkdownString(l10n.t`Creating file (${lineCount} lines)`);

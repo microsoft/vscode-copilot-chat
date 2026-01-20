@@ -16,6 +16,7 @@ const TARGET_DIR = path.join(CHAT_LIB_DIR, 'src');
 const execAsync = promisify(exec);
 
 // Entry point - follow imports from the main chat-lib file
+// Note: All *.ts files in src/lib/node/test/ are automatically included
 const entryPoints = [
 	'src/lib/node/chatLibMain.ts',
 	'src/util/vs/base-common.d.ts',
@@ -106,7 +107,9 @@ class ChatLibExtractor {
 	private async processEntryPoints(): Promise<void> {
 		console.log('Processing entry points and dependencies...');
 
-		const queue = [...entryPoints];
+		// Start with static entry points and dynamically add all test files
+		const testFiles = await glob('src/lib/vscode-node/test/*.ts', { cwd: REPO_ROOT });
+		const queue = [...entryPoints, ...testFiles];
 
 		while (queue.length > 0) {
 			const filePath = queue.shift()!;
@@ -395,14 +398,25 @@ class ChatLibExtractor {
 	private transformFileContent(content: string, filePath: string): string {
 		let transformed = content;
 
+		// Normalize path for consistent comparison across platforms
+		const normalizedFilePath = this.normalizePath(filePath);
+
 		// Rewrite non-type imports of 'vscode' to use vscodeTypesShim
-		transformed = this.rewriteVscodeImports(transformed, filePath);
+		transformed = this.rewriteVscodeImports(transformed, normalizedFilePath);
 
 		// Rewrite imports from local vscodeTypes to use vscodeTypesShim
-		transformed = this.rewriteVscodeTypesImports(transformed, filePath);
+		transformed = this.rewriteVscodeTypesImports(transformed, normalizedFilePath);
+
+		// Rewrite imports in test files: '../../node/chatLibMain' -> '../../../../main'
+		if (normalizedFilePath.startsWith('src/lib/vscode-node/test/')) {
+			transformed = transformed.replace(
+				/(from\s+['"])\.\.\/\.\.\/node\/chatLibMain(['"])/g,
+				'$1../../../../main$2'
+			);
+		}
 
 		// Only rewrite relative imports for main.ts (chatLibMain.ts)
-		if (filePath === 'src/lib/node/chatLibMain.ts') {
+		if (normalizedFilePath === 'src/lib/node/chatLibMain.ts') {
 			transformed = transformed.replace(
 				/import\s+([^'"]*)\s+from\s+['"](\.\/[^'"]*|\.\.\/[^'"]*)['"]/g,
 				(match, importClause, importPath) => {
@@ -515,8 +529,29 @@ class ChatLibExtractor {
 		// Copy all tiktoken files
 		await this.copyTikTokenFiles();
 
+		// Copy test reply files
+		await this.copyTestReplyFiles();
+
 		// Update chat-lib tsconfig.json with path mappings
 		await this.updateChatLibTsConfig();
+	}
+
+	private async copyTestReplyFiles(): Promise<void> {
+		console.log('Copying test reply files...');
+
+		// Find all .reply.txt files in src/lib/vscode-node/test/
+		const testDir = path.join(REPO_ROOT, 'src', 'lib', 'vscode-node', 'test');
+		const replyFiles = await glob('*.reply.txt', { cwd: testDir });
+
+		for (const file of replyFiles) {
+			const srcPath = path.join(testDir, file);
+			const destPath = path.join(TARGET_DIR, '_internal', 'lib', 'vscode-node', 'test', file);
+
+			await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+			await fs.promises.copyFile(srcPath, destPath);
+		}
+
+		console.log(`Copied ${replyFiles.length} test reply files`);
 	}
 
 	private async updateChatLibTsConfig(): Promise<void> {

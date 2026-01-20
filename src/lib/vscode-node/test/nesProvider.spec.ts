@@ -11,18 +11,18 @@ import { promises as fs } from 'fs';
 import { outdent } from 'outdent';
 import * as path from 'path';
 import { assert, describe, expect, it } from 'vitest';
-import { CopilotToken, createTestExtendedTokenInfo } from '../src/_internal/platform/authentication/common/copilotToken';
-import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
-import { DocumentId } from '../src/_internal/platform/inlineEdits/common/dataTypes/documentId';
-import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
-import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../src/_internal/platform/networking/common/fetcherService';
-import { IFetcher } from '../src/_internal/platform/networking/common/networking';
-import { CancellationToken } from '../src/_internal/util/vs/base/common/cancellation';
-import { Emitter } from '../src/_internal/util/vs/base/common/event';
-import { URI } from '../src/_internal/util/vs/base/common/uri';
-import { StringEdit, StringReplacement } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
-import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../platform/authentication/common/copilotToken';
+import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
+import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
+import { MutableObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../../../platform/networking/common/fetcherService';
+import { IFetcher } from '../../../platform/networking/common/networking';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Emitter } from '../../../util/vs/base/common/event';
+import { URI } from '../../../util/vs/base/common/uri';
+import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
+import { createNESProvider, ILogTarget, ITelemetrySender, LogLevel } from '../../node/chatLibMain';
 
 
 class TestFetcher implements IFetcher {
