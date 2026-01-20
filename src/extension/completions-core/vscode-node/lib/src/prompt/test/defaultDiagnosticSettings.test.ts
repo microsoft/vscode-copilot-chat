@@ -7,8 +7,7 @@ import assert from 'assert';
 import Sinon from 'sinon';
 import { TestingServiceCollection } from '../../../../../../../platform/test/node/services';
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../../../../../platform/telemetry/common/nullExperimentationService';
+import { IConfigurationService } from '../../../../../../../platform/configuration/common/configurationService';
 import { DefaultDiagnosticSettings, getDefaultDiagnosticSettings } from '../contextProviderRegistry';
 import { createLibTestingContext } from '../../test/context';
 
