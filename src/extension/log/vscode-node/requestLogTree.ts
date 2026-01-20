@@ -25,6 +25,32 @@ import { IExtensionContribution } from '../../common/contributions';
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+
+/**
+ * Serialize MCP server definitions to a JSON-safe format.
+ * Excludes sensitive headers like Authorization.
+ */
+function serializeMcpServers(servers: readonly vscode.McpServerDefinition[]): object[] {
+	return servers.map(server => {
+		if (server instanceof vscode.McpStdioServerDefinition) {
+			return {
+				type: 'stdio',
+				label: server.label,
+				command: server.command,
+				args: server.args,
+				cwd: server.cwd?.toString(),
+				version: server.version
+			};
+		} else {
+			return {
+				type: 'http',
+				label: server.label,
+				uri: server.uri.with({ authority: '[authority]', query: '', fragment: '' }).toString(),
+				version: server.version
+			};
+		}
+	});
+}
 const exportPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportPromptLogsAsJson';
 const exportAllPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportAllPromptLogsAsJson';
 const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
@@ -479,7 +505,8 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 					exportedAt: new Date().toISOString(),
 					totalPrompts: allPromptsContent.length,
 					totalLogEntries: totalLogEntries,
-					prompts: allPromptsContent
+					prompts: allPromptsContent,
+					mcpServers: serializeMcpServers(vscode.lm.mcpServerDefinitions ?? [])
 				}, null, 2);
 
 				// Write to the selected file
