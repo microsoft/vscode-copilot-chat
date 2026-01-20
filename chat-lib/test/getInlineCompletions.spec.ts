@@ -11,7 +11,6 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { assert, describe, expect, it } from 'vitest';
 import type { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
-import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
 import { createTextDocument } from '../src/_internal/extension/completions-core/vscode-node/lib/src/test/textDocument';
 import { TextDocumentIdentifier } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocument';
 import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocumentManager';
@@ -25,6 +24,7 @@ import { Disposable } from '../src/_internal/util/vs/base/common/lifecycle';
 import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { ChatRequest } from '../src/_internal/vscodeTypes';
 import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
+import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/resultType';
 
 class TestFetcher implements IFetcher {
 	private _fetched = new Map<string, number>();

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionModelInfo, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -25,10 +25,11 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
+import { assert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
-import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { autorun, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
@@ -37,6 +38,7 @@ import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/naturalLanguageHint';
 import { createCorrelationId } from '../common/correlationId';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
@@ -111,7 +113,7 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 
 	private readonly _logger: ILogger;
 
-	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
+	public readonly onDidChange = this.model.onChange;
 	public readonly handleDidPartiallyAcceptCompletionItem = undefined;
 	public readonly handleDidRejectCompletionItem = undefined;
 
@@ -180,8 +182,13 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const label = `NES | ${basename(document.uri.fsPath)} (v${document.version})`;
+
 		const capturingToken = new CapturingToken(label, undefined, true, true);
-		const nesContext: NESInlineCompletionContext = { enforceCacheDelay: true, ...context };
+
+		assert(context.changeHint === undefined || NesChangeHint.is(context.changeHint), 'Expected changeHint to be of type TriggerNes or undefined');
+		const changeHint = context.changeHint as NesChangeHint | undefined;
+		const nesContext: NESInlineCompletionContext = { enforceCacheDelay: true, ...context, changeHint };
+
 		return this._requestLogger.captureInvocation(capturingToken, () => this._provideInlineCompletionItems(document, position, nesContext, token));
 	}
 

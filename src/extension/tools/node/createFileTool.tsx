@@ -165,6 +165,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		const confirmation = await this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			[uri],
+			this._promptContext?.allowedEditUris,
 			async () => this.instantiationService.invokeFunction(
 				formatDiffAsUnified,
 				uri,

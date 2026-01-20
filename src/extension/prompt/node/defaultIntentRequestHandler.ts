@@ -240,8 +240,8 @@ export class DefaultIntentRequestHandler {
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.documentContext?.document.uri);
 		participants.push(stream => interactionOutcomeComputer.spyOnStream(stream));
 
-		// 4. Linkify the stream unless told otherwise
-		if (!intentInvocation.linkification?.disable) {
+		// 4. Linkify the stream unless told otherwise, or if this is a subagent request
+		if (!intentInvocation.linkification?.disable && !this.request.subAgentInvocationId) {
 			participants.push(stream => {
 				const linkStream = this._instantiationService.createInstance(ResponseStreamWithLinkification, { requestId: this.turn.id, references: this.turn.references }, stream, intentInvocation.linkification?.additionaLinkifiers ?? [], this.token);
 				return ChatResponseStreamImpl.spy(linkStream, p => p, () => {
@@ -685,7 +685,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
 		const debugName = this.options.request.subAgentInvocationId ?
-			`tool/runSubagent` :
+			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
 		return this.options.invocation.endpoint.makeChatRequest2({
 			...opts,

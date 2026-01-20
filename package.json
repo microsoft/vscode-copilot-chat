@@ -2129,6 +2129,11 @@
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
 			{
+				"command": "copilot.claude.hooks",
+				"title": "Configure Hooks",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -2652,6 +2657,12 @@
 				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.checkoutPullRequestReroute",
+				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
+				"icon": "$(git-pull-request)",
+				"category": "GitHub Pull Request"
 			}
 		],
 		"configuration": [
@@ -3869,6 +3880,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.agent.omitFileAttachmentContents": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.omitFileAttachmentContents%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.instantApply.shortContextModelName": {
 						"type": "string",
 						"default": "gpt-4o-instant-apply-full-ft-v66-short",
@@ -4072,7 +4092,7 @@
 					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
 						"tags": [
 							"advanced",
@@ -4206,6 +4226,11 @@
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "chatSessionType == copilotcli",
+					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
 					"group": "navigation@0"
 				}
 			],
@@ -4446,6 +4471,10 @@
 				},
 				{
 					"command": "github.copilot.chat.showAsChatSession",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "false"
 				}
 			],
@@ -5132,6 +5161,10 @@
 					{
 						"name": "security-review",
 						"description": "Complete a security review of the pending changes on the current branch"
+					},
+					{
+						"name": "hooks",
+						"description": "Configure Claude Code hooks for tool execution and events"
 					}
 				]
 			},
@@ -5303,7 +5336,7 @@
 		"@types/source-map-support": "^0.5.10",
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
-		"@types/vscode": "^1.102.0",
+		"@types/vscode": "^1.108.1",
 		"@types/vscode-webview": "^1.57.4",
 		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
@@ -5376,7 +5409,7 @@
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.381",
+		"@github/copilot": "^0.0.384",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
