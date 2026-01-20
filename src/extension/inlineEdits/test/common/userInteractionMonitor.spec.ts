@@ -163,7 +163,7 @@ describe('UserInteractionMonitor', () => {
 		test('returns neutral aggressiveness with no history', () => {
 			// With no data, score is 0.5, which is between low and medium thresholds
 			// Default: highThreshold = 0.6, mediumThreshold = 0.4
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.Medium);
 		});
 
@@ -173,7 +173,7 @@ describe('UserInteractionMonitor', () => {
 				monitor.handleAcceptance();
 			}
 
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.High);
 		});
 
@@ -183,7 +183,7 @@ describe('UserInteractionMonitor', () => {
 				monitor.handleRejection();
 			}
 
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.Low);
 		});
 
@@ -198,7 +198,7 @@ describe('UserInteractionMonitor', () => {
 				monitor.handleAcceptance();
 			}
 
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.Low);
 		});
 
@@ -211,7 +211,7 @@ describe('UserInteractionMonitor', () => {
 				monitor.handleRejection();
 			}
 
-			const levelRejectionsRecent = monitor.getAggressivenessLevel();
+			const levelRejectionsRecent = monitor.getAggressivenessLevel().aggressivenessLevel;
 
 			// Reset and do opposite order
 			monitor = new TestUserInteractionMonitor(configurationService, experimentationService);
@@ -222,7 +222,7 @@ describe('UserInteractionMonitor', () => {
 				monitor.handleAcceptance();
 			}
 
-			const levelAcceptancesRecent = monitor.getAggressivenessLevel();
+			const levelAcceptancesRecent = monitor.getAggressivenessLevel().aggressivenessLevel;
 
 			// When acceptances are more recent, aggressiveness should be higher
 			const aggressivenessOrder = [AggressivenessLevel.Low, AggressivenessLevel.Medium, AggressivenessLevel.High];
@@ -252,7 +252,7 @@ describe('UserInteractionMonitor', () => {
 			monitor.handleIgnored();
 			monitor.handleRejection();
 
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			// With ignored having score 0.5, result should be medium
 			expect(level).toBe(AggressivenessLevel.Medium);
 		});
@@ -280,7 +280,7 @@ describe('UserInteractionMonitor', () => {
 			monitor.handleIgnored();
 
 			// Only 2 ignored should be counted due to limit
-			const level = monitor.getAggressivenessLevel();
+			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect([AggressivenessLevel.Medium, AggressivenessLevel.High]).toContain(level);
 		});
 	});
