@@ -177,7 +177,7 @@ This groups all background operations together, clearly separating them from use
 - [x] Add `parentToken?: CapturingToken` to `CapturingToken` constructor
 - [x] Add `createChild()` method to `CapturingToken`
 - [x] Expose `currentToken` on `IRequestLogger` interface
-- [ ] Update subagent invocation to pass parent token
+- [ ] Update subagent invocation to pass parent token (see Future Improvements)
 - [x] Update `requestLogTree.ts` to render token hierarchy
 - [x] Add unit tests for hierarchical token behavior
 - [ ] Update background operations to use a shared background token
