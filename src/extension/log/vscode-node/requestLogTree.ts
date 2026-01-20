@@ -648,23 +648,17 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		}
 
 		// Second pass: collect prompt items and apply flattening/promotion logic
-		const rootPrompts: ChatPromptItem[] = [];
 		for (const [, promptItem] of tokenToPromptItem) {
 			// Apply flattening and promotion logic
 			if (promptItem.token.flattenSingleChild && promptItem.children.length === 1 && !promptItem.hasSeen) {
+				// Flattened: add the single child directly to result
 				result.push(promptItem.children[0]);
 			} else {
+				// Not flattened: add the prompt item itself to result
 				if (promptItem.token.promoteMainEntry) {
 					promptItem.promoteMainEntry();
 				}
-				rootPrompts.push(promptItem);
-			}
-		}
-
-		// Add root prompts to result (they may have been added by non-token entries already)
-		for (const prompt of rootPrompts) {
-			if (!result.includes(prompt)) {
-				result.push(prompt);
+				result.push(promptItem);
 			}
 		}
 
