@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
 import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
@@ -151,24 +152,25 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 }
 
 class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProvider {
-	private _releaseDate: string | undefined;
+	private readonly _releaseDate: string | undefined;
 
 	constructor(
 		envService: IEnvService,
-		fileSystemService: IFileSystemService,
+		_fileSystemService: IFileSystemService,
 		private _logService: ILogService
 	) {
-		this._initReleaseDate(envService, fileSystemService);
+		this._releaseDate = this._initReleaseDate(envService);
 	}
 
-	private async _initReleaseDate(envService: IEnvService, fileSystemService: IFileSystemService): Promise<void> {
+	private _initReleaseDate(envService: IEnvService): string | undefined {
 		try {
 			const productJsonUri = URI.joinPath(URI.file(envService.appRoot), 'product.json');
-			const content = await fileSystemService.readFile(productJsonUri);
-			const product = JSON.parse(new TextDecoder().decode(content));
-			this._releaseDate = this._formatReleaseDate(product.date ?? '');
+			const content = fs.readFileSync(productJsonUri.fsPath, 'utf8');
+			const product = JSON.parse(content);
+			return this._formatReleaseDate(product.date ?? '');
 		} catch {
 			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date`);
+			return undefined;
 		}
 	}
 
