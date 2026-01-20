@@ -50,13 +50,13 @@ function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | unde
 	// Claude models
 	if (family.includes('claude') || name.includes('claude')) {
 		if (name.includes('opus')) {
-			return 'Most capable Claude model. Excellent for complex analysis, coding tasks, and nuanced creative writing.';
+			return vscode.l10n.t('Most capable Claude model. Excellent for complex analysis, coding tasks, and nuanced creative writing.');
 		}
 		if (name.includes('sonnet')) {
-			return 'Balanced Claude model offering strong performance for everyday coding and chat tasks at faster speeds.';
+			return vscode.l10n.t('Balanced Claude model offering strong performance for everyday coding and chat tasks at faster speeds.');
 		}
 		if (name.includes('haiku')) {
-			return 'Fastest and most compact Claude model. Ideal for quick responses and simple tasks.';
+			return vscode.l10n.t('Fastest and most compact Claude model. Ideal for quick responses and simple tasks.');
 		}
 	}
 
@@ -64,41 +64,41 @@ function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | unde
 	if (family.includes('gpt') || name.includes('gpt') || family.includes('codex') || name.includes('codex')) {
 		if (name.includes('codex') || family.includes('codex')) {
 			if (name.includes('max')) {
-				return 'Maximum capability Codex model optimized for complex multi-file refactoring and large codebase understanding.';
+				return vscode.l10n.t('Maximum capability Codex model optimized for complex multi-file refactoring and large codebase understanding.');
 			}
 			if (name.includes('mini')) {
-				return 'Lightweight Codex model for quick code completions and simple edits with low latency.';
+				return vscode.l10n.t('Lightweight Codex model for quick code completions and simple edits with low latency.');
 			}
-			return 'OpenAI Codex model specialized for code generation, debugging, and software development tasks.';
+			return vscode.l10n.t('OpenAI Codex model specialized for code generation, debugging, and software development tasks.');
 		}
 		if (name.includes('4o')) {
-			return 'Optimized GPT-4 model with faster responses and multimodal capabilities.';
+			return vscode.l10n.t('Optimized GPT-4 model with faster responses and multimodal capabilities.');
 		}
 		if (name.includes('4.1') || name.includes('4-1')) {
-			return 'Enhanced GPT-4 model with improved instruction following and coding performance.';
+			return vscode.l10n.t('Enhanced GPT-4 model with improved instruction following and coding performance.');
 		}
 		if (name.includes('4')) {
-			return 'Reliable GPT-4 model suitable for a wide range of coding and general tasks.';
+			return vscode.l10n.t('Reliable GPT-4 model suitable for a wide range of coding and general tasks.');
 		}
 	}
 
 	// Gemini models
 	if (family.includes('gemini') || name.includes('gemini')) {
 		if (name.includes('flash')) {
-			return 'Fast and efficient Gemini model optimized for quick responses and high throughput.';
+			return vscode.l10n.t('Fast and efficient Gemini model optimized for quick responses and high throughput.');
 		}
 		if (name.includes('pro')) {
-			return 'Google\'s advanced Gemini Pro model with strong reasoning and coding capabilities.';
+			return vscode.l10n.t("Google's advanced Gemini Pro model with strong reasoning and coding capabilities.");
 		}
-		return 'Google Gemini model with balanced performance for coding and general assistance.';
+		return vscode.l10n.t('Google Gemini model with balanced performance for coding and general assistance.');
 	}
 
 	// o1/o3 reasoning models
 	if (family.includes('o1') || family.includes('o3') || name.includes('o1') || name.includes('o3')) {
 		if (name.includes('mini')) {
-			return 'Compact reasoning model for quick problem-solving with step-by-step thinking.';
+			return vscode.l10n.t('Compact reasoning model for quick problem-solving with step-by-step thinking.');
 		}
-		return 'Advanced reasoning model that excels at complex problem-solving, math, and coding challenges.';
+		return vscode.l10n.t('Advanced reasoning model that excels at complex problem-solving, math, and coding challenges.');
 	}
 
 	return undefined;
