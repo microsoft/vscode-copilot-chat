@@ -19,6 +19,7 @@ import { ClaudeCodeModels, IClaudeCodeModels } from '../../agents/claude/node/cl
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
+import { ClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport } from '../../agents/copilotcli/node/copilotCLIImageSupport';
@@ -88,7 +89,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider));
-		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider, chatSessionContentProvider);
+		const slashCommandService = claudeAgentInstaService.createInstance(ClaudeSlashCommandService);
+		const claudeChatSessionParticipant = new ClaudeChatSessionParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider, chatSessionContentProvider, slashCommandService);
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider, chatParticipant));
 
