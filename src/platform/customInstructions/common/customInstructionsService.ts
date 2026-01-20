@@ -66,7 +66,12 @@ export interface ICustomInstructionsService {
 	isSkillMdFile(uri: URI): boolean;
 	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
 
-	/** Refreshes the cached extension prompt files. */
+	/**
+	 * Refreshes the cached extension prompt files by querying VS Code's extension prompt file provider.
+	 * The cache is normally initialized lazily on first use in {@link isExternalInstructionsFile}, so
+	 * callers only need to invoke this explicitly when they require the latest extension state before
+	 * that first lookup or want to force a manual refresh of the cached prompt file list.
+	 */
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
