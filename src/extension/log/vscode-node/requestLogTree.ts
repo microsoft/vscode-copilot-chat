@@ -617,6 +617,10 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		// Map from token to its ChatPromptItem for nesting child tokens
 		const tokenToPromptItem = new Map<CapturingToken, ChatPromptItem>();
 
+		// Track the order in which we first see each token (for proper chronological ordering)
+		const tokenFirstSeenIndex = new Map<CapturingToken, number>();
+		let globalIndex = 0;
+
 		// First pass: create ChatPromptItems for all tokens and collect entries
 		let lastPrompt: ChatPromptItem | undefined;
 
@@ -631,6 +635,7 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 					if (!existingPrompt) {
 						existingPrompt = ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token));
 						tokenToPromptItem.set(currReq.token, existingPrompt);
+						tokenFirstSeenIndex.set(currReq.token, globalIndex);
 					}
 					lastPrompt = existingPrompt;
 					seen.add(currReq.token);
@@ -646,21 +651,43 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 					lastPrompt.children.push(currReqTreeItem);
 				}
 			}
+			globalIndex++;
 		}
 
 		// Second pass: build hierarchy by nesting child tokens under parent tokens
+		// Sort child tokens by their first-seen index to maintain chronological order
 		const rootPrompts: ChatPromptItem[] = [];
 		const nestedTokens = new Set<CapturingToken>();
 
-		for (const [token, promptItem] of tokenToPromptItem) {
-			if (token.parentToken) {
-				// This token has a parent - try to nest it
-				const parentPromptItem = tokenToPromptItem.get(token.parentToken);
-				if (parentPromptItem) {
-					// Add this prompt item as a child of the parent
-					parentPromptItem.children.push(promptItem);
-					nestedTokens.add(token);
+		// Collect tokens with parents, sorted by first-seen index
+		const tokensWithParents = [...tokenToPromptItem.entries()]
+			.filter(([token]) => token.parentToken)
+			.sort((a, b) => (tokenFirstSeenIndex.get(a[0]) ?? 0) - (tokenFirstSeenIndex.get(b[0]) ?? 0));
+
+		for (const [token, promptItem] of tokensWithParents) {
+			// This token has a parent - try to nest it
+			const parentPromptItem = tokenToPromptItem.get(token.parentToken!);
+			if (parentPromptItem) {
+				// Find the correct insertion position based on when this token was first seen
+				// relative to other children in the parent
+				const childIndex = tokenFirstSeenIndex.get(token) ?? 0;
+				let insertPosition = parentPromptItem.children.length;
+
+				// Find where to insert to maintain chronological order
+				for (let i = 0; i < parentPromptItem.children.length; i++) {
+					const child = parentPromptItem.children[i];
+					if (child instanceof ChatPromptItem && child.token) {
+						const childFirstSeen = tokenFirstSeenIndex.get(child.token) ?? 0;
+						if (childIndex < childFirstSeen) {
+							insertPosition = i;
+							break;
+						}
+					}
 				}
+
+				// Insert the prompt item at the correct position
+				parentPromptItem.children.splice(insertPosition, 0, promptItem);
+				nestedTokens.add(token);
 			}
 		}
 
