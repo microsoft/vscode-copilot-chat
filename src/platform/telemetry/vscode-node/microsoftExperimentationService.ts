@@ -156,7 +156,6 @@ class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProv
 
 	constructor(
 		envService: IEnvService,
-		_fileSystemService: IFileSystemService,
 		private _logService: ILogService
 	) {
 		this._releaseDate = this._initReleaseDate(envService);
@@ -168,8 +167,8 @@ class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProv
 			const content = fs.readFileSync(productJsonUri.fsPath, 'utf8');
 			const product = JSON.parse(content);
 			return this._formatReleaseDate(product.date ?? '');
-		} catch {
-			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date`);
+		} catch (error) {
+			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date: ${error}`);
 			return undefined;
 		}
 	}
@@ -230,7 +229,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
-				new PlatformAndReleaseDateFilterProvider(envService, fileSystemService, logService),
+				new PlatformAndReleaseDateFilterProvider(envService, logService),
 			);
 		};
 
