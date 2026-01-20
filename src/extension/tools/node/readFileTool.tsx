@@ -171,6 +171,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		}
 
 		const { start, end } = getParamRanges(input, documentSnapshot);
+
+		await this.customInstructionsService.refreshExtensionPromptFiles();
 		const skillInfo = this.customInstructionsService.getSkillInfo(uri);
 
 		if (start === 1 && end === documentSnapshot.lineCount) {
