@@ -10,7 +10,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { DebugRecorderBookmark } from '../../../../platform/inlineEdits/common/debugRecorderBookmark';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
-import { ISerializedEdit, LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
+import { deserializeEdit, ISerializedEdit, LogEntry, serializeEdit } from '../../../../platform/workspaceRecorder/common/workspaceLog';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { DebugRecorder } from '../../node/debugRecorder';
 import { filterLogForSensitiveFiles } from './inlineEditDebugComponent';
@@ -349,15 +349,16 @@ export class ExpectedEditCaptureController extends Disposable {
 	}
 
 	/**
-	 * Compose two serialized edits (similar to StringEdit.compose).
+	 * Compose two serialized edits using StringEdit.compose.
 	 */
 	private _composeSerializedEdits(
 		first: ISerializedEdit,
 		second: ISerializedEdit
 	): ISerializedEdit {
-		// For now, just concatenate the edits
-		// TODO: Implement proper composition if needed
-		return [...first, ...second];
+		const firstEdit = deserializeEdit(first);
+		const secondEdit = deserializeEdit(second);
+		const composed = firstEdit.compose(secondEdit);
+		return serializeEdit(composed);
 	}
 
 	/**
