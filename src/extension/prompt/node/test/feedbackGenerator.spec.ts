@@ -66,17 +66,30 @@ class MockTextDocument implements TextDocument {
 		if (!range) {
 			return this._lines.join('\n');
 		}
-		const start = range.start;
-		const end = range.end;
-		if (start.line === end.line) {
-			return this._lines[start.line].substring(start.character, end.character);
+		// Clamp range to valid document bounds (like VS Code's TextDocument does)
+		const startLine = Math.max(0, Math.min(range.start.line, this._lines.length - 1));
+		const endLine = Math.max(0, Math.min(range.end.line, this._lines.length));
+		const startChar = Math.max(0, Math.min(range.start.character, this._lines[startLine]?.length ?? 0));
+
+		if (startLine === endLine || endLine >= this._lines.length) {
+			// For ranges ending at or beyond lineCount, get text from start to end of document
+			if (endLine >= this._lines.length) {
+				const lines: string[] = [];
+				lines.push(this._lines[startLine].substring(startChar));
+				for (let i = startLine + 1; i < this._lines.length; i++) {
+					lines.push(this._lines[i]);
+				}
+				return lines.join('\n');
+			}
+			return this._lines[startLine].substring(startChar, range.end.character);
 		}
 		const lines: string[] = [];
-		lines.push(this._lines[start.line].substring(start.character));
-		for (let i = start.line + 1; i < end.line; i++) {
+		lines.push(this._lines[startLine].substring(startChar));
+		for (let i = startLine + 1; i < endLine; i++) {
 			lines.push(this._lines[i]);
 		}
-		lines.push(this._lines[end.line].substring(0, end.character));
+		const endChar = Math.min(range.end.character, this._lines[endLine]?.length ?? 0);
+		lines.push(this._lines[endLine].substring(0, endChar));
 		return lines.join('\n');
 	}
 
