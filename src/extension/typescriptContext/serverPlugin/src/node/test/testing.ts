@@ -8,11 +8,11 @@ import * as tt from 'typescript';
 import TS from '../../common/typescript';
 const ts = TS();
 
-import { computeContext as _computeContext, prepareNesRename as _prepareNesRename } from '../../common/api';
+import { computeContext as _computeContext, nesRename as _nesRename, prepareNesRename as _prepareNesRename } from '../../common/api';
 import { CharacterBudget, ComputeContextSession, ContextResult, NullLogger, RequestContext, type Logger, type Search } from '../../common/contextProvider';
 import type { Host } from '../../common/host';
 import { PrepareNesRenameResult } from '../../common/nesRenameValidator';
-import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type Range, type PriorityTag, type RenameKind, type Trait } from '../../common/protocol';
+import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type Range, type RenameGroup, type RenameKind, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -198,6 +198,19 @@ export function prepareNesRename(session: TestSession, document: string, positio
 	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
 	_prepareNesRename(result, session.session, session.service, document, pos, oldName, newName, lastSymbolRename, new NullCancellationToken());
 	return result.getCanRename();
+}
+
+export function nesRename(session: TestSession, document: string, position: { line: number; character: number }, oldName: string, newName: string, lastSymbolRename: Range): RenameGroup[] {
+	const program = session.service.getProgram();
+	if (program === undefined) {
+		return [];
+	}
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return [];
+	}
+	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
+	return _nesRename(session.session, session.service, document, pos, oldName, newName, lastSymbolRename);
 }
 
 class LanguageServiceTestSession extends SingleLanguageServiceSession {

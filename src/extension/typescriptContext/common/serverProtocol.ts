@@ -526,25 +526,16 @@ export interface PrepareNesRenameRequest extends tt.server.protocol.Request {
 export interface PrepareNesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	oldName: string;
 	newName: string;
-	lastSymbolRename?: {
-		start: { line: number; offset: number };
-		end: { line: number; offset: number };
-	};
+	lastSymbolRename?: Range;
 	startTime: number;
 	timeBudget: number;
 }
-
-export type LastSymbolRename = NonNullable<PrepareNesRenameRequestArgs['lastSymbolRename']>;
 
 export namespace PrepareNesRenameResponse {
 
 	export type OK = PrepareNesRenameResult;
 
-	export type Failed = {
-		error: ErrorCode;
-		message: string;
-		stack?: string;
-	};
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: PrepareNesRenameResponse): boolean {
 		return (response.type === 'cancelled');
@@ -569,45 +560,41 @@ export interface NesRenameRequest extends tt.server.protocol.Request {
 export interface NesRenameRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	oldName: string;
 	newName: string;
-	lastSymbolRename?: {
-		start: { line: number; offset: number };
-		end: { line: number; offset: number };
-	};
+	lastSymbolRename?: Range;
+}
+
+export type TextChange = {
+	range: Range;
+	newText?: string;
+}
+
+export type RenameGroup = {
+	file: FilePath;
+	changes: TextChange[];
 }
 
 export namespace NesRenameResult {
 	export type OK = {
-		succeeded: true;
-		timedOut: boolean;
+		groups: RenameGroup[];
 	}
-	export type Failed = {
-		succeeded: false;
-		timedOut: boolean;
-		reason?: string;
-	}
+	export type Failed = CustomResponse.Failed;
 }
-
-export type NesRenameResult = NesRenameResult.OK | NesRenameResult.Failed;
 
 export namespace NesRenameResponse {
 
-	export type OK = NesRenameResult;
+	export type OK = NesRenameResult.OK;
 
-	export type Failed = {
-		error: ErrorCode;
-		message: string;
-		stack?: string;
-	};
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: NesRenameResponse): boolean {
 		return (response.type === 'cancelled');
 	}
 
 	export function isOk(response: NesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: OK } {
-		return response.type === 'response' && (response.body as NesRenameResult).succeeded !== undefined;
+		return response.type === 'response' && (response.body as NesRenameResult.OK).groups !== undefined;
 	}
 	export function isError(response: NesRenameResponse): response is Omit<tt.server.protocol.Response, 'body'> & { body: Failed } {
-		return response.type === 'response' && (response.body as Failed).error !== undefined;
+		return response.type === 'response' && (response.body as NesRenameResult.Failed).error !== undefined;
 	}
 }
 

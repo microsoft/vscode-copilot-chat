@@ -197,10 +197,10 @@ function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program,
 }
 
 function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: Range, token: tt.CancellationToken) {
-	const [newText, newPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
 
-	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (updatedProgram, _originalProgram, updatedSourceFile) => {
-		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, newPos, {});
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, oldPos, {});
 		if (!renameInfo.canRename) {
 			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
 			return;
@@ -209,7 +209,7 @@ function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: 
 			result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
 			return;
 		}
-		doPrepareNesRename(result, updatedProgram, updatedSourceFile, newPos, oldName, newName, token);
+		doPrepareNesRename(result, updatedProgram, updatedSourceFile, oldPos, oldName, newName, token);
 		if (result.getCanRename() === RenameKind.maybe || result.getCanRename() === RenameKind.yes) {
 			result.setOnOldState(true);
 		}
@@ -231,11 +231,11 @@ export function nesRename(session: ComputeContextSession, languageService: tt.La
 		return [];
 	}
 
-	const [newText, newPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
-	// const delta = newName.length - oldName.length;
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+	const delta = newName.length - oldName.length;
 	const map: Map<string, RenameGroup> = new Map();
-	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, newText, (updatedProgram, _originalProgram, updatedSourceFile) => {
-		const renameLocations = languageService.findRenameLocations(updatedSourceFile.fileName, newPos, false, false, {});
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameLocations = languageService.findRenameLocations(updatedSourceFile.fileName, oldPos, false, false, {});
 		if (renameLocations === undefined) {
 			return;
 		}
@@ -254,12 +254,19 @@ export function nesRename(session: ComputeContextSession, languageService: tt.La
 			}
 			const start = sf.getLineAndCharacterOfPosition(loc.textSpan.start);
 			const end = sf.getLineAndCharacterOfPosition(loc.textSpan.start + loc.textSpan.length);
+			if (
+				loc.fileName === document &&
+				start.line === lastSymbolRename.start.line && start.character === lastSymbolRename.start.character &&
+				end.line === lastSymbolRename.end.line && end.character === lastSymbolRename.end.character - delta
+			) {
+				continue;
+			}
 			group.changes.push({
 				range: {
 					start: { line: start.line, character: start.character },
 					end: { line: end.line, character: end.character }
 				},
-				newText: (loc.prefixText ?? '') + newName + (loc.suffixText ?? '')
+				newText: (loc.prefixText || loc.suffixText) ? (loc.prefixText ?? '') + newName + (loc.suffixText ?? '') : undefined
 			});
 		}
 	});

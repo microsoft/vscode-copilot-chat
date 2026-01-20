@@ -272,7 +272,7 @@ export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {
 					languageServiceHost = info.languageServiceHost;
 					info.session.addProtocolHandler('_.copilot.context', computeContextHandler);
 					info.session.addProtocolHandler('_.copilot.prepareNesRename', prepareNesRenameHandler);
-					info.session.addProtocolHandler('_.copilot.newRename', nesRenameHandler);
+					info.session.addProtocolHandler('_.copilot.postNesRename', nesRenameHandler);
 				}
 
 			} catch (e) {

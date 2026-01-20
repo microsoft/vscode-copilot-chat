@@ -565,7 +565,7 @@ export interface NesRenameRequestArgs extends tt.server.protocol.FileLocationReq
 
 export type TextChange = {
 	range: Range;
-	newText: string;
+	newText?: string;
 }
 
 export type RenameGroup = {
@@ -580,17 +580,11 @@ export namespace NesRenameResult {
 	export type Failed = CustomResponse.Failed;
 }
 
-export type NesRenameResult = NesRenameResult.OK | NesRenameResult.Failed;
-
 export namespace NesRenameResponse {
 
-	export type OK = NesRenameResult;
+	export type OK = NesRenameResult.OK;
 
-	export type Failed = {
-		error: ErrorCode;
-		message: string;
-		stack?: string;
-	};
+	export type Failed = CustomResponse.Failed;
 
 	export function isCancelled(response: NesRenameResponse): boolean {
 		return (response.type === 'cancelled');

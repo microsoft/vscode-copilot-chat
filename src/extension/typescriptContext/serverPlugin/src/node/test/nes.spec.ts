@@ -17,7 +17,9 @@ import type * as testing from './testing';
 
 let create: typeof testing.create;
 let prepareNesRename: typeof testing.prepareNesRename;
+let nesRename: typeof testing.nesRename;
 let RenameKind: typeof protocol.RenameKind;
+let toNormalizedPath: typeof ts.server.toNormalizedPath;
 
 // This is OK since we run tests in node loading a TS version installed in the workspace.
 const root = path.join(__dirname, '../../../fixtures/nes');
@@ -194,7 +196,9 @@ beforeAll(async function () {
 	]);
 	create = testingModule.create;
 	prepareNesRename = testingModule.prepareNesRename;
+	nesRename = testingModule.nesRename;
 	RenameKind = protocolModule.RenameKind;
+	toNormalizedPath = ts.server.toNormalizedPath;
 }, 10000);
 
 suite('NES Test Suite', function () {
@@ -233,16 +237,24 @@ suite('NES Post Rename Test Suite', function () {
 		const start = trackedRename.range.start;
 		const end = trackedRename.range.end;
 		test(testCase.title, () => {
+			const normalizedFilePath = toNormalizedPath(filePath);
+			const position = { line: testCase.line, character: testCase.character };
+			const lastSymbolRename: Range = {
+				start: { line: start.line, character: start.character },
+				end: { line: end.line, character: end.character },
+			};
 			// First, perform the tracked rename.
 			const trackedRenameKind = prepareNesRename(
 				session,
-				filePath,
-				{ line: testCase.line, character: testCase.character },
+				normalizedFilePath,
+				position,
 				testCase.oldName,
 				testCase.newName,
-				{ start: { line: start.line, character: start.character }, end: { line: end.line, character: end.character } },
+				lastSymbolRename,
 			);
 			assert.strictEqual(trackedRenameKind, RenameKind.fromString(testCase.expected));
+			const renameGroups = nesRename(session, normalizedFilePath, position, testCase.oldName, testCase.newName, lastSymbolRename);
+			assert.strictEqual(renameGroups.length > 0, true);
 		});
 	}
 });
