@@ -285,7 +285,7 @@ To add new functionality:
 3. **New Tool Permission Handler:**
    - Create handler in appropriate directory (common/node/vscode-node)
    - Implement tool approval logic
-   - Export from `index.ts` to trigger registration
+   - Import your handler module in `index.ts` to trigger registration
 
 ## Configuration
 
