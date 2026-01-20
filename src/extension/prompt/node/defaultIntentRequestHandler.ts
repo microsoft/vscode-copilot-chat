@@ -356,6 +356,12 @@ export class DefaultIntentRequestHandler {
 		return codeBlocks || summarizedConversationHistory || renderedUserMessageMetadata || globalContextMetadata || tokenUsageMetadata ?
 			{
 				...chatResult,
+				...tokenUsageMetadata && {
+					usage: {
+						promptTokens: tokenUsageMetadata.promptTokens,
+						completionTokens: tokenUsageMetadata.outputTokens,
+					}
+				},
 				metadata: {
 					...chatResult?.metadata,
 					...codeBlocks,

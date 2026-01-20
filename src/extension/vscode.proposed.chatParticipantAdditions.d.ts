@@ -86,8 +86,6 @@ declare module 'vscode' {
 		 * Tools may use this to render interim UI while the full invocation input is collected.
 		 */
 		readonly partialInput?: unknown;
-
-		readonly subagentInvocationId?: string;
 	}
 
 	export interface ChatTerminalToolInvocationData {
@@ -361,7 +359,7 @@ declare module 'vscode' {
 		 * @param toolName The name of the tool being invoked.
 		 * @param streamData Optional initial streaming data with partial arguments.
 		 */
-		beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): void;
+		beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData & { subagentInvocationId?: string }): void;
 
 		/**
 		 * Update the streaming data for a tool invocation that was started with `beginToolInvocation`.
@@ -513,6 +511,21 @@ declare module 'vscode' {
 
 	export type ChatExtendedRequestHandler = (request: ChatRequest, context: ChatContext, response: ChatResponseStream, token: CancellationToken) => ProviderResult<ChatResult | void>;
 
+	/**
+	 * Token usage information for a chat request.
+	 */
+	export interface ChatResultUsage {
+		/**
+		 * The number of prompt tokens used in this request.
+		 */
+		readonly promptTokens: number;
+
+		/**
+		 * The number of completion tokens generated in this response.
+		 */
+		readonly completionTokens: number;
+	}
+
 	export interface ChatResult {
 		nextQuestion?: {
 			prompt: string;
@@ -523,6 +536,12 @@ declare module 'vscode' {
 		 * An optional detail string that will be rendered at the end of the response in certain UI contexts.
 		 */
 		details?: string;
+
+		/**
+		 * Token usage information for this request, if available.
+		 * This is typically provided by the underlying language model.
+		 */
+		readonly usage?: ChatResultUsage;
 	}
 
 	export namespace chat {
@@ -687,7 +706,7 @@ declare module 'vscode' {
 
 	export interface LanguageModelToolInvocationOptions<T> {
 		model?: LanguageModelChat;
-		readonly chatStreamToolCallId?: string;
+		chatStreamToolCallId?: string;
 	}
 
 	export interface LanguageModelToolInvocationStreamOptions<T> {
