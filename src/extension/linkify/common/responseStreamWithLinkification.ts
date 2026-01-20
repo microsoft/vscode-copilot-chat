@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
+import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatToolInvocationStreamData, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -110,7 +110,6 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return part instanceof ChatResponseFileTreePart
 			|| part instanceof ChatResponseCommandButtonPart
 			|| part instanceof ChatResponseConfirmationPart
-			|| part instanceof ChatPrepareToolInvocationPart
 			|| part instanceof ChatToolInvocationPart
 			|| part instanceof ChatResponseThinkingProgressPart;
 	}
@@ -154,8 +153,13 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
-	prepareToolInvocation(toolName: string): ChatResponseStream {
-		this.enqueue(() => this._progress.prepareToolInvocation(toolName), false);
+	beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): ChatResponseStream {
+		this.enqueue(() => this._progress.beginToolInvocation(toolCallId, toolName, streamData), true);
+		return this;
+	}
+
+	updateToolInvocation(toolCallId: string, streamData: { partialInput?: unknown }): ChatResponseStream {
+		this.enqueue(() => this._progress.updateToolInvocation(toolCallId, streamData), false);
 		return this;
 	}
 

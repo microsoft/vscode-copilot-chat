@@ -83,7 +83,9 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 				details.push(`${totalClearedThinkingTurns} thinking turns`);
 			}
 
-			text += `🧹 Context cleared: ${details.join(', ')}`;
+			if (details.length > 0) {
+				text += `🧹 Context cleared: ${details.join(', ')}`;
+			}
 		}
 
 		return text;
@@ -344,6 +346,20 @@ export class RequestLogger extends AbstractRequestLogger {
 			thinking,
 			edits,
 			toolMetadata
+		));
+	}
+
+	public override logServerToolCall(id: string, name: string, args: unknown): void {
+		const syntheticResponse: LanguageModelToolResult2 = {
+			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
+		};
+		this._addEntry(new LoggedToolCall(
+			id,
+			`${name} [server]`,
+			args,
+			syntheticResponse,
+			this.currentRequest,
+			Date.now()
 		));
 	}
 

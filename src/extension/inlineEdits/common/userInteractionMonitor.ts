@@ -226,22 +226,28 @@ export class UserInteractionMonitor {
 
 	// Determine aggressiveness level based on user interactions
 
-	public getAggressivenessLevel(): AggressivenessLevel {
+	/**
+	 * Returns the aggressiveness level and the user happiness score that was used to derive it.
+	 * The score is returned to avoid race conditions when logging telemetry.
+	 */
+	public getAggressivenessLevel(): { aggressivenessLevel: AggressivenessLevel; userHappinessScore: number | undefined } {
 		const configuredAggressivenessLevel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabAggressivenessLevel, this._experimentationService);
 
 		if (configuredAggressivenessLevel !== undefined) {
-			return configuredAggressivenessLevel;
+			return { aggressivenessLevel: configuredAggressivenessLevel, userHappinessScore: undefined };
 		}
 
+		let level: AggressivenessLevel;
 		const config = this._getUserHappinessScoreConfiguration();
 		const userHappinessScore = this._getUserHappinessScore(config);
 		if (userHappinessScore >= config.highThreshold) {
-			return AggressivenessLevel.High;
+			level = AggressivenessLevel.High;
 		} else if (userHappinessScore >= config.mediumThreshold) {
-			return AggressivenessLevel.Medium;
+			level = AggressivenessLevel.Medium;
 		} else {
-			return AggressivenessLevel.Low;
+			level = AggressivenessLevel.Low;
 		}
+		return { aggressivenessLevel: level, userHappinessScore };
 	}
 
 	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {

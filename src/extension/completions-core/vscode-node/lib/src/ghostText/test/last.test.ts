@@ -9,7 +9,6 @@ import { createLibTestingContext } from '../../test/context';
 import { withInMemoryTelemetry } from '../../test/telemetry';
 import { createTextDocument } from '../../test/textDocument';
 import { CopilotCompletion } from '../copilotCompletion';
-import { ResultType } from '../ghostText';
 import {
 	ICompletionsLastGhostText, handleGhostTextPostInsert,
 	handleGhostTextShown,
@@ -17,6 +16,7 @@ import {
 	rejectLastShown,
 	setLastShown
 } from '../last';
+import { ResultType } from '../resultType';
 
 suite('Isolated LastGhostText tests', function () {
 	let accessor: ServicesAccessor;
@@ -100,7 +100,7 @@ suite('Isolated LastGhostText tests', function () {
 		handleGhostTextShown(accessor, cmp);
 
 		const { reporter } = await withInMemoryTelemetry(accessor, () => {
-			handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length, undefined, undefined);
+			handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length);
 		});
 
 		const event = reporter.events.find(e => e.name === 'ghostText.accepted');
@@ -112,11 +112,11 @@ suite('Isolated LastGhostText tests', function () {
 		last.setState({ uri: 'file:///test' }, { line: 0, character: 0 });
 		const cmp = makeCompletion(0, 'line1\nline2\nline3', 0);
 		handleGhostTextShown(accessor, cmp);
-		handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length, undefined, undefined);
+		handlePartialGhostTextPostInsert(accessor, cmp, 'line1'.length);
 		cmp.displayText = 'line2\nline3'; // Simulate the display text being updated after accepting the first line
 
 		const { reporter } = await withInMemoryTelemetry(accessor, () => {
-			handlePartialGhostTextPostInsert(accessor, cmp, 'line2'.length, undefined, undefined);
+			handlePartialGhostTextPostInsert(accessor, cmp, 'line2'.length);
 		});
 
 		const event = reporter.events.reverse().find(e => e.name === 'ghostText.accepted');

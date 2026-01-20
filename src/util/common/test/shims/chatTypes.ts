@@ -215,16 +215,6 @@ export class ChatResponseConfirmationPart {
 	}
 }
 
-export class ChatPrepareToolInvocationPart {
-	toolName: string;
-	/**
-	 * @param toolName The name of the tool being prepared for invocation.
-	 */
-	constructor(toolName: string) {
-		this.toolName = toolName;
-	}
-}
-
 export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	constructor(
 		readonly prompt: string,
@@ -530,5 +520,16 @@ export class LanguageModelError extends Error {
 		super(message, { cause });
 		this.name = LanguageModelError.#name;
 		this.code = code ?? '';
+	}
+}
+
+/**
+ * Represents a custom agent resource file (e.g., .agent.md).
+ */
+export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
+	readonly resource: vscode.ChatResourceDescriptor;
+
+	constructor(resource: vscode.ChatResourceDescriptor) {
+		this.resource = resource;
 	}
 }

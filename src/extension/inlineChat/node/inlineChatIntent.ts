@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
@@ -20,12 +19,14 @@ import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -431,12 +432,16 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 									query: request.prompt,
 									chatVariables: new ChatVariablesCollection([...request.references]),
 									history: [],
+									allowedEditUris: request.location2 instanceof ChatRequestEditorData ? new ResourceSet([request.location2.document.uri]) : undefined,
 								}, CopilotToolMode.FullContext);
 							}
 
 							const result = await this._toolsService.invokeTool(toolCall.name, {
 								input,
 								toolInvocationToken: request.toolInvocationToken,
+								// Split on `__vscode` so it's the chat stream id
+								// TODO @lramos15 - This is a gross hack
+								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
 							}, token) as vscode.ExtendedLanguageModelToolResult;
 
 							if (result.hasError) {

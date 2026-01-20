@@ -259,8 +259,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 						change.uri,
 						fileStats?.insertions ?? 0,
 						fileStats?.deletions ?? 0,
-						change.originalUri
-					));
+						change.status !== 1 /* INDEX_ADDED */
+							? change.originalUri
+							: undefined));
 				} catch (error) { }
 			}
 
@@ -284,7 +285,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				toGitUri(change.uri, worktreeProperties.branchName),
 				change.insertions,
 				change.deletions,
-				toGitUri(change.originalUri, worktreeProperties.baseCommit));
+				change.status !== 1 /* INDEX_ADDED */
+					? toGitUri(change.originalUri, worktreeProperties.baseCommit)
+					: undefined);
 		});
 
 		this._sessionWorktreeChanges.set(sessionId, changes);
@@ -310,7 +313,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		// Commit all changes in the worktree
-		const repository = this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
+		const repository = await this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
 		if (!repository) {
 			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to find repository for working directory ${worktreePath}`);
 			throw new Error(`Unable to find repository for working directory ${worktreePath}`);

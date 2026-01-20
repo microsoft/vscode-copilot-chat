@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Range, commands, window, type Disposable } from 'vscode';
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { DisposableStore, IDisposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService, type ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { CopilotNamedAnnotationList } from '../../../lib/src/openai/stream';
 import * as constants from '../constants';
 import { registerCommand } from '../telemetry';
 import { wrapDoc } from '../textDocumentManager';

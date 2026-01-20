@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
@@ -28,10 +29,11 @@ import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { count } from '../../../util/vs/base/common/strings';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
@@ -42,6 +44,7 @@ import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
+import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
@@ -179,6 +182,29 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		}, this.alternativeNotebookEditGenerator, telemetryOptions, CancellationToken.None);
 
 		return { path: uri, edits };
+	}
+
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<IApplyPatchToolParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		const partialInput = options.rawInput as Partial<IApplyPatchToolParams> | undefined;
+
+		let invocationMessage: MarkdownString;
+		if (partialInput && typeof partialInput === 'object' && partialInput.input) {
+			const lineCount = count(partialInput.input, '\n') + 1;
+			const files = [...identify_files_needed(partialInput.input), ...identify_files_added(partialInput.input)]
+				.map(f => this.promptPathRepresentationService.resolveFilePath(f))
+				.filter(isDefined)
+				.map(uri => formatUriForFileWidget(uri));
+			if (files.length > 0) {
+				const fileNames = files.join(', ');
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines) in ${fileNames}`);
+			} else {
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines)`);
+			}
+		} else {
+			invocationMessage = new MarkdownString(l10n.t`Generating patch`);
+		}
+
+		return { invocationMessage };
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, token: vscode.CancellationToken) {
@@ -614,6 +640,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uris,
+			this._promptContext?.allowedEditUris,
 			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
 		);
 	}

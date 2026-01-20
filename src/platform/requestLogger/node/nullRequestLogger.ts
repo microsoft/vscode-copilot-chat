@@ -22,5 +22,7 @@ export class NullRequestLogger extends AbstractRequestLogger {
 	}
 	public override logToolCall(name: string | undefined, args: unknown, response: LanguageModelToolResult): void {
 	}
+	public override logServerToolCall(id: string, name: string, args: unknown): void {
+	}
 	override onDidChangeRequests: Event<void> = Event.None;
 }

@@ -10,6 +10,7 @@ export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
 	readonly includeViewedFiles: boolean;
+	readonly includeLineNumbers: boolean;
 }
 
 export type LanguageContextLanguages = { [languageId: string]: boolean };
@@ -134,6 +135,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		nDocuments: 5,
 		maxTokens: 2000,
 		includeViewedFiles: false,
+		includeLineNumbers: false,
 	},
 	languageContext: {
 		enabled: false,

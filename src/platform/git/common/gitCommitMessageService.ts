@@ -12,7 +12,7 @@ export const IGitCommitMessageService = createServiceIdentifier<IGitCommitMessag
 export interface IGitCommitMessageService {
 	readonly _serviceBrand: undefined;
 	generateCommitMessage(repository: Repository, cancellationToken: CancellationToken | undefined): Promise<string | undefined>;
-	getRepository(uri: Uri | undefined): Repository | null;
+	getRepository(uri: Uri | undefined): Promise<Repository | null>;
 }
 
 /**
@@ -25,7 +25,7 @@ export class NoopGitCommitMessageService implements IGitCommitMessageService {
 		return Promise.resolve('Test commit message');
 	}
 
-	getRepository(): Repository | null {
+	async getRepository(): Promise<Repository | null> {
 		return null;
 	}
 }
