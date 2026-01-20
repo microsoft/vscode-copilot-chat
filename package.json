@@ -4108,15 +4108,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.cli.autoCommit.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
