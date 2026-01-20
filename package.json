@@ -2129,6 +2129,11 @@
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
 			{
+				"command": "copilot.claude.hooks",
+				"title": "Configure Hooks",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -4087,7 +4092,7 @@
 					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
 						"tags": [
 							"advanced",
@@ -5156,6 +5161,10 @@
 					{
 						"name": "security-review",
 						"description": "Complete a security review of the pending changes on the current branch"
+					},
+					{
+						"name": "hooks",
+						"description": "Configure Claude Code hooks for tool execution and events"
 					}
 				]
 			},
@@ -5327,7 +5336,7 @@
 		"@types/source-map-support": "^0.5.10",
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
-		"@types/vscode": "^1.102.0",
+		"@types/vscode": "^1.108.1",
 		"@types/vscode-webview": "^1.57.4",
 		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
@@ -5400,7 +5409,7 @@
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.381",
+		"@github/copilot": "^0.0.384",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
