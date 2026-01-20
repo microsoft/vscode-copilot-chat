@@ -12,7 +12,6 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
-import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
@@ -207,8 +206,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IFetcherService fetcherService: IFetcherService,
-		@ILogService logService: ILogService,
-		@IFileSystemService fileSystemService: IFileSystemService
+		@ILogService logService: ILogService
 	) {
 
 		const id = context.extension.id;
