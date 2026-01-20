@@ -39,6 +39,71 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 
+/**
+ * Returns a description of the model's capabilities and intended use cases.
+ * This is shown in the rich hover when selecting models.
+ */
+function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | undefined {
+	const name = endpoint.name.toLowerCase();
+	const family = endpoint.family.toLowerCase();
+
+	// Claude models
+	if (family.includes('claude') || name.includes('claude')) {
+		if (name.includes('opus')) {
+			return 'Most capable Claude model. Excellent for complex analysis, coding tasks, and nuanced creative writing.';
+		}
+		if (name.includes('sonnet')) {
+			return 'Balanced Claude model offering strong performance for everyday coding and chat tasks at faster speeds.';
+		}
+		if (name.includes('haiku')) {
+			return 'Fastest and most compact Claude model. Ideal for quick responses and simple tasks.';
+		}
+	}
+
+	// GPT models
+	if (family.includes('gpt') || name.includes('gpt') || family.includes('codex') || name.includes('codex')) {
+		if (name.includes('codex') || family.includes('codex')) {
+			if (name.includes('max')) {
+				return 'Maximum capability Codex model optimized for complex multi-file refactoring and large codebase understanding.';
+			}
+			if (name.includes('mini')) {
+				return 'Lightweight Codex model for quick code completions and simple edits with low latency.';
+			}
+			return 'OpenAI Codex model specialized for code generation, debugging, and software development tasks.';
+		}
+		if (name.includes('4o')) {
+			return 'Optimized GPT-4 model with faster responses and multimodal capabilities.';
+		}
+		if (name.includes('4.1') || name.includes('4-1')) {
+			return 'Enhanced GPT-4 model with improved instruction following and coding performance.';
+		}
+		if (name.includes('4')) {
+			return 'Reliable GPT-4 model suitable for a wide range of coding and general tasks.';
+		}
+	}
+
+	// Gemini models
+	if (family.includes('gemini') || name.includes('gemini')) {
+		if (name.includes('flash')) {
+			return 'Fast and efficient Gemini model optimized for quick responses and high throughput.';
+		}
+		if (name.includes('pro')) {
+			return 'Google\'s advanced Gemini Pro model with strong reasoning and coding capabilities.';
+		}
+		return 'Google Gemini model with balanced performance for coding and general assistance.';
+	}
+
+	// o1/o3 reasoning models
+	if (family.includes('o1') || family.includes('o3') || name.includes('o1') || name.includes('o3')) {
+		if (name.includes('mini')) {
+			return 'Compact reasoning model for quick problem-solving with step-by-step thinking.';
+		}
+		return 'Advanced reasoning model that excels at complex problem-solving, math, and coding challenges.';
+	}
+
+	return undefined;
+}
+
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
@@ -194,6 +259,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
+				description: endpoint instanceof AutoChatEndpoint ? undefined : getModelCapabilitiesDescription(endpoint),
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,
