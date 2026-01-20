@@ -357,7 +357,9 @@ export class HooksSlashCommand implements IClaudeSlashCommandHandler {
 			const text = document.getText();
 
 			// Find the line containing the command
-			const commandEscaped = command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			const commandEscaped = command
+				.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+				.replace(/\\/g, '\\\\');
 			const regex = new RegExp(`"command"\\s*:\\s*"${commandEscaped}"`);
 			const match = regex.exec(text);
 
