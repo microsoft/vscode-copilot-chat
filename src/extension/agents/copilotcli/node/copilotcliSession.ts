@@ -166,12 +166,22 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const toolIdEditMap = new Map<string, Promise<string | undefined>>();
 		const editFilesAndToolCallIds = new ResourceMap<ToolCall[]>();
 		disposables.add(this._options.addPermissionHandler(async (permissionRequest) => {
-			// Need better API from SDK to correlate file edits in permission requests to tool invocations.
-			return await this.requestPermission(permissionRequest, editTracker,
+			const response = await this.requestPermission(permissionRequest, editTracker,
 				(toolCallId: string) => toolCalls.get(toolCallId),
 				this._options.toSessionOptions().workingDirectory,
 				token
 			);
+
+			this._requestLogger.addEntry({
+				type: LoggedRequestKind.MarkdownContentRequest,
+				debugName: `Permission Request`,
+				startTimeMs: Date.now(),
+				icon: Codicon.question,
+				markdownContent: this._renderPermissionToMarkdown(permissionRequest, response.kind),
+				isConversationRequest: true
+			});
+
+			return response;
 		}));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
@@ -262,6 +272,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
 				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
+				const errorMarkdown = [`# Error Details`, `Type: ${event.data.errorType}`, `Message: ${event.data.message}`, `## Stack`, event.data.stack || ''].join('\n');
+				this._requestLogger.addEntry({
+					type: LoggedRequestKind.MarkdownContentRequest,
+					debugName: `Session Error`,
+					startTimeMs: Date.now(),
+					icon: Codicon.error,
+					markdownContent: errorMarkdown,
+					isConversationRequest: true
+				});
 			})));
 
 			this._logRequest(prompt, modelId || '', attachments, logStartTime);
@@ -466,6 +485,67 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
 		});
 		result.push(`~~~`);
+		result.push(``);
+		return result.join('\n');
+	}
+
+	private _renderPermissionToMarkdown(permissionRequest: PermissionRequest, response: string): string {
+		const result: string[] = [];
+		result.push(`# Permission Request`);
+		result.push(``);
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`sessionId    : ${this.sessionId}`);
+		result.push(`kind         : ${permissionRequest.kind}`);
+		result.push(`toolcallid   : ${permissionRequest.toolCallId || ''}`);
+		result.push(`~~~`);
+		result.push(``);
+		switch (permissionRequest.kind) {
+			case 'read':
+				result.push(`## Read Permission Details`);
+				result.push(`~~~`);
+				result.push(`path         : ${permissionRequest.path}`);
+				result.push(`intention    : ${permissionRequest.intention}`);
+				result.push(`~~~`);
+				break;
+			case 'write':
+				result.push(`## Write Permission Details`);
+				result.push(`~~~`);
+				result.push(`path         : ${permissionRequest.fileName}`);
+				result.push(`path         : ${permissionRequest.intention}`);
+				result.push(`diff         : ${permissionRequest.diff}`);
+				result.push(`~~~`);
+				break;
+			case 'mcp':
+				result.push(`## MCP Permission Details`);
+				result.push(`~~~`);
+				result.push(`server       : ${permissionRequest.serverName}`);
+				result.push(`tool         : ${permissionRequest.toolName} (${permissionRequest.toolTitle})`);
+				result.push(`readOnly     : ${permissionRequest.readOnly}`);
+				result.push(`args         : ${permissionRequest.args !== undefined ? (typeof permissionRequest.args === 'string' ? permissionRequest.args : JSON.stringify(permissionRequest.args, undefined, 2)) : ''}`);
+				result.push(`~~~`);
+				break;
+			case 'shell':
+				result.push(`## Shell Permission Details`);
+				result.push(`~~~`);
+				result.push(`command : ${permissionRequest.fullCommandText}`);
+				result.push(`intention    : ${permissionRequest.intention}`);
+				result.push(`paths        : ${permissionRequest.possiblePaths}`);
+				result.push(`urls         : ${permissionRequest.possibleUrls}`);
+				result.push(`~~~`);
+				break;
+			case 'url':
+				result.push(`## URL Permission Details`);
+				result.push(`~~~`);
+				result.push(`url      : ${permissionRequest.url}`);
+				result.push(`intention    : ${permissionRequest.intention}`);
+				result.push(`~~~`);
+				break;
+		}
+		result.push(``);
+		result.push(`## Response`);
+		result.push(`~~~`);
+		result.push(response);
 		result.push(``);
 		return result.join('\n');
 	}
