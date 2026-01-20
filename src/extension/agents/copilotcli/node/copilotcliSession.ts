@@ -16,6 +16,7 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
+import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
@@ -130,7 +131,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const promptLabel = prompt.length > 50 ? prompt.substring(0, 47) + '...' : prompt;
-		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'copilot', false, true);
+		const capturingToken = new CapturingToken(`Background Agent | ${promptLabel}`, 'worktree', false, true);
 		return this._requestLogger.captureInvocation(capturingToken, () => this._handleRequestImpl(requestId, prompt, attachments, modelId, token));
 	}
 
@@ -234,6 +235,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_complete', (event) => {
+				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
+				// Log tool call to request logger
+				const eventError = event.data.error ? { ...event.data.error, code: event.data.error.code || '' } : undefined;
+				const eventData = { ...event.data, error: eventError };
+				this._logToolCall(event.data.toolCallId, toolName, toolCalls.get(event.data.toolCallId)?.arguments, eventData);
+
 				// Mark the end of the edit if this was an edit tool.
 				toolIdEditMap.set(event.data.toolCallId, editTracker.completeEdit(event.data.toolCallId));
 				if (editToolIds.has(event.data.toolCallId)) {
@@ -246,23 +253,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					this._stream?.push(responsePart);
 				}
 
-				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
 				const success = `success: ${event.data.success}`;
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
 				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
 				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
 				this.logService.trace(`[CopilotCLISession]Complete Tool ${toolName}, ${parts}`);
-
-				// Log tool call to request logger
-				const eventError = event.data.error ? { ...event.data.error, code: event.data.error.code || '' } : undefined;
-				const eventData = { ...event.data, error: eventError };
-
-				this._logToolCall(event.data.toolCallId, toolName, toolCalls.get(event.data.toolCallId)?.arguments, eventData);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
 				this.logService.error(`[CopilotCLISession]CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
 			})));
+
+			this._logRequest(prompt, modelId || '', attachments, logStartTime);
 
 			if (!token.isCancellationRequested) {
 				await this._sdkSession.send({ prompt, attachments, abortController });
@@ -283,7 +285,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._statusChange.fire(this._status);
 
 			// Log the completed conversation
-			this._logConversation(prompt, assistantMessageChunks.join(''), logStartTime, 'Completed');
+			this._logConversation(prompt, assistantMessageChunks.join(''), modelId || '', attachments, logStartTime, 'Completed');
 		} catch (error) {
 			this._status = ChatSessionStatus.Failed;
 			this._statusChange.fire(this._status);
@@ -291,7 +293,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 
 			// Log the failed conversation
-			this._logConversation(prompt, assistantMessageChunks.join(''), logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
+			this._logConversation(prompt, assistantMessageChunks.join(''), modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
 		} finally {
 			this._pendingPrompt = undefined;
 			disposables.dispose();
@@ -416,19 +418,59 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._permissionHandler;
 	}
 
-	private _logConversation(userPrompt: string, assistantResponse: string, startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): void {
-		const markdownContent = this._renderConversationToMarkdown(userPrompt, assistantResponse, startTimeMs, status, errorMessage);
+	private _logRequest(userPrompt: string, modelId: string, attachments: Attachment[], startTimeMs: number): void {
+		const markdownContent = this._renderRequestToMarkdown(userPrompt, modelId, attachments, startTimeMs);
 		this._requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
 			debugName: `Background Agent | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
 			startTimeMs,
-			icon: Codicon.copilot,
+			icon: ThemeIcon.fromId('worktree'),
 			markdownContent,
 			isConversationRequest: true
 		});
 	}
 
-	private _renderConversationToMarkdown(userPrompt: string, assistantResponse: string, startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): string {
+	private _logConversation(userPrompt: string, assistantResponse: string, modelId: string, attachments: Attachment[], startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): void {
+		const markdownContent = this._renderConversationToMarkdown(userPrompt, assistantResponse, modelId, attachments, startTimeMs, status, errorMessage);
+		this._requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: `Background Agent | ${userPrompt.substring(0, 30)}${userPrompt.length > 30 ? '...' : ''}`,
+			startTimeMs,
+			icon: ThemeIcon.fromId('worktree'),
+			markdownContent,
+			isConversationRequest: true
+		});
+	}
+
+	private _renderRequestToMarkdown(userPrompt: string, modelId: string, attachments: Attachment[], startTimeMs: number): string {
+		const result: string[] = [];
+		result.push(`# Background Agent Session`);
+		result.push(``);
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`sessionId    : ${this.sessionId}`);
+		result.push(`modelId      : ${modelId}`);
+		result.push(`isolation    : ${this.options.isolationEnabled ? 'enabled' : 'disabled'}`);
+		result.push(`working dir  : ${this.options.workingDirectory?.fsPath || '<not set>'}`);
+		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
+		result.push(`~~~`);
+		result.push(``);
+		result.push(`## User Prompt`);
+		result.push(`~~~`);
+		result.push(userPrompt);
+		result.push(`~~~`);
+		result.push(``);
+		result.push(`## Attachments`);
+		result.push(`~~~`);
+		attachments.forEach(attachment => {
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+		});
+		result.push(`~~~`);
+		result.push(``);
+		return result.join('\n');
+	}
+
+	private _renderConversationToMarkdown(userPrompt: string, assistantResponse: string, modelId: string, attachments: Attachment[], startTimeMs: number, status: 'Completed' | 'Failed', errorMessage?: string): string {
 		const result: string[] = [];
 		result.push(`# Background Agent Session`);
 		result.push(``);
@@ -436,6 +478,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`~~~`);
 		result.push(`sessionId    : ${this.sessionId}`);
 		result.push(`status       : ${status}`);
+		result.push(`modelId      : ${modelId}`);
+		result.push(`isolation    : ${this.options.isolationEnabled ? 'enabled' : 'disabled'}`);
+		result.push(`working dir  : ${this.options.workingDirectory?.fsPath || '<not set>'}`);
 		result.push(`startTime    : ${new Date(startTimeMs).toISOString()}`);
 		result.push(`endTime      : ${new Date().toISOString()}`);
 		result.push(`duration     : ${Date.now() - startTimeMs}ms`);
@@ -447,6 +492,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## User Prompt`);
 		result.push(`~~~`);
 		result.push(userPrompt);
+		result.push(`~~~`);
+		result.push(``);
+		result.push(`## Attachments`);
+		result.push(`~~~`);
+		attachments.forEach(attachment => {
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+		});
 		result.push(`~~~`);
 		result.push(``);
 		result.push(`## Assistant Response`);
@@ -492,3 +544,4 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		});
 	}
 }
+

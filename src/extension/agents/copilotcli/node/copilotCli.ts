@@ -5,12 +5,12 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { Uri } from 'vscode';
-import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -93,12 +93,18 @@ export class CopilotCLISessionOptions {
 	}
 }
 
+export interface CopilotCLIModelInfo {
+	readonly id: string;
+	readonly name: string;
+	readonly multiplier?: number;
+}
+
 export interface ICopilotCLIModels {
 	readonly _serviceBrand: undefined;
 	resolveModel(modelId: string): Promise<string | undefined>;
 	getDefaultModel(): Promise<string | undefined>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
-	getModels(): Promise<{ id: string; name: string }[]>;
+	getModels(): Promise<CopilotCLIModelInfo[]>;
 }
 
 export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotCLISDK');
@@ -107,13 +113,13 @@ export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICo
 
 export class CopilotCLIModels implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<{ id: string; name: string }[]>>;
+	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
-		this._availableModels = new Lazy<Promise<{ id: string; name: string }[]>>(() => this._getAvailableModels());
+		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -136,16 +142,16 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		await this.extensionContext.globalState.update(COPILOT_CLI_MODEL_MEMENTO_KEY, modelId);
 	}
 
-	public async getModels(): Promise<{ id: string; name: string }[]> {
+	public async getModels(): Promise<CopilotCLIModelInfo[]> {
 		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
 		return this._availableModels.value;
 	}
 
-	private async _getAvailableModels(): Promise<{ id: string; name: string }[]> {
+	private async _getAvailableModels(): Promise<CopilotCLIModelInfo[]> {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.id, name: model.name }));
+			return models.map(model => ({ id: model.id, name: model.name, multiplier: model.billing?.multiplier }));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
