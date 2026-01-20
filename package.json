@@ -2134,6 +2134,11 @@
 				"category": "Claude Agent"
 			},
 			{
+				"command": "copilot.claude.memory",
+				"title": "Open Memory Files",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -5165,6 +5170,10 @@
 					{
 						"name": "hooks",
 						"description": "Configure Claude Code hooks for tool execution and events"
+					},
+					{
+						"name": "memory",
+						"description": "Open memory files (CLAUDE.md) for editing"
 					}
 				]
 			},
