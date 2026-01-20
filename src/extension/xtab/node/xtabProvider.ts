@@ -339,6 +339,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const prediction = this.getPredictedOutput(activeDocument, editWindowLines, responseFormat);
 
+		// Check if prediction content exceeds the configured limit (reuse languageContext.maxTokens)
+		if (prediction?.content) {
+			const maxPredictionTokens = promptOptions.languageContext.maxTokens;
+			const predictionText = typeof prediction.content === 'string'
+				? prediction.content
+				: prediction.content.map(part => part.text).join('');
+			const predictionTokenCount = XtabProvider.computeTokens(predictionText);
+			if (predictionTokenCount > maxPredictionTokens) {
+				return Result.error(new NoNextEditReason.PromptTooLarge('prediction'));
+			}
+		}
+
 		const messages = constructMessages({
 			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
 			userMsg: userPrompt,

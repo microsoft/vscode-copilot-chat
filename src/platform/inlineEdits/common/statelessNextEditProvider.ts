@@ -246,7 +246,7 @@ export namespace NoNextEditReason {
 	}
 	export class PromptTooLarge extends NoNextEditReason {
 		public readonly kind = 'promptTooLarge';
-		constructor(public readonly message: 'editWindow' | 'currentFile' | 'final') {
+		constructor(public readonly message: 'editWindow' | 'currentFile' | 'final' | 'prediction') {
 			super();
 		}
 		toString(): string {
