@@ -26,51 +26,5 @@ export class CapturingToken {
 		 * excluded from the children list and its content is shown when clicking the parent.
 		 */
 		public readonly promoteMainEntry: boolean = false,
-		/**
-		 * Optional parent token for hierarchical grouping.
-		 * Used to link subagent/child requests to their parent request,
-		 * enabling proper grouping even when AsyncLocalStorage context is lost.
-		 */
-		public readonly parentToken?: CapturingToken,
 	) { }
-
-	/**
-	 * Create a child token that references this token as its parent.
-	 * Useful for subagent requests or other child operations that need
-	 * to maintain the request hierarchy.
-	 *
-	 * @param label Label for the child token
-	 * @param icon Optional icon for the child token
-	 * @param flattenSingleChild Whether to flatten single children (default: false)
-	 * @returns A new CapturingToken with this token as its parent
-	 */
-	createChild(label: string, icon?: string, flattenSingleChild: boolean = false): CapturingToken {
-		return new CapturingToken(label, icon, flattenSingleChild, false, this);
-	}
-
-	/**
-	 * Get the root token in the hierarchy.
-	 * Traverses up the parentToken chain to find the topmost token.
-	 */
-	getRoot(): CapturingToken {
-		let current: CapturingToken = this;
-		while (current.parentToken) {
-			current = current.parentToken;
-		}
-		return current;
-	}
-
-	/**
-	 * Check if this token is a descendant of the given token.
-	 */
-	isDescendantOf(token: CapturingToken): boolean {
-		let current: CapturingToken | undefined = this.parentToken;
-		while (current) {
-			if (current === token) {
-				return true;
-			}
-			current = current.parentToken;
-		}
-		return false;
-	}
 }

@@ -601,25 +601,20 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		} else if (element) {
 			return [];
 		} else {
-			// Build hierarchical tree structure based on token parentToken relationships
+			// Build tree structure grouping entries by CapturingToken
 			return this.buildHierarchicalTree();
 		}
 	}
 
 	/**
-	 * Build a hierarchical tree structure that respects parentToken relationships.
-	 * Tokens with parentToken are nested under their parent's ChatPromptItem.
+	 * Build a hierarchical tree structure that groups entries by CapturingToken.
 	 */
 	private buildHierarchicalTree(): (ChatPromptItem | TreeChildItem)[] {
 		const result: (ChatPromptItem | TreeChildItem)[] = [];
 		const seen = new Set<CapturingToken>();
 
-		// Map from token to its ChatPromptItem for nesting child tokens
+		// Map from token to its ChatPromptItem
 		const tokenToPromptItem = new Map<CapturingToken, ChatPromptItem>();
-
-		// Track the order in which we first see each token (for proper chronological ordering)
-		const tokenFirstSeenIndex = new Map<CapturingToken, number>();
-		let globalIndex = 0;
 
 		// First pass: create ChatPromptItems for all tokens and collect entries
 		let lastPrompt: ChatPromptItem | undefined;
@@ -635,7 +630,6 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 					if (!existingPrompt) {
 						existingPrompt = ChatPromptItem.create(currReq, currReq.token, seen.has(currReq.token));
 						tokenToPromptItem.set(currReq.token, existingPrompt);
-						tokenFirstSeenIndex.set(currReq.token, globalIndex);
 					}
 					lastPrompt = existingPrompt;
 					seen.add(currReq.token);
@@ -651,59 +645,19 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 					lastPrompt.children.push(currReqTreeItem);
 				}
 			}
-			globalIndex++;
 		}
 
-		// Second pass: build hierarchy by nesting child tokens under parent tokens
-		// Sort child tokens by their first-seen index to maintain chronological order
+		// Second pass: collect prompt items and apply flattening/promotion logic
 		const rootPrompts: ChatPromptItem[] = [];
-		const nestedTokens = new Set<CapturingToken>();
-
-		// Collect tokens with parents, sorted by first-seen index
-		const tokensWithParents = [...tokenToPromptItem.entries()]
-			.filter(([token]) => token.parentToken)
-			.sort((a, b) => (tokenFirstSeenIndex.get(a[0]) ?? 0) - (tokenFirstSeenIndex.get(b[0]) ?? 0));
-
-		for (const [token, promptItem] of tokensWithParents) {
-			// This token has a parent - try to nest it
-			const parentPromptItem = tokenToPromptItem.get(token.parentToken!);
-			if (parentPromptItem) {
-				// Find the correct insertion position based on when this token was first seen
-				// relative to other children in the parent
-				const childIndex = tokenFirstSeenIndex.get(token) ?? 0;
-				let insertPosition = parentPromptItem.children.length;
-
-				// Find where to insert to maintain chronological order
-				for (let i = 0; i < parentPromptItem.children.length; i++) {
-					const child = parentPromptItem.children[i];
-					if (child instanceof ChatPromptItem && child.token) {
-						const childFirstSeen = tokenFirstSeenIndex.get(child.token) ?? 0;
-						if (childIndex < childFirstSeen) {
-							insertPosition = i;
-							break;
-						}
-					}
+		for (const [, promptItem] of tokenToPromptItem) {
+			// Apply flattening and promotion logic
+			if (promptItem.token.flattenSingleChild && promptItem.children.length === 1 && !promptItem.hasSeen) {
+				result.push(promptItem.children[0]);
+			} else {
+				if (promptItem.token.promoteMainEntry) {
+					promptItem.promoteMainEntry();
 				}
-
-				// Insert the prompt item at the correct position
-				parentPromptItem.children.splice(insertPosition, 0, promptItem);
-				nestedTokens.add(token);
-			}
-		}
-
-		// Third pass: collect root-level prompt items (those not nested under a parent)
-		for (const [token, promptItem] of tokenToPromptItem) {
-			if (!nestedTokens.has(token)) {
-				// This is a root-level prompt (no parent or parent not in our set)
-				// Apply flattening and promotion logic
-				if (promptItem.token.flattenSingleChild && promptItem.children.length === 1 && !promptItem.hasSeen) {
-					result.push(promptItem.children[0]);
-				} else {
-					if (promptItem.token.promoteMainEntry) {
-						promptItem.promoteMainEntry();
-					}
-					rootPrompts.push(promptItem);
-				}
+				rootPrompts.push(promptItem);
 			}
 		}
 

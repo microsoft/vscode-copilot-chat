@@ -85,7 +85,6 @@ The `CapturingToken` includes:
 - `icon`: Optional icon
 - `flattenSingleChild`: Whether to flatten single-child groups
 - `promoteMainEntry`: Whether to make the parent item clickable
-- `parentToken`: Optional parent `CapturingToken` used to build hierarchical groupings of related requests in the tree
 
 ### 3. Entry Storage and Event Flow
 
@@ -112,12 +111,12 @@ private async _addEntry(entry: LoggedInfo): Promise<boolean> {
 
 ## TreeView Grouping Logic
 
-The TreeView builds a hierarchical tree structure using the `buildHierarchicalTree()` method:
+The TreeView builds a tree structure using the `buildHierarchicalTree()` method:
 
 ```typescript
 // Simplified logic from buildHierarchicalTree()
 private buildHierarchicalTree(): (ChatPromptItem | TreeChildItem)[] {
-    // First pass: Create ChatPromptItems for all tokens and collect entries
+    // Create ChatPromptItems for all tokens and collect entries
     for (const currReq of this.requestLogger.getRequests()) {
         if (currReq.token) {
             // Get or create ChatPromptItem for this token
@@ -130,34 +129,18 @@ private buildHierarchicalTree(): (ChatPromptItem | TreeChildItem)[] {
         }
     }
 
-    // Second pass: Build hierarchy using parentToken relationships
-    for (const [token, promptItem] of tokenToPromptItem) {
-        if (token.parentToken) {
-            const parentPromptItem = tokenToPromptItem.get(token.parentToken);
-            if (parentPromptItem) {
-                parentPromptItem.children.push(promptItem); // Nest under parent
-            }
-        }
-    }
-
-    // Third pass: Collect root-level items (those without parents)
+    // Collect prompt items and apply flattening/promotion logic
     // ...
 }
 ```
 
-### Hierarchical Grouping
+### Grouping Behavior
 
-Tokens with a `parentToken` are nested under their parent's `ChatPromptItem`, creating a tree structure that reflects the logical hierarchy of requests (e.g., subagent requests nested under the parent conversation).
+1. **Token reuse** - If the same `CapturingToken` is used in different contexts, entries get grouped together (marked with "Continued...")
 
-### Grouping Edge Cases
+2. **No token** - Entries without a token appear as top-level items
 
-1. **Token hierarchy** - Child tokens (created via `createChild()`) are nested under their parent token's tree item
-
-2. **Token reuse** - If the same `CapturingToken` is used in different contexts, entries get grouped together (marked with "Continued...")
-
-3. **No token** - Entries without a token appear as top-level items
-
-4. **Orphan parent tokens** - If a token has a `parentToken` but that parent isn't in the entry set, the token appears at the root level
+3. **Single child flattening** - When `flattenSingleChild` is true and only one entry exists, it's promoted to the top level
 
 ---
 
@@ -179,21 +162,9 @@ Tokens with a `parentToken` are nested under their parent's `ChatPromptItem`, cr
 
 **Goal:** Display subagent calls (e.g., `search_subagent`, `runSubagent`) nested under the parent request that invoked them, rather than as separate top-level items.
 
-**Current State:** The infrastructure exists (`CapturingToken.createChild()`, `parentToken`, `buildHierarchicalTree()`), but subagent tools create standalone tokens that appear as siblings to the parent request.
+**Current State:** Subagent tools create standalone `CapturingToken` instances that appear as siblings to the parent request.
 
-**Attempted Approach:**
-```typescript
-// In searchSubagentTool.ts invoke()
-const parentToken = this.requestLogger.currentToken;
-const searchSubagentToken = parentToken
-    ? parentToken.createChild(label, 'search')
-    : new CapturingToken(label, 'search', false);
-```
-
-**Why It Didn't Work:** The `currentToken` is `undefined` when the tool's `invoke()` method runs, likely because:
-1. Tool invocation happens outside the parent's `captureInvocation()` context
-2. The tool calling loop may create a new async context boundary
-3. The `IToolsService.invokeTool()` call chain doesn't preserve the AsyncLocalStorage context
+**Why It's Challenging:** Tool invocation happens outside the parent's `captureInvocation()` context, so there's no way to access the parent token via AsyncLocalStorage.
 
 **Potential Solutions to Investigate:**
 1. **Pass token explicitly via tool context** - Add the parent token to `IBuildPromptContext` or `LanguageModelToolInvocationOptions` so tools can access it without relying on AsyncLocalStorage
