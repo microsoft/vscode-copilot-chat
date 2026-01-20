@@ -170,3 +170,33 @@ Tokens with a `parentToken` are nested under their parent's `ChatPromptItem`, cr
 | [requestLogTree.ts](../src/extension/log/vscode-node/requestLogTree.ts) | TreeView implementation |
 | [capturingToken.ts](../src/platform/requestLogger/common/capturingToken.ts) | Token for grouping requests |
 | [toolCallingLoop.ts](../src/extension/intents/node/toolCallingLoop.ts) | Tool call logging |
+
+---
+
+## Future Improvements
+
+### Subagent Nesting in Tree View
+
+**Goal:** Display subagent calls (e.g., `search_subagent`, `runSubagent`) nested under the parent request that invoked them, rather than as separate top-level items.
+
+**Current State:** The infrastructure exists (`CapturingToken.createChild()`, `parentToken`, `buildHierarchicalTree()`), but subagent tools create standalone tokens that appear as siblings to the parent request.
+
+**Attempted Approach:**
+```typescript
+// In searchSubagentTool.ts invoke()
+const parentToken = this.requestLogger.currentToken;
+const searchSubagentToken = parentToken
+    ? parentToken.createChild(label, 'search')
+    : new CapturingToken(label, 'search', false);
+```
+
+**Why It Didn't Work:** The `currentToken` is `undefined` when the tool's `invoke()` method runs, likely because:
+1. Tool invocation happens outside the parent's `captureInvocation()` context
+2. The tool calling loop may create a new async context boundary
+3. The `IToolsService.invokeTool()` call chain doesn't preserve the AsyncLocalStorage context
+
+**Potential Solutions to Investigate:**
+1. **Pass token explicitly via tool context** - Add the parent token to `IBuildPromptContext` or `LanguageModelToolInvocationOptions` so tools can access it without relying on AsyncLocalStorage
+2. **Wrap tool invocation in parent context** - Ensure `ToolCallingLoop.invokeToolInternal()` runs within the parent's `captureInvocation()` scope
+3. **Post-hoc linking** - Associate subagent entries with parents after the fact using a correlation ID (e.g., `subAgentInvocationId`)
+4. **Different grouping strategy** - Group by conversation/turn ID rather than token hierarchy
