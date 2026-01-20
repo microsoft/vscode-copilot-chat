@@ -16,6 +16,7 @@
 		],
 		// Needed for tsx to run test files
 		"paths": {
+			"#src/*": ["./src/*"],
 			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"]
 		}
 	},
