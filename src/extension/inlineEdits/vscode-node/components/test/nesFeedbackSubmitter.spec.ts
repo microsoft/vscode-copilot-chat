@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { LogEntry } from '../../../../../platform/workspaceRecorder/common/workspaceLog';
 import { FeedbackFile, NesFeedbackSubmitter } from '../nesFeedbackSubmitter';
+import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 
 /**
  * Creates a minimal test instance of NesFeedbackSubmitter for testing private methods.
@@ -14,16 +15,6 @@ import { FeedbackFile, NesFeedbackSubmitter } from '../nesFeedbackSubmitter';
 class TestableNesFeedbackSubmitter extends NesFeedbackSubmitter {
 	constructor() {
 		// Create minimal mock implementations
-		const mockLogService = {
-			_serviceBrand: undefined,
-			trace: () => { },
-			debug: () => { },
-			info: () => { },
-			warn: () => { },
-			error: () => { },
-			show: () => { }
-		};
-
 		const mockAuthService = {
 			_serviceBrand: undefined,
 			isMinimalMode: false,
@@ -46,7 +37,7 @@ class TestableNesFeedbackSubmitter extends NesFeedbackSubmitter {
 			getUserAgentLibrary: () => 'test-agent'
 		};
 
-		super(mockLogService as any, mockAuthService as any, mockFetcherService as any);
+		super(new TestLogService(), mockAuthService as any, mockFetcherService as any);
 	}
 
 	// Expose private methods for testing
