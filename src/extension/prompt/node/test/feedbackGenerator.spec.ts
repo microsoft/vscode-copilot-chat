@@ -3,14 +3,25 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import assert from 'assert';
-import { describe, suite, test } from 'vitest';
+import { afterEach, beforeEach, describe, suite, test } from 'vitest';
 import type { EndOfLine, TextDocument, TextLine } from 'vscode';
+import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
-import { ReviewRequest } from '../../../../platform/review/common/reviewService';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Position, Range, Uri } from '../../../../vscodeTypes';
 import { CurrentChangeInput } from '../../../prompts/node/feedback/currentChange';
-import { parseFeedbackResponse, parseReviewComments } from '../feedbackGenerator';
+import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { FeedbackGenerator, parseFeedbackResponse, parseReviewComments } from '../feedbackGenerator';
 
 class MockTextDocument implements TextDocument {
 	readonly uri: Uri;
@@ -121,10 +132,10 @@ function createReviewRequest(overrides?: Partial<ReviewRequest>): ReviewRequest 
 	};
 }
 
-suite('parseFeedbackResponse', function () {
+suite('parseFeedbackResponse', () => {
 
-	describe('basic parsing', function () {
-		test('parses single comment with all fields including linkOffset and linkLength', function () {
+	describe('basic parsing', () => {
+		test('parses single comment with all fields including linkOffset and linkLength', () => {
 			const response = '1. Line 10 in `file.ts`, bug, high severity: This is a bug.';
 			const matches = parseFeedbackResponse(response);
 
@@ -141,7 +152,7 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].linkLength, 7);
 		});
 
-		test('parses comment without backticks around path', function () {
+		test('parses comment without backticks around path', () => {
 			const response = '1. Line 5 in file.ts, performance, medium severity: Slow code.';
 			const matches = parseFeedbackResponse(response);
 
@@ -149,7 +160,7 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].relativeDocumentPath, 'file.ts');
 		});
 
-		test('parses line range (from-to) with correct linkLength', function () {
+		test('parses line range (from-to) with correct linkLength', () => {
 			const response = '1. Line 10-15 in `file.ts`, bug, high severity: Multiple lines affected.';
 			const matches = parseFeedbackResponse(response);
 
@@ -160,7 +171,7 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].linkLength, 5 + 2 + 2 + 1);
 		});
 
-		test('defaults kind to "other" and severity to "unknown" when not specified', function () {
+		test('defaults kind to "other" and severity to "unknown" when not specified', () => {
 			const response = '1. Line 42 in `utils.js`: Minimal comment.';
 			const matches = parseFeedbackResponse(response);
 
@@ -169,7 +180,7 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matches[0].severity, 'unknown');
 		});
 
-		test('parses comment with extra text before "in" keyword', function () {
+		test('parses comment with extra text before "in" keyword', () => {
 			const response = '1. Line 10 (modified) in `file.ts`, bug: Issue with extra text.';
 			const matches = parseFeedbackResponse(response);
 
@@ -179,8 +190,8 @@ suite('parseFeedbackResponse', function () {
 		});
 	});
 
-	describe('multiple comments', function () {
-		test('parses multiple comments separated by newlines or next numbered item', function () {
+	describe('multiple comments', () => {
+		test('parses multiple comments separated by newlines or next numbered item', () => {
 			const response = `1. Line 10 in \`file.ts\`, bug, high severity: First issue.
 
 2. Line 20 in \`other.ts\`, performance, low severity: Second issue.
@@ -194,8 +205,8 @@ suite('parseFeedbackResponse', function () {
 		});
 	});
 
-	describe('dropPartial option', function () {
-		test('keeps partial comment when dropPartial is false, drops when true', function () {
+	describe('dropPartial option', () => {
+		test('keeps partial comment when dropPartial is false, drops when true', () => {
 			const partialResponse = '1. Line 10 in `file.ts`, bug: Incomplete';
 
 			// dropPartial = false (default) keeps partial
@@ -208,7 +219,7 @@ suite('parseFeedbackResponse', function () {
 			assert.strictEqual(matchesDropped.length, 0);
 		});
 
-		test('keeps first complete comment but drops partial second when dropPartial is true', function () {
+		test('keeps first complete comment but drops partial second when dropPartial is true', () => {
 			const response = `1. Line 10 in \`file.ts\`, bug: First complete.
 
 2. Line 20 in \`other.ts\`, bug: Partial`;
@@ -219,8 +230,8 @@ suite('parseFeedbackResponse', function () {
 		});
 	});
 
-	describe('code block handling', function () {
-		test('removes trailing complete code block', function () {
+	describe('code block handling', () => {
+		test('removes trailing complete code block', () => {
 			const response = `1. Line 33 in \`file.ts\`, readability, low severity: The lambda function could be extracted.
 \`\`\`typescript
 const extracted = () => doSomething();
@@ -232,7 +243,7 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content.indexOf('```'), -1);
 		});
 
-		test('removes broken code block (odd number of markers)', function () {
+		test('removes broken code block (odd number of markers)', () => {
 			const response = '1. Line 10 in `file.ts`, bug: Here is some code:\n```typescript\nconst x = 1;';
 			const matches = parseFeedbackResponse(response);
 
@@ -240,7 +251,7 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content, 'Here is some code:');
 		});
 
-		test('preserves inline code (single backticks)', function () {
+		test('preserves inline code (single backticks)', () => {
 			const response = '1. Line 10 in `file.ts`, bug: The variable `foo` should be renamed.';
 			const matches = parseFeedbackResponse(response);
 
@@ -248,7 +259,7 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content, 'The variable `foo` should be renamed.');
 		});
 
-		test('removes trailing ``` via broken block handler when no opening marker exists', function () {
+		test('removes trailing ``` via broken block handler when no opening marker exists', () => {
 			const response = '1. Line 10 in `file.ts`, bug: Some text ending with ```\n\n';
 			const matches = parseFeedbackResponse(response);
 
@@ -258,7 +269,7 @@ const extracted = () => doSomething();
 			assert.strictEqual(matches[0].content, 'Some text ending with');
 		});
 
-		test('preserves complete code block in middle but removes trailing code block', function () {
+		test('preserves complete code block in middle but removes trailing code block', () => {
 			const response = `1. Line 10 in \`file.ts\`, bug: Example:
 \`\`\`typescript
 const x = 1;
@@ -278,8 +289,8 @@ const y = 2;
 		});
 	});
 
-	describe('path handling', function () {
-		test('normalizes path separators for subdirectories', function () {
+	describe('path handling', () => {
+		test('normalizes path separators for subdirectories', () => {
 			const response = '1. Line 10 in `src/utils/helpers.ts`, bug: Issue.\n\n';
 			const matches = parseFeedbackResponse(response);
 
@@ -295,13 +306,13 @@ const y = 2;
 		});
 	});
 
-	describe('edge cases', function () {
-		test('returns empty array for empty or invalid response', function () {
+	describe('edge cases', () => {
+		test('returns empty array for empty or invalid response', () => {
 			assert.strictEqual(parseFeedbackResponse('').length, 0);
 			assert.strictEqual(parseFeedbackResponse('This is just some text without the expected format.').length, 0);
 		});
 
-		test('handles line number 1 correctly (0-indexed)', function () {
+		test('handles line number 1 correctly (0-indexed)', () => {
 			const response = '1. Line 1 in `file.ts`, bug: First line issue.';
 			const matches = parseFeedbackResponse(response);
 
@@ -310,7 +321,7 @@ const y = 2;
 			assert.strictEqual(matches[0].to, 1);
 		});
 
-		test('trims whitespace from content', function () {
+		test('trims whitespace from content', () => {
 			const response = '1. Line 10 in `file.ts`, bug:    Spaces around content.   ';
 			const matches = parseFeedbackResponse(response);
 
@@ -318,7 +329,7 @@ const y = 2;
 			assert.strictEqual(matches[0].content, 'Spaces around content.');
 		});
 
-		test('handles multiline content before next comment', function () {
+		test('handles multiline content before next comment', () => {
 			const response = `1. Line 10 in \`file.ts\`, bug: This is a longer
 description that spans
 multiple lines.
@@ -331,7 +342,7 @@ multiple lines.
 			assert.ok(matches[0].content.includes('multiple lines.'));
 		});
 
-		test('handles multi-digit item numbers for linkOffset calculation', function () {
+		test('handles multi-digit item numbers for linkOffset calculation', () => {
 			const response = '10. Line 5 in `file.ts`, bug: Issue.\n\n';
 			const matches = parseFeedbackResponse(response);
 
@@ -342,10 +353,10 @@ multiple lines.
 	});
 });
 
-suite('parseReviewComments', function () {
+suite('parseReviewComments', () => {
 
-	describe('basic parsing', function () {
-		test('parses valid comment and creates ReviewComment', function () {
+	describe('basic parsing', () => {
+		test('parses valid comment and creates ReviewComment', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
 			const snapshot = createTestSnapshot(uri, content);
@@ -374,7 +385,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments[0].request, request);
 		});
 
-		test('parses multiple comments from same input', function () {
+		test('parses multiple comments from same input', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4\nline 5';
 			const snapshot = createTestSnapshot(uri, content);
@@ -404,8 +415,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('kind filtering', function () {
-		test('filters out unknown kind', function () {
+	describe('kind filtering', () => {
+		test('filters out unknown kind', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2';
 			const snapshot = createTestSnapshot(uri, content);
@@ -426,7 +437,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 0);
 		});
 
-		test('accepts all known kinds', function () {
+		test('accepts all known kinds', () => {
 			const knownKinds = ['bug', 'performance', 'consistency', 'documentation', 'naming', 'readability', 'style', 'other'];
 			const uri = Uri.file('/test/file.ts');
 			const content = Array.from({ length: 20 }, (_, i) => `line ${i}`).join('\n');
@@ -452,8 +463,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('input matching', function () {
-		test('skips comment when relativeDocumentPath does not match any input', function () {
+	describe('input matching', () => {
+		test('skips comment when relativeDocumentPath does not match any input', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
 			const snapshot = createTestSnapshot(uri, content);
@@ -474,7 +485,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 0);
 		});
 
-		test('matches correct input from multiple inputs', function () {
+		test('matches correct input from multiple inputs', () => {
 			const uri1 = Uri.file('/test/first.ts');
 			const uri2 = Uri.file('/test/second.ts');
 			const content = 'line 0\nline 1';
@@ -510,8 +521,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('line clamping', function () {
-		test('uses line 0 correctly when Line 1 is specified (0-indexed)', function () {
+	describe('line clamping', () => {
+		test('uses line 0 correctly when Line 1 is specified (0-indexed)', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = '  indented line\nline 1';
 			const snapshot = createTestSnapshot(uri, content);
@@ -537,7 +548,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments[0].range.start.character, 2);
 		});
 
-		test('clamps line number exceeding lineCount', function () {
+		test('clamps line number exceeding lineCount', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nlast line';
 			const snapshot = createTestSnapshot(uri, content);
@@ -562,8 +573,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('range intersection filtering', function () {
-		test('filters out comment outside change hunk range', function () {
+	describe('range intersection filtering', () => {
+		test('filters out comment outside change hunk range', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
 			const snapshot = createTestSnapshot(uri, content);
@@ -586,7 +597,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 0);
 		});
 
-		test('uses selection range for filtering when selection is provided', function () {
+		test('uses selection range for filtering when selection is provided', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
 			const snapshot = createTestSnapshot(uri, content);
@@ -609,7 +620,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(commentsInside.length, 1);
 		});
 
-		test('includes comment when no filterRanges (no selection or change)', function () {
+		test('includes comment when no filterRanges (no selection or change)', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
 			const snapshot = createTestSnapshot(uri, content);
@@ -626,7 +637,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 1);
 		});
 
-		test('includes comment when intersecting any of multiple hunks', function () {
+		test('includes comment when intersecting any of multiple hunks', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4\nline 5';
 			const snapshot = createTestSnapshot(uri, content);
@@ -652,8 +663,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('dropPartial parameter', function () {
-		test('passes dropPartial to parseFeedbackResponse', function () {
+	describe('dropPartial parameter', () => {
+		test('passes dropPartial to parseFeedbackResponse', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
 			const snapshot = createTestSnapshot(uri, content);
@@ -680,8 +691,8 @@ suite('parseReviewComments', function () {
 		});
 	});
 
-	describe('edge cases', function () {
-		test('returns empty array for empty message', function () {
+	describe('edge cases', () => {
+		test('returns empty array for empty message', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0';
 			const snapshot = createTestSnapshot(uri, content);
@@ -701,7 +712,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 0);
 		});
 
-		test('returns empty array when no inputs provided', function () {
+		test('returns empty array when no inputs provided', () => {
 			const request = createReviewRequest();
 			const message = '1. Line 1 in `file.ts`, bug: No inputs.\n\n';
 
@@ -710,7 +721,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments.length, 0);
 		});
 
-		test('sets correct range with firstNonWhitespaceCharacterIndex', function () {
+		test('sets correct range with firstNonWhitespaceCharacterIndex', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = '    indented content here';
 			const snapshot = createTestSnapshot(uri, content);
@@ -735,7 +746,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments[0].range.end.character, 25);
 		});
 
-		test('handles line range spanning multiple lines', function () {
+		test('handles line range spanning multiple lines', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = '  line 0\nline 1\n  line 2 with trailing  ';
 			const snapshot = createTestSnapshot(uri, content);
@@ -762,7 +773,7 @@ suite('parseReviewComments', function () {
 			assert.strictEqual(comments[0].range.end.character, 22);
 		});
 
-		test('preserves document reference in comment', function () {
+		test('preserves document reference in comment', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0';
 			const snapshot = createTestSnapshot(uri, content);
@@ -782,6 +793,464 @@ suite('parseReviewComments', function () {
 
 			assert.strictEqual(comments.length, 1);
 			assert.strictEqual(comments[0].document, snapshot);
+		});
+	});
+});
+
+class MockIgnoreService implements IIgnoreService {
+	declare _serviceBrand: undefined;
+
+	isEnabled = true;
+	isRegexExclusionsEnabled = true;
+	dispose(): void { }
+
+	private _ignoredUris = new Set<string>();
+	private _alwaysIgnore = false;
+
+	init(): Promise<void> {
+		return Promise.resolve();
+	}
+
+	isCopilotIgnored(file: Uri, _token?: CancellationToken): Promise<boolean> {
+		if (this._alwaysIgnore) {
+			return Promise.resolve(true);
+		}
+		return Promise.resolve(this._ignoredUris.has(file.toString()));
+	}
+
+	asMinimatchPattern(): Promise<string | undefined> {
+		return Promise.resolve(undefined);
+	}
+
+	setAlwaysIgnore(): void {
+		this._alwaysIgnore = true;
+	}
+
+	setIgnoredUris(uris: Uri[]): void {
+		this._ignoredUris = new Set(uris.map(u => u.toString()));
+	}
+
+	reset(): void {
+		this._alwaysIgnore = false;
+		this._ignoredUris.clear();
+	}
+}
+
+class MockChatEndpoint {
+	model = 'gpt-4.1-test';
+	family = 'gpt-4.1';
+	name = 'Test Endpoint';
+	maxOutputTokens = 8000;
+	modelMaxPromptTokens = 128000;
+	supportsToolCalls = true;
+	supportsVision = true;
+	supportsPrediction = true;
+	showInModelPicker = true;
+	isDefault = true;
+	isFallback = false;
+	policy: 'enabled' | { terms: string } = 'enabled';
+	urlOrRequestMetadata = 'https://test.com';
+	version = '1.0';
+	tokenizer = 'o200k_base';
+
+	private _response: ChatResponse = { type: ChatFetchResponseType.Success, value: '', requestId: 'test-request-id', serverRequestId: undefined, usage: undefined, resolvedModel: 'gpt-4.1-test' };
+
+	setResponse(response: ChatResponse): void {
+		this._response = response;
+	}
+
+	async makeChatRequest(
+		_debugName: string,
+		_messages: Raw.ChatMessage[],
+		finishedCb: ((text: string) => Promise<void>) | undefined,
+		_token: CancellationToken,
+	): Promise<ChatResponse> {
+		if (this._response.type === ChatFetchResponseType.Success && finishedCb) {
+			await finishedCb(this._response.value);
+		}
+		return this._response;
+	}
+
+	acquireTokenizer(): any {
+		return {
+			tokenize: (text: string) => ({ bpe: text.split(' ').map((_, i) => i), text }),
+			tokenLength: (text: string) => Math.ceil(text.length / 4),
+			encode: (text: string) => text.split(' ').map((_, i) => i),
+			decode: (tokens: number[]) => tokens.join(' '),
+		};
+	}
+}
+
+class MockEndpointProvider implements IEndpointProvider {
+	declare readonly _serviceBrand: undefined;
+
+	private _endpoint = new MockChatEndpoint();
+
+	get mockEndpoint(): MockChatEndpoint {
+		return this._endpoint;
+	}
+
+	async getChatEndpoint(): Promise<IChatEndpoint> {
+		return this._endpoint as unknown as IChatEndpoint;
+	}
+
+	async getEmbeddingsEndpoint(): Promise<any> {
+		throw new Error('Not implemented');
+	}
+
+	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
+		return [this._endpoint as unknown as IChatEndpoint];
+	}
+
+	async getAllCompletionModels(): Promise<any[]> {
+		return [];
+	}
+}
+
+suite('FeedbackGenerator.generateComments', () => {
+	let disposables: DisposableStore;
+	let mockIgnoreService: MockIgnoreService;
+	let mockEndpointProvider: MockEndpointProvider;
+	let feedbackGenerator: FeedbackGenerator;
+	let instantiationService: IInstantiationService;
+
+	beforeEach(() => {
+		disposables = new DisposableStore();
+		mockIgnoreService = new MockIgnoreService();
+		mockEndpointProvider = new MockEndpointProvider();
+
+		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+		serviceCollection.define(IIgnoreService, mockIgnoreService);
+		serviceCollection.define(IEndpointProvider, mockEndpointProvider);
+		serviceCollection.define(ITelemetryService, new NullTelemetryService());
+		instantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
+		feedbackGenerator = instantiationService.createInstance(FeedbackGenerator);
+	});
+
+	afterEach(() => {
+		disposables.dispose();
+	});
+
+	function createInput(
+		uri: Uri,
+		content: string,
+		relativeDocumentPath: string,
+		options?: { selection?: Range; hunks?: { range: Range; text: string }[] }
+	): CurrentChangeInput {
+		const snapshot = createTestSnapshot(uri, content);
+		const input: CurrentChangeInput = {
+			document: snapshot,
+			relativeDocumentPath,
+		};
+		if (options?.selection) {
+			input.selection = options.selection;
+		}
+		if (options?.hunks) {
+			input.change = {
+				repository: {} as any,
+				uri,
+				hunks: options.hunks,
+			};
+		}
+		return input;
+	}
+
+	describe('basic functionality', () => {
+		test('returns success with comments when endpoint returns valid response', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 4, 6), text: content }]
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: '1. Line 2 in `file.ts`, bug, high severity: This is a bug.\n\n',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 1);
+				assert.strictEqual(result.comments[0].kind, 'bug');
+				assert.strictEqual(result.comments[0].severity, 'high');
+			}
+		});
+
+		test('returns success with empty comments when endpoint returns no comments', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: 'No issues found in this code.',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 0);
+			}
+		});
+
+		test('returns multiple comments from single response', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4\nline 5';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 5, 6), text: content }]
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: `1. Line 2 in \`file.ts\`, bug, high severity: First bug.
+
+2. Line 4 in \`file.ts\`, performance, medium severity: Performance issue.
+
+`,
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 2);
+				assert.strictEqual(result.comments[0].kind, 'bug');
+				assert.strictEqual(result.comments[1].kind, 'performance');
+			}
+		});
+	});
+
+	describe('ignored documents handling', () => {
+		test('returns error when all inputs are ignored', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+			})];
+
+			mockIgnoreService.setAlwaysIgnore();
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'error');
+			if (result.type === 'error') {
+				assert.strictEqual(result.severity, 'info');
+				assert.ok(result.reason.includes('ignored'));
+			}
+		});
+
+		test('filters out ignored documents but processes non-ignored ones', async () => {
+			const uri1 = Uri.file('/test/ignored.ts');
+			const uri2 = Uri.file('/test/allowed.ts');
+			const content = 'line 0\nline 1';
+			const input = [
+				createInput(uri1, content, 'ignored.ts', {
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				}),
+				createInput(uri2, content, 'allowed.ts', {
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				})
+			];
+
+			mockIgnoreService.setIgnoredUris([uri1]);
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: '1. Line 1 in `allowed.ts`, bug: Issue in allowed file.\n\n',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 1);
+				assert.strictEqual(result.comments[0].uri.toString(), uri2.toString());
+			}
+		});
+	});
+
+	describe('cancellation handling', () => {
+		test('returns cancelled when token is cancelled before request', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+			})];
+
+			const tokenSource = new CancellationTokenSource();
+			tokenSource.cancel();
+
+			const result = await feedbackGenerator.generateComments(input, tokenSource.token);
+
+			assert.strictEqual(result.type, 'cancelled');
+		});
+	});
+
+	describe('error handling', () => {
+		test('returns error when endpoint returns error', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Failed,
+				reason: 'API error',
+				requestId: 'test-request-id',
+				serverRequestId: undefined
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'error');
+			if (result.type === 'error') {
+				assert.strictEqual(result.reason, 'API error');
+			}
+		});
+	});
+
+	describe('progress reporting', () => {
+		test('reports progress when progress callback is provided', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const input = [createInput(uri, content, 'file.ts', {
+				hunks: [{ range: new Range(0, 0, 4, 6), text: content }]
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: '1. Line 2 in `file.ts`, bug, high severity: This is a bug.\n\n',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const reportedComments: ReviewComment[][] = [];
+			const progress = {
+				report: (comments: ReviewComment[]) => {
+					reportedComments.push(comments);
+				}
+			};
+
+			await feedbackGenerator.generateComments(input, CancellationToken.None, progress);
+
+			// Progress should have been reported at least once
+			assert.ok(reportedComments.length > 0);
+		});
+	});
+
+	describe('input types', () => {
+		test('handles selection input correctly', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
+			const input = [createInput(uri, content, 'file.ts', {
+				selection: new Range(1, 0, 3, 6)
+			})];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: '1. Line 2 in `file.ts`, bug: Selection issue.\n\n',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 1);
+			}
+		});
+
+		test('handles multiple files correctly', async () => {
+			const uri1 = Uri.file('/test/first.ts');
+			const uri2 = Uri.file('/test/second.ts');
+			const content = 'line 0\nline 1';
+			const input = [
+				createInput(uri1, content, 'first.ts', {
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				}),
+				createInput(uri2, content, 'second.ts', {
+					hunks: [{ range: new Range(0, 0, 1, 6), text: content }]
+				})
+			];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: `1. Line 1 in \`first.ts\`, bug: Issue in first file.
+
+2. Line 1 in \`second.ts\`, performance: Issue in second file.
+
+`,
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 2);
+				assert.strictEqual(result.comments[0].uri.toString(), uri1.toString());
+				assert.strictEqual(result.comments[1].uri.toString(), uri2.toString());
+			}
+		});
+	});
+
+	describe('edge cases', () => {
+		test('handles empty input array', async () => {
+			const result = await feedbackGenerator.generateComments([], CancellationToken.None);
+
+			assert.strictEqual(result.type, 'error');
+			if (result.type === 'error') {
+				assert.strictEqual(result.severity, 'info');
+			}
+		});
+
+		test('handles input with no changes or selection', async () => {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1';
+			const input = [createInput(uri, content, 'file.ts')];
+
+			mockEndpointProvider.mockEndpoint.setResponse({
+				type: ChatFetchResponseType.Success,
+				value: '1. Line 1 in `file.ts`, bug: Issue.\n\n',
+				requestId: 'test-request-id',
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'gpt-4.1-test'
+			});
+
+			const result = await feedbackGenerator.generateComments(input, CancellationToken.None);
+
+			assert.strictEqual(result.type, 'success');
 		});
 	});
 });
