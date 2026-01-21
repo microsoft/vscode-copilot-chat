@@ -230,7 +230,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
 			// Let's cache the results across extension activations
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
-			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			const multiplier = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			let modelDetail: string | undefined;
 
 			// Append rate info to tooltip for all non-Auto models with a multiplier
 			if (endpoint.multiplier !== undefined && !(endpoint instanceof AutoChatEndpoint)) {
@@ -263,6 +264,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelTooltip,
+				multiplier,
 				detail: modelDetail,
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
