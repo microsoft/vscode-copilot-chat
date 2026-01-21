@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, suite, test } from 'vitest';
 import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
@@ -681,29 +681,18 @@ multiple lines.
 		});
 	});
 
-	class MockIgnoreService implements IIgnoreService {
-		declare _serviceBrand: undefined;
-
-		isEnabled = true;
-		isRegexExclusionsEnabled = true;
-		dispose(): void { }
+	class MockIgnoreService extends NullIgnoreService {
+		override get isEnabled(): boolean { return true; }
+		override get isRegexExclusionsEnabled(): boolean { return true; }
 
 		private _ignoredUris = new Set<string>();
 		private _alwaysIgnore = false;
 
-		init(): Promise<void> {
-			return Promise.resolve();
-		}
-
-		isCopilotIgnored(file: Uri, _token?: CancellationToken): Promise<boolean> {
+		override async isCopilotIgnored(file: Uri): Promise<boolean> {
 			if (this._alwaysIgnore) {
-				return Promise.resolve(true);
+				return true;
 			}
-			return Promise.resolve(this._ignoredUris.has(file.toString()));
-		}
-
-		asMinimatchPattern(): Promise<string | undefined> {
-			return Promise.resolve(undefined);
+			return this._ignoredUris.has(file.toString());
 		}
 
 		setAlwaysIgnore(): void {
