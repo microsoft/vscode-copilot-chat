@@ -18,9 +18,12 @@ import { IConversationStore } from '../../conversationStore/node/conversationSto
 import { Conversation } from '../../prompt/common/conversation';
 
 interface SummaryCache {
-	readonly conversationSessionId: string;
+	readonly cacheKey: string;
 	readonly promise: Promise<string | undefined>;
 }
+
+const SINGLE_TURN_MESSAGE_LIMIT = 1_000;
+const MAX_TOTAL_MESSAGE_LENGTH = 10_000;
 
 export class ChatSessionContextContribution extends Disposable {
 
@@ -127,7 +130,8 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 
 			// Check if we have a cached or in-progress summary for this conversation
 			const existingCache = this.getSummaryCache();
-			if (existingCache && existingCache.conversationSessionId === conversation.sessionId) {
+			const cacheKey = this.getCacheKey(conversation);
+			if (existingCache && existingCache.cacheKey === cacheKey) {
 				// Await the existing promise (whether it's still running or already resolved)
 				const summary = await existingCache.promise;
 				if (summary) {
@@ -140,7 +144,7 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			// Note: We don't pass the cancellation token to avoid cancelling on subsequent calls
 			const summaryPromise = this.generateSummary(conversation);
 			this.setSummaryCache({
-				conversationSessionId: conversation.sessionId,
+				cacheKey,
 				promise: summaryPromise
 			});
 
@@ -161,6 +165,10 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			return Date.now();
 		}
 		return turns[0].startTime;
+	}
+
+	private getCacheKey(conversation: Conversation): string {
+		return `${conversation.sessionId}:${conversation.turns.length}`;
 	}
 
 	private async generateSummary(conversation: Conversation): Promise<string | undefined> {
@@ -224,9 +232,10 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			// Add assistant response
 			if (turn.responseMessage?.message) {
 				// Truncate long responses
+				const truncatedIndicator = '\n... (truncated) ...\n';
 				const responseMessage = turn.responseMessage.message;
-				const truncatedMessage = responseMessage.length > 500
-					? responseMessage.substring(0, 500) + '...'
+				const truncatedMessage = responseMessage.length > SINGLE_TURN_MESSAGE_LIMIT + truncatedIndicator.length
+					? responseMessage.substring(0, SINGLE_TURN_MESSAGE_LIMIT / 2) + truncatedIndicator + responseMessage.substring(responseMessage.length - SINGLE_TURN_MESSAGE_LIMIT / 2)
 					: responseMessage;
 				lines.push(`Assistant: ${truncatedMessage}`);
 			}
@@ -236,7 +245,22 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 			return undefined;
 		}
 
-		return lines.join('\n\n');
+		// Make sure the total length is within limits
+		let characterCount = 0;
+		const linesToKeep = [];
+		for (let i = lines.length - 1; i >= 0; i--) {
+			linesToKeep.unshift(lines[i]);
+			characterCount += lines[i].length;
+			if (characterCount >= MAX_TOTAL_MESSAGE_LENGTH) {
+				break;
+			}
+		}
+
+		if (linesToKeep.length < lines.length) {
+			linesToKeep.unshift('... (truncated) ...');
+		}
+
+		return linesToKeep.join('\n\n');
 	}
 
 	private createTraitFromSummary(summary: string): Copilot.Trait[] {
