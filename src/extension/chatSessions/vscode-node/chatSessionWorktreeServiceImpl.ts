@@ -8,11 +8,11 @@ import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { derived, IObservable } from '../../../util/vs/base/common/observable';
+import { derived, IObservable, observableValue } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -24,7 +24,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
-	private _activeRepositoryPath: string | undefined;
+	private readonly _selectedRepository = observableValue<RepoContext | undefined>(this, undefined);
+	readonly selectedRepository: IObservable<RepoContext | undefined>;
+
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile[] | undefined> = new Map();
 
@@ -40,6 +42,13 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		this.isWorktreeSupportedObs = derived(reader => {
 			const activeRepository = this.gitService.activeRepository.read(reader);
 			return activeRepository !== undefined;
+		});
+
+		this.selectedRepository = derived(reader => {
+			const selectedRepository = this._selectedRepository.read(reader);
+			const activeRepository = this.gitService.activeRepository.read(reader);
+
+			return selectedRepository ?? activeRepository;
 		});
 	}
 
@@ -61,8 +70,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	setActiveRepositoryPath(repositoryPath: string): void {
-		this._activeRepositoryPath = repositoryPath;
+	async setSelectedRepository(repositoryPath: string): Promise<void> {
+		const repository = await this.gitService.getRepository(vscode.Uri.file(repositoryPath));
+		this._selectedRepository.set(repository, undefined);
 	}
 
 	async createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> {
@@ -84,16 +94,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private async _createWorktree(progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
-			let activeRepository = this.gitService.activeRepository.get();
-
-			if (this._activeRepositoryPath) {
-				const repositoryPath = vscode.Uri.file(this._activeRepositoryPath);
-				const repository = await this.gitService.getRepository(repositoryPath);
-				if (repository) {
-					activeRepository = repository;
-				}
-			}
-
+			const activeRepository = this.selectedRepository.get();
 			if (!activeRepository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
@@ -134,6 +135,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
 		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: 1 };
 		await this.extensionContext.globalState.update(CHAT_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
+	}
+
+	async getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined> {
+		const worktreeProperties = this._sessionWorktrees.get(sessionId);
+		if (typeof worktreeProperties === 'string' || !worktreeProperties?.repositoryPath) {
+			return undefined;
+		}
+
+		return this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
 	}
 
 	getWorktreePath(sessionId: string): vscode.Uri | undefined {

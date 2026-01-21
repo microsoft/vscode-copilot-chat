@@ -6,10 +6,10 @@
 import { Attachment, SweCustomAgent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, Uri } from 'vscode';
+import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { IGitService } from '../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
@@ -20,7 +20,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observable';
-import { isEqual } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
@@ -40,6 +40,7 @@ import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
+const REPOSITORY_OPTION_ID = 'repository';
 
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
@@ -210,6 +211,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		@IPromptsService private readonly promptsService: IPromptsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IGitService private readonly gitService: IGitService
 	) {
 		super();
 
@@ -255,6 +257,21 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			options[MODELS_OPTION_ID] = model;
 		}
 
+		// Exclude worktrees from the repository list
+		const repositories = this.gitService.repositories
+			.filter(repository => repository.kind !== 'worktree');
+
+		if (repositories.length > 1) {
+			const repository = await this.copilotCLIWorktreeManagerService.getWorktreeRepository(copilotcliSessionId);
+
+			if (repository) {
+				options[REPOSITORY_OPTION_ID] = {
+					...toRepositoryOptionItem(repository),
+					locked: true
+				};
+			}
+		}
+
 		const history = existingSession?.object?.getChatHistory() || [];
 		existingSession?.dispose();
 		// Always keep track of this in memory.
@@ -297,6 +314,29 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 			]
 		};
+
+		// Exclude worktrees from the repository list
+		const repositories = this.gitService.repositories
+			.filter(repository => repository.kind !== 'worktree');
+
+		if (repositories.length > 1) {
+			const selectedRepository = this.copilotCLIWorktreeManagerService.selectedRepository.get();
+
+			const repositoryItems = repositories.map(repository => {
+				return {
+					...toRepositoryOptionItem(repository),
+					default: extUriBiasedIgnorePathCase.isEqual(repository.rootUri, selectedRepository?.rootUri)
+				} satisfies vscode.ChatSessionProviderOptionItem;
+			});
+
+			options.optionGroups.push({
+				id: REPOSITORY_OPTION_ID,
+				name: l10n.t('Repository'),
+				description: l10n.t('Pick Repository'),
+				items: repositoryItems
+			});
+		}
+
 		if (hasAgents) {
 			options.optionGroups.unshift({
 				id: AGENTS_OPTION_ID,
@@ -322,6 +362,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				if (agent?.name) {
 					await this.selectAgentModel(resource, agent, token);
 				}
+			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string') {
+				this.copilotCLIWorktreeManagerService.setSelectedRepository(update.value);
 			}
 		}
 	}
@@ -376,6 +418,18 @@ async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): P
 	} catch (error) {
 		return false;
 	}
+}
+
+function toRepositoryOptionItem(repository: RepoContext): ChatSessionProviderOptionItem {
+	const repositoryName = repository.rootUri.path.split('/').pop() ?? repository.rootUri.toString();
+
+	return {
+		id: repository.rootUri.fsPath,
+		name: repositoryName,
+		icon: repository.kind === 'repository'
+			? new vscode.ThemeIcon('repo')
+			: new vscode.ThemeIcon('archive'),
+	} satisfies vscode.ChatSessionProviderOptionItem;
 }
 
 const WAIT_FOR_NEW_SESSION_TO_GET_USED = 5 * 60 * 1000; // 5 minutes
@@ -434,16 +488,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			});
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
-			const currentRepository = this.gitService.activeRepository?.get();
-			const hasUncommittedChanges = (this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get() && currentRepository?.changes)
-				? (currentRepository.changes.indexChanges.length > 0 || currentRepository.changes.workingTree.length > 0)
+			const selectedRepository = this.copilotCLIWorktreeManagerService.selectedRepository.get();
+			const hasUncommittedChanges = (this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get() && selectedRepository?.changes)
+				? (selectedRepository.changes.indexChanges.length > 0 || selectedRepository.changes.workingTree.length > 0)
 				: false;
 
 			if (!chatSessionContext) {
 				// Delegating from another chat session
 				return await this.handleDelegationFromAnotherChat(request, context, confirmationResults, hasUncommittedChanges, stream, token);
 			}
-
 
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
@@ -481,6 +534,22 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					}
 				}
 			}
+			// Repository picker
+			const repositories = this.gitService.repositories
+				.filter(repository => repository.kind !== 'worktree');
+
+			if (isUntitled && repositories.length > 1 && selectedRepository) {
+				const changes: { optionId: string; value: vscode.ChatSessionProviderOptionItem }[] = [{
+					optionId: REPOSITORY_OPTION_ID,
+					value: {
+						...toRepositoryOptionItem(selectedRepository),
+						locked: true
+					} satisfies vscode.ChatSessionProviderOptionItem
+				}];
+
+				this.contentProvider.notifySessionOptionsChange(resource, changes);
+			}
+
 			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommittedChangesAction !== 'cancel' ? uncommittedChangesAction : undefined, stream, disposables, token);
 			if (!session || token.isCancellationRequested) {
 				return {};
@@ -753,10 +822,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		isUntitled: boolean,
 	): vscode.ChatResult | void {
 		const message = isUntitled ?
-			l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?') :
+			l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?') :
 			l10n.t('Background Agent will work in an isolated worktree to implement your requested changes.')
 			+ '\n\n'
-			+ l10n.t('This workspace has uncommitted changes. Should these changes be included in the new worktree?');
+			+ l10n.t('The selected repository has uncommitted changes. Should these changes be included in the new worktree?');
 
 		const buttons = [
 			CLI_COPY_CHANGES,
