@@ -3,15 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import path from 'path';
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
 import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
 import { isObject } from '../../../util/vs/base/common/types';
-import { URI } from '../../../util/vs/base/common/uri';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
-import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
@@ -152,24 +151,21 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 }
 
 class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProvider {
-	private _releaseDate: string | undefined;
+	private readonly _releaseDate: string | undefined;
 
 	constructor(
-		envService: IEnvService,
-		fileSystemService: IFileSystemService,
 		private _logService: ILogService
 	) {
-		this._initReleaseDate(envService, fileSystemService);
+		this._releaseDate = this._initReleaseDate();
 	}
 
-	private async _initReleaseDate(envService: IEnvService, fileSystemService: IFileSystemService): Promise<void> {
+	private _initReleaseDate(): string | undefined {
 		try {
-			const productJsonUri = URI.joinPath(URI.file(envService.appRoot), 'product.json');
-			const content = await fileSystemService.readFile(productJsonUri);
-			const product = JSON.parse(new TextDecoder().decode(content));
-			this._releaseDate = this._formatReleaseDate(product.date ?? '');
-		} catch {
-			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date`);
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
+			return this._formatReleaseDate(product.date ?? '');
+		} catch (error) {
+			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date: ${error}`);
+			return undefined;
 		}
 	}
 
@@ -207,8 +203,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IFetcherService fetcherService: IFetcherService,
-		@ILogService logService: ILogService,
-		@IFileSystemService fileSystemService: IFileSystemService
+		@ILogService logService: ILogService
 	) {
 
 		const id = context.extension.id;
@@ -229,7 +224,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
-				new PlatformAndReleaseDateFilterProvider(envService, fileSystemService, logService),
+				new PlatformAndReleaseDateFilterProvider(logService),
 			);
 		};
 
