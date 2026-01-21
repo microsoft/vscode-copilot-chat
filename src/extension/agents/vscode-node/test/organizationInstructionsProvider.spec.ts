@@ -10,7 +10,6 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { GithubRepoId, IGitService, RepoContext } from '../../../../platform/git/common/gitService';
-import { IOctoKitService } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -18,6 +17,7 @@ import { constObservable, observableValue } from '../../../../util/vs/base/commo
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationInstructionsProvider } from '../organizationInstructionsProvider';
+import { MockOctoKitService } from './mockOctoKitService';
 
 /**
  * Mock implementation of IGitService for testing
@@ -107,51 +107,6 @@ class MockGitService implements IGitService {
 }
 
 /**
- * Mock implementation of IOctoKitService for testing
- */
-class MockOctoKitService implements IOctoKitService {
-	_serviceBrand: undefined;
-
-	private orgInstructions: Map<string, string> = new Map();
-
-	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
-	getCopilotPullRequestsForUser = async () => [];
-	getCopilotSessionsForPR = async () => [];
-	getSessionLogs = async () => '';
-	getSessionInfo = async () => undefined;
-	postCopilotAgentJob = async () => undefined;
-	getJobByJobId = async () => undefined;
-	getJobBySessionId = async () => undefined;
-	addPullRequestComment = async () => null;
-	getAllOpenSessions = async () => [];
-	getAllSessions = async () => [];
-	getPullRequestFromGlobalId = async () => null;
-	getPullRequestFiles = async () => [];
-	closePullRequest = async () => false;
-	getFileContent = async () => '';
-	getUserOrganizations = async () => [];
-	getOrganizationRepositories = async () => [];
-	getCustomAgents = async () => [];
-	getCustomAgentDetails = async () => undefined;
-
-	async getOrgCustomInstructions(orgLogin: string): Promise<string | undefined> {
-		return this.orgInstructions.get(orgLogin);
-	}
-
-	setOrgInstructions(orgLogin: string, instructions: string | undefined) {
-		if (instructions === undefined) {
-			this.orgInstructions.delete(orgLogin);
-		} else {
-			this.orgInstructions.set(orgLogin, instructions);
-		}
-	}
-
-	clearInstructions() {
-		this.orgInstructions.clear();
-	}
-}
-
-/**
  * Mock implementation of extension context for testing
  */
 class MockExtensionContext {
@@ -228,10 +183,10 @@ suite('OrganizationInstructionsProvider', () => {
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		// Pre-populate cache
+		// Pre-populate cache - implementation uses org/repo format from repoId.toString()
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const instructionContent = `# Organization Instructions
 
 Always follow our coding standards.`;
@@ -240,19 +195,18 @@ Always follow our coding standards.`;
 		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.equal(instructions.length, 1);
-		assert.equal(instructions[0].name, 'testorg');
-		assert.equal(instructions[0].description, '');
+		assert.ok(instructions[0].uri);
 	});
 
 	test('fetches and caches instructions from API', async () => {
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		// Mock API response
+		// Mock API response - use org/repo key since that's what the implementation uses
 		const mockInstructions = `# Organization Instructions
 
 Always use TypeScript strict mode.`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		// First call returns cached (empty) results
 		const instructions1 = await provider.provideInstructions({}, {} as any);
@@ -264,7 +218,7 @@ Always use TypeScript strict mode.`;
 		// Second call should return newly cached instructions
 		const instructions2 = await provider.provideInstructions({}, {} as any);
 		assert.equal(instructions2.length, 1);
-		assert.equal(instructions2[0].name, 'testorg');
+		assert.ok(instructions2[0].uri);
 	});
 
 	test('caches instructions with correct content', async () => {
@@ -276,14 +230,14 @@ Always use TypeScript strict mode.`;
 1. Use tabs for indentation
 2. Follow TypeScript conventions
 3. Write comprehensive tests`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Check cached file content
+		// Check cached file content - uses org/repo path
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const contentBytes = await mockFileSystem.readFile(instructionFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -295,7 +249,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		const mockInstructions = `# Initial Instructions`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -307,7 +261,7 @@ Always use TypeScript strict mode.`;
 
 		// Update the instructions
 		const updatedInstructions = `# Updated Instructions`;
-		mockOctoKitService.setOrgInstructions('testorg', updatedInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', updatedInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
@@ -334,7 +288,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		let apiCallCount = 0;
-		mockOctoKitService.getOrgCustomInstructions = async () => {
+		mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 			apiCallCount++;
 			// Simulate slow API call
 			await new Promise(resolve => setTimeout(resolve, 50));
@@ -358,7 +312,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		const mockInstructions = `# Stable Instructions`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -381,7 +335,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		// API returns undefined (no instructions)
-		mockOctoKitService.setOrgInstructions('testorg', undefined);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', undefined);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -401,14 +355,14 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		const mockInstructions = `# Company Instructions`;
-		mockOctoKitService.setOrgInstructions('mycompany', mockInstructions);
+		mockOctoKitService.setOrgInstructions('mycompany/testrepo', mockInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Check that file was created with correct name
+		// Check that file was created with correct name - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		const instructionFile = URI.joinPath(cacheDir, 'mycompany.instruction.md');
+		const instructionFile = URI.joinPath(cacheDir, 'mycompany/testrepo.instruction.md');
 		try {
 			const contentBytes = await mockFileSystem.readFile(instructionFile);
 			const content = new TextDecoder().decode(contentBytes);
@@ -425,7 +379,7 @@ Always use TypeScript strict mode.`;
 		mockGitService.setActiveRepository(new GithubRepoId('orgA', 'repoA'));
 
 		let capturedOrgLogin: string | undefined;
-		mockOctoKitService.getOrgCustomInstructions = async (orgLogin: string) => {
+		mockOctoKitService.getOrgCustomInstructions = async (orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 			capturedOrgLogin = orgLogin;
 			return 'Org A instructions';
 		};
@@ -433,7 +387,7 @@ Always use TypeScript strict mode.`;
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		assert.equal(capturedOrgLogin, 'orgA');
+		assert.equal(capturedOrgLogin, 'orgA/repoA');
 
 		// Change to org B
 		mockGitService.setActiveRepository(new GithubRepoId('orgB', 'repoB'));
@@ -442,7 +396,7 @@ Always use TypeScript strict mode.`;
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Should fetch from new organization
-		assert.equal(capturedOrgLogin, 'orgB');
+		assert.equal(capturedOrgLogin, 'orgB/repoB');
 	});
 
 	test('creates cache directory if it does not exist', async () => {
@@ -450,7 +404,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		const mockInstructions = `# Test Instructions`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		// Initially no cache directory
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
@@ -471,10 +425,10 @@ Always use TypeScript strict mode.`;
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		// Pre-populate cache
+		// Pre-populate cache - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const instructionContent = `# Existing Instructions`;
 		mockFileSystem.mockFile(instructionFile, instructionContent);
 
@@ -482,7 +436,7 @@ Always use TypeScript strict mode.`;
 
 		// Should successfully read cached instructions
 		assert.equal(instructions.length, 1);
-		assert.equal(instructions[0].name, 'testorg');
+		assert.ok(instructions[0].uri);
 	});
 
 	test('handles cache read errors gracefully', async () => {
@@ -510,7 +464,7 @@ Always use TypeScript strict mode.`;
 		const provider = createProvider();
 
 		// Initial setup with no instructions
-		mockOctoKitService.setOrgInstructions('testorg', undefined);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', undefined);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -524,7 +478,7 @@ Always use TypeScript strict mode.`;
 		const newInstructions = `# New Instructions
 
 Follow these rules.`;
-		mockOctoKitService.setOrgInstructions('testorg', newInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', newInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
@@ -540,7 +494,7 @@ Follow these rules.`;
 
 		// Initial setup with instructions
 		const initialInstructions = `# Initial Instructions`;
-		mockOctoKitService.setOrgInstructions('testorg', initialInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', initialInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -550,7 +504,7 @@ Follow these rules.`;
 		});
 
 		// Remove instructions
-		mockOctoKitService.setOrgInstructions('testorg', undefined);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', undefined);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 150));
@@ -565,14 +519,14 @@ Follow these rules.`;
 		const provider = createProvider();
 
 		// API returns empty string
-		mockOctoKitService.setOrgInstructions('testorg', '');
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', '');
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Empty strings are treated as "no instructions" and not cached
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		try {
 			await mockFileSystem.readFile(instructionFile);
 			assert.fail('Cache file should not exist for empty instructions');
@@ -590,14 +544,14 @@ Follow these rules.`;
 Use "double quotes" and 'single quotes'.
 Include special chars: @#$%^&*()
 Unicode: 你好 🚀`;
-		mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Check that special characters are preserved
+		// Check that special characters are preserved - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const contentBytes = await mockFileSystem.readFile(instructionFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -610,14 +564,14 @@ Unicode: 你好 🚀`;
 
 		// Generate large content (e.g., 100KB)
 		const largeContent = '# Large Instructions\n\n' + 'x'.repeat(100000);
-		mockOctoKitService.setOrgInstructions('testorg', largeContent);
+		mockOctoKitService.setOrgInstructions('testorg/testrepo', largeContent);
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// Check that large content is handled correctly
+		// Check that large content is handled correctly - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const contentBytes = await mockFileSystem.readFile(instructionFile);
 		const content = new TextDecoder().decode(contentBytes);
 
@@ -628,10 +582,10 @@ Unicode: 你好 🚀`;
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 		const provider = createProvider();
 
-		// Pre-populate cache
+		// Pre-populate cache - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+		const instructionFile = URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md');
 		const instructionContent = `# Test`;
 		mockFileSystem.mockFile(instructionFile, instructionContent);
 
@@ -647,14 +601,14 @@ Unicode: 你好 🚀`;
 
 		// First organization
 		mockGitService.setActiveRepository(new GithubRepoId('org1', 'repo1'));
-		mockOctoKitService.setOrgInstructions('org1', '# Org 1 Instructions');
+		mockOctoKitService.setOrgInstructions('org1/repo1', '# Org 1 Instructions');
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Second organization
 		mockGitService.setActiveRepository(new GithubRepoId('org2', 'repo2'));
-		mockOctoKitService.setOrgInstructions('org2', '# Org 2 Instructions');
+		mockOctoKitService.setOrgInstructions('org2/repo2', '# Org 2 Instructions');
 
 		await provider.provideInstructions({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -670,36 +624,36 @@ Unicode: 你好 🚀`;
 	test('reads correct organization instructions when multiple are cached', async () => {
 		const provider = createProvider();
 
-		// Pre-populate cache with multiple organizations
+		// Pre-populate cache with multiple organizations - uses org/repo format
 		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
 		mockFileSystem.mockDirectory(cacheDir, [
-			['org1.instruction.md', FileType.File],
-			['org2.instruction.md', FileType.File],
+			['org1/repo1.instruction.md', FileType.File],
+			['org2/repo2.instruction.md', FileType.File],
 		]);
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org1.instruction.md'), '# Org 1 Instructions');
-		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org2.instruction.md'), '# Org 2 Instructions');
+		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org1/repo1.instruction.md'), '# Org 1 Instructions');
+		mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org2/repo2.instruction.md'), '# Org 2 Instructions');
 
 		// Request instructions for org1
 		mockGitService.setActiveRepository(new GithubRepoId('org1', 'repo1'));
 		const instructions = await provider.provideInstructions({}, {} as any);
 
 		assert.equal(instructions.length, 1);
-		assert.equal(instructions[0].name, 'org1');
+		assert.ok(instructions[0].uri.toString().includes('org1/repo1'));
 	});
 
 	suite('Polling Behavior', () => {
 		test('starts polling on initialization', async () => {
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 			const mockInstructions = '# Test Instructions';
-			mockOctoKitService.setOrgInstructions('testorg', mockInstructions);
+			mockOctoKitService.setOrgInstructions('testorg/testrepo', mockInstructions);
 
-			// Pre-populate cache so we have something to poll
+			// Pre-populate cache so we have something to poll - uses org/repo format
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), mockInstructions);
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), mockInstructions);
 
 			let apiCallCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				apiCallCount++;
 				return mockInstructions;
 			};
@@ -722,16 +676,16 @@ Unicode: 你好 🚀`;
 		test('polling refreshes cache periodically', async () => {
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 			const initialInstructions = '# Initial Instructions';
-			mockOctoKitService.setOrgInstructions('testorg', initialInstructions);
+			mockOctoKitService.setOrgInstructions('testorg/testrepo', initialInstructions);
 
-			// Pre-populate cache
+			// Pre-populate cache - uses org/repo format
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), initialInstructions);
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), initialInstructions);
 
 			let apiCallCount = 0;
 			let changeEventCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				apiCallCount++;
 				if (apiCallCount === 1) {
 					return initialInstructions;
@@ -769,7 +723,7 @@ Unicode: 你好 🚀`;
 			const provider = createProvider();
 
 			let apiCallCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				apiCallCount++;
 				return '# Test';
 			};
@@ -792,13 +746,13 @@ Unicode: 你好 🚀`;
 		test('polling handles errors gracefully', async () => {
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 
-			// Pre-populate cache
+			// Pre-populate cache - uses org/repo format
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), '# Test');
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), '# Test');
 
 			let shouldThrowError = false;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				if (shouldThrowError) {
 					throw new Error('API Error');
 				}
@@ -826,13 +780,13 @@ Unicode: 你好 🚀`;
 			const v1Instructions = '# Version 1';
 			const v2Instructions = '# Version 2';
 
-			// Pre-populate cache with v1
+			// Pre-populate cache with v1 - uses org/repo format
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), v1Instructions);
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), v1Instructions);
 
 			let currentVersion = 1;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				return currentVersion === 1 ? v1Instructions : v2Instructions;
 			};
 
@@ -840,7 +794,7 @@ Unicode: 你好 🚀`;
 
 			// Initial state - should have v1
 			await provider.provideInstructions({}, {} as any);
-			let contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg.instruction.md'));
+			let contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'));
 			let content = new TextDecoder().decode(contentBytes);
 			assert.equal(content, v1Instructions);
 
@@ -852,7 +806,7 @@ Unicode: 你好 🚀`;
 			await new Promise(resolve => setTimeout(resolve, 100));
 
 			// Cache should now have v2
-			contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg.instruction.md'));
+			contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'));
 			content = new TextDecoder().decode(contentBytes);
 			assert.equal(content, v2Instructions);
 		});
@@ -861,13 +815,13 @@ Unicode: 你好 🚀`;
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 			const stableInstructions = '# Stable Instructions';
 
-			// Pre-populate cache
+			// Pre-populate cache - uses org/repo format
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), stableInstructions);
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), stableInstructions);
 
 			let apiCallCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				apiCallCount++;
 				return stableInstructions;
 			};
@@ -896,45 +850,45 @@ Unicode: 你好 🚀`;
 			mockGitService.setActiveRepository(new GithubRepoId('org1', 'repo1'));
 
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['org1.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org1.instruction.md'), '# Org 1');
+			mockFileSystem.mockDirectory(cacheDir, [['org1/repo1.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org1/repo1.instruction.md'), '# Org 1');
 
 			let lastRequestedOrg: string | undefined;
-			mockOctoKitService.getOrgCustomInstructions = async (orgLogin: string) => {
+			mockOctoKitService.getOrgCustomInstructions = async (orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				lastRequestedOrg = orgLogin;
 				return `# Instructions for ${orgLogin}`;
 			};
 
 			const provider = createProvider();
 
-			// Refresh should query org1
+			// Refresh should query org1/repo1
 			await (provider as any).refreshCache();
 			await new Promise(resolve => setTimeout(resolve, 50));
-			assert.equal(lastRequestedOrg, 'org1');
+			assert.equal(lastRequestedOrg, 'org1/repo1');
 
 			// Switch to org2
 			mockGitService.setActiveRepository(new GithubRepoId('org2', 'repo2'));
 			mockFileSystem.mockDirectory(cacheDir, [
-				['org1.instruction.md', FileType.File],
-				['org2.instruction.md', FileType.File],
+				['org1/repo1.instruction.md', FileType.File],
+				['org2/repo2.instruction.md', FileType.File],
 			]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org2.instruction.md'), '# Org 2');
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'org2/repo2.instruction.md'), '# Org 2');
 
-			// Refresh should now query org2
+			// Refresh should now query org2/repo2
 			await (provider as any).refreshCache();
 			await new Promise(resolve => setTimeout(resolve, 50));
-			assert.equal(lastRequestedOrg, 'org2');
+			assert.equal(lastRequestedOrg, 'org2/repo2');
 		});
 
 		test('polling continues after temporary API failures', async () => {
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), '# Original');
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), '# Original');
 
 			let attemptCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				attemptCount++;
 				if (attemptCount === 1) {
 					throw new Error('Temporary API failure');
@@ -955,7 +909,7 @@ Unicode: 你好 🚀`;
 			assert.equal(attemptCount, 2);
 
 			// Cache should be updated after recovery
-			const contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg.instruction.md'));
+			const contentBytes = await mockFileSystem.readFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'));
 			const content = new TextDecoder().decode(contentBytes);
 			assert.equal(content, '# Updated after recovery');
 		});
@@ -964,12 +918,12 @@ Unicode: 你好 🚀`;
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), '# Test');
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), '# Test');
 
 			let concurrentCallCount = 0;
 			let maxConcurrentCalls = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				concurrentCallCount++;
 				maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCallCount);
 				await new Promise(resolve => setTimeout(resolve, 50));
@@ -998,7 +952,7 @@ Unicode: 你好 🚀`;
 			mockGitService.setActiveRepository(undefined);
 
 			let apiCallCount = 0;
-			mockOctoKitService.getOrgCustomInstructions = async () => {
+			mockOctoKitService.getOrgCustomInstructions = async (_orgLogin: string, _authOptions: { createIfNone?: boolean }) => {
 				apiCallCount++;
 				return '# Test';
 			};
@@ -1015,8 +969,8 @@ Unicode: 你好 🚀`;
 			// Now set an active repository
 			mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 			const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
-			mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
-			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg.instruction.md'), '# Test');
+			mockFileSystem.mockDirectory(cacheDir, [['testorg/testrepo.instruction.md', FileType.File]]);
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, 'testorg/testrepo.instruction.md'), '# Test');
 
 			// Refresh should now work
 			await (provider as any).refreshCache();

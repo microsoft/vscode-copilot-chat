@@ -9,74 +9,13 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationAndEnterpriseAgentProvider } from '../organizationAndEnterpriseAgentProvider';
-
-/**
- * Mock implementation of IOctoKitService for testing
- */
-class MockOctoKitService implements IOctoKitService {
-	_serviceBrand: undefined;
-
-	private customAgents: CustomAgentListItem[] = [];
-	private agentDetails: Map<string, CustomAgentDetails> = new Map();
-
-	private userOrganizations: string[] = ['testorg'];
-
-	getCurrentAuthedUser = async () => ({ login: 'testuser', name: 'Test User', avatar_url: '' });
-	getOpenPullRequestsForUser = async () => [];
-	getCopilotSessionsForPR = async () => [];
-	getSessionLogs = async () => '';
-	getSessionInfo = async () => undefined;
-	postCopilotAgentJob = async () => undefined;
-	getJobByJobId = async () => undefined;
-	getJobBySessionId = async () => undefined;
-	addPullRequestComment = async () => null;
-	getAllSessions = async () => [];
-	getPullRequestFromGlobalId = async () => null;
-	getPullRequestFiles = async () => [];
-	closePullRequest = async () => false;
-	getFileContent = async () => '';
-	getUserOrganizations = async () => this.userOrganizations;
-	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
-	getOrgCustomInstructions = async () => undefined;
-	getUserRepositories = async () => [];
-	getRecentlyCommittedRepositories = async () => [];
-	getCopilotAgentModels = async () => [];
-	getAssignableActors = async () => [];
-
-	async getCustomAgents(owner: string, repo: string, options: CustomAgentListOptions, authOptions: { createIfNone?: boolean }): Promise<CustomAgentListItem[]> {
-		if (!(await this.getCurrentAuthedUser())) {
-			throw new PermissiveAuthRequiredError();
-		}
-		return this.customAgents;
-	}
-
-	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version: string, authOptions: { createIfNone?: boolean }): Promise<CustomAgentDetails | undefined> {
-		return this.agentDetails.get(agentName);
-	}
-
-	setCustomAgents(agents: CustomAgentListItem[]) {
-		this.customAgents = agents;
-	}
-
-	setAgentDetails(name: string, details: CustomAgentDetails) {
-		this.agentDetails.set(name, details);
-	}
-
-	setUserOrganizations(orgs: string[]) {
-		this.userOrganizations = orgs;
-	}
-
-	clearAgents() {
-		this.customAgents = [];
-		this.agentDetails.clear();
-	}
-}
+import { MockOctoKitService } from './mockOctoKitService';
 
 /**
  * Mock implementation of extension context for testing
