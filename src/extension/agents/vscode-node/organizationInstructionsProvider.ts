@@ -113,9 +113,9 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		}
 
 		// Check if current repository belongs to an organization with instructions
-		const repoId = await getRepoId(this.gitService);
-		if (repoId) {
-			const currentOrgLogin = repoId.toString();
+		const repoIds = await getRepoId(this.gitService);
+		if (repoIds && repoIds.length > 0) {
+			const currentOrgLogin = repoIds[0].org;
 			const hasInstructions = await this.hasInstructionsInCache(currentOrgLogin, cacheDir);
 			if (hasInstructions) {
 				this.logService.trace(`[OrganizationInstructionsProvider] Using current repository's organization: ${currentOrgLogin}`);
