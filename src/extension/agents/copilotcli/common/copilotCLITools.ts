@@ -7,9 +7,11 @@ import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent 
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
 import { isLocation } from '../../../../util/common/types';
+import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import type { MCP } from '../../../common/modelContextProtocol';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -465,6 +467,81 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
 	return undefined;
 }
 
+/**
+ * Converts MCP ContentBlock[] to VS Code McpToolInvocationContentData[] for rendering tool results
+ */
+function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[]): McpToolInvocationContentData[] {
+	const output: McpToolInvocationContentData[] = [];
+	const encoder = new TextEncoder();
+
+	for (const block of blocks) {
+		try {
+			switch (block.type) {
+				case 'text':
+					// Convert text to UTF-8 bytes with text/plain mime type
+					output.push(new McpToolInvocationContentData(
+						encoder.encode(block.text),
+						'text/plain'
+					));
+					break;
+
+				case 'image':
+					// Decode base64 image data and preserve mime type
+					output.push(new McpToolInvocationContentData(
+						decodeBase64(block.data).buffer,
+						block.mimeType
+					));
+					break;
+
+				case 'audio':
+					// Decode base64 audio data and preserve mime type
+					output.push(new McpToolInvocationContentData(
+						decodeBase64(block.data).buffer,
+						block.mimeType
+					));
+					break;
+
+				case 'resource': {
+					// Handle embedded resource (text or blob)
+					const resource = block.resource;
+					if ('text' in resource) {
+						// TextResourceContents
+						const mimeType = resource.mimeType || 'text/plain';
+						output.push(new McpToolInvocationContentData(
+							encoder.encode(resource.text),
+							mimeType
+						));
+					} else if ('blob' in resource) {
+						// BlobResourceContents
+						const mimeType = resource.mimeType || 'application/octet-stream';
+						output.push(new McpToolInvocationContentData(
+							decodeBase64(resource.blob).buffer,
+							mimeType
+						));
+					}
+					break;
+				}
+
+				case 'resource_link': {
+					// Format resource link as readable text with name and URI
+					const displayName = block.title || block.name;
+					const linkText = displayName ? `Resource: ${displayName}\nURI: ${block.uri}` : block.uri;
+					output.push(new McpToolInvocationContentData(
+						encoder.encode(linkText),
+						'text/plain'
+					));
+					break;
+				}
+			}
+		} catch (error) {
+			// Log conversion errors but continue processing other blocks
+			console.error(`Failed to convert MCP content block of type ${block.type}:`, error);
+		}
+	}
+
+	return output;
+}
+
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall);
 	if (toolInvocation) {
@@ -486,6 +563,20 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			invocation[0].isConfirmed = false;
 		} else {
 			invocation[0].isConfirmed = true;
+		}
+
+		// Convert MCP content to VS Code ChatMcpToolInvocationData format
+		const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
+		if (mcpContent && mcpContent.length > 0) {
+			const output = convertMcpContentToToolInvocationData(mcpContent);
+			const toolCall = invocation[1];
+			// Use tool arguments as input, formatted as JSON
+			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
+
+			invocation[0].toolSpecificData = {
+				input,
+				output
+			} as ChatMcpToolInvocationData;
 		}
 	}
 
