@@ -11,8 +11,7 @@ import * as extpath from '../../../util/vs/base/common/extpath';
 import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface IMemoryParams {
 	command: 'view' | 'create' | 'str_replace' | 'insert' | 'delete' | 'rename';
@@ -36,9 +35,7 @@ interface MemoryResult {
  * All memory operations are confined to the /memories directory within the extension's
  * workspace-specific storage location. Each workspace maintains its own isolated memory.
  */
-class MemoryTool implements ICopilotTool<IMemoryParams> {
-	public static readonly toolName = ToolName.Memory;
-
+class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	private static readonly MEMORY_DIR_NAME = 'memory-tool/memories';
 
 	constructor(
@@ -379,4 +376,70 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	}
 }
 
-ToolRegistry.registerTool(MemoryTool);
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'copilot_memory',
+		toolReferenceName: 'memory',
+		displayName: 'Memory',
+		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',
+		userDescription: 'Manage persistent memory files across conversations',
+		source: undefined,
+		tags: [],
+		models: [
+			{ id: 'claude-opus-4.5' },
+			{ id: 'claude-sonnet-4.5' },
+			{ id: 'claude-haiku-4.5' },
+		],
+		inputSchema: {
+			type: 'object',
+			properties: {
+				command: {
+					type: 'string',
+					enum: ['view', 'create', 'str_replace', 'insert', 'delete', 'rename'],
+					description: 'The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory'
+				},
+				path: {
+					type: 'string',
+					description: 'Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)'
+				},
+				view_range: {
+					type: 'array',
+					items: { type: 'number' },
+					minItems: 2,
+					maxItems: 2,
+					description: '[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]'
+				},
+				file_text: {
+					type: 'string',
+					description: '[create only] Content to write to the file. Required for create command.'
+				},
+				old_str: {
+					type: 'string',
+					description: '[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command.'
+				},
+				new_str: {
+					type: 'string',
+					description: '[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command.'
+				},
+				insert_line: {
+					type: 'number',
+					description: '[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command.'
+				},
+				insert_text: {
+					type: 'string',
+					description: '[insert only] Text to insert at the specified line. Required for insert command.'
+				},
+				old_path: {
+					type: 'string',
+					description: '[rename only] Current path of the file or directory. Must start with /memories. Required for rename command.'
+				},
+				new_path: {
+					type: 'string',
+					description: '[rename only] New path for the file or directory. Must start with /memories. Required for rename command.'
+				}
+			},
+			required: ['command']
+		}
+	},
+	MemoryTool
+);
