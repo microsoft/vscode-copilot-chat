@@ -16,7 +16,7 @@ import { getRepoId } from '../../chatSessions/vscode/copilotCodingAgentUtils';
 const InstructionFileExtension = '.instruction.md';
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-export class OrganizationInstructionsProvider extends Disposable implements vscode.InstructionsProvider {
+export class OrganizationInstructionsProvider extends Disposable implements vscode.ChatInstructionsProvider {
 
 	private readonly _onDidChangeInstructions = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeInstructions = this._onDidChangeInstructions.event;
@@ -47,9 +47,9 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 	}
 
 	async provideInstructions(
-		options: vscode.InstructionsQueryOptions,
+		options: unknown,
 		_token: vscode.CancellationToken
-	): Promise<vscode.InstructionsResource[]> {
+	): Promise<vscode.ChatResource[]> {
 		try {
 			const orgLogin = await this.determineOrganizationToUse();
 			const cachedInstructions = orgLogin ? await this.readFromCache(orgLogin) : [];
@@ -64,7 +64,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 	 * Tries all user's organizations to find one with custom instructions.
 	 * Returns the first organization login that has instructions, or undefined if none found.
 	 */
-	private async tryAllOrganizations(options: vscode.InstructionsQueryOptions): Promise<string | undefined> {
+	private async tryAllOrganizations(): Promise<string | undefined> {
 		try {
 			this.logService.trace('[OrganizationInstructionsProvider] Fetching list of user organizations');
 			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
@@ -115,7 +115,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 		// Check if current repository belongs to an organization with instructions
 		const repoId = await getRepoId(this.gitService);
 		if (repoId) {
-			const currentOrgLogin = repoId.org;
+			const currentOrgLogin = repoId.toString();
 			const hasInstructions = await this.hasInstructionsInCache(currentOrgLogin, cacheDir);
 			if (hasInstructions) {
 				this.logService.trace(`[OrganizationInstructionsProvider] Using current repository's organization: ${currentOrgLogin}`);
@@ -158,7 +158,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 
 	private async readFromCache(
 		orgLogin: string,
-	): Promise<vscode.InstructionsResource[]> {
+	): Promise<vscode.ChatResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -172,14 +172,10 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 				return [];
 			}
 
-			const instructions: vscode.InstructionsResource[] = [];
+			const instructions: vscode.ChatResource[] = [];
 			const fileName = this.getCacheFilename(orgLogin);
 			const fileUri = vscode.Uri.joinPath(cacheDir, fileName);
-			instructions.push({
-				name: orgLogin,
-				description: '',
-				uri: fileUri,
-			});
+			instructions.push({ uri: fileUri });
 
 			this.logService.trace(`[OrganizationInstructionsProvider] Loaded ${instructions.length} instructions from cache for org ${orgLogin}`);
 			return instructions;
@@ -191,7 +187,6 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 
 	private async fetchAndUpdateCache(
 		orgLogin: string | undefined,
-		options: vscode.InstructionsQueryOptions
 	): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
@@ -204,7 +199,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 			// If no orgLogin provided, try all organizations
 			if (!orgLogin) {
 				this.logService.trace('[OrganizationInstructionsProvider] No orgLogin provided, trying all organizations');
-				orgLogin = await this.tryAllOrganizations(options);
+				orgLogin = await this.tryAllOrganizations();
 				if (!orgLogin) {
 					this.logService.trace('[OrganizationInstructionsProvider] No organization with instructions found');
 					return;
@@ -312,7 +307,7 @@ export class OrganizationInstructionsProvider extends Disposable implements vsco
 	private async refreshCache(): Promise<void> {
 		try {
 			const orgLogin = await this.determineOrganizationToUse();
-			await this.fetchAndUpdateCache(orgLogin, {});
+			await this.fetchAndUpdateCache(orgLogin);
 		} catch (error) {
 			this.logService.error(`[OrganizationInstructionsProvider] Error in refreshCache: ${error}`);
 		}
