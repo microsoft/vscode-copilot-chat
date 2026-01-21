@@ -390,6 +390,7 @@ ToolRegistry.registerModelSpecificTool(
 			{ id: 'claude-sonnet-4.5' },
 			{ id: 'claude-haiku-4.5' },
 		],
+		toolSet: 'vscode',
 		inputSchema: {
 			type: 'object',
 			properties: {
