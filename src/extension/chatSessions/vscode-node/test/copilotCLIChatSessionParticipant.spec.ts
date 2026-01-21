@@ -12,7 +12,7 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { IGitService } from '../../../../platform/git/common/gitService';
+import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
@@ -22,7 +22,7 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
+import { IObservable, ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -63,9 +63,11 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
+	override readonly selectedRepository: IObservable<RepoContext | undefined>;
 	constructor(_isSupported: boolean = false) {
 		super();
 		this.isWorktreeSupportedObs = observableValue(this, _isSupported);
+		this.selectedRepository = observableValue(this, undefined);
 	}
 	setSupported(supported: boolean) {
 		this.isWorktreeSupportedObs.set(supported, undefined);
@@ -88,6 +90,7 @@ class FakeModels implements ICopilotCLIModels {
 
 class FakeGitService extends mock<IGitService>() {
 	override activeRepository = { get: () => undefined } as unknown as IGitService['activeRepository'];
+	override repositories: RepoContext[] = [];
 }
 
 // Cloud provider fake for delegate scenario
