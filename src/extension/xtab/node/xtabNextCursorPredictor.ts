@@ -10,6 +10,7 @@ import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { parseLintOptionString } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -65,7 +66,7 @@ export class XtabNextCursorPredictor {
 	}
 
 
-	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ITracer): Promise<Result</* zero-based line number */ number, Error>> {
+	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ITracer, telemetryBuilder: StatelessNextEditTelemetryBuilder | undefined, cancellationToken: CancellationToken): Promise<Result</* zero-based line number */ number, Error>> {
 
 		const tracer = parentTracer.sub('predictNextCursorPosition');
 
@@ -132,6 +133,8 @@ export class XtabNextCursorPredictor {
 			userMsg: userMessage
 		});
 
+		telemetryBuilder?.setCursorJumpPrompt(messages);
+
 		const modelName = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, this.expService);
 		if (modelName === undefined) {
 			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
@@ -183,7 +186,7 @@ export class XtabNextCursorPredictor {
 				location: ChatLocation.Other,
 				requestOptions,
 			},
-			CancellationToken.None,
+			cancellationToken,
 		);
 
 		if (response.type !== ChatFetchResponseType.Success) {
@@ -195,6 +198,7 @@ export class XtabNextCursorPredictor {
 		}
 
 		try {
+			telemetryBuilder?.setCursorJumpResponse(response.value);
 			const trimmed = response.value.trim();
 			const lineNumber = parseInt(trimmed, 10);
 			if (isNaN(lineNumber)) {
