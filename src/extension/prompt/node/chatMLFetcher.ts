@@ -1060,7 +1060,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		telemetryProperties?: TelemetryProperties
 	): void {
 		// Reconstruct the text content from deltas (filter out null, undefined, and empty text values)
-		const textContent = deltas.filter(delta => delta.text !== null && delta.text !== '').map(delta => delta.text).join('');
+		const textContent = deltas.filter(delta => delta.text?.length > 0).map(delta => delta.text).join('');
 
 		// Early exit if no content
 		if (!textContent || textContent.trim().length === 0) {
