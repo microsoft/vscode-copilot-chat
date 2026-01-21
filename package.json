@@ -137,7 +137,8 @@
 		"chatSessionsProvider@3",
 		"devDeviceId",
 		"contribEditorContentMenu",
-		"chatPromptFiles"
+		"chatPromptFiles",
+		"mcpServerDefinitions"
 	],
 	"contributes": {
 		"languageModelTools": [
