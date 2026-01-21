@@ -2673,7 +2673,6 @@
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
 				"enablement": "!chatSessionRequestInProgress",
-				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -4236,11 +4235,6 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
-				},
-				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"group": "navigation@1",
-					"when": "resourceScheme == copilotcli-worktree-changes"
 				}
 			],
 			"explorer/context": [
