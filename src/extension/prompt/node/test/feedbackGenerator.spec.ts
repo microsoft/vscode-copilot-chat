@@ -10,11 +10,11 @@ import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/c
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
-import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../platform/telemetry/common/telemetry';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -1155,18 +1155,12 @@ multiple lines.
 		});
 	});
 
-	class MockLogService implements ILogService {
-		declare _serviceBrand: undefined;
-
+	class MockLogService extends TestLogService {
 		readonly debugMessages: string[] = [];
 		readonly warnMessages: string[] = [];
 
-		trace(_message: string): void { }
-		debug(message: string): void { this.debugMessages.push(message); }
-		info(_message: string): void { }
-		warn(message: string): void { this.warnMessages.push(message); }
-		error(_error: string | Error, _message?: string): void { }
-		show(_preserveFocus?: boolean): void { }
+		override debug(message: string): void { this.debugMessages.push(message); }
+		override warn(message: string): void { this.warnMessages.push(message); }
 
 		reset(): void {
 			this.debugMessages.length = 0;
@@ -1180,33 +1174,17 @@ multiple lines.
 		measurements?: TelemetryEventMeasurements;
 	}
 
-	class MockTelemetryService implements ITelemetryService {
-		declare readonly _serviceBrand: undefined;
-
+	class MockTelemetryService extends NullTelemetryService {
 		readonly msftEvents: TelemetryCall[] = [];
 		readonly internalMsftEvents: TelemetryCall[] = [];
 
-		dispose(): void { }
-
-		sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+		override sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
 			this.msftEvents.push({ eventName, properties, measurements });
 		}
 
-		sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+		override sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
 			this.internalMsftEvents.push({ eventName, properties, measurements });
 		}
-
-		sendMSFTTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		sendGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		sendGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		sendGHTelemetryException(_maybeError: unknown, _origin: string): void { }
-		sendTelemetryEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		sendTelemetryErrorEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		setSharedProperty(_name: string, _value: string): void { }
-		setAdditionalExpAssignments(_expAssignments: string[]): void { }
-		postEvent(_eventName: string, _props: Map<string, string>): void { }
-		sendEnhancedGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-		sendEnhancedGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
 
 		reset(): void {
 			this.msftEvents.length = 0;
