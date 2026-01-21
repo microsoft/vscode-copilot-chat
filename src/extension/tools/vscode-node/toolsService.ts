@@ -37,11 +37,11 @@ export class ToolsService extends BaseToolsService {
 	} = { input: [], output: [] };
 
 	get tools(): ReadonlyArray<vscode.LanguageModelToolInformation> {
-		if (arraysEqual(this._contributedToolCache.input, vscode.lm.tools)) {
+		const tools = vscode.lm.tools;
+		if (arraysEqual(this._contributedToolCache.input, tools)) {
 			return this._contributedToolCache.output;
 		}
-
-		const input = [...vscode.lm.tools];
+		const input = [...tools];
 		const contributedTools = [...input]
 			.sort((a, b) => {
 				// Sort builtin tools to the top
@@ -145,14 +145,15 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
-		const toolMap = new Map(this.tools.map(t => [t.name, t]));
+		const tools = this.tools;
+		const toolMap = new Map(tools.map(t => [t.name, t]));
 		// todo@connor4312: string check here is for back-compat for 1.109 Insiders
 		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [typeof t === 'string' ? t : t.name, enabled]));
 
-		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint));
+		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint, tools));
 		const modelSpecificTools = this.getModelSpecificTools();
 
-		return this.tools
+		return tools
 			.filter(tool => {
 				// 0. If the tool was a model specific tool with an override, it'll be mixed in in the 'map' later.
 				if (modelSpecificTools.get(tool.name)?.tool.overridesTool) {
@@ -215,8 +216,8 @@ export class ToolsService extends BaseToolsService {
 			});
 	}
 
-	private *getToolOverridesForEndpoint(endpoint: IChatEndpoint) {
-		for (const tool of this.tools) {
+	private *getToolOverridesForEndpoint(endpoint: IChatEndpoint, tools = this.tools) {
+		for (const tool of tools) {
 			const modelSpecificTool = this.getModelSpecificTools().get(tool.name);
 			if (!modelSpecificTool) {
 				continue;

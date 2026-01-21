@@ -147,7 +147,9 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	test('returns cached agents on first call', async () => {
-		const provider = createProvider();
+		// Set up file system mocks BEFORE creating provider to avoid race with background fetch
+		// Also prevent background fetch from interfering by having no organizations
+		mockOctoKitService.setUserOrganizations([]);
 
 		// Pre-populate cache with org folder
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -162,17 +164,20 @@ description: A test agent
 Test prompt content`;
 		mockFileSystem.mockFile(agentFile, agentContent);
 
+		const provider = createProvider();
+
+		// Wait for background fetch to complete (it will return early due to no orgs)
+		await new Promise(resolve => setTimeout(resolve, 50));
+
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'test_agent');
-		assert.equal(agents[0].description, 'A test agent');
+		const agentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName, 'test_agent');
 	});
 
 	test('fetches and caches agents from API', async () => {
-		const provider = createProvider();
-
-		// Mock API response
+		// Mock API response BEFORE creating provider
 		const mockAgent: CustomAgentListItem = {
 			name: 'api_agent',
 			repo_owner_id: 1,
@@ -192,9 +197,7 @@ Test prompt content`;
 		};
 		mockOctoKitService.setAgentDetails('api_agent', mockDetails);
 
-		// First call returns cached (empty) results and triggers background fetch
-		const agents1 = await provider.provideCustomAgents({}, {} as any);
-		assert.deepEqual(agents1, []);
+		const provider = createProvider();
 
 		// Wait for background fetch to complete
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -202,13 +205,14 @@ Test prompt content`;
 		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'api_agent');
-		assert.equal(agents2[0].description, 'An agent from API');
+		const agentName2 = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName2, 'api_agent');
 
 		// Third call should also return from memory cache without file I/O
 		const agents3 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents3.length, 1);
-		assert.equal(agents3[0].name, 'api_agent');
+		const agentName3 = (agents3[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName3, 'api_agent');
 	});
 
 	test('generates correct markdown format for agents', async () => {
@@ -359,7 +363,7 @@ Detailed prompt content
 			return [];
 		};
 
-		const queryOptions: vscode.CustomAgentQueryOptions = {};
+		const queryOptions: vscode.CustomAgentContext = {};
 
 		await provider.provideCustomAgents(queryOptions, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -392,8 +396,6 @@ Detailed prompt content
 	});
 
 	test('handles partial agent detail fetch failures gracefully', async () => {
-		const provider = createProvider();
-
 		const agents: CustomAgentListItem[] = [
 			{
 				name: 'agent1',
@@ -438,20 +440,19 @@ description: First agent
 Agent 1 prompt`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// With error handling, partial failures skip cache update for that org
 		// So the existing file cache is returned with the one successful agent
 		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
-		assert.equal(cachedAgents[0].name, 'agent1');
+		const cachedAgentName = (cachedAgents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(cachedAgentName, 'agent1');
 	});
 
 	test('caches agents in memory after first successful fetch', async () => {
-		const provider = createProvider();
-
-		// Initial setup with one agent
+		// Initial setup with one agent BEFORE creating provider
 		const initialAgent: CustomAgentListItem = {
 			name: 'initial_agent',
 			repo_owner_id: 1,
@@ -469,13 +470,14 @@ Agent 1 prompt`;
 			prompt: 'Initial prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// After successful fetch, subsequent calls return from memory
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents1.length, 1);
-		assert.equal(agents1[0].name, 'initial_agent');
+		const agentName1 = (agents1[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName1, 'initial_agent');
 
 		// Even if API is updated, memory cache is used
 		const newAgent: CustomAgentListItem = {
@@ -498,13 +500,12 @@ Agent 1 prompt`;
 		// Memory cache returns old results without refetching
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'initial_agent');
+		const agentName2ForMemory = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName2ForMemory, 'initial_agent');
 	});
 
 	test('memory cache persists after first successful fetch', async () => {
-		const provider = createProvider();
-
-		// Initial setup with two agents
+		// Initial setup with two agents BEFORE creating provider
 		const agents: CustomAgentListItem[] = [
 			{
 				name: 'agent1',
@@ -533,7 +534,7 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('agent1', { ...agents[0], prompt: 'Prompt 1' });
 		mockOctoKitService.setAgentDetails('agent2', { ...agents[1], prompt: 'Prompt 2' });
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify both agents are cached
@@ -546,8 +547,10 @@ Agent 1 prompt`;
 		// Memory cache still returns both agents (no refetch)
 		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents2.length, 2);
-		assert.equal(cachedAgents2[0].name, 'agent1');
-		assert.equal(cachedAgents2[1].name, 'agent2');
+		const cachedAgent2Name1 = (cachedAgents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const cachedAgent2Name2 = (cachedAgents2[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(cachedAgent2Name1, 'agent1');
+		assert.equal(cachedAgent2Name2, 'agent2');
 	});
 
 	test('does not fire change event when content is identical', async () => {
@@ -587,9 +590,7 @@ Agent 1 prompt`;
 	});
 
 	test('memory cache persists even when API returns empty list', async () => {
-		const provider = createProvider();
-
-		// Setup with initial agents
+		// Setup with initial agents BEFORE creating provider
 		const mockAgent: CustomAgentListItem = {
 			name: 'temporary_agent',
 			repo_owner_id: 1,
@@ -607,7 +608,7 @@ Agent 1 prompt`;
 			prompt: 'Temporary prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Verify agent is cached
@@ -620,7 +621,8 @@ Agent 1 prompt`;
 		// Memory cache still returns the agent (no refetch)
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		assert.equal(agents2[0].name, 'temporary_agent');
+		const temporaryAgentName = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(temporaryAgentName, 'temporary_agent');
 	});
 
 	test('generates markdown with only required fields', async () => {
@@ -701,9 +703,10 @@ Agent 1 prompt`;
 	});
 
 	test('handles malformed frontmatter in cached files', async () => {
-		const provider = createProvider();
+		// Prevent background fetch from interfering
+		mockOctoKitService.setUserOrganizations([]);
 
-		// Pre-populate cache with mixed valid and malformed content
+		// Pre-populate cache with mixed valid and malformed content BEFORE creating provider
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
 		const orgDir = URI.joinPath(cacheDir, 'testorg');
 		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
@@ -723,14 +726,19 @@ Valid prompt`;
 		const noFrontmatterContent = `Just some content without any frontmatter`;
 		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
 
+		const provider = createProvider();
+
+		// Wait for background fetch to complete (returns early due to no orgs)
+		await new Promise(resolve => setTimeout(resolve, 50));
+
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Parser is lenient - both agents are returned, one with empty description
 		assert.equal(agents.length, 2);
-		assert.equal(agents[0].name, 'valid_agent');
-		assert.equal(agents[0].description, 'A valid agent');
-		assert.equal(agents[1].name, 'no_frontmatter');
-		assert.equal(agents[1].description, '');
+		const validAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(validAgentName, 'valid_agent');
+		const noFrontmatterAgentName = (agents[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(noFrontmatterAgentName, 'no_frontmatter');
 	});
 
 	test('fetches agents from all user organizations', async () => {
@@ -914,9 +922,7 @@ Test prompt
 	});
 
 	test('deduplicates enterprise agents that appear in multiple organizations', async () => {
-		const provider = createProvider();
-
-		// Setup multiple organizations
+		// Setup multiple organizations BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create an enterprise agent that will appear in both organizations
@@ -943,14 +949,15 @@ Test prompt
 			prompt: 'Enterprise prompt',
 		});
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Should only have one agent, not two (deduped)
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'enterprise_agent');
+		const enterpriseAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(enterpriseAgentName, 'enterprise_agent');
 
 		// Verify it was only written to one org directory
 		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
@@ -980,8 +987,7 @@ Test prompt
 	});
 
 	test('deduplicates agents with same repo regardless of version', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create agents with same name but different versions
@@ -1030,19 +1036,19 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'versioned_agent');
+		const versionedAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(versionedAgentName, 'versioned_agent');
 	});
 
 	test('does not deduplicate org-specific agents with same name from different orgs', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
 
 		// Create agents with same name but from different org repos (not enterprise)
@@ -1089,20 +1095,21 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Should have 2 agents since they're from different repos (not duplicates)
 		assert.equal(agents.length, 2);
-		assert.equal(agents[0].name, 'org_agent');
-		assert.equal(agents[1].name, 'org_agent');
+		const orgAgentName1 = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const orgAgentName2 = (agents[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(orgAgentName1, 'org_agent');
+		assert.equal(orgAgentName2, 'org_agent');
 	});
 
 	test('deduplicates enterprise agents even when API returns them in different order', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
 
 		const enterpriseAgent1: CustomAgentListItem = {
@@ -1151,7 +1158,7 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -1160,13 +1167,12 @@ Test prompt
 		assert.equal(agents.length, 2);
 
 		// Verify both agent names are present
-		const agentNames = agents.map(a => a.name).sort();
+		const agentNames = agents.map(a => (a.resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '')).sort();
 		assert.deepEqual(agentNames, ['enterprise_agent1', 'enterprise_agent2']);
 	});
 
 	test('deduplication key does not include version so different versions are deduplicated', async () => {
-		const provider = createProvider();
-
+		// Set up mocks BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA']);
 
 		// Same agent with two different versions
@@ -1200,13 +1206,14 @@ Test prompt
 			return undefined;
 		};
 
-		await provider.provideCustomAgents({}, {} as any);
+		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		assert.equal(agents[0].name, 'multi_version_agent');
+		const multiVersionAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(multiVersionAgentName, 'multi_version_agent');
 	});
 });

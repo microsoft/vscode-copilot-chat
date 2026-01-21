@@ -158,8 +158,14 @@ export interface IAuthenticationService {
 export abstract class BaseAuthenticationService extends Disposable implements IAuthenticationService {
 	declare readonly _serviceBrand: undefined;
 
-	protected readonly _onDidAuthenticationChange = this._register(new Emitter<void>());
+	private readonly _onDidAuthenticationChange = this._register(new Emitter<void>());
 	readonly onDidAuthenticationChange: Event<void> = this._onDidAuthenticationChange.event;
+
+	protected fireAuthenticationChange(source: string): void {
+		const hasSession = !!this.copilotToken;
+		this._logService.info(`AuthenticationService: firing onDidAuthenticationChange from ${source}. Has token: ${hasSession}`);
+		this._onDidAuthenticationChange.fire();
+	}
 
 	protected readonly _onDidAccessTokenChange = this._register(new Emitter<void>());
 	readonly onDidAccessTokenChange: Event<void> = this._onDidAccessTokenChange.event;
@@ -246,7 +252,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			// to an account that doesn't have a valid subscription (no copilot token can be minted).
 			// NOTE: if either error is undefined, this event should be fired elsewhere already.
 			if (beforeError && afterError && beforeError.message !== afterError.message) {
-				this._onDidAuthenticationChange.fire();
+				this.fireAuthenticationChange('getCopilotToken error change');
 			}
 			throw afterError;
 		}
@@ -319,7 +325,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			copilotTokenErrorBefore?.message !== this._copilotTokenError?.message
 		) {
 			this._logService.debug('CopilotToken state changed, firing event.');
-			this._onDidAuthenticationChange.fire();
+			this.fireAuthenticationChange('handleAuthChangeEvent');
 		}
 		this._logService.debug('Finished handling auth change event.');
 	}

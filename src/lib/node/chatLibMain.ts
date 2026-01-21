@@ -710,6 +710,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(IAuthenticationService, authService);
+	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
@@ -853,6 +854,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
+	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 
 	return builder.seal();
 }

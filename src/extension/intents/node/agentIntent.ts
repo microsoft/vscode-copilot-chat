@@ -232,8 +232,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		let shouldTriggerSummarize = false;
 		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
 
-		const anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this.configurationService, this.expService);
-		if (summarizationEnabled && isAnthropicFamily(this.endpoint) && anthropicContextEditingEnabled) {
+		const anthropicContextEditingEnabled = isAnthropicFamily(this.endpoint) && isAnthropicContextEditingEnabled(this.endpoint, this.configurationService, this.expService);
+		if (summarizationEnabled && anthropicContextEditingEnabled) {
 			// First check current turn for token usage (from tool calling loop), then fall back to previous turn's result metadata
 			const currentTurn = promptContext.conversation?.getLatestTurn();
 			const currentTurnTokenUsage = currentTurn?.getMetadata(AnthropicTokenUsageMetadata);

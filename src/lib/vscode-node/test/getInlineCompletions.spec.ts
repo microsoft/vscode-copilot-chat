@@ -9,23 +9,21 @@ dotenv.config({ path: '../.env' });
 
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import * as stream from 'stream';
 import { assert, describe, expect, it } from 'vitest';
-import type { AuthenticationGetSessionOptions, AuthenticationSession, LanguageModelChat } from 'vscode';
-import { ResultType } from '../src/_internal/extension/completions-core/vscode-node/lib/src/ghostText/ghostText';
-import { createTextDocument } from '../src/_internal/extension/completions-core/vscode-node/lib/src/test/textDocument';
-import { TextDocumentIdentifier } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocument';
-import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../src/_internal/extension/completions-core/vscode-node/lib/src/textDocumentManager';
-import { CopilotToken, createTestExtendedTokenInfo } from '../src/_internal/platform/authentication/common/copilotToken';
-import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../src/_internal/platform/endpoint/common/endpointProvider';
-import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
-import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../src/_internal/platform/networking/common/fetcherService';
-import { IChatEndpoint, IEmbeddingsEndpoint, IFetcher } from '../src/_internal/platform/networking/common/networking';
-import { Emitter, Event } from '../src/_internal/util/vs/base/common/event';
-import { Disposable } from '../src/_internal/util/vs/base/common/lifecycle';
-import { URI } from '../src/_internal/util/vs/base/common/uri';
-import { ChatRequest } from '../src/_internal/vscodeTypes';
-import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../src/main';
+import type { AuthenticationGetSessionOptions, AuthenticationSession, ChatRequest, LanguageModelChat } from 'vscode';
+import { ResultType } from '../../../extension/completions-core/vscode-node/lib/src/ghostText/resultType';
+import { createTextDocument } from '../../../extension/completions-core/vscode-node/lib/src/test/textDocument';
+import { TextDocumentIdentifier } from '../../../extension/completions-core/vscode-node/lib/src/textDocument';
+import { TextDocumentChangeEvent, TextDocumentCloseEvent, TextDocumentFocusedEvent, TextDocumentOpenEvent, WorkspaceFoldersChangeEvent } from '../../../extension/completions-core/vscode-node/lib/src/textDocumentManager';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../platform/authentication/common/copilotToken';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily } from '../../../platform/endpoint/common/endpointProvider';
+import { MutableObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../../../platform/networking/common/fetcherService';
+import { IChatEndpoint, IEmbeddingsEndpoint, IFetcher } from '../../../platform/networking/common/networking';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../util/vs/base/common/uri';
+import { createInlineCompletionsProvider, IActionItem, IAuthenticationService, ICompletionsStatusChangedEvent, ICompletionsTextDocumentManager, IEndpointProvider, ILogTarget, ITelemetrySender, LogLevel } from '../../node/chatLibMain';
 
 class TestFetcher implements IFetcher {
 	private _fetched = new Map<string, number>();
@@ -51,13 +49,12 @@ class TestFetcher implements IFetcher {
 		};
 
 		const found = typeof responseText === 'string';
-		return new Response(
+		const text = responseText || '';
+		return Response.fromText(
 			found ? 200 : 404,
 			found ? 'OK' : 'Not Found',
 			headers,
-			async () => responseText || '',
-			async () => JSON.parse(responseText || ''),
-			async () => stream.Readable.from([responseText || '']),
+			text,
 			'node-http'
 		);
 	}

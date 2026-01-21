@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClientHttp2Stream } from 'http2';
 import { CopilotAnnotation, CopilotAnnotations, CopilotNamedAnnotationList, StreamCopilotAnnotations } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { getRequestId, RequestId } from '../../../../../../platform/networking/common/fetch';
+import { DestroyableStream } from '../../../../../../platform/networking/common/fetcherService';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CancellationToken as ICancellationToken } from '../../../types/src';
 import { ICompletionsLogTargetService, Logger } from '../logger';
@@ -211,7 +211,7 @@ export class SSEProcessor {
 	private constructor(
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
-		private readonly body: NodeJS.ReadableStream,
+		private readonly body: DestroyableStream<string>,
 		private readonly telemetryData: TelemetryWithExp,
 		private readonly dropCompletionReasons: string[],
 		private readonly cancellationToken: ICancellationToken | undefined = undefined,
@@ -236,23 +236,7 @@ export class SSEProcessor {
 		const instantiationService = accessor.get(IInstantiationService);
 		const logTargetService = accessor.get(ICompletionsLogTargetService);
 
-		// Handle both NodeJS.ReadableStream and ReadableStream for web.  Once
-		// helix fetcher is removed, the NodeJS.ReadableStream support can be
-		let body = response.body() as unknown as NodeJS.ReadableStream;
-		if (body === null) {
-			throw new Error('No response body available');
-		}
-		// OLD
-		/* if (typeof body.setEncoding === 'function') {
-			body.setEncoding('utf8');
-		} else {
-			// Convert fetch response to utf-8 decoded stream
-			body = (body as unknown as ReadableStream).pipeThrough(new TextDecoderStream()) as unknown as NodeJS.ReadableStream;
-		} */
-
-		// NEW
-		body = await body as NodeJS.ReadableStream;
-		body.setEncoding('utf8');
+		const body = response.body.pipeThrough(new TextDecoderStream());
 
 		// TODO@benibenj can we switch to our SSEProcessor implementation?
 		// It seems like they build more on top of the shared impl
@@ -288,7 +272,7 @@ export class SSEProcessor {
 		try {
 			yield* this.processSSEInner(finishedCb);
 		} finally {
-			this.cancel();
+			await this.cancel();
 			streamChoicesLogger.debug(this.logTarget,
 				`request done: headerRequestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
@@ -307,7 +291,7 @@ export class SSEProcessor {
 
 		// Iterate over arbitrarily sized chunks coming in from the network.
 		networkRead: for await (const chunk of this.body) {
-			if (this.maybeCancel('after awaiting body chunk')) {
+			if (await this.maybeCancel('after awaiting body chunk')) {
 				return;
 			}
 
@@ -431,7 +415,7 @@ export class SSEProcessor {
 							})
 						);
 
-						if (this.maybeCancel('after awaiting finishedCb')) {
+						if (await this.maybeCancel('after awaiting finishedCb')) {
 							return;
 						}
 					}
@@ -486,7 +470,7 @@ export class SSEProcessor {
 						solution.yielded = true;
 					}
 
-					if (this.maybeCancel('after yielding finished choice')) {
+					if (await this.maybeCancel('after yielding finished choice')) {
 						return;
 					}
 
@@ -522,7 +506,7 @@ export class SSEProcessor {
 				usage: usage,
 			};
 
-			if (this.maybeCancel('after yielding after iteration done')) {
+			if (await this.maybeCancel('after yielding after iteration done')) {
 				return;
 			}
 		}
@@ -605,7 +589,7 @@ export class SSEProcessor {
 				usage: usage,
 			};
 
-			if (this.maybeCancel('after yielding on DONE')) {
+			if (await this.maybeCancel('after yielding on DONE')) {
 				return;
 			}
 		}
@@ -615,22 +599,18 @@ export class SSEProcessor {
 	 * Returns whether the cancellation token was cancelled and closes the
 	 * stream if it was.
 	 */
-	private maybeCancel(description: string) {
+	private async maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
 			streamChoicesLogger.debug(this.logTarget, 'Cancelled: ' + description);
-			this.cancel();
+			await this.cancel();
 			return true;
 		}
 		return false;
 	}
 
 	/** Cancels the network request to the proxy. */
-	private cancel() {
-		if (this.body && 'destroy' in this.body && typeof this.body.destroy === 'function') {
-			(this.body as ClientHttp2Stream).destroy();
-		} else if (this.body instanceof ReadableStream) {
-			void this.body.cancel();
-		}
+	private async cancel() {
+		await this.body.destroy();
 	}
 
 	/** Returns whether we've finished receiving all expected solutions. */

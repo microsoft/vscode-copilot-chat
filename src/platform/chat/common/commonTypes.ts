@@ -250,7 +250,7 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 			case 'individual_pro':
 				return l10n.t(`You've exhausted your premium model quota. Please enable additional paid premium requests or wait for your allowance to renew.`);
 			default:
-				return l10n.t(`You've exhausted your premium model quota. Please reach out to your organization's Copilot admin to enable additional paid premium requests or wait for your allowance to renew.`);
+				return l10n.t(`You've exhausted your premium model quota. To continue working, switch to Auto. For additional paid premium requests, please reach out to your organization's Copilot admin or wait for your allowance to renew.`);
 		}
 	} else if (fetchResult.capiError?.code === 'overage_limit_reached') {
 		return l10n.t({

@@ -115,6 +115,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	reference = this.forward(this._wrapped.reference.bind(this._wrapped));
 	textEdit = this.forward(this._wrapped.textEdit.bind(this._wrapped));
 	notebookEdit = this.forward(this._wrapped.notebookEdit.bind(this._wrapped));
+	workspaceEdit = this.forward(this._wrapped.workspaceEdit?.bind(this._wrapped) || (() => { }));
 	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
 	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
 	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));

@@ -183,7 +183,7 @@ describe('createFormattedToolInvocation', () => {
 			const result = createFormattedToolInvocation(toolUse);
 
 			expect(result).toBeDefined();
-			expect(result!.invocationMessage).toBe('Here is Claude\'s plan:\n\nundefined');
+			expect(result!.invocationMessage).toBe('Here is Claude\'s plan:\n\n');
 		});
 	});
 

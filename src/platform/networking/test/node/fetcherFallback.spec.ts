@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
-import { Readable } from 'stream';
 import { suite, test } from 'vitest';
 import { ConfigKey } from '../../../configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../configuration/common/defaultsOnlyConfigurationService';
@@ -186,13 +185,11 @@ function createTestFetchers(fetcherSpecs: Array<{ name: string; response: Respon
 }
 
 function createFakeResponse(statusCode: number, content: string) {
-	return new Response(
+	return Response.fromText(
 		statusCode,
 		'status text',
 		new FakeHeaders(),
-		() => Promise.resolve(content),
-		() => Promise.resolve(JSON.parse(content)),
-		async () => Readable.from([content]),
+		content,
 		'test-stub'
 	);
 }

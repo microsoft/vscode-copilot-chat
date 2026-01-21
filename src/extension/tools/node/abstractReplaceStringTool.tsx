@@ -555,6 +555,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			allUris,
+			this._promptContext?.allowedEditUris,
 			(urisNeedingConfirmation) => this.generateConfirmationDetails(replaceInputs, urisNeedingConfirmation, options, token)
 		);
 	}
