@@ -6,15 +6,14 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../../platform/filesystem/common/fileTypes';
-import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions } from '../../../../platform/github/common/githubService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { OrganizationAndEnterpriseAgentProvider } from '../organizationAndEnterpriseAgentProvider';
+import { GitHubResourceType } from '../githubPromptFileService';
+import { GitHubAgentProvider } from '../organizationAndEnterpriseAgentProvider';
+import { MockGitHubPromptFileService } from './mockGitHubPromptFileService';
 import { MockOctoKitService } from './mockOctoKitService';
 
 /**
@@ -31,10 +30,10 @@ class MockExtensionContext {
 suite('OrganizationAndEnterpriseAgentProvider', () => {
 	let disposables: DisposableStore;
 	let mockOctoKitService: MockOctoKitService;
-	let mockFileSystem: MockFileSystemService;
+	let mockPromptFileService: MockGitHubPromptFileService;
 	let mockExtensionContext: MockExtensionContext;
 	let accessor: any;
-	let provider: OrganizationAndEnterpriseAgentProvider;
+	let provider: GitHubAgentProvider;
 
 	beforeEach(() => {
 		disposables = new DisposableStore();
@@ -43,26 +42,25 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		mockOctoKitService = new MockOctoKitService();
 		const storageUri = URI.file('/test/storage');
 		mockExtensionContext = new MockExtensionContext(storageUri);
+		mockPromptFileService = new MockGitHubPromptFileService(storageUri);
 
 		// Set up testing services
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
-
-		mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 	});
 
 	afterEach(() => {
 		disposables.dispose();
 		mockOctoKitService.clearAgents();
+		mockPromptFileService.clearAllStorage();
 	});
 
 	function createProvider() {
 		// Create provider manually with all dependencies
-		provider = new OrganizationAndEnterpriseAgentProvider(
+		provider = new GitHubAgentProvider(
 			mockOctoKitService,
 			accessor.get(ILogService),
-			mockExtensionContext as any,
-			mockFileSystem,
+			mockPromptFileService,
 		);
 		disposables.add(provider);
 		return provider;
@@ -92,17 +90,12 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		mockOctoKitService.setUserOrganizations([]);
 
 		// Pre-populate cache with org folder
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
-		mockFileSystem.mockDirectory(orgDir, [['test_agent.agent.md', FileType.File]]);
-		const agentFile = URI.joinPath(orgDir, 'test_agent.agent.md');
 		const agentContent = `---
 name: Test Agent
 description: A test agent
 ---
 Test prompt content`;
-		mockFileSystem.mockFile(agentFile, agentContent);
+		mockPromptFileService.setStorage('testorg', GitHubResourceType.Agents, new Map([['test_agent.agent.md', agentContent]]));
 
 		const provider = createProvider();
 
@@ -185,11 +178,7 @@ Test prompt content`;
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check cached file content
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'full_agent.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'full_agent.agent.md');
 
 		const expectedContent = `---
 name: Full Agent
@@ -234,16 +223,8 @@ Detailed prompt content
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		// Check that file was created with sanitized name
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'agent_with_spaces___.agent.md');
-		try {
-			const contentBytes = await mockFileSystem.readFile(agentFile);
-			const content = new TextDecoder().decode(contentBytes);
-			assert.ok(content, 'Sanitized file should exist');
-		} catch (error) {
-			assert.fail('Sanitized file should exist');
-		}
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'agent_with_spaces___.agent.md');
+		assert.ok(content, 'Sanitized file should exist');
 	});
 
 	test('fires change event when cache is updated on first fetch', async () => {
@@ -367,16 +348,12 @@ Detailed prompt content
 		});
 
 		// Pre-populate file cache with the first agent to simulate previous successful state
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
-		mockFileSystem.mockDirectory(orgDir, [['agent1.agent.md', FileType.File]]);
 		const agentContent = `---
 name: Agent 1
 description: First agent
 ---
 Agent 1 prompt`;
-		mockFileSystem.mockFile(URI.joinPath(orgDir, 'agent1.agent.md'), agentContent);
+		mockPromptFileService.setStorage('testorg', GitHubResourceType.Agents, new Map([['agent1.agent.md', agentContent]]));
 
 		const provider = createProvider();
 		await new Promise(resolve => setTimeout(resolve, 100));
@@ -589,11 +566,8 @@ Agent 1 prompt`;
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'minimal_agent.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'minimal_agent.agent.md');
+		assert.ok(content, 'Agent file should exist');
 
 		// Should have name and description, but no tools (empty array)
 		assert.ok(content.includes('name: Minimal Agent'));
@@ -630,11 +604,8 @@ Agent 1 prompt`;
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'wildcard_agent.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'wildcard_agent.agent.md');
+		assert.ok(content, 'Agent file should exist');
 
 		// Tools field should be excluded when it's just ['*']
 		assert.ok(!content.includes('tools:'));
@@ -645,24 +616,17 @@ Agent 1 prompt`;
 		mockOctoKitService.setUserOrganizations([]);
 
 		// Pre-populate cache with mixed valid and malformed content BEFORE creating provider
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		mockFileSystem.mockDirectory(cacheDir, [['testorg', FileType.Directory]]);
-		mockFileSystem.mockDirectory(orgDir, [
-			['valid_agent.agent.md', FileType.File],
-			['no_frontmatter.agent.md', FileType.File],
-		]);
-
 		const validContent = `---
 name: Valid Agent
 description: A valid agent
 ---
 Valid prompt`;
-		mockFileSystem.mockFile(URI.joinPath(orgDir, 'valid_agent.agent.md'), validContent);
-
 		// File without frontmatter - parser extracts name from filename, description is empty
 		const noFrontmatterContent = `Just some content without any frontmatter`;
-		mockFileSystem.mockFile(URI.joinPath(orgDir, 'no_frontmatter.agent.md'), noFrontmatterContent);
+		mockPromptFileService.setStorage('testorg', GitHubResourceType.Agents, new Map([
+			['valid_agent.agent.md', validContent],
+			['no_frontmatter.agent.md', noFrontmatterContent],
+		]));
 
 		const provider = createProvider();
 
@@ -728,11 +692,7 @@ Valid prompt`;
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'world_domination.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'world_domination.agent.md');
 
 		const expectedContent = `---
 name: World Domination
@@ -773,11 +733,7 @@ You are a world-class computer scientist.
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'special_chars_agent.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'special_chars_agent.agent.md');
 
 		const expectedContent = `---
 name: Special Chars Agent
@@ -816,11 +772,7 @@ Test prompt with special characters
 		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgDir = URI.joinPath(cacheDir, 'testorg');
-		const agentFile = URI.joinPath(orgDir, 'multiline_agent.agent.md');
-		const contentBytes = await mockFileSystem.readFile(agentFile);
-		const content = new TextDecoder().decode(contentBytes);
+		const content = await mockPromptFileService.readCacheFile('testorg', GitHubResourceType.Agents, 'multiline_agent.agent.md');
 
 		// Newlines should be escaped to keep description on a single line
 		const expectedContent = `---
@@ -898,27 +850,11 @@ Test prompt
 		assert.equal(enterpriseAgentName, 'enterprise_agent');
 
 		// Verify it was only written to one org directory
-		const cacheDir = URI.joinPath(mockExtensionContext.globalStorageUri!, 'githubAgentsCache');
-		const orgADir = URI.joinPath(cacheDir, 'orga');
-		const orgBDir = URI.joinPath(cacheDir, 'orgb');
-
 		// Check which org has the agent file
-		let orgAHasAgent = false;
-		let orgBHasAgent = false;
-
-		try {
-			const file = await mockFileSystem.readFile(URI.joinPath(orgADir, 'enterprise_agent.agent.md'));
-			orgAHasAgent = file !== undefined;
-		} catch {
-			// File doesn't exist in orgA
-		}
-
-		try {
-			const file = await mockFileSystem.readFile(URI.joinPath(orgBDir, 'enterprise_agent.agent.md'));
-			orgBHasAgent = file !== undefined;
-		} catch {
-			// File doesn't exist in orgB
-		}
+		const orgAContent = await mockPromptFileService.readCacheFile('orga', GitHubResourceType.Agents, 'enterprise_agent.agent.md');
+		const orgBContent = await mockPromptFileService.readCacheFile('orgb', GitHubResourceType.Agents, 'enterprise_agent.agent.md');
+		const orgAHasAgent = orgAContent !== undefined;
+		const orgBHasAgent = orgBContent !== undefined;
 
 		// Agent should be in exactly one org directory (the first one processed)
 		assert.ok(orgAHasAgent && !orgBHasAgent, 'Enterprise agent should only be cached in first org');

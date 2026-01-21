@@ -924,7 +924,10 @@ export namespace ConfigKey {
 	export const EnableAlternateGeminiModelFPrompt = defineSetting<boolean>('chat.alternateGeminiModelFPrompt.enabled', ConfigType.ExperimentBased, false);
 
 	/** Enable custom agents from GitHub Enterprise/Organizations */
-	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, false);
+	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, true);
+
+	/** Enable custom instructions from GitHub Organizations */
+	export const UseOrganizationInstructions = defineSetting<boolean>('chat.customInstructions.useOrganizationInstructions', ConfigType.Simple, true);
 
 	/** Enable custom instructions from GitHub Organizations */
 	export const UseOrganizationInstructions = defineSetting<boolean>('chat.customInstructions.useOrganizationInstructions', ConfigType.Simple, false);
