@@ -167,8 +167,8 @@ export class InlineChatProgressMessages {
 			if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
 				return parsed.filter(msg => msg.length > 0 && msg.length < 50);
 			}
-		} catch {
-			this._logService.warn('[InlineChatProgressMessages] Failed to parse response as JSON');
+		} catch (err) {
+			this._logService.warn('[InlineChatProgressMessages] Failed to parse response as JSON', err);
 		}
 
 		return [];
