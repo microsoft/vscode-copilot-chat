@@ -1351,7 +1351,6 @@
 				"name": "vscode",
 				"description": "",
 				"tools": [
-					"askQuestions",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
