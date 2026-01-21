@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { SimpleExperimentationService } from '../src/main';
-import { DefaultsOnlyConfigurationService } from '../src/_internal/platform/configuration/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/common/defaultsOnlyConfigurationService';
+import { SimpleExperimentationService } from '../../node/chatLibMain';
 
 describe('SimpleExperimentationService', () => {
 	it('should initialize with no treatment variables', async () => {

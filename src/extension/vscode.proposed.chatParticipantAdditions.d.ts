@@ -65,6 +65,29 @@ declare module 'vscode' {
 		constructor(uri: Uri, edits: NotebookEdit | NotebookEdit[]);
 	}
 
+	/**
+	 * Represents a file-level edit (creation, deletion, or rename).
+	 */
+	export interface ChatWorkspaceFileEdit {
+		/**
+		 * The original file URI (undefined for new files).
+		 */
+		oldResource?: Uri;
+
+		/**
+		 * The new file URI (undefined for deleted files).
+		 */
+		newResource?: Uri;
+	}
+
+	/**
+	 * Represents a workspace edit containing file-level operations.
+	 */
+	export class ChatResponseWorkspaceEditPart {
+		edits: ChatWorkspaceFileEdit[];
+		constructor(edits: ChatWorkspaceFileEdit[]);
+	}
+
 	export class ChatResponseConfirmationPart {
 		title: string;
 		message: string | MarkdownString;
@@ -86,8 +109,6 @@ declare module 'vscode' {
 		 * Tools may use this to render interim UI while the full invocation input is collected.
 		 */
 		readonly partialInput?: unknown;
-
-		readonly subagentInvocationId?: string;
 	}
 
 	export interface ChatTerminalToolInvocationData {
@@ -181,7 +202,7 @@ declare module 'vscode' {
 		constructor(uris: Uri[], callback: () => Thenable<unknown>);
 	}
 
-	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatResponsePullRequestPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart | ChatResponseExternalEditPart;
+	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseWorkspaceEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatResponsePullRequestPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart | ChatResponseExternalEditPart;
 	export class ChatResponseWarningPart {
 		value: MarkdownString;
 		constructor(value: string | MarkdownString);
@@ -316,6 +337,12 @@ declare module 'vscode' {
 		notebookEdit(target: Uri, isDone: true): void;
 
 		/**
+		 * Push a workspace edit containing file-level operations (create, delete, rename).
+		 * @param edits Array of file-level edits to apply
+		 */
+		workspaceEdit(edits: ChatWorkspaceFileEdit[]): void;
+
+		/**
 		 * Makes an external edit to one or more resources. Changes to the
 		 * resources made within the `callback` and before it resolves will be
 		 * tracked as agent edits. This can be used to track edits made from
@@ -361,7 +388,7 @@ declare module 'vscode' {
 		 * @param toolName The name of the tool being invoked.
 		 * @param streamData Optional initial streaming data with partial arguments.
 		 */
-		beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): void;
+		beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData & { subagentInvocationId?: string }): void;
 
 		/**
 		 * Update the streaming data for a tool invocation that was started with `beginToolInvocation`.
@@ -687,7 +714,7 @@ declare module 'vscode' {
 
 	export interface LanguageModelToolInvocationOptions<T> {
 		model?: LanguageModelChat;
-		readonly chatStreamToolCallId?: string;
+		chatStreamToolCallId?: string;
 	}
 
 	export interface LanguageModelToolInvocationStreamOptions<T> {

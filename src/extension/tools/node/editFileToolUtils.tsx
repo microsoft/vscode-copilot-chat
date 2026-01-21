@@ -21,7 +21,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { getLanguageId } from '../../../util/common/markdown';
 import { findNotebook } from '../../../util/common/notebooks';
 import * as glob from '../../../util/vs/base/common/glob';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
@@ -884,11 +884,11 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 }
 
-export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
+export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], allowedUris: ResourceSet | undefined, detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))
-	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
+	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation && !allowedUris?.has(r.uri));
 
 	if (!needsConfirmation.length) {
 		return { presentation: 'hidden' };

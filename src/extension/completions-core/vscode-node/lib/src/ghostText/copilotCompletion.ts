@@ -6,8 +6,9 @@ import { CopilotNamedAnnotationList } from '../../../../../../platform/completio
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, IRange, LocationFactory, TextDocumentContents } from '../textDocument';
-import { CompletionResult, ResultType } from './ghostText';
+import { CompletionResult } from './ghostText';
 import { ITextEditorOptions, normalizeIndentCharacter } from './normalizeIndent';
+import { ResultType } from './resultType';
 
 export interface CopilotCompletion {
 	uuid: string;

@@ -174,6 +174,8 @@ export interface IMakeChatRequestOptions {
 	useFetcher?: FetcherId;
 	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
 	disableThinking?: boolean;
+	/** Enable retrying once on simple network errors like ECONNRESET. */
+	canRetryOnceWithoutRollback?: boolean;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -307,6 +309,7 @@ function networkRequest(
 	additionalHeaders?: Record<string, string>,
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
+	canRetryOnce: boolean = true,
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
@@ -358,7 +361,7 @@ function networkRequest(
 	}
 	if (typeof endpoint.urlOrRequestMetadata === 'string') {
 		const requestPromise = fetcher.fetch(endpoint.urlOrRequestMetadata, request).catch(reason => {
-			if (canRetryOnceNetworkError(reason)) {
+			if (canRetryOnce && canRetryOnceNetworkError(reason)) {
 				// disconnect and retry the request once if the connection was reset
 				telemetryService.sendGHTelemetryEvent('networking.disconnectAll');
 				return fetcher.disconnectAll().then(() => {
@@ -401,6 +404,7 @@ export function postRequest(
 	additionalHeaders?: Record<string, string>,
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
+	canRetryOnce: boolean = true,
 ): Promise<Response> {
 	return networkRequest(fetcherService,
 		telemetryService,
@@ -414,6 +418,7 @@ export function postRequest(
 		additionalHeaders,
 		cancelToken,
 		useFetcher,
+		canRetryOnce,
 	);
 }
 

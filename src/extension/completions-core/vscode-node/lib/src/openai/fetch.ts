@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClientHttp2Stream } from 'http2';
 import { IAuthenticationService } from '../../../../../../platform/authentication/common/authentication';
 import { CopilotAnnotations, StreamCopilotAnnotations } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { IEnvService } from '../../../../../../platform/env/common/envService';
@@ -475,15 +474,10 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			return { type: 'canceled', reason: 'before fetch request' };
 		}
 		if (cancel?.isCancellationRequested) {
-			const body = await response.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
 				// and can cancel/forget about the request itself.
-				if (body && typeof (body as ClientHttp2Stream).destroy === 'function') {
-					(body as ClientHttp2Stream).destroy();
-				} else if (body instanceof ReadableStream) {
-					void body.cancel();
-				}
+				await response.body.destroy();
 			} catch (e) {
 				this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
 			}

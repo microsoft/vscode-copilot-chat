@@ -130,7 +130,6 @@ suite('RepoInfoTelemetry', () => {
 			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			organization_list: [],
 			isVscodeTeamMember: false,
 			username: 'testUser',
@@ -1523,7 +1522,6 @@ suite('RepoInfoTelemetry', () => {
 			sku: 'free_limited_copilot',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'], // GitHub org for internal users
 			isVscodeTeamMember: true,
 			username: 'testUser',

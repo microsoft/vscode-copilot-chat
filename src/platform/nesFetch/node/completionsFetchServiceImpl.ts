@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -124,19 +123,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				return Result.error(new Completions.UnsuccessfulResponse(response.status, response.statusText, response.headers, () => response.text().catch(() => '')));
 			}
 
-			const responseBody = await response.body();
-
-			const body = (
-				responseBody instanceof Readable
-					? responseBody
-					: (
-						responseBody
-							? new Readable().wrap(responseBody as NodeJS.ReadableStream)
-							: new Readable()
-					)
-			);
-
-			body.setEncoding('utf8');
+			const body = response.body.pipeThrough(new TextDecoderStream());
 
 			const responseStream = new AsyncIterableObject<string>(async (emitter) => {
 				try {

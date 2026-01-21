@@ -20,8 +20,7 @@ First, add an entry in vscode-copilot's package.json under `contributes.language
   - The existing `copilot_` tools will be renamed later.
 - Give it a reasonable `toolReferenceName` and a localized `userDescription`.
   - `toolReferenceName` is the name used in the tool picker, and to reference the tool with `#`, and to add the tool to a mode or toolset.
-  - Consider whether the tool should be available on its own or part of a toolset. Add it to a toolset in `contributes.languageModelToolSets` if needed.
-  - Otherwise, set `"canBeReferencedInPrompt": true` and add an `icon`.
+  - Add it to a toolset in `contributes.languageModelToolSets`- new tools should be part of a toolset.
 - Now write your `modelDescription`. This is what the LLM uses to decide whether to use your tool. This should _not_ be localized. Be very detailed:
   - What exactly does the tool do?
   - What kind of information does it return?

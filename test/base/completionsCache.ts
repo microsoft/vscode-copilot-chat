@@ -86,9 +86,7 @@ export function emptyFetcherResponse(headers: IHeaders): Response {
 		200,
 		'',
 		headers,
-		() => Promise.resolve(''),
-		() => Promise.resolve(''),
-		() => Promise.resolve(''),
+		null,
 		'electron-fetch',
 	);
 }

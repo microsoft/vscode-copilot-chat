@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { OrganizationAndEnterpriseAgentContribution } from '../../agents/vscode-node/organizationAndEnterpriseAgentContrib';
+import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
@@ -116,6 +116,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
-	asContributionFactory(OrganizationAndEnterpriseAgentContribution),
+	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 ];

@@ -10,7 +10,7 @@ import { countLines, SuggestionStatus } from '../suggestions/partialSuggestions'
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, TextDocumentContents, TextDocumentIdentifier } from '../textDocument';
 import { CopilotCompletion } from './copilotCompletion';
-import { ResultType } from './ghostText';
+import { ResultType } from './resultType';
 import { GHOST_TEXT_CATEGORY, telemetryShown } from './telemetry';
 
 const ghostTextLogger = new Logger('ghostText');

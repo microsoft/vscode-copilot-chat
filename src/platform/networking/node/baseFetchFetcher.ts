@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
+
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
 import { FetcherId, FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
@@ -87,14 +87,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			resp.status,
 			resp.statusText,
 			resp.headers,
-			() => resp.text(),
-			() => resp.json(),
-			async () => {
-				if (!resp.body) {
-					return Readable.from([]);
-				}
-				return Readable.fromWeb(resp.body);
-			},
+			resp.body,
 			this._fetcherId
 		);
 	}
