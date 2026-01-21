@@ -121,7 +121,10 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
-		const contextCompactionEnabled = isAnthropicContextEditingEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+		const contextCompactionEnabled = endpoint
+			? isAnthropicContextEditingEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicContextEditingEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
