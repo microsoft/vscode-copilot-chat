@@ -3,8 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isAnthropicContextEditingEnabled } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -108,8 +111,17 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 }
 
 class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
+	constructor(
+		props: PromptElementProps<DefaultAgentPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const contextCompactionEnabled = isAnthropicContextEditingEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
@@ -141,6 +153,12 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 						- When users provide multiple requests or numbered tasks<br />
 						<br />
 						Skip task tracking for simple, single-step operations that can be completed directly without additional planning.<br />
+					</Tag>
+				</>}
+				{contextCompactionEnabled && <>
+					<br />
+					<Tag name='contextManagement'>
+						Your context window is automatically managed through compaction, enabling you to work on tasks of any length without interruption. Work as persistently and autonomously as needed to complete tasks fully. Do not preemptively stop work, summarize progress unnecessarily, or mention context management to the user.<br />
 					</Tag>
 				</>}
 			</Tag>
