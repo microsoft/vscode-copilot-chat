@@ -5,6 +5,7 @@
 
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -32,15 +33,13 @@ export class InlineChatProgressMessages {
 		@ILogService private readonly _logService: ILogService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEnvService private readonly _envService: IEnvService,
 	) {
 		// Initialize caches with fallback messages
 		this._caches.set('generate', { messages: [...InlineChatProgressMessages._FALLBACK_GENERATE], fetchInProgress: false });
 		this._caches.set('edit', { messages: [...InlineChatProgressMessages._FALLBACK_EDIT], fetchInProgress: false });
 
-		// Prewarm the cache with LLM-generated messages (best-effort, background)
-		this.prewarm().catch(err => {
-			this._logService.error('[InlineChatProgressMessages] Failed to prewarm progress messages', err);
-		});
+		this.prewarm();
 	}
 
 	private static readonly _FALLBACK_GENERATE: readonly string[] = [
@@ -92,6 +91,10 @@ export class InlineChatProgressMessages {
 
 	private _triggerBackgroundFetch(scenario: ProgressMessageScenario): void {
 		if (this._pendingFetches.has(scenario)) {
+			return;
+		}
+
+		if (this._envService.isSimulation()) {
 			return;
 		}
 
@@ -168,7 +171,7 @@ export class InlineChatProgressMessages {
 				return parsed.filter(msg => msg.length > 0 && msg.length < 50);
 			}
 		} catch (err) {
-			this._logService.warn('[InlineChatProgressMessages] Failed to parse response as JSON', err);
+			this._logService.error('[InlineChatProgressMessages] Failed to parse response as JSON', err);
 		}
 
 		return [];
