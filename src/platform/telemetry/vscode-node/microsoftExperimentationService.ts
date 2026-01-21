@@ -3,12 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as fs from 'fs';
+import path from 'path';
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
 import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
 import { isObject } from '../../../util/vs/base/common/types';
-import { URI } from '../../../util/vs/base/common/uri';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
@@ -155,17 +154,14 @@ class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProv
 	private readonly _releaseDate: string | undefined;
 
 	constructor(
-		envService: IEnvService,
 		private _logService: ILogService
 	) {
-		this._releaseDate = this._initReleaseDate(envService);
+		this._releaseDate = this._initReleaseDate();
 	}
 
-	private _initReleaseDate(envService: IEnvService): string | undefined {
+	private _initReleaseDate(): string | undefined {
 		try {
-			const productJsonUri = URI.joinPath(URI.file(envService.appRoot), 'product.json');
-			const content = fs.readFileSync(productJsonUri.fsPath, 'utf8');
-			const product = JSON.parse(content);
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
 			return this._formatReleaseDate(product.date ?? '');
 		} catch (error) {
 			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date: ${error}`);
@@ -228,7 +224,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
-				new PlatformAndReleaseDateFilterProvider(envService, logService),
+				new PlatformAndReleaseDateFilterProvider(logService),
 			);
 		};
 
