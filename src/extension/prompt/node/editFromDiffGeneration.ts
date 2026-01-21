@@ -155,7 +155,7 @@ export function createEditsFromPseudoDiff(code: Lines, diff: Lines, reporter?: R
 				return i;
 			}
 		}
-		reporter?.warning("Unable to find a matching line for the diff line: " + diffLineInfo.content);
+		reporter?.warning('Unable to find a matching line for the diff line: ' + diffLineInfo.content);
 		return -1;
 	}
 

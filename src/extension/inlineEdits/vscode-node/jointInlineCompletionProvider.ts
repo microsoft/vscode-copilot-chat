@@ -5,16 +5,18 @@
 
 import { join } from 'path';
 import * as vscode from 'vscode';
-import { IAuthenticationService, IExperimentationService } from '../../../lib/node/chatLibMain';
+import { InlineCompletionModelInfo } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { JointCompletionsProviderStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
+import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../../platform/inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
-import { shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
+import { checkIfCursorAtEndOfLine, shortenOpportunityId } from '../../../platform/inlineEdits/common/utils/utils';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import * as errors from '../../../util/common/errors';
 import { isNotebookCell } from '../../../util/common/notebooks';
 import { createTracer, ITracer } from '../../../util/common/tracing';
@@ -32,12 +34,15 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { registerUnificationCommands } from '../../completions-core/vscode-node/completionsServiceBridges';
-import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/inlineCompletion';
+import { GhostTextCompletionItem, GhostTextCompletionList } from '../../completions-core/vscode-node/extension/src/ghostText/ghostTextProvider';
+import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/vscodeInlineCompletionItemProvider';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
+import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -49,6 +54,9 @@ import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
 
 export class JointCompletionsProviderContribution extends Disposable implements IExtensionContribution {
+
+	private static NES_GROUP_ID = 'nes';
+	private static COMPLETIONS_GROUP_ID = 'completions';
 
 	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsProviderId, this._expService));
 
@@ -114,7 +122,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 				const excludes = this._excludedProviders.read(reader).slice();
 
 				let inlineEditProvider: InlineCompletionProviderImpl | undefined = undefined;
-				if (this.inlineEditsEnabled.read(reader)) {
+				if (!excludes.includes(JointCompletionsProviderContribution.NES_GROUP_ID) && this.inlineEditsEnabled.read(reader)) {
 					const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
 
 					const statelessProviderId = this._inlineEditsProviderId.read(reader);
@@ -145,7 +153,13 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 
 					const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
 
-					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
+					// Create the expected edit capture controller
+					const expectedEditCaptureController = reader.store.add(this._instantiationService.createInstance(
+						ExpectedEditCaptureController,
+						model.debugRecorder
+					));
+
+					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender, expectedEditCaptureController);
 
 					reader.store.add(vscode.commands.registerCommand(learnMoreCommandId, () => {
 						this._envService.openExternal(URI.parse(learnMoreLink));
@@ -178,9 +192,15 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 					const configEnabled = this._configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, this._expService).read(reader);
 					const extensionUnification = unificationStateValue?.extensionUnification ?? false;
 
+					// respect excludes if NES is enabled
+					const isExcluded = excludes.includes(JointCompletionsProviderContribution.COMPLETIONS_GROUP_ID) && this.inlineEditsEnabled.read(reader);
+
 					// @ulugbekna: note that we don't want it if modelUnification is on
 					const modelUnification = unificationStateValue?.modelUnification ?? false;
-					if (!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+					if (
+						(!modelUnification || unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) &&
+						!isExcluded
+					) {
 						completionsProvider = this._copilotInlineCompletionItemProviderService.getOrCreateProvider() as CopilotInlineCompletionItemProvider;
 					}
 
@@ -217,16 +237,16 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 }
 
 type SingularCompletionItem =
-	| ({ source: 'completions' } & vscode.InlineCompletionItem)
+	| ({ source: 'completions' } & GhostTextCompletionItem)
 	| ({ source: 'inlineEdits' } & NesCompletionItem)
 	;
 
 type SingularCompletionList =
-	| ({ source: 'completions' } & vscode.InlineCompletionList)
+	| ({ source: 'completions' } & GhostTextCompletionList)
 	| ({ source: 'inlineEdits' } & NesCompletionList)
 	;
 
-function toCompletionsList(list: vscode.InlineCompletionList): SingularCompletionList {
+function toCompletionsList(list: GhostTextCompletionList): SingularCompletionList {
 	return { ...list, items: list.items.map(item => ({ ...item, source: 'completions' })), source: 'completions' };
 }
 
@@ -238,11 +258,34 @@ type LastNesSuggestion = {
 	docUri: vscode.Uri;
 	docVersionId: number;
 	docWithNesEditApplied: StringText;
+	completionItem: NesCompletionItem;
 };
 
 class JointCompletionsProvider extends Disposable implements vscode.InlineCompletionItemProvider {
 
-	public onDidChange?: vscode.Event<void> | undefined;
+	private readonly _onDidChangeEmitter: vscode.EventEmitter<NesChangeHint> | undefined;
+	public readonly onDidChange?: vscode.Event<NesChangeHint> | undefined;
+
+	private _requestsInFlight = new Set<CancellationToken>();
+	private _completionsRequestsInFlight = new Set<CancellationToken>();
+
+	private get _isRequestInFlight(): boolean {
+		return this._requestsInFlight.size > 0;
+	}
+
+	private get _isCompletionsRequestInFlight(): boolean {
+		return this._completionsRequestsInFlight.size > 0;
+	}
+
+	private _tracer = createTracer(['NES', 'JointCompletionsProvider'], (msg) => this._logService.trace(msg));
+
+	//#region Model picker
+	public readonly onDidChangeModelInfo = this._inlineEditProvider?.onDidChangeModelInfo;
+	public readonly setCurrentModelId = this._inlineEditProvider?.setCurrentModelId?.bind(this._inlineEditProvider);
+	public get modelInfo(): InlineCompletionModelInfo | undefined {
+		return this._inlineEditProvider?.modelInfo;
+	}
+	//#endregion
 
 	constructor(
 		private readonly _completionsProvider: CopilotInlineCompletionItemProvider | undefined,
@@ -252,7 +295,37 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-		this.onDidChange = _inlineEditProvider?.onDidChange;
+
+		// Only set up the onDidChange emitter if the inlineEditProvider has one to channel
+		if (this._inlineEditProvider?.onDidChange) {
+			this._onDidChangeEmitter = this._register(new vscode.EventEmitter<NesChangeHint>());
+			this.onDidChange = this._onDidChangeEmitter.event;
+
+			this._register(this._inlineEditProvider.onDidChange((changeHint) => {
+				const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderTriggerChangeStrategy, this._expService);
+				switch (strategy) {
+					case JointCompletionsProviderTriggerChangeStrategy.AlwaysTrigger:
+						break;
+					case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnRequestInFlight:
+						if (this._isRequestInFlight) {
+							this._tracer.trace('Skipping onDidChange event firing because request is in flight');
+							return;
+						}
+						break;
+					case JointCompletionsProviderTriggerChangeStrategy.NoTriggerOnCompletionsRequestInFlight:
+						if (this._isCompletionsRequestInFlight) {
+							this._tracer.trace('Skipping onDidChange event firing because completions request is in flight');
+							return;
+						}
+						break;
+					default:
+						assertNever(strategy);
+				}
+				this._tracer.trace('Firing onDidChange event');
+				this._onDidChangeEmitter!.fire(changeHint);
+			}));
+		}
+
 		softAssert(
 			_completionsProvider?.onDidChange === undefined,
 			'CompletionsProvider does not implement onDidChange'
@@ -260,15 +333,61 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	public async provideInlineCompletionItems(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<SingularCompletionList | undefined> {
-		const tracer = createTracer(['JointCompletionsProvider', shortenOpportunityId(context.requestUuid), 'provideInlineCompletionItems'], (msg) => this._logService.trace(msg));
+		const tracer = this._tracer.sub([shortenOpportunityId(context.requestUuid), 'provideInlineCompletionItems']);
 
 		const strategy = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsJointCompletionsProviderStrategy, this._expService);
 
 		switch (strategy) {
 			case JointCompletionsProviderStrategy.Regular:
 				return this.provideInlineCompletionItemsRegular(document, position, context, token, tracer);
+			case JointCompletionsProviderStrategy.CursorEndOfLine:
+				return this.provideInlineCompletionItemsCursorEndOfLine(document, position, context, token, tracer);
 			default:
 				assertNever(strategy);
+		}
+	}
+
+	private async provideInlineCompletionItemsCursorEndOfLine(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken, tracer: ITracer): Promise<SingularCompletionList | undefined> {
+		const sw = new StopWatch();
+
+		this._requestsInFlight.add(token);
+		const disp = token.onCancellationRequested(() => {
+			this._requestsInFlight.delete(token);
+		});
+		try {
+			if (this._completionsProvider === undefined && this._inlineEditProvider === undefined) {
+				tracer.returns('neither completions nor NES provider available');
+				return undefined;
+
+			} else if (this._completionsProvider === undefined && this._inlineEditProvider !== undefined) {
+				tracer.trace('only NES provider is available, invoking it');
+				const r = await this._invokeNESProvider(tracer, document, position, false, context, token, sw);
+				return r ? toInlineEditsList(r) : undefined;
+
+			} else if (this._completionsProvider !== undefined && this._inlineEditProvider === undefined) {
+				tracer.trace('only completions provider is available, invoking it');
+				const r = await this._invokeCompletionsProvider(tracer, document, position, context, token, sw);
+				return r ? toCompletionsList(r) : undefined;
+			} else {
+
+				const cursorLine = document.lineAt(position.line).text;
+				const isCursorAtEndOfLine = checkIfCursorAtEndOfLine(cursorLine, position.character);
+
+				if (isCursorAtEndOfLine) {
+					tracer.trace('cursor is at end of line, invoking ghost-text provider only');
+					const r = await this._invokeCompletionsProvider(tracer, document, position, context, token, sw);
+					return r ? toCompletionsList(r) : undefined;
+				}
+
+				const r = await this._invokeNESProvider(tracer, document, position, false, context, token, sw);
+				return r ? toInlineEditsList(r) : undefined;
+			}
+		} finally {
+			if (!token.isCancellationRequested) {
+				this._tracer.trace('request in flight: false -- due to provider finishing');
+				this._requestsInFlight.delete(token);
+			}
+			disp.dispose();
 		}
 	}
 
@@ -280,6 +399,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		const invocationId = ++this.provideInlineCompletionItemsInvocationCount;
 		const completionsCts = new CancellationTokenSource(token);
 		const nesCts = new CancellationTokenSource(token);
+
+		this._requestsInFlight.add(token);
+		const disp1 = token.onCancellationRequested(() => {
+			tracer.trace(`invocation #${invocationId}: request in flight: false -- due to cancellation`);
+			this._requestsInFlight.delete(token);
+		});
+		tracer.trace(`invocation #${invocationId} started; request in flight: true`);
 
 		let saveLastNesSuggestion: null | LastNesSuggestion = null;
 		try {
@@ -301,7 +427,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				return list;
 			}
 
-			const firstItem = list.items[0];
+			const firstItem = (list.items as NesCompletionItem[])[0];
 			if (!firstItem.range || typeof firstItem.insertText !== 'string') {
 				return list;
 			}
@@ -316,10 +442,16 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 				docUri: document.uri,
 				docVersionId,
 				docWithNesEditApplied: new StringText(applied),
+				completionItem: firstItem,
 			};
 
 			return list;
 		} finally {
+			if (!token.isCancellationRequested) {
+				tracer.trace(`invocation #${invocationId}: request in flight: false -- due to provider finishing`);
+				this._requestsInFlight.delete(token);
+			}
+			disp1.dispose();
 
 			// Only save the last NES suggestion if this is the latest invocation
 			if (invocationId === this.provideInlineCompletionItemsInvocationCount) {
@@ -356,22 +488,22 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 		tracer.trace('requesting completions and/or NES');
 
-		if (!lastNesSuggestion) {
+		if (!lastNesSuggestion || !lastNesSuggestion.completionItem.wasShown) {
 			// prefer completions unless there are none
-			tracer.trace(`no last NES suggestion to consider`);
-			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens, sw);
-			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
+			tracer.trace(`defaulting to yielding to completions; last NES suggestion is ${lastNesSuggestion ? 'not shown' : 'not available'}`);
+			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
+			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens.nesCts.token, sw);
+			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
 		}
 
 		tracer.trace(`last NES suggestion is for the current document, checking if it agrees with the current suggestion`);
 
 		const enforceCacheDelay = (lastNesSuggestion.docVersionId !== document.version);
-		const nesP = this._invokeNESProvider(tracer, document, position, enforceCacheDelay, context, tokens, sw);
+		const nesP = this._invokeNESProvider(tracer, document, position, enforceCacheDelay, context, tokens.nesCts.token, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
-			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
-			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
+			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
+			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
 		}
 
 		const NES_CACHE_WAIT_MS = 10;
@@ -405,7 +537,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 
 		tracer.trace(`the NES provider did not return in ${NES_CACHE_WAIT_MS}ms so we are triggering the completions provider too`);
-		const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens, sw);
+		const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
 
 		const suggestionsList = await raceCancellation(
 			Promise.race(coalesce([
@@ -432,15 +564,16 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 
 		tracer.trace('falling back to the default because completions came first or NES disagreed');
-		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, sw, tracer, tokens);
+		return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
 	}
 
-	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, enforceCacheDelay: boolean, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
-		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay };
+	private _invokeNESProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, enforceCacheDelay: boolean, context: vscode.InlineCompletionContext, ct: CancellationToken, sw: StopWatch) {
+		const changeHint = context.changeHint === undefined || NesChangeHint.is(context.changeHint) ? context.changeHint as NesChangeHint | undefined : undefined;
+		const nesContext: NESInlineCompletionContext = { ...context, enforceCacheDelay, changeHint };
 		let nesP: Promise<NesCompletionList | undefined> | undefined;
 		if (this._inlineEditProvider) {
 			tracer.trace(`- requesting NES provideInlineCompletionItems`);
-			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, nesContext, tokens.nesCts.token);
+			nesP = this._inlineEditProvider.provideInlineCompletionItems(document, position, nesContext, ct);
 			nesP.then((nesR) => {
 				tracer.trace(`got NES response in ${sw.elapsed()}ms -- ${nesR === undefined ? 'undefined' : `with ${nesR.items.length} items`}`);
 			}).catch((e) => {
@@ -453,16 +586,30 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return nesP;
 	}
 
-	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource }, sw: StopWatch) {
-		let completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined;
+	private _invokeCompletionsProvider(tracer: ITracer, document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, ct: CancellationToken, sw: StopWatch) {
+		let completionsP: Promise<GhostTextCompletionList | undefined> | undefined;
 		if (this._completionsProvider) {
-			tracer.trace(`- requesting completions provideInlineCompletionItems`);
-			completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, tokens.completionsCts.token);
-			completionsP.then((completionsR) => {
-				tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
-			}).catch((e) => {
-				tracer.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
-			});
+			this._completionsRequestsInFlight.add(ct);
+			const disp = ct.onCancellationRequested(() => this._completionsRequestsInFlight.delete(ct));
+			const cleanup = () => {
+				this._completionsRequestsInFlight.delete(ct);
+				disp.dispose();
+			};
+			try { // in case the provider throws synchronously
+				tracer.trace(`- requesting completions provideInlineCompletionItems`);
+				completionsP = this._completionsProvider.provideInlineCompletionItems(document, position, context, ct);
+				completionsP.then((completionsR) => {
+					tracer.trace(`got completions response in ${sw.elapsed()}ms -- ${completionsR === undefined ? 'undefined' : `with ${completionsR.items.length} items`}`);
+				}).catch((e) => {
+					tracer.trace(`completions provider errored after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				}).finally(() => {
+					cleanup();
+				});
+			} catch (e) {
+				cleanup();
+				tracer.trace(`completions provider threw synchronously after ${sw.elapsed()}ms -- ${errors.toString(errors.fromUnknown(e))}`);
+				throw e;
+			}
 		} else {
 			tracer.trace(`- no completions provider`);
 			completionsP = undefined;
@@ -471,8 +618,9 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private async _returnCompletionsOrOtherwiseNES(
-		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		completionsP: Promise<GhostTextCompletionList | undefined> | undefined,
 		nesP: Promise<NesCompletionList | undefined> | undefined,
+		docSnapshot: StringText,
 		sw: StopWatch,
 		tracer: ITracer,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
@@ -483,16 +631,26 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		tracer.trace(`completions response received`);
 
 		if (completionsR && completionsR.items.length > 0) {
-			tracer.trace(`using completions response, cancelling NES provider`);
-			return this._returnCompletions(completionsR, { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace }, nesP, sw, tracer, tokens);
+			const filteredCompletionR = JointCompletionsProvider.retainOnlyMeaningfulEdits(docSnapshot, completionsR);
+			if (filteredCompletionR.items.length === 0) {
+				tracer.trace(`all completions edits are no-op, ignoring completions response`);
+			} else {
+				tracer.trace(`using completions response, cancelling NES provider`);
+				return this._returnCompletions(filteredCompletionR, { kind: vscode.InlineCompletionsDisposeReasonKind.LostRace }, nesP, sw, tracer, tokens);
+			}
 		}
 
 		const nesR = nesP ? await nesP : undefined;
 		tracer.trace(`NES response received`);
 
 		if (nesR && nesR.items.length > 0) {
-			tracer.trace(`using NES response`);
-			return this._returnNES(nesR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, completionsP, sw, tracer, tokens);
+			const filteredNesR = JointCompletionsProvider.retainOnlyMeaningfulEdits(docSnapshot, nesR);
+			if (filteredNesR.items.length === 0) {
+				tracer.trace(`all NES edits are no-op, ignoring NES response`);
+			} else {
+				tracer.trace(`using NES response`);
+				return this._returnNES(filteredNesR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, completionsP, sw, tracer, tokens);
+			}
 		}
 
 		// return empty completions
@@ -500,7 +658,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	}
 
 	private _returnCompletions(
-		completionsR: vscode.InlineCompletionList,
+		completionsR: GhostTextCompletionList,
 		nesDisposeReason: vscode.InlineCompletionsDisposeReason,
 		nesP: Promise<NesCompletionList | undefined> | undefined,
 		sw: StopWatch,
@@ -517,7 +675,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 	private _returnNES(
 		nesR: NesCompletionList,
 		completionsDisposeReason: vscode.InlineCompletionsDisposeReason,
-		completionsP: Promise<vscode.InlineCompletionList | undefined> | undefined,
+		completionsP: Promise<GhostTextCompletionList | undefined> | undefined,
 		sw: StopWatch,
 		tracer: ITracer,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
@@ -537,10 +695,33 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		return applied === docWithNesEditApplied.getValue();
 	}
 
+	private static retainOnlyMeaningfulEdits<T extends vscode.InlineCompletionList>(docSnapshot: StringText, list: T): T {
+		// meaningful = not noop
+		function isMeaningfulEdit(item: T['items'][number]): boolean {
+			if (item.range === undefined || // must be a completion with a side-effect, eg a command invocation or something
+				typeof item.insertText !== 'string' // shouldn't happen
+			) {
+				return true;
+			}
+			const originalSnippet = docSnapshot.getValueOfRange(new Range(
+				item.range.start.line + 1,
+				item.range.start.character + 1,
+				item.range.end.line + 1,
+				item.range.end.character + 1,
+			));
+			return originalSnippet !== item.insertText;
+		}
+		const filteredEdits = list.items.filter(isMeaningfulEdit);
+		if (filteredEdits.length === list.items.length) {
+			return list;
+		}
+		return { ...list, items: filteredEdits };
+	}
+
 	public handleDidShowCompletionItem?(completionItem: SingularCompletionItem, updatedInsertText: string): void {
 		switch (completionItem.source) {
 			case 'completions':
-				this._completionsProvider?.handleDidShowCompletionItem?.(completionItem, updatedInsertText);
+				this._completionsProvider?.handleDidShowCompletionItem?.(completionItem);
 				break;
 			case 'inlineEdits':
 				this._inlineEditProvider?.handleDidShowCompletionItem?.(completionItem, updatedInsertText);

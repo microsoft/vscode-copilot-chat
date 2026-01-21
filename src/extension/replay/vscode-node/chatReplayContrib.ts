@@ -107,7 +107,7 @@ export class ChatReplayConfigProvider implements DebugConfigurationProvider {
 		}
 
 		if (!config.program) {
-			return window.showInformationMessage("Cannot find a program to debug").then(_ => {
+			return window.showInformationMessage('Cannot find a program to debug').then(_ => {
 				return undefined;	// abort launch
 			});
 		}

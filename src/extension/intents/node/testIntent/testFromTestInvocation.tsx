@@ -24,7 +24,7 @@ import { InstructionMessage } from '../../../prompts/node/base/instructionMessag
 import { PromptRenderer } from '../../../prompts/node/base/promptRenderer';
 import { SafetyRules } from '../../../prompts/node/base/safetyRules';
 import { Tag } from '../../../prompts/node/base/tag';
-import { ChatToolReferences, ChatVariables } from '../../../prompts/node/panel/chatVariables';
+import { ChatToolReferences, ChatVariables, UserQuery } from '../../../prompts/node/panel/chatVariables';
 import { HistoryWithInstructions } from '../../../prompts/node/panel/conversationHistory';
 import { CustomInstructions } from '../../../prompts/node/panel/customInstructions';
 import { CodeBlock } from '../../../prompts/node/panel/safeElements';
@@ -192,7 +192,7 @@ class TestFromTestPrompt extends PromptElement<Props> {
 					{/* include summarized source file: */}
 					<Test2Impl priority={800} documentContext={context} srcFile={testGenInfo} />
 					{/* include summarized test file: */}
-					<Tag name="testsFile" priority={900}>
+					<Tag name='testsFile' priority={900}>
 						<SummarizedDocumentWithSelection
 							documentData={data}
 							tokenBudget={sizing.tokenBudget / 3}
@@ -201,12 +201,12 @@ class TestFromTestPrompt extends PromptElement<Props> {
 						{/* repeat tested declaration -- otherwise, model seems to forget it: */}
 					</Tag>
 					{testGenInfo !== undefined && testedDeclarationExcerpt !== undefined && /* FIXME@ulugbekna: include class around */
-						<Tag name="codeToTest" priority={900}>
+						<Tag name='codeToTest' priority={900}>
 							{`Repeating excerpt from \`${testGenInfo?.uri.path}\` here that needs to be tested:`}{/* FIXME@ulugbekna */}<br />
 							<CodeBlock uri={testGenInfo.uri} languageId={context.language.languageId} code={testedDeclarationExcerpt} />
 						</Tag>}
-					<Tag name="userPrompt" priority={900}>
-						{requestAndUserQuery}
+					<Tag name='userPrompt' priority={900}>
+						<UserQuery chatVariables={filteredChatVariables} query={requestAndUserQuery} />
 					</Tag>
 				</UserMessage>
 			</>

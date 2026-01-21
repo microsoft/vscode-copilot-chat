@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
@@ -32,6 +31,7 @@ import { TelemetryData } from '../../../platform/telemetry/common/telemetryData'
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import * as errorsUtil from '../../../util/common/errors';
+import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
@@ -86,6 +86,12 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 }
 
 export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
+
+	/**
+	 * Delays (in ms) between connectivity check attempts before retrying a failed request.
+	 * Configurable for testing purposes.
+	 */
+	public connectivityCheckDelays = [1000, 10000, 10000];
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -148,13 +154,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			ourRequestId,
 			location: opts.location,
 			body: requestBody,
-			ignoreStatefulMarker: opts.ignoreStatefulMarker
+			ignoreStatefulMarker: opts.ignoreStatefulMarker,
+			isConversationRequest: opts.isConversationRequest
 		});
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
 		const enableRetryOnError = opts.enableRetryOnError ?? opts.enableRetryOnFilter;
+		const canRetryOnce = opts.canRetryOnceWithoutRollback ?? !(opts.enableRetryOnFilter || opts.enableRetryOnError);
 		let usernameToScrub: string | undefined;
 		let actualFetcher: FetcherId | undefined;
+		let actualBytesReceived: number | undefined;
+		let actualStatusCode: number | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
@@ -182,9 +192,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					userInitiatedRequest,
 					telemetryProperties,
 					opts.useFetcher,
+					canRetryOnce,
 				);
 				response = fetchResult.result;
 				actualFetcher = fetchResult.fetcher;
+				actualBytesReceived = fetchResult.bytesReceived;
+				actualStatusCode = fetchResult.statusCode;
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({
@@ -198,7 +211,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.markTimeToFirstToken(timeToFirstToken);
 			switch (response.type) {
 				case FetchResponseKind.Success: {
-					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, streamRecorder, baseTelemetry, chatEndpoint, userInitiatedRequest, actualFetcher);
+					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, streamRecorder, baseTelemetry, chatEndpoint, userInitiatedRequest, actualFetcher, actualBytesReceived);
 
 					// Handle FilteredRetry case with augmented messages
 					if (result.type === ChatFetchResponseType.FilteredRetry) {
@@ -232,6 +245,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
 									enableRetryOnFilter: false,
+									canRetryOnceWithoutRollback: false,
 									enableRetryOnError,
 								}, token);
 
@@ -263,9 +277,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							model: chatEndpoint.model,
 							apiType: chatEndpoint.apiType,
 							associatedRequestId: telemetryProperties.associatedRequestId,
-							retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
 							retryAfterError: telemetryProperties.retryAfterError,
+							retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId,
 							connectivityTestError: telemetryProperties.connectivityTestError,
+							connectivityTestErrorGitHubRequestId: telemetryProperties.connectivityTestErrorGitHubRequestId,
 							retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 							fetcher: actualFetcher,
 						},
@@ -275,16 +290,46 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 							tokenCountMax: maxResponseTokens,
 							timeToFirstToken,
 							timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
-							timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
+							timeToCancelled: Date.now() - baseTelemetry.issuedTime,
 							isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 							isBYOK: isBYOKModel(chatEndpoint),
-							isAuto: isAutoModel(chatEndpoint)
+							isAuto: isAutoModel(chatEndpoint),
+							bytesReceived: actualBytesReceived,
+							issuedTime: baseTelemetry.issuedTime,
 						});
 					pendingLoggedChatRequest?.resolveWithCancelation();
 					return this.processCanceledResponse(response, ourRequestId);
 				case FetchResponseKind.Failed: {
 					const processed = this.processFailedResponse(response, ourRequestId);
-					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher);
+					// Retry on server errors based on configured status codes
+					const retryServerErrorStatusCodes = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryServerErrorStatusCodes, this._experimentationService);
+					const statusCodesToRetry = retryServerErrorStatusCodes
+						.split(',')
+						.map(s => parseInt(s.trim(), 10));
+					if (enableRetryOnError && actualStatusCode !== undefined && statusCodesToRetry.includes(actualStatusCode)) {
+						const { retryResult } = await this._retryAfterError({
+							opts,
+							processed,
+							telemetryProperties,
+							requestBody,
+							tokenCount,
+							maxResponseTokens,
+							timeToError: timeToFirstToken,
+							actualFetcher,
+							bytesReceived: actualBytesReceived,
+							baseTelemetry,
+							streamRecorder,
+							retryReason: 'server_error',
+							debugNamePrefix: 'retry-server-error-',
+							pendingLoggedChatRequest,
+							token,
+							usernameToScrub,
+						});
+						if (retryResult) {
+							return retryResult;
+						}
+					}
+					Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages), actualFetcher, actualBytesReceived, baseTelemetry.issuedTime);
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
 				}
@@ -294,46 +339,32 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			if (err.fetcherId) {
 				actualFetcher = err.fetcherId;
 			}
-			const processed = this.processError(err, ourRequestId, usernameToScrub);
-			let connectivityTestError = telemetryProperties.connectivityTestError;
+			const processed = this.processError(err, ourRequestId, err.gitHubRequestId, usernameToScrub);
 			if (processed.type === ChatFetchResponseType.NetworkError && enableRetryOnError) {
-				// Keep existing handling of net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
-				const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
 				const isRetryNetworkErrorEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.RetryNetworkErrors, this._experimentationService);
-				if (isNetworkChangedError || isRetryNetworkErrorEnabled) {
-					const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
-					this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
-					// Keep existing handling of net::ERR_NETWORK_CHANGED if setting is not enabled: https://github.com/microsoft/vscode/issues/260297
-					const connectivity = !isRetryNetworkErrorEnabled ? { retryRequest: true } : await this._checkNetworkConnectivity(useFetcher);
-					connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
-					if (connectivity.retryRequest) {
-						streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
-						const retryResult = await this.fetchMany({
-							...opts,
-							debugName: 'retry-error-' + debugName,
-							messages,
-							finishedCb,
-							location,
-							endpoint: chatEndpoint,
-							source,
-							requestOptions,
-							userInitiatedRequest: false, // do not mark the retry as user initiated
-							telemetryProperties: {
-								...telemetryProperties,
-								retryAfterErrorCategory: processed.reasonDetail || processed.reason,
-								retryAfterError: processed.reasonDetail || processed.reason,
-								connectivityTestError,
-							},
-							enableRetryOnFilter: opts.enableRetryOnFilter,
-							enableRetryOnError: false,
-							useFetcher,
-						}, token);
-
-						pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+				if (isRetryNetworkErrorEnabled) {
+					const { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId } = await this._retryAfterError({
+						opts,
+						processed,
+						telemetryProperties,
+						requestBody,
+						tokenCount,
+						maxResponseTokens,
+						timeToError,
+						actualFetcher,
+						bytesReceived: err.bytesReceived,
+						baseTelemetry,
+						streamRecorder,
+						retryReason: 'network_error',
+						debugNamePrefix: 'retry-error-',
+						pendingLoggedChatRequest,
+						token,
+						usernameToScrub,
+					});
+					if (retryResult) {
 						return retryResult;
-					} else {
-						this._logService.info(`Not retrying chat request as network connectivity could not be re-established.`);
 					}
+					telemetryProperties = { ...telemetryProperties, connectivityTestError, connectivityTestErrorGitHubRequestId };
 				}
 			}
 			if (processed.type === ChatFetchResponseType.Canceled) {
@@ -345,9 +376,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						model: chatEndpoint.model,
 						apiType: chatEndpoint.apiType,
 						associatedRequestId: telemetryProperties.associatedRequestId,
-						retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory,
 						retryAfterError: telemetryProperties.retryAfterError,
-						connectivityTestError,
+						retryAfterErrorGitHubRequestId: telemetryProperties.retryAfterErrorGitHubRequestId,
+						connectivityTestError: telemetryProperties.connectivityTestError,
+						connectivityTestErrorGitHubRequestId: telemetryProperties.connectivityTestErrorGitHubRequestId,
 						retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory,
 						fetcher: actualFetcher,
 					},
@@ -359,21 +391,24 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						timeToCancelled: timeToError,
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 						isBYOK: isBYOKModel(chatEndpoint),
-						isAuto: isAutoModel(chatEndpoint)
+						isAuto: isAutoModel(chatEndpoint),
+						bytesReceived: err.bytesReceived,
+						issuedTime: baseTelemetry.issuedTime,
 					}
 				);
 			} else {
-				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, { ...telemetryProperties, connectivityTestError }, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher);
+				Telemetry.sendResponseErrorTelemetry(this._telemetryService, processed, telemetryProperties, chatEndpoint, requestBody, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages), actualFetcher, err.bytesReceived, baseTelemetry.issuedTime);
 			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
 	}
 
-	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<{ retryRequest: boolean; connectivityTestError?: string }> {
+	private async _checkNetworkConnectivity(useFetcher?: FetcherId): Promise<{ retryRequest: boolean; connectivityTestError?: string; connectivityTestErrorGitHubRequestId?: string }> {
 		// Ping CAPI to check network connectivity before retrying
-		const delays = [1000, 10000, 10000];
+		const delays = this.connectivityCheckDelays;
 		let connectivityTestError: string | undefined = undefined;
+		let connectivityTestErrorGitHubRequestId: string | undefined = undefined;
 		for (const delay of delays) {
 			this._logService.info(`Waiting ${delay}ms before pinging CAPI to check network connectivity...`);
 			await new Promise(resolve => setTimeout(resolve, delay));
@@ -387,17 +422,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				});
 				if (res.status >= 200 && res.status < 300) {
 					this._logService.info(`CAPI ping successful, proceeding with chat request retry...`);
-					return { retryRequest: true, connectivityTestError };
+					return { retryRequest: true, connectivityTestError, connectivityTestErrorGitHubRequestId };
 				} else {
 					connectivityTestError = `Status ${res.status}: ${res.statusText}`;
+					connectivityTestErrorGitHubRequestId = res.headers.get('x-github-request-id') ?? '';
 					this._logService.info(`CAPI ping returned status ${res.status}, retrying ping...`);
 				}
 			} catch (err) {
 				connectivityTestError = collectSingleLineErrorMessage(err, true);
+				connectivityTestErrorGitHubRequestId = undefined; // no response headers yet
 				this._logService.info(`CAPI ping failed with error, retrying ping: ${connectivityTestError}`);
 			}
 		}
-		return { retryRequest: false, connectivityTestError };
+		return { retryRequest: false, connectivityTestError, connectivityTestErrorGitHubRequestId };
 	}
 
 	private async _getAuthHeaders(isGHEnterprise: boolean, url: string) {
@@ -419,6 +456,92 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		return authHeaders;
 	}
 
+	private async _retryAfterError(params: {
+		opts: IFetchMLOptions;
+		processed: ChatFetchError;
+		telemetryProperties: TelemetryProperties;
+		requestBody: IEndpointBody;
+		tokenCount: number;
+		maxResponseTokens: number;
+		timeToError: number;
+		actualFetcher: FetcherId | undefined;
+		bytesReceived: number | undefined;
+		baseTelemetry: TelemetryData;
+		streamRecorder: FetchStreamRecorder;
+		retryReason: 'network_error' | 'server_error';
+		debugNamePrefix: string;
+		pendingLoggedChatRequest: ReturnType<IRequestLogger['logChatRequest']>;
+		token: CancellationToken;
+		usernameToScrub: string | undefined;
+	}): Promise<{ retryResult?: ChatResponses; connectivityTestError?: string; connectivityTestErrorGitHubRequestId?: string }> {
+		const {
+			opts,
+			processed,
+			telemetryProperties,
+			requestBody,
+			tokenCount,
+			maxResponseTokens,
+			timeToError,
+			actualFetcher,
+			bytesReceived,
+			baseTelemetry,
+			streamRecorder,
+			retryReason,
+			debugNamePrefix,
+			pendingLoggedChatRequest,
+			token,
+			usernameToScrub,
+		} = params;
+
+		// net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
+		const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
+		const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
+		this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
+		const connectivity = await this._checkNetworkConnectivity(useFetcher);
+		const connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
+		const connectivityTestErrorGitHubRequestId = connectivity.connectivityTestErrorGitHubRequestId;
+		if (!connectivity.retryRequest) {
+			this._logService.info(`Not retrying chat request as network connectivity could not be re-established.`);
+			return { connectivityTestError, connectivityTestErrorGitHubRequestId };
+		}
+
+		Telemetry.sendResponseErrorTelemetry(
+			this._telemetryService,
+			processed,
+			telemetryProperties,
+			opts.endpoint,
+			requestBody,
+			tokenCount,
+			maxResponseTokens,
+			timeToError,
+			this.filterImageMessages(opts.messages),
+			actualFetcher,
+			bytesReceived,
+			baseTelemetry.issuedTime,
+			true
+		);
+
+		streamRecorder.callback('', 0, { text: '', retryReason });
+
+		const retryResult = await this.fetchMany({
+			...opts,
+			debugName: debugNamePrefix + opts.debugName,
+			userInitiatedRequest: false, // do not mark the retry as user initiated
+			telemetryProperties: {
+				...telemetryProperties,
+				retryAfterError: processed.reasonDetail || processed.reason,
+				retryAfterErrorGitHubRequestId: processed.serverRequestId,
+				connectivityTestError,
+				connectivityTestErrorGitHubRequestId,
+			},
+			enableRetryOnError: false,
+			useFetcher,
+		}, token);
+
+		pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+		return { retryResult, connectivityTestError, connectivityTestErrorGitHubRequestId };
+	}
+
 	private async _fetchAndStreamChat(
 		chatEndpointInfo: IChatEndpoint,
 		request: IEndpointBody,
@@ -432,8 +555,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties | undefined,
-		useFetcher?: FetcherId
-	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId }> {
+		useFetcher?: FetcherId,
+		canRetryOnce?: boolean,
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 
 		if (cancellationToken.isCancellationRequested) {
 			return { result: { type: FetchResponseKind.Canceled, reason: 'before fetch request' } };
@@ -471,22 +595,23 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			cancellationToken,
 			userInitiatedRequest,
 			{ ...telemetryProperties, modelCallId },
-			useFetcher
+			useFetcher,
+			canRetryOnce,
 		);
 
 		if (cancellationToken.isCancellationRequested) {
-			const body = await response!.body();
 			try {
 				// Destroy the stream so that the server is hopefully notified we don't want any more data
 				// and can cancel/forget about the request itself.
-				(body as ClientHttp2Stream).destroy();
+				await response!.body.destroy();
 			} catch (e) {
 				this._logService.error(e, `Error destroying stream`);
 				this._telemetryService.sendGHTelemetryException(e, 'Error destroying stream');
 			}
 			return {
 				result: { type: FetchResponseKind.Canceled, reason: 'after fetch request' },
-				fetcher: response.fetcher
+				fetcher: response.fetcher,
+				bytesReceived: response.bytesReceived
 			};
 		}
 
@@ -499,22 +624,45 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			this._logService.info('Request ID for failed request: ' + ourRequestId);
 			return {
 				result: await this._handleError(telemetryData, response, ourRequestId),
-				fetcher: response.fetcher
+				fetcher: response.fetcher,
+				bytesReceived: response.bytesReceived,
+				statusCode: response.status
 			};
 		}
 
 		// Extend baseTelemetryData with modelCallId for output messages
 		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 
-		const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
-			this._telemetryService,
-			this._logService,
-			response,
-			nChoices ?? /* OpenAI's default */ 1,
-			finishedCb,
-			extendedBaseTelemetryData,
-			cancellationToken
-		);
+		let chatCompletions;
+		const gitHubRequestId = response.headers.get('x-github-request-id') ?? '';
+		try {
+			const completions = await chatEndpointInfo.processResponseFromChatEndpoint(
+				this._telemetryService,
+				this._logService,
+				response,
+				nChoices ?? /* OpenAI's default */ 1,
+				finishedCb,
+				extendedBaseTelemetryData,
+				cancellationToken
+			);
+			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
+				try {
+					for await (const completion of completions) {
+						emitter.emitOne(completion);
+					}
+				} catch (err) {
+					err.fetcherId = response.fetcher;
+					err.gitHubRequestId = gitHubRequestId;
+					err.bytesReceived = response.bytesReceived;
+					throw err;
+				}
+			});
+		} catch (err) {
+			err.fetcherId = response.fetcher;
+			err.gitHubRequestId = gitHubRequestId;
+			err.bytesReceived = response.bytesReceived;
+			throw err;
+		}
 
 		// CAPI will return us a Copilot Edits Session Header which is our token to using the speculative decoding endpoint
 		// We should store this in the auth service for easy use later
@@ -529,7 +677,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: FetchResponseKind.Success,
 				chatCompletions,
 			},
-			fetcher: response.fetcher
+			fetcher: response.fetcher,
+			bytesReceived: response.bytesReceived
 		};
 	}
 
@@ -542,7 +691,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		cancellationToken: CancellationToken,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		useFetcher?: FetcherId
+		useFetcher?: FetcherId,
+		canRetryOnce?: boolean,
 	): Promise<Response> {
 
 		// If request contains an image, we include this header.
@@ -592,7 +742,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			request,
 			additionalHeaders,
 			cancellationToken,
-			useFetcher
+			useFetcher,
+			canRetryOnce,
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
@@ -604,7 +755,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 			// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 			// If they are different then we will override the original one we set in telemetryData above.
-			const modelRequestId = getRequestId(response, undefined);
+			const modelRequestId = getRequestId(response.headers);
 			telemetryData.extendWithRequestId(modelRequestId);
 
 			// TODO: Add response length (requires parsing)
@@ -650,7 +801,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		response: Response,
 		requestId: string
 	): Promise<ChatRequestFailed> {
-		const modelRequestIdObj = getRequestId(response, undefined);
+		const modelRequestIdObj = getRequestId(response.headers);
 		requestId = modelRequestIdObj.headerRequestId || requestId;
 		modelRequestIdObj.headerRequestId = requestId;
 
@@ -717,7 +868,11 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			if (response.status === 402) {
 				// When we receive a 402, we have exceed a quota
 				// This is stored on the token so let's refresh it
-				this._authenticationService.resetCopilotToken(response.status);
+				if (!this._authenticationService.copilotToken?.isChatQuotaExceeded) {
+					this._authenticationService.resetCopilotToken(response.status);
+					await this._authenticationService.getCopilotToken();
+				}
+
 
 				const retryAfter = response.headers.get('retry-after');
 
@@ -892,6 +1047,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		chatEndpointInfo: IChatEndpoint,
 		userInitiatedRequest: boolean | undefined,
 		fetcher: FetcherId | undefined,
+		bytesReceived: number | undefined,
 	): Promise<ChatResponses | ChatFetchRetriableError<string[]>> {
 
 		const completions: ChatCompletion[] = [];
@@ -911,6 +1067,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 					hasImageMessages: this.filterImageMessages(messages),
 					fetcher,
+					bytesReceived,
 				}
 			);
 
@@ -1055,7 +1212,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 	}
 
-	private processError(err: unknown, requestId: string, usernameToScrub: string | undefined): ChatFetchError {
+	private processError(err: unknown, requestId: string, gitHubRequestId: string | undefined, usernameToScrub: string | undefined): ChatFetchError {
 		const fetcher = this._fetcherService;
 		// If we cancelled a network request, we don't want to log an error
 		if (fetcher.isAbortError(err)) {
@@ -1063,7 +1220,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'network request aborted',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		if (isCancellationError(err)) {
@@ -1071,7 +1228,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Got a cancellation error',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		if (err && (
@@ -1082,7 +1239,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Stream closed prematurely',
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
@@ -1096,7 +1253,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		} else if (fetcher.isFetcherError(err)) {
 			return {
@@ -1104,7 +1261,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: userMessage,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		} else {
 			return {
@@ -1112,7 +1269,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				reason: 'Error on conversation request. Check the log for more details.',
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
-				serverRequestId: undefined,
+				serverRequestId: gitHubRequestId,
 			};
 		}
 	}
@@ -1191,5 +1348,7 @@ export function locationToIntent(location: ChatLocation): string {
 			return 'conversation-agent';
 		case ChatLocation.ResponsesProxy:
 			return 'responses-proxy';
+		case ChatLocation.MessagesProxy:
+			return 'messages-proxy';
 	}
 }

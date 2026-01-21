@@ -18,6 +18,31 @@ export interface IInlineEditsModelService {
 	setCurrentModelId(modelId: string): Promise<void>;
 
 	selectedModelConfiguration(): ModelConfiguration;
+
+	defaultModelConfiguration(): ModelConfiguration;
 }
 
 export const IInlineEditsModelService = createServiceIdentifier<IInlineEditsModelService>('IInlineEditsModelService');
+
+export interface IUndesiredModelsManager {
+	readonly _serviceBrand: undefined;
+	isUndesiredModelId(modelId: string): boolean;
+	addUndesiredModelId(modelId: string): Promise<void>;
+	removeUndesiredModelId(modelId: string): Promise<void>;
+}
+
+export const IUndesiredModelsManager = createServiceIdentifier<IUndesiredModelsManager>('IUndesiredModelsManager');
+
+export class NullUndesiredModelsManager implements IUndesiredModelsManager {
+	declare _serviceBrand: undefined;
+
+	isUndesiredModelId(_modelId: string): boolean {
+		return false;
+	}
+	addUndesiredModelId(_modelId: string): Promise<void> {
+		return Promise.resolve();
+	}
+	removeUndesiredModelId(_modelId: string): Promise<void> {
+		return Promise.resolve();
+	}
+}

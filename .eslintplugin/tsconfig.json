@@ -1,19 +1,17 @@
 {
 	"compilerOptions": {
-		"target": "es2020",
-		"lib": ["ES2020"],
-		"module": "node16",
-		"esModuleInterop": true,
-		"alwaysStrict": true,
-		"allowJs": true,
+		"target": "es2024",
+		"lib": ["ES2024"],
+		"module": "esnext",
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
+		"verbatimModuleSyntax": true,
+		"noEmit": true,
 		"strict": true,
 		"exactOptionalPropertyTypes": false,
 		"useUnknownInCatchVariables": false,
 		"noUnusedLocals": true,
-		"noUnusedParameters": true,
-		"newLine": "lf",
-		"noEmit": true
+		"noUnusedParameters": true
 	},
-	"include": ["**/*.ts", "**/*.js"],
 	"exclude": ["node_modules/**"]
 }

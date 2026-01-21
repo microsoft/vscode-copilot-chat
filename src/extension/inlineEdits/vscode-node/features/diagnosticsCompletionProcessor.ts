@@ -24,7 +24,7 @@ import { ThrottledDelayer } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
-import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { autorun, derived, IObservable, runOnChange } from '../../../../util/vs/base/common/observableInternal';
 import { isEqual } from '../../../../util/vs/base/common/resources';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -37,7 +37,7 @@ import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorks
 import { toInternalPosition } from '../utils/translations';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
-import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
+import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
@@ -143,6 +143,7 @@ export type DiagnosticCompletionState = {
 	item: DiagnosticCompletionItem | undefined;
 	telemetry: IDiagnosticsCompletionTelemetry;
 	logContext: DiagnosticInlineEditRequestLogContext | undefined;
+	workInProgress?: boolean;
 };
 
 export class DiagnosticsCompletionProcessor extends Disposable {
@@ -275,7 +276,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		const cursor = toInternalPosition(selection.start);
 		const log = new DiagnosticInlineEditRequestLogContext();
 
-		const { availableDiagnostics, relevantDiagnostics } = this._getDiagnostics(workspaceDocument, cursor, log);
+		const relevantDiagnostics = this._getDiagnostics(workspaceDocument, cursor, log);
 		const diagnosticsSorted = sortDiagnosticsByDistance(workspaceDocument, relevantDiagnostics, cursor);
 
 		if (this._currentDiagnostics.isEqualAndUpdate(diagnosticsSorted)) {
@@ -284,14 +285,13 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._tracer.trace('Scheduled update for diagnostics inline completion');
 
-		await this._worker.schedule(async (token: CancellationToken) => this._runCompletionHandler(workspaceDocument, diagnosticsSorted, availableDiagnostics, cursor, log, token));
+		await this._worker.schedule(async (token: CancellationToken) => this._runCompletionHandler(workspaceDocument, diagnosticsSorted, cursor, log, token));
 	}
 
-	private _getDiagnostics(workspaceDocument: IVSCodeObservableDocument, cursor: Position, logContext: DiagnosticInlineEditRequestLogContext): { availableDiagnostics: Diagnostic[]; relevantDiagnostics: Diagnostic[] } {
+	private _getDiagnostics(workspaceDocument: IVSCodeObservableDocument, cursor: Position, logContext: DiagnosticInlineEditRequestLogContext): Diagnostic[] {
 		const availableDiagnostics = workspaceDocument.diagnostics.get().map(d => new Diagnostic(d));
-
 		if (availableDiagnostics.length === 0) {
-			return { availableDiagnostics: [], relevantDiagnostics: [] };
+			return [];
 		}
 
 		const filterDiagnosticsAndLog = (diagnostics: Diagnostic[], message: string, filterFn: (diagnostics: Diagnostic[]) => Diagnostic[]): Diagnostic[] => {
@@ -311,10 +311,10 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by recent acceptance', ds => ds.filter(diagnostic => !this._hasDiagnosticRecentlyBeenAccepted(diagnostic)));
 		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by no recent edit', ds => this._filterDiagnosticsByRecentEditNearby(ds, workspaceDocument));
 
-		return { availableDiagnostics, relevantDiagnostics };
+		return relevantDiagnostics;
 	}
 
-	private async _runCompletionHandler(workspaceDocument: IVSCodeObservableDocument, diagnosticsSorted: Diagnostic[], allDiagnostics: Diagnostic[], cursor: Position, log: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<IDiagnosticsCompletionState> {
+	private async _runCompletionHandler(workspaceDocument: IVSCodeObservableDocument, diagnosticsSorted: Diagnostic[], cursor: Position, log: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<IDiagnosticsCompletionState> {
 		const telemetryBuilder = new DiagnosticsCompletionHandlerTelemetry();
 
 		let completionItem = null;
@@ -327,20 +327,6 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._tracer.trace('Diagnostic Providers returned completion item: ' + (completionItem ? completionItem.toString() : 'null'));
 
-		// Distance to the closest diagnostic which is not supported by any provider
-		const allNoneSupportedDiagnostics = allDiagnostics.filter(diagnostic => !diagnosticsSorted.includes(diagnostic));
-		telemetryBuilder.setDistanceToUnknownDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allNoneSupportedDiagnostics, cursor));
-
-		// Distance to the closest none result diagnostic
-		const allAlternativeDiagnostics = allDiagnostics.filter(diagnostic => !completionItem || !completionItem.diagnostic.equals(diagnostic));
-		telemetryBuilder.setDistanceToAlternativeDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allAlternativeDiagnostics, cursor));
-
-		if (completionItem) {
-			const hasDiagnosticForSameRange = allAlternativeDiagnostics.some(diagnostic => completionItem.diagnostic.range.equals(diagnostic.range));
-			telemetryBuilder.setHasAlternativeDiagnosticForSameRange(hasDiagnosticForSameRange);
-		}
-
-		// Todo: this should be handled on a lower level
 		if (completionItem instanceof ImportDiagnosticCompletionItem) {
 			telemetryBuilder.setImportTelemetry(completionItem);
 		}
@@ -354,43 +340,28 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		const workspaceDocument = this._workspace.getDocument(docId);
 		if (!workspaceDocument) { return { item: undefined, telemetry: new DiagnosticsCompletionHandlerTelemetry().addDroppedReason('WorkspaceDocumentNotFound').build(), logContext: undefined }; }
 
-		if (currentState === NoResultReason.HasNotRunYet) {
+		if (currentState === undefined) {
 			return { item: undefined, telemetry: new DiagnosticsCompletionHandlerTelemetry().build(), logContext: undefined };
-		}
-		if (currentState === NoResultReason.WorkInProgress) {
-			return { item: undefined, telemetry: new DiagnosticsCompletionHandlerTelemetry().addDroppedReason(NoResultReason.WorkInProgress).build(), logContext: undefined };
 		}
 
 		const { telemetryBuilder, completionItem, logContext } = currentState;
+		const workInProgress = this._worker.workInProgress();
 		if (!completionItem) {
-			return { item: undefined, telemetry: telemetryBuilder.build(), logContext };
+			return { item: undefined, telemetry: telemetryBuilder.build(), logContext, workInProgress };
 		}
 
 		if (!this._isCompletionItemValid(completionItem, workspaceDocument, currentState.logContext, telemetryBuilder)) {
-			return { item: undefined, telemetry: telemetryBuilder.build(), logContext };
+			return { item: undefined, telemetry: telemetryBuilder.build(), logContext, workInProgress };
 		}
 
 		if (completionItem.documentId !== docId) {
-			logContext.addLog("Dropped: wrong-document");
-			return { item: undefined, telemetry: telemetryBuilder.addDroppedReason('wrong-document').build(), logContext };
+			logContext.addLog('Dropped: wrong-document');
+			return { item: undefined, telemetry: telemetryBuilder.addDroppedReason('wrong-document').build(), logContext, workInProgress };
 		}
 
-		log("following known diagnostics:\n" + this._currentDiagnostics.toString(), undefined, this._tracer);
+		log('following known diagnostics:\n' + this._currentDiagnostics.toString(), undefined, this._tracer);
 
-		return { item: completionItem, telemetry: telemetryBuilder.build(), logContext };
-	}
-
-	async getNextUpdatedState(docId: DocumentId, token: CancellationToken): Promise<DiagnosticCompletionState> {
-		const disposables = new DisposableStore();
-
-		await new Promise<void>((resolve) => {
-			disposables.add(token.onCancellationRequested(() => resolve()));
-			disposables.add(this._worker.onDidChange(() => resolve()));
-		});
-
-		disposables.dispose();
-
-		return this.getCurrentState(docId);
+		return { item: completionItem, telemetry: telemetryBuilder.build(), logContext, workInProgress };
 	}
 
 	private async _getCompletionFromDiagnostics(workspaceDocument: IVSCodeObservableDocument, diagnosticsSorted: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken, tb: DiagnosticsCompletionHandlerTelemetry): Promise<DiagnosticCompletionItem | null> {
@@ -563,11 +534,6 @@ function isEditorFromEditorGrid(editor: vscode.TextEditor): boolean {
 	return editor.viewColumn !== undefined;
 }
 
-const enum NoResultReason {
-	WorkInProgress = 'work-in-progress',
-	HasNotRunYet = 'has-not-run-yet'
-}
-
 class AsyncWorker<T extends {}> extends Disposable {
 	private readonly _taskQueue: ThrottledDelayer<void>;
 
@@ -575,18 +541,18 @@ class AsyncWorker<T extends {}> extends Disposable {
 	readonly onDidChange = this._onDidChange.event;
 
 	private _currentTokenSource: CancellationTokenSource | undefined = undefined;
-	private _activeWorkPromise: Promise<void> | undefined = undefined;
+	private _activeWorkPromise: Promise<T | undefined> | undefined = undefined;
 
 	private __currentResult: T | undefined = undefined;
 	private get _currentResult(): T | undefined {
 		return this.__currentResult;
 	}
 	private set _currentResult(value: T) {
-		if (!this._taskQueue.isTriggered() && (this.__currentResult === undefined || !this._equals(value, this.__currentResult))) {
+		const changed = this.__currentResult === undefined || !this._equals(value, this.__currentResult);
+		this.__currentResult = value;
+		if (changed) {
 			this._onDidChange.fire(value);
 		}
-
-		this.__currentResult = value;
 	}
 
 	constructor(delay: number, private readonly _equals: (a: T, b: T) => boolean) {
@@ -599,45 +565,46 @@ class AsyncWorker<T extends {}> extends Disposable {
 		const activePromise = this._doSchedule(fn);
 		this._activeWorkPromise = activePromise;
 
-		await activePromise;
+		const result = await activePromise;
 
 		if (this._activeWorkPromise === activePromise) {
 			this._activeWorkPromise = undefined;
 		}
+
+		if (result !== undefined) {
+			this._currentResult = result;
+		}
 	}
 
-	private async _doSchedule(fn: (token: CancellationToken) => Promise<T>): Promise<void> {
+	private async _doSchedule(fn: (token: CancellationToken) => Promise<T>): Promise<T | undefined> {
 		this._currentTokenSource?.dispose(true);
 		this._currentTokenSource = new CancellationTokenSource();
 		const token = this._currentTokenSource.token;
 
+		let result;
 		await this._taskQueue.trigger(async () => {
 			if (token.isCancellationRequested) {
 				return;
 			}
 
-			const result = await fn(token);
-
-			if (token.isCancellationRequested) {
-				return;
-			}
-
-			this._currentResult = result;
+			result = await fn(token);
 		});
+
+		return result;
 	}
 
 	// Get the active result if there is one currently
 	// Return undefined if there is currently work being done
-	getCurrentResult(): T | NoResultReason {
+	getCurrentResult(): T | undefined {
 		if (this._currentResult === undefined) {
-			return NoResultReason.HasNotRunYet;
-		}
-
-		if (this._activeWorkPromise !== undefined) {
-			return NoResultReason.WorkInProgress;
+			return undefined;
 		}
 
 		return this._currentResult;
+	}
+
+	workInProgress(): boolean {
+		return this._activeWorkPromise !== undefined;
 	}
 
 	override dispose(): void {

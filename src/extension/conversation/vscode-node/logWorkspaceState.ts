@@ -77,7 +77,7 @@ export class WorkspaceStateSnapshotHelper {
 	) { }
 
 	public async captureWorkspaceStateSnapshot(symbolQueries: string[]): Promise<ISerializedWorkspaceState> {
-		const workspaceFoldersFilePaths = this.workspaceService.getWorkspaceFolders().map(w => w.fsPath + "/");
+		const workspaceFoldersFilePaths = this.workspaceService.getWorkspaceFolders().map(w => w.fsPath + '/');
 		const notebookDocumentFilePaths = this.workspaceService.notebookDocuments.map(d => d.uri.fsPath);
 		const symbols = (await Promise.all(symbolQueries.map(q => this.languageService.getWorkspaceSymbols(q)))).flat();
 		const serializedSymbols = symbols.map(s => ({

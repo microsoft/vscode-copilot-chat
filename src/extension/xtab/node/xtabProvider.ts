@@ -49,17 +49,23 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces } from '../common/promptCrafting';
+import { LintErrors } from '../common/lintErrors';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
+import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
 import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
 
-const enum RetryState {
-	NotRetrying,
-	Retrying
+namespace RetryState {
+	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
+	export class Retrying { constructor(public readonly reason: 'cursorJump' | 'expandedWindow') { } }
+
+	export type t =
+		| NotRetrying
+		| Retrying;
 }
 
 interface ModelConfig extends xtabPromptOptions.PromptOptions {
@@ -72,7 +78,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	public readonly ID = XtabProvider.ID;
 
-	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
 	private static computeTokens = (s: string) => Math.floor(s.length / 4);
@@ -166,7 +171,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
-			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
+			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying.INSTANCE);
 
 			if (nextEditResult.isError() && nextEditResult.err instanceof NoNextEditReason.GotCancelled) {
 				logContext.setIsSkipped();
@@ -188,7 +193,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
-		retryState: RetryState,
+		retryState: RetryState.t,
 	): Promise<Result<void, NoNextEditReason>> {
 		return this.doGetNextEditWithSelection(
 			request,
@@ -212,7 +217,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
-		retryState: RetryState,
+		retryState: RetryState.t,
 	): Promise<Result<void, NoNextEditReason>> {
 
 		const tracer = parentTracer.sub(['XtabProvider', 'doGetNextEditWithSelection']);
@@ -246,7 +251,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, retryState, tracer, telemetryBuilder);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
 
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
@@ -270,18 +275,31 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundEditWindowLinesRange,
 			promptOptions,
 			XtabProvider.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness } }
+			{
+				includeLineNumbers: {
+					areaAroundCodeToEdit: false,
+					currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness || promptOptions.promptingStrategy === PromptingStrategy.PatchBased,
+				}
+			}
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentDocLines, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
+		const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
-		telemetryBuilder.setNLinesOfCurrentFileInPrompt(taggedCurrentDocLines.length);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(clippedTaggedCurrentDoc.lines.length);
 
-		const aggressivenessLevel = this.userInteractionMonitor.getAggressivenessLevel();
+		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
+
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness prompting strategy
+		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness) {
+			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
+			if (userHappinessScore !== undefined) {
+				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
+			}
+		}
 
 		const langCtx = await this.getAndProcessLanguageContext(
 			request,
@@ -298,16 +316,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.GotCancelled('afterLanguageContextAwait'));
 		}
 
+		const lintErrors = promptOptions.lintOptions ? new LintErrors(promptOptions.lintOptions, activeDocument.id, currentDocument, this.langDiagService) : undefined;
+
 		const promptPieces = new PromptPieces(
 			currentDocument,
 			editWindowLinesRange,
 			areaAroundEditWindowLinesRange,
 			activeDocument,
 			request.xtabEditHistory,
-			taggedCurrentDocLines,
+			clippedTaggedCurrentDoc.lines,
 			areaAroundCodeToEdit,
 			langCtx,
 			aggressivenessLevel,
+			lintErrors,
 			XtabProvider.computeTokens,
 			promptOptions
 		);
@@ -316,7 +337,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
-		const prediction = this.getPredictedOutput(editWindowLines, responseFormat);
+		const prediction = this.getPredictedOutput(activeDocument, editWindowLines, responseFormat);
 
 		const messages = constructMessages({
 			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
@@ -332,7 +353,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
 		}
 
-		await this.debounce(delaySession, tracer, telemetryBuilder);
+		await this.debounce(delaySession, retryState, tracer, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return Result.error(new NoNextEditReason.GotCancelled('afterDebounce'));
 		}
@@ -480,7 +501,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	public async streamEdits(
+	private async streamEdits(
 		request: StatelessNextEditRequest,
 		pushEdit: PushEdit,
 		endpoint: IChatEndpoint,
@@ -495,14 +516,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		opts: {
 			responseFormat: xtabPromptOptions.ResponseFormat;
 			shouldRemoveCursorTagFromResponse: boolean;
-			retryState: RetryState;
+			retryState: RetryState.t;
 		},
 		delaySession: DelaySession,
 		parentTracer: ITracer,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
-	) {
+	): Promise<Result<void, NoNextEditReason> | void> {
 		const tracer = parentTracer.sub('streamEdits');
 
 		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
@@ -614,10 +635,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			});
 		})();
 
+		const isFromCursorJump = opts.retryState instanceof RetryState.Retrying && opts.retryState.reason === 'cursorJump';
+
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
+			return XtabCustomDiffPatchResponseHandler.handleResponse(
+				pushEdit,
+				linesStream,
+				request.documentBeforeEdits,
+				editWindow,
+			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
 			const firstLine = await linesIter.next();
@@ -649,7 +679,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					new LineRange(editWindowLineRange.start + cursorOriginalLinesOffset + 1 /* 0-based to 1-based */, editWindowLineRange.start + cursorOriginalLinesOffset + 2),
 					[editWindowLines[cursorOriginalLinesOffset].slice(0, cursorLineOffset - 1) + lineWithCursorContinued.value + editWindowLines[cursorOriginalLinesOffset].slice(cursorLineOffset - 1)]
 				);
-				pushEdit(Result.ok({ edit, window: editWindow }));
+				pushEdit(Result.ok({ edit, isFromCursorJump, window: editWindow }));
 
 				const lines: string[] = [];
 				let v = await linesIter.next();
@@ -668,6 +698,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 						new LineRange(line, line),
 						lines
 					),
+					isFromCursorJump,
 					window: editWindow
 				}));
 
@@ -764,7 +795,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							}
 						}
 
-						pushEdit(Result.ok({ edit: singleLineEdit, window: editWindow }));
+						pushEdit(Result.ok({ edit: singleLineEdit, isFromCursorJump, window: editWindow }));
 						i++;
 					}
 				}
@@ -799,18 +830,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
-		retryState: RetryState,
-	) {
-		const allowRetryWithExpandedWindow = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService);
-
-		// if allowed to retry and not retrying already, flip the retry state and try again
-		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying && request.expandedEditWindowNLines === undefined) {
-			this.doGetNextEdit(request, pushEdit, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
-			return;
-		}
-
+		retryState: RetryState.t,
+	): Promise<void> {
 		const nextCursorLinePrediction = this.nextCursorPredictor.determineEnablement();
-		if (nextCursorLinePrediction !== undefined && retryState === RetryState.NotRetrying) {
+		if (nextCursorLinePrediction !== undefined && retryState instanceof RetryState.NotRetrying) {
 			const nextCursorLineR = await this.nextCursorPredictor.predictNextCursorPosition(promptPieces, tracer);
 			if (cancellationToken.isCancellationRequested) {
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
@@ -844,8 +867,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 							pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow, nextCursorPosition)));
 							return;
 						}
-						case NextCursorLinePrediction.OnlyWithEdit:
-						case NextCursorLinePrediction.LabelOnlyWithEdit: {
+						case NextCursorLinePrediction.OnlyWithEdit: {
 							this.doGetNextEditWithSelection(
 								request,
 								new Range(nextCursorLineOneBased, nextCursorColumn, nextCursorLineOneBased, nextCursorColumn),
@@ -855,7 +877,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 								logContext,
 								cancellationToken,
 								telemetryBuilder,
-								RetryState.Retrying,
+								new RetryState.Retrying('cursorJump'),
 							);
 							return;
 						}
@@ -879,7 +901,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, retryState: RetryState, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
+	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		const currentDocLines = currentDocument.lines;
 		const cursorLineOffset = currentDocument.cursorLineOffset;
 
@@ -920,10 +942,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				tracer.trace(`Using default nLinesBelow: ${N_LINES_BELOW}`);
 				nLinesBelow = N_LINES_BELOW; // default
 			}
-		}
-
-		if (retryState === RetryState.Retrying) {
-			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
 		}
 
 		let codeToEditStart = Math.max(0, cursorLineOffset - nLinesAbove);
@@ -976,10 +994,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
-			return {
+			const defaultOptions = {
 				modelName: undefined,
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
+			const defaultModelConfig = this.modelService.defaultModelConfiguration();
+			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig = {
@@ -997,6 +1017,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
 				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeViewedFiles, this.expService),
+				includeLineNumbers: false, // Line numbers are only used for next cursor prediction
 			},
 			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
@@ -1011,6 +1032,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
 				useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffUseRelativePaths, this.expService),
 			},
+			lintOptions: undefined,
 			includePostScript: true,
 		};
 
@@ -1031,6 +1053,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...modelConfig.currentFile,
 				includeTags: overridingConfig.includeTagsInCurrentFile,
 			},
+			lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
 		};
 	}
 
@@ -1041,6 +1064,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.Codexv21NesUnified:
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
+			case xtabPromptOptions.PromptingStrategy.PatchBased:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;
@@ -1078,29 +1102,37 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return createProxyXtabEndpoint(this.instaService, configuredModelName);
 	}
 
-	private getPredictedOutput(editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
+	private getPredictedOutput(doc: StatelessNextEditDocument, editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
 		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
 			? {
 				type: 'content',
-				content: XtabProvider.getPredictionContents(editWindowLines, responseFormat)
+				content: this.getPredictionContents(doc, editWindowLines, responseFormat)
 			}
 			: undefined;
 	}
 
-	private static getPredictionContents(editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
+	private getPredictionContents(doc: StatelessNextEditDocument, editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
 		if (responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			return editWindowLines.join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			return ['```', ...editWindowLines, '```'].join('\n');
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
+			const workspacePath = doc.workspaceRoot?.path;
+			const workspaceRelativeDocPath = toUniquePath(doc.id, workspacePath);
+			return `${workspaceRelativeDocPath}:`;
 		} else {
 			assertNever(responseFormat);
 		}
 	}
 
-	private async debounce(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState.t, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
+			return;
+		}
+		if (retryState instanceof RetryState.Retrying) {
+			tracer.trace('Skipping debounce on retry');
 			return;
 		}
 		const debounceTime = delaySession.getDebounceTime();

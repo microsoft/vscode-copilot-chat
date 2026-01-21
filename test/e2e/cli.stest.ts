@@ -6,9 +6,11 @@
 import { SessionOptions } from '@github/copilot/sdk';
 import assert from 'assert';
 import * as fs from 'fs/promises';
+import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
+import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
 import { CopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
@@ -18,6 +20,7 @@ import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../src/extension
 import { PermissionRequest } from '../../src/extension/agents/copilotcli/node/permissionHelpers';
 import { OpenAIAdapterFactoryForSTests } from '../../src/extension/agents/node/adapters/openaiAdapterForSTests';
 import { ILanguageModelServer, ILanguageModelServerConfig, LanguageModelServer } from '../../src/extension/agents/node/langModelServer';
+import { ChatSummarizerProvider } from '../../src/extension/prompt/node/summarizer';
 import { MockChatResponseStream, TestChatRequest } from '../../src/extension/test/node/testHelpers';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
@@ -50,6 +53,21 @@ function restoreEnvVariables() {
 	}
 }
 
+let testCounter = 0;
+function trackEnvVariablesBeforeTests() {
+	testCounter++;
+}
+
+/**
+ * Tests run in parallel, so only restore env variables after all tests have completed.
+ */
+function restoreEnvVariablesAfterTests() {
+	testCounter--;
+	if (testCounter === 0) {
+		restoreEnvVariables();
+	}
+}
+
 function registerChatServices(testingServiceCollection: TestingServiceCollection) {
 	const ITestSessionOptionsProvider = createServiceIdentifier<TestSessionOptionsProvider>('ITestSessionOptionsProvider');
 	class TestSessionOptionsProvider {
@@ -71,8 +89,8 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 
 			const url = `http://localhost:${serverConfig.port}`;
 			const ghToken = serverConfig.nonce;
-			process.env.COPILOT_ENABLE_ALT_PROVIDERS = "true";
-			process.env.COPILOT_AGENT_MODEL = "sweagent-capi:gpt-5";
+			process.env.COPILOT_ENABLE_ALT_PROVIDERS = 'true';
+			process.env.COPILOT_AGENT_MODEL = 'sweagent-capi:gpt-5';
 			process.env.GH_TOKEN = ghToken;
 			process.env.COPILOT_API_URL = url;
 			process.env.GITHUB_COPILOT_API_TOKEN = ghToken;
@@ -100,7 +118,6 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			mutableOptions.disableHttpLogging = true;
 			return options;
 		}
 	}
@@ -128,6 +145,41 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			this.adapterFactories.set('/chat/completions', oaiAdapterFactory);
 			requestHooks.forEach(requestHook => oaiAdapterFactory.addHooks(requestHook));
 			responseHooks.forEach(responseHook => oaiAdapterFactory.addHooks(undefined, responseHook));
+			this.requestHandlers.set('/graphql', { method: 'POST', handler: this.graphqlHandler.bind(this) });
+			this.requestHandlers.set('/models', { method: 'GET', handler: this.modelsHandler.bind(this) });
+		}
+
+		private async graphqlHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			const data = {
+				viewer: {
+					login: '',
+					copilotEndpoints: {
+						api: `http://localhost:${this.config.port}`
+					}
+				}
+			};
+			res.end(JSON.stringify({ data }));
+		}
+		private async modelsHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json', 'x-github-request-id': 'TESTREQUESTID1234' });
+			const endpoints = await this.endpointProvider.getAllChatEndpoints();
+			const data = endpoints.map(e => {
+				return {
+					id: e.model,
+					name: e.model,
+					capabilities: {
+						supports: {
+							vision: e.supportsVision,
+						},
+						limits: {
+							max_prompt_tokens: e.modelMaxPromptTokens,
+							max_context_window_tokens: e.maxOutputTokens,
+						}
+					}
+				};
+			});
+			res.end(JSON.stringify({ data }));
 		}
 	}
 
@@ -144,6 +196,10 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 		}
 	}
 
+	let accessor = testingServiceCollection.clone().createTestingAccessor();
+	let instaService = accessor.get(IInstantiationService);
+	const summarizer = instaService.createInstance(ChatSummarizerProvider);
+	const delegatingSummarizerProvider = instaService.createInstance(ChatDelegationSummaryService, summarizer);
 	testingServiceCollection.define(ICopilotCLISessionService, new SyncDescriptor(TestCopilotCLISessionService));
 	testingServiceCollection.define(ITestSessionOptionsProvider, new SyncDescriptor(TestSessionOptionsProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(TestLanguageModelServer));
@@ -152,13 +208,14 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
 
-	const accessor = testingServiceCollection.createTestingAccessor();
+	accessor = testingServiceCollection.createTestingAccessor();
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);
 	const sdk = accessor.get(ICopilotCLISDK);
-	const instaService = accessor.get(IInstantiationService);
+	instaService = accessor.get(IInstantiationService);
 	const imageSupport = instaService.createInstance(CopilotCLIImageSupport);
 	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver, imageSupport);
 
@@ -269,16 +326,17 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 const vscCopilotRoot = path.join(__dirname, '..');
 // NOTE: Ensure all files/folders/workingDirectories are under test/scenarios/test-cli for path replacements to work correctly.
 const sourcePath = path.join(__dirname, '..', 'test', 'scenarios', 'test-cli');
-
+let tmpDirCounter = 0;
 function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: URI) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
 	return async (testingServiceCollection: TestingServiceCollection) => {
+		trackEnvVariablesBeforeTests();
 		const disposables = new DisposableStore();
 		// Temp folder can be `/var/folders/....` in our code we use `realpath` to resolve any symlinks.
 		// That results in these temp folders being resolved as `/private/var/folders/...` on macOS.
-		const scenariosPath = path.join(tmpdir(), 'vscode-copilot-chat', 'test-cli');
+		const scenariosPath = path.join(tmpdir() + tmpDirCounter++, 'vscode-copilot-chat', 'test-cli');
 		await fs.rm(scenariosPath, { recursive: true, force: true }).catch(() => { /* Ignore */ });
 		await fs.mkdir(scenariosPath, { recursive: true });
-		await fs.cp(sourcePath, scenariosPath, { recursive: true });
+		await fs.cp(sourcePath, scenariosPath, { recursive: true, force: true, errorOnExist: false });
 		try {
 			const services = registerChatServices(testingServiceCollection);
 			const stream = new MockChatResponseStream();
@@ -286,7 +344,7 @@ function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; 
 			await cb(services, await fs.realpath(scenariosPath), stream, disposables);
 		} finally {
 			await fs.rm(scenariosPath, { recursive: true }).catch(() => { /* Ignore */ });
-			restoreEnvVariables();
+			restoreEnvVariablesAfterTests();
 			disposables.dispose();
 		}
 	};
@@ -614,24 +672,24 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 		})
 	);
 
-	(platform() === 'win32' ? stest.skip : stest)({ description: 'can run terminal commands' },
+	stest({ description: 'can run terminal commands' },
 		testRunner(async ({ sessionService, promptResolver, init }, scenariosPath, stream, disposables) => {
 			const workingDirectory = URI.file(path.join(scenariosPath, 'wkspc1'));
 			await init(workingDirectory);
 
+			const command = platform() === 'win32' ? 'Get-Location' : 'pwd';
 			const { prompt, attachments } = await resolvePromptWithFileReferences(
-				`Use terminal commands to determine my current directory`,
+				`Use terminal command '${command}' to determine my current directory`,
 				[],
 				promptResolver
 			);
 			const session = await sessionService.createSession({ workingDirectory }, CancellationToken.None);
 			disposables.add(session);
 			disposables.add(session.object.attachStream(stream));
-
 			disposables.add(session.object.attachPermissionHandler(async (permission: PermissionRequest) => {
 				if (permission.kind === 'read') {
 					return true;
-				} else if (permission.kind === 'shell' && permission.fullCommandText === 'pwd') {
+				} else if (permission.kind === 'shell' && permission.fullCommandText.toLowerCase().includes(command.toLowerCase())) {
 					return true;
 				} else {
 					return false;
@@ -640,6 +698,7 @@ ssuite.skip({ title: '@cli', location: 'external' }, async (_) => {
 
 			await session.object.handleRequest('', prompt, attachments, undefined, CancellationToken.None);
 
+			assertNoErrorsInStream(stream);
 			assert.strictEqual(session.object.status, ChatSessionStatus.Completed);
 			assertStreamContains(stream, 'wkspc1');
 		})
@@ -685,5 +744,5 @@ function createDiagnosticReference(file: string, diag: Diagnostic[]): ChatPrompt
 
 
 function resolvePromptWithFileReferences(prompt: string, filesOrReferences: (string | ChatPromptReference)[], promptResolver: CopilotCLIPromptResolver): Promise<{ prompt: string; attachments: any[] }> {
-	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, CancellationToken.None);
+	return promptResolver.resolvePrompt(createWithRequestWithFileReference(prompt, filesOrReferences), undefined, [], false, undefined, CancellationToken.None);
 }

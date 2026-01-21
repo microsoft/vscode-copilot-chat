@@ -58,7 +58,7 @@ class TelemetrySender {
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
 				"canRename": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether NES rename can be performed" },
 				"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out" },
-				"timeTaken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time taken to prepare NES rename in ms" }
+				"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to prepare NES rename in ms", "isMeasurement": true  }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent(

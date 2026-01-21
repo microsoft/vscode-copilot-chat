@@ -5,16 +5,18 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { match } from '../../../util/vs/base/common/glob';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
-import { isEqualOrParent, joinPath, dirname as uriDirname } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
+import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
 import { CodeGenerationImportInstruction, CodeGenerationTextInstruction, Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { INativeEnvService } from '../../env/common/envService';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
@@ -46,6 +48,11 @@ export interface IInstruction {
 
 export const ICustomInstructionsService = createServiceIdentifier<ICustomInstructionsService>('ICustomInstructionsService');
 
+export interface IExtensionPromptFile {
+	uri: URI;
+	type: 'instructions' | 'prompt' | 'agent' | 'skill';
+}
+
 export interface ICustomInstructionsService {
 	readonly _serviceBrand: undefined;
 	fetchInstructionsFromSetting(configKey: Config<CodeGenerationInstruction[]>): Promise<ICustomInstructions[]>;
@@ -53,8 +60,21 @@ export interface ICustomInstructionsService {
 
 	getAgentInstructions(): Promise<URI[]>;
 
-	isExternalInstructionsFile(uri: URI): boolean;
+	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
+	isSkillFile(uri: URI): boolean;
+	isSkillMdFile(uri: URI): boolean;
+	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+
+	/**
+	 * Refreshes the cached extension prompt files by querying VS Code's extension prompt file provider.
+	 * The cache is normally initialized lazily on first use in {@link isExternalInstructionsFile}, so
+	 * callers only need to invoke this explicitly when they require the latest extension state before
+	 * that first lookup or want to force a manual refresh of the cached prompt file list.
+	 */
+	refreshExtensionPromptFiles(): Promise<void>;
+	/** Gets skill info for extension-contributed skill files */
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -76,8 +96,9 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
 const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 
-const SKILL_FOLDER = '.claude/skills';
-const USE_CLAUDE_SKILLS_SETTING = 'chat.useClaudeSkills';
+const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
+const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
+const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
 
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
@@ -88,7 +109,10 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 
 	readonly _matchInstructionLocationsFromConfig: IObservable<(uri: URI) => boolean>;
 	readonly _matchInstructionLocationsFromExtensions: IObservable<(uri: URI) => boolean>;
-	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => boolean>;
+	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => { skillName: string; skillFolderUri: URI } | undefined>;
+
+	private _extensionPromptFilesCache: IExtensionPromptFile[] | undefined;
+	private readonly _onDidChangeExtensionPromptFilesCache = this._register(new Emitter<void>());
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -98,6 +122,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@ILogService private readonly logService: ILogService,
 		@IExtensionsService private readonly extensionService: IExtensionsService,
+		@IRunCommandExecutionService private readonly runCommandExecutionService: IRunCommandExecutionService,
 	) {
 		super();
 
@@ -145,7 +170,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					if (Array.isArray(chatInstructions)) {
 						for (const contribution of chatInstructions) {
 							if (contribution.path) {
-								const folderUri = uriDirname(joinPath(extension.extensionUri, contribution.path));
+								const folderUri = extUriBiasedIgnorePathCase.dirname(Uri.joinPath(extension.extensionUri, contribution.path));
 								locations.add(folderUri);
 							}
 						}
@@ -153,7 +178,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 				}
 				return ((uri: URI) => {
 					for (const location of locations) {
-						if (isEqualOrParent(uri, location)) {
+						if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, location)) {
 							return true;
 						}
 					}
@@ -163,19 +188,49 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		);
 
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
-			(handleChange) => this._register(configurationService.onDidChangeConfiguration(e => {
-				if (e.affectsConfiguration(USE_CLAUDE_SKILLS_SETTING)) {
-					handleChange(e);
-				}
-			})),
+			(handleChange) => {
+				const configurationDisposable = configurationService.onDidChangeConfiguration(e => {
+					if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
+						handleChange(e);
+					}
+				});
+				const workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(handleChange);
+				const cacheDisposable = this._onDidChangeExtensionPromptFilesCache.event(handleChange);
+				return {
+					dispose: () => {
+						configurationDisposable.dispose();
+						workspaceDisposable.dispose();
+						cacheDisposable.dispose();
+					}
+				};
+			},
 			() => {
-				if (this.configurationService.getNonExtensionConfig<boolean>(USE_CLAUDE_SKILLS_SETTING)) {
-					const skillFolderUri = joinPath(this.envService.userHome, SKILL_FOLDER);
+				if (this.configurationService.getNonExtensionConfig<boolean>(USE_AGENT_SKILLS_SETTING)) {
+					const personalSkillFolderUris = PERSONAL_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(this.envService.userHome, folder));
+					const workspaceSkillFolderUris = this.workspaceService.getWorkspaceFolders().flatMap(workspaceFolder =>
+						WORKSPACE_SKILL_FOLDERS.map(folder => extUriBiasedIgnorePathCase.joinPath(workspaceFolder, folder))
+					);
+					// List of **/skills folder URIs
+					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
 					return ((uri: URI) => {
-						return isEqualOrParent(uri, skillFolderUri);
+						// Check workspace and personal skill folders
+						for (const topLevelSkillFolderUri of topLevelSkillsFolderUris) {
+							if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, topLevelSkillFolderUri)) {
+								// Get the path segments relative to the skill folder
+								const relativePath = extUriBiasedIgnorePathCase.relativePath(topLevelSkillFolderUri, uri);
+								if (relativePath) {
+									// The skill directory is the first path segment under the skill folder
+									const skillName = relativePath.split('/')[0];
+									const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(topLevelSkillFolderUri, skillName);
+									return { skillName, skillFolderUri };
+								}
+							}
+						}
+						// Check extension-contributed skills
+						return this.getExtensionSkillInfo(uri);
 					});
 				}
-				return (() => false);
+				return (() => undefined);
 			}
 		);
 	}
@@ -189,7 +244,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		if (this.configurationService.getConfig(ConfigKey.UseInstructionFiles)) {
 			for (const folder of this.workspaceService.getWorkspaceFolders()) {
 				try {
-					const uri = joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
+					const uri = extUriBiasedIgnorePathCase.joinPath(folder, COPILOT_INSTRUCTIONS_PATH);
 					if ((await this.fileSystemService.stat(uri)).type === FileType.File) {
 						result.push(uri);
 					}
@@ -273,17 +328,95 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		}
 	}
 
-	public isExternalInstructionsFile(uri: URI): boolean {
+	public async refreshExtensionPromptFiles(): Promise<void> {
+		try {
+			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as IExtensionPromptFile[] | undefined;
+			this._extensionPromptFilesCache = extensionPromptFiles ?? [];
+		} catch (e) {
+			this.logService.warn(`Error fetching extension prompt files: ${e}`);
+			this._extensionPromptFilesCache = [];
+		}
+		this._onDidChangeExtensionPromptFilesCache.fire();
+	}
+
+	private isExtensionPromptFile(uri: URI): boolean {
+		if (!this._extensionPromptFilesCache) {
+			return false;
+		}
+		return this._extensionPromptFilesCache.some(file => {
+			if (file.type === 'skill') {
+				// For skills, the URI points to SKILL.md - allow everything under the parent folder
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+				return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
+			}
+			return extUriBiasedIgnorePathCase.isEqual(file.uri, uri);
+		});
+	}
+
+	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+		if (!this._extensionPromptFilesCache) {
+			return undefined;
+		}
+		for (const file of this._extensionPromptFilesCache) {
+			if (file.type === 'skill') {
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri)) {
+					const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
+					return { skillName, skillFolderUri };
+				}
+			}
+		}
+		return undefined;
+	}
+
+	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
 		}
-		return this._matchInstructionLocationsFromConfig.get()(uri)
+		if (this._matchInstructionLocationsFromConfig.get()(uri)
 			|| this._matchInstructionLocationsFromExtensions.get()(uri)
-			|| this._matchInstructionLocationsFromSkills.get()(uri);
+			|| this._matchInstructionLocationsFromSkills.get()(uri)) {
+			return true;
+		}
+
+		// Check cached extension-contributed prompt files
+		if (this._extensionPromptFilesCache === undefined) {
+			// Cache not initialized yet, fetch it now
+			await this.refreshExtensionPromptFiles();
+		}
+		return this.isExtensionPromptFile(uri);
 	}
 
 	public isExternalInstructionsFolder(uri: URI): boolean {
 		return this._matchInstructionLocationsFromExtensions.get()(uri)
-			|| this._matchInstructionLocationsFromSkills.get()(uri);
+			|| this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
+	}
+
+	public isSkillFile(uri: URI): boolean {
+		return this._matchInstructionLocationsFromSkills.get()(uri) !== undefined;
+	}
+
+	public isSkillMdFile(uri: URI): boolean {
+		return this.isSkillFile(uri) && extUriBiasedIgnorePathCase.basename(uri).toLowerCase() === 'skill.md';
+	}
+
+	public getSkillDirectory(uri: URI): URI | undefined {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		if (!skillInfo) {
+			return undefined;
+		}
+		return skillInfo.skillFolderUri;
+	}
+
+	public getSkillName(uri: URI): string | undefined {
+		const skillInfo = this._matchInstructionLocationsFromSkills.get()(uri);
+		if (!skillInfo) {
+			return undefined;
+		}
+		return skillInfo.skillName;
+	}
+
+	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
 }

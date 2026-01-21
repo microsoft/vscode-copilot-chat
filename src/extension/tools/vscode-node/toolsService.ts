@@ -27,11 +27,11 @@ export class ToolsService extends BaseToolsService {
 	} = { input: [], output: [] };
 
 	get tools(): ReadonlyArray<vscode.LanguageModelToolInformation> {
-		if (arraysEqual(this._contributedToolCache.input, vscode.lm.tools)) {
+		const tools = vscode.lm.tools;
+		if (arraysEqual(this._contributedToolCache.input, tools)) {
 			return this._contributedToolCache.output;
 		}
-
-		const input = [...vscode.lm.tools];
+		const input = [...tools];
 		const contributedTools = [...input]
 			.sort((a, b) => {
 				// Sort builtin tools to the top
@@ -98,9 +98,9 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
-		const toolMap = new Map(this.tools.map(t => [t.name, t]));
-
-		return this.tools
+		const tools = this.tools;
+		const toolMap = new Map(tools.map(t => [t.name, t]));
+		return tools
 			.map(tool => {
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);

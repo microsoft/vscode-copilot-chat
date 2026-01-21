@@ -16,7 +16,7 @@ interface UserConfigProperties {
 	sku?: string;
 }
 
-function propertiesFromCopilotToken(copilotToken: Omit<CopilotToken, "token">): UserConfigProperties | undefined {
+function propertiesFromCopilotToken(copilotToken: Omit<CopilotToken, 'token'>): UserConfigProperties | undefined {
 	const trackingId = copilotToken.getTokenValue('tid');
 	const organizationsList = copilotToken.organizationList;
 	const enterpriseList = copilotToken.enterpriseList;
@@ -68,7 +68,7 @@ export class TelemetryUserConfig extends Disposable implements ICompletionsTelem
 		return this.#properties.copilot_trackingId;
 	}
 
-	updateFromToken(copilotToken: Omit<CopilotToken, "token">) {
+	updateFromToken(copilotToken: Omit<CopilotToken, 'token'>) {
 		const properties = propertiesFromCopilotToken(copilotToken);
 		if (properties) {
 			this.#properties = properties;

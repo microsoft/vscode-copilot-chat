@@ -9,7 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatR
 import { isLocation } from '../../../../util/common/types';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, Range, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -137,11 +137,32 @@ type ThinkTool = {
 	};
 };
 
+type UpdateTodoTool = {
+	toolName: 'update_todo';
+	arguments: {
+		todos: string;
+	};
+};
+
 type ReportProgressTool = {
 	toolName: 'report_progress';
 	arguments: {
 		commitMessage: string;
 		prDescription: string;
+	};
+};
+
+type WebFetchTool = {
+	toolName: 'web_fetch';
+	arguments: {
+		url: string;
+	};
+};
+
+type WebSearchTool = {
+	toolName: 'web_search';
+	arguments: {
+		query: string;
 	};
 };
 
@@ -199,7 +220,7 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	GrepTool | GLobTool |
 	ReportIntentTool | ThinkTool | ReportProgressTool |
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
-	ReplyToCommentTool | CodeReviewTool;
+	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
 
 export type ToolCall = ToolInfo & { toolCallId: string };
 export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
@@ -260,7 +281,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 		const [fullMatch, uri, title, description, author, linkTag] = match;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
-			.replace(/&apos;/g, "'")
+			.replace(/&apos;/g, `'`)
 			.replace(/&quot;/g, '"')
 			.replace(/&gt;/g, '>')
 			.replace(/&lt;/g, '<')
@@ -292,8 +313,37 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 
 	let details: { requestId: string; toolIdEditMap: Record<string, string> } | undefined;
 	let isFirstUserMessage = true;
+	const currentAssistantMessage: { chunks: string[] } = { chunks: [] };
+	const processedMessages = new Set<string>();
+
+	function processAssistantMessage(content: string) {
+		// Extract PR metadata if present
+		const { cleanedContent, prPart } = extractPRMetadata(content);
+		// Add PR part first if it exists
+		if (prPart) {
+			currentResponseParts.push(prPart);
+		}
+		if (cleanedContent) {
+			currentResponseParts.push(
+				new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
+			);
+		}
+	}
+
+	function flushPendingAssistantMessage() {
+		if (currentAssistantMessage.chunks.length > 0) {
+			const content = currentAssistantMessage.chunks.join('');
+			currentAssistantMessage.chunks = [];
+			processAssistantMessage(content);
+		}
+	}
+
 	for (const event of events) {
 		details = getVSCodeRequestId(event.id) ?? details;
+		if (event.type !== 'assistant.message') {
+			flushPendingAssistantMessage();
+		}
+
 		switch (event.type) {
 			case 'user.message': {
 				// Flush any pending response parts before adding user message
@@ -304,7 +354,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				// TODO @DonJayamanne Temporary work around until we get the zod types.
 				type Attachment = {
 					path: string;
-					type: "file" | "directory";
+					type: 'file' | 'directory';
 					displayName: string;
 				};
 				// Filter out vscode instruction files from references when building session history
@@ -353,21 +403,16 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
+			case 'assistant.message_delta': {
+				if (typeof event.data.deltaContent === 'string') {
+					processedMessages.add(event.data.messageId);
+					currentAssistantMessage.chunks.push(event.data.deltaContent);
+				}
+				break;
+			}
 			case 'assistant.message': {
-				if (event.data.content) {
-					// Extract PR metadata if present
-					const { cleanedContent, prPart } = extractPRMetadata(event.data.content);
-
-					// Add PR part first if it exists
-					if (prPart) {
-						currentResponseParts.push(prPart);
-					}
-
-					if (cleanedContent) {
-						currentResponseParts.push(
-							new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
-						);
-					}
+				if (event.data.content && !processedMessages.has(event.data.messageId)) {
+					processAssistantMessage(event.data.content);
 				}
 				break;
 			}
@@ -384,12 +429,14 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
 					if (isCopilotCliEditToolCall(toolCall) && editId && editedUris.length > 0) {
+						responsePart.presentation = 'hidden';
+						currentResponseParts.push(responsePart);
 						for (const uri of editedUris) {
 							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseCodeblockUriPart(uri, true, editId));
-							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, []));
 							currentResponseParts.push(new ChatResponseTextEditPart(uri, true));
+							currentResponseParts.push(new ChatResponseMarkdownPart('\n````\n'));
 						}
 					} else {
 						currentResponseParts.push(responsePart);
@@ -400,6 +447,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 		}
 	}
 
+	flushPendingAssistantMessage();
 
 	if (currentResponseParts.length > 0) {
 		turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
@@ -507,6 +555,9 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
 	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
+	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
+	'web_search': [l10n.t('Web Search'), emptyInvocation],
+	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
 };
 
 
@@ -519,14 +570,16 @@ function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCa
 }
 
 
+
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {
 	const args = toolCall.arguments;
 
 	if (!args.path) {
 		return;
 	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
-		const display = formatUriForFileWidget(Uri.file(args.path));
 		const [start, end] = args.view_range;
+		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
+		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
@@ -635,13 +688,13 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	} else if (toolCall.toolName === 'semantic_code_search') {
 		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
 	} else if (toolCall.toolName === 'search_bash') {
-		invocation.invocationMessage = `Command: ${toolCall.arguments.command}`;
+		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
-		const searchInPath = toolCall.arguments.path ? ` in ${toolCall.arguments.path}` : '';
-		invocation.invocationMessage = `Pattern: ${toolCall.arguments.pattern}${searchInPath}`;
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	}
 }
 

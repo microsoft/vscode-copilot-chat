@@ -24,6 +24,7 @@ export interface INextEditResult {
 		showRangePreference?: ShowNextEditPreference;
 		displayLocation?: INextEditDisplayLocation;
 		targetDocumentId?: DocumentId;
+		isFromCursorJump?: boolean;
 	} | undefined;
 }
 
@@ -38,6 +39,7 @@ export class NextEditResult implements INextEditResult {
 			displayLocation?: INextEditDisplayLocation;
 			targetDocumentId?: DocumentId;
 			action?: Command;
+			isFromCursorJump: boolean;
 			jumpToPosition?: Position;
 		} | undefined,
 	) { }

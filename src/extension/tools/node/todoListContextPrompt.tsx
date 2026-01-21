@@ -8,7 +8,7 @@ import { ITodoListContextProvider } from '../../prompt/node/todoListContextProvi
 import { Tag } from '../../prompts/node/base/tag';
 
 export interface TodoListContextPromptProps extends BasePromptElementProps {
-	sessionId?: string;
+	sessionResource?: string;
 }
 
 /**
@@ -23,16 +23,16 @@ export class TodoListContextPrompt extends PromptElement<TodoListContextPromptPr
 	}
 
 	async render() {
-		const sessionId = this.props.sessionId;
-		if (!sessionId) {
+		const sessionResource = this.props.sessionResource;
+		if (!sessionResource) {
 			return null;
 		}
-		const todoContext = await this.todoListContextProvider.getCurrentTodoContext(sessionId);
+		const todoContext = await this.todoListContextProvider.getCurrentTodoContext(sessionResource);
 		if (!todoContext) {
 			return null;
 		}
 		return (
-			<Tag name="todoList">
+			<Tag name='todoList'>
 				{todoContext}
 			</Tag>
 		);

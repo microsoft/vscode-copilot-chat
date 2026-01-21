@@ -14,7 +14,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { PythonTerminalService } from './pythonTerminalService';
+import { PythonTerminalService } from './copilotCLIPythonTerminalService';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
@@ -299,7 +299,7 @@ async function getCommonTerminalOptions(name: string, authenticationService: IAu
 		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
-	const session = await authenticationService.getAnyGitHubSession();
+	const session = await authenticationService.getGitHubSession('any', { silent: true });
 	if (session) {
 		options.env = {
 			// Old Token name for GitHub integrations (deprecate once the new variable has been adopted widely)

@@ -104,7 +104,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.agent, PromptHeaderAttributes.model, PromptHeaderAttributes.tools].join(', '),
 					},
 					{
@@ -116,7 +116,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: toolNamesList
 					},
 					{
@@ -165,7 +165,7 @@ export class PromptFileContextContribution extends Disposable {
 				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
+						name: 'This is a custom agent file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other attributes',
 						value: [PromptHeaderAttributes.name, PromptHeaderAttributes.description, PromptHeaderAttributes.argumentHint, PromptHeaderAttributes.target, PromptHeaderAttributes.model, PromptHeaderAttributes.tools, PromptHeaderAttributes.handOffs].join(', '),
 					},
 					{
@@ -173,7 +173,7 @@ export class PromptFileContextContribution extends Disposable {
 						value: this.models.join(', '),
 					},
 					{
-						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						name: '`tools` is optional and must be an array of one or more of the following values. Do not make up any other tool names.',
 						value: `[${toolNamesList}]`,
 					},
 					{

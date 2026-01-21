@@ -5,7 +5,7 @@
 
 import * as eslint from 'eslint';
 
-export = new class NoTestOnly implements eslint.Rule.RuleModule {
+export default new class NoTestOnly implements eslint.Rule.RuleModule {
 
 	create(context: eslint.Rule.RuleContext): eslint.Rule.RuleListener {
 		return {

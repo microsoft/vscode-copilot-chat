@@ -29,7 +29,7 @@ export class CodeBlockFormattingRules extends PromptElement<CodeBlockFormattingR
 					</>
 				}
 				In the code block, use a line comment with '{EXISTING_CODE_MARKER}' to indicate code that is already present in the file.<br />
-				<ExampleCodeBlock languageId="languageId" examplePath={'/path/to/file'} includeFilepath={true} minNumberOfBackticks={4}
+				<ExampleCodeBlock languageId='languageId' examplePath={'/path/to/file'} includeFilepath={true} minNumberOfBackticks={4}
 					code={
 						[
 							`// ${EXISTING_CODE_MARKER}`,
