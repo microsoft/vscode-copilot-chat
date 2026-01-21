@@ -121,7 +121,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('applies model override from settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'gpt-4-turbo');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'Claude Haiku 4.5 (copilot)');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -130,7 +130,7 @@ suite('PlanAgentProvider', () => {
 		const content = getAgentContent(agents[0]);
 
 		// Should contain model override
-		assert.ok(content.includes('model: gpt-4-turbo'));
+		assert.ok(content.includes('model: Claude Haiku 4.5 (copilot)'));
 	});
 
 	test('applies both additionalTools and model settings together', async () => {
@@ -251,6 +251,43 @@ suite('PlanAgentProvider', () => {
 });
 
 suite('buildAgentMarkdown', () => {
+	test('generates expected full content for Plan agent (snapshot test)', () => {
+		// This test outputs the full generated content for easy visual review of format changes
+		const config = {
+			name: 'Plan',
+			description: 'Researches and outlines multi-step plans',
+			argumentHint: 'Outline the goal or problem to research',
+			tools: ['github/issue_read', 'agent', 'search'],
+			model: 'Claude Haiku 4.5 (copilot)',
+			handoffs: [
+				{
+					label: 'Start Implementation',
+					agent: 'agent',
+					prompt: 'Start implementation',
+					send: true
+				}
+			],
+			body: 'You are a PLANNING AGENT.'
+		};
+
+		const result = buildAgentMarkdown(config);
+
+		assert.deepStrictEqual(result,
+			`---
+name: Plan
+description: Researches and outlines multi-step plans
+argument-hint: Outline the goal or problem to research
+model: Claude Haiku 4.5 (copilot)
+tools: ['github/issue_read', 'agent', 'search']
+handoffs:
+  - label: Start Implementation
+    agent: agent
+    prompt: 'Start implementation'
+    send: true
+---
+You are a PLANNING AGENT.`);
+	});
+
 	test('generates valid YAML frontmatter with basic config', () => {
 		const config = {
 			name: 'TestAgent',
@@ -277,14 +314,14 @@ suite('buildAgentMarkdown', () => {
 			description: 'Test',
 			argumentHint: 'Test',
 			tools: [],
-			model: 'gpt-4-turbo',
+			model: 'Claude Haiku 4.5 (copilot)',
 			handoffs: [],
 			body: 'Body'
 		};
 
 		const result = buildAgentMarkdown(config);
 
-		assert.ok(result.includes('model: gpt-4-turbo'));
+		assert.ok(result.includes('model: Claude Haiku 4.5 (copilot)'));
 	});
 
 	test('omits model when not provided', () => {

@@ -208,28 +208,23 @@ export class PlanAgentProvider extends Disposable implements vscode.CustomAgentP
 		}));
 	}
 
-	async provideCustomAgents(
+	provideCustomAgents(
 		_context: vscode.CustomAgentContext,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentChatResource[]> {
-		try {
-			// Build config with settings-based customization
-			const config = this.buildCustomizedConfig();
+	): vscode.CustomAgentChatResource[] {
+		// Build config with settings-based customization
+		const config = this.buildCustomizedConfig();
 
-			// Generate .agent.md content
-			const content = buildAgentMarkdown(config);
+		// Generate .agent.md content
+		const content = buildAgentMarkdown(config);
 
-			// Return inline content - VS Code will parse the YAML frontmatter
-			return [
-				new vscode.CustomAgentChatResource({
-					id: 'github.copilot.plan',
-					content
-				})
-			];
-		} catch (error) {
-			this.logService.error('[PlanAgentProvider] Error providing agents:', error);
-			return [];
-		}
+		// Return inline content - VS Code will parse the YAML frontmatter
+		return [
+			new vscode.CustomAgentChatResource({
+				id: 'github.copilot.plan',
+				content
+			})
+		];
 	}
 
 	private buildCustomizedConfig(): PlanAgentConfig {
