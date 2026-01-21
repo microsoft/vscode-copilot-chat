@@ -122,7 +122,7 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		});
 	}
 
-	getRepository(uri?: Uri): Repository | null {
+	async getRepository(uri?: Uri): Promise<Repository | null> {
 		if (!this._gitExtensionApi) {
 			return null;
 		}
@@ -132,7 +132,19 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		}
 
 		uri = uri ?? window.activeTextEditor?.document.uri;
-		return uri ? this._gitExtensionApi.getRepository(uri) : null;
+		if (!uri) {
+			return null;
+		}
+
+		const repository = this._gitExtensionApi.getRepository(uri);
+		if (!repository) {
+			return null;
+		}
+
+		// Refresh repository state
+		await repository.status();
+
+		return repository;
 	}
 
 	private _getAttemptCount(repository: Repository, changes: string[]): number {

@@ -6,7 +6,6 @@
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { CancellationToken } from 'vscode-languageserver-protocol';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -29,7 +28,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile[] | undefined> = new Map();
 
 	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
@@ -84,10 +82,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const repository = this.gitService.activeRepository.get();
 			if (!repository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
 				return undefined;
 			}
-
-			const autoCommit = this.configurationService.getConfig(ConfigKey.Advanced.CLIAutoCommitEnabled);
 
 			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
 			const branch = `${branchPrefix}copilot-worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
@@ -95,7 +92,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			if (worktreePath && repository.headCommitHash) {
 				return {
-					autoCommit,
+					autoCommit: true,
 					branchName: branch,
 					baseCommit: repository.headCommitHash,
 					repositoryPath: repository.rootUri.fsPath,
@@ -103,6 +100,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				} satisfies ChatSessionWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
+			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Failed to create worktree for isolation.');
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
@@ -135,17 +133,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			// Worktree properties v1
 			return vscode.Uri.file(worktreeProperties.worktreePath);
 		}
-	}
-
-	getWorktreeRelativePath(sessionId: string): string | undefined {
-		const worktreePath = this.getWorktreePath(sessionId);
-		if (!worktreePath) {
-			return undefined;
-		}
-
-		// TODO@rebornix, @osortega: read the workingtree name from git extension
-		const lastIndex = worktreePath.fsPath.lastIndexOf('/');
-		return worktreePath.fsPath.substring(lastIndex + 1);
 	}
 
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
@@ -268,8 +255,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 						change.uri,
 						fileStats?.insertions ?? 0,
 						fileStats?.deletions ?? 0,
-						change.originalUri
-					));
+						change.status !== 1 /* INDEX_ADDED */
+							? change.originalUri
+							: undefined));
 				} catch (error) { }
 			}
 
@@ -293,7 +281,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				toGitUri(change.uri, worktreeProperties.branchName),
 				change.insertions,
 				change.deletions,
-				toGitUri(change.originalUri, worktreeProperties.baseCommit));
+				change.status !== 1 /* INDEX_ADDED */
+					? toGitUri(change.originalUri, worktreeProperties.baseCommit)
+					: undefined);
 		});
 
 		this._sessionWorktreeChanges.set(sessionId, changes);
@@ -308,21 +298,16 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 		const worktreePath = worktreeProperties.worktreePath;
 
-		if (!worktreeProperties.autoCommit) {
-			// Stage all changes in the worktree
-			await this.gitService.add(vscode.Uri.file(worktreePath), []);
-
-			// Delete worktree changes from cache
-			this._sessionWorktreeChanges.delete(sessionId);
-
-			return;
-		}
-
 		// Commit all changes in the worktree
-		const repository = this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
+		const repository = await this.gitCommitMessageService.getRepository(vscode.Uri.file(worktreePath));
 		if (!repository) {
 			this.logService.error(`[ChatSessionWorktreeService][handleRequestCompleted] Unable to find repository for working directory ${worktreePath}`);
 			throw new Error(`Unable to find repository for working directory ${worktreePath}`);
+		}
+
+		if (repository.state.workingTreeChanges.length === 0 && repository.state.indexChanges.length === 0 && repository.state.untrackedChanges.length === 0) {
+			this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] No changes to commit in working directory ${worktreePath}`);
+			return;
 		}
 
 		this.logService.trace(`[ChatSessionWorktreeService][handleRequestCompleted] Generating commit message for working directory ${worktreePath}. Repository state: ${JSON.stringify(repository.state)}`);

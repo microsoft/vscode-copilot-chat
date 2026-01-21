@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Endpoints } from '@octokit/types';
+import { CCAModel, RemoteAgentJobPayload } from '@vscode/copilot-api';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { decodeBase64 } from '../../../util/vs/base/common/buffer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { addPullRequestCommentGraphQLRequest, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, AssignableActor, closePullRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 /**
  * Options for controlling authentication behavior in OctoKit service methods.
@@ -118,20 +119,6 @@ export interface ErrorResponseWithStatusCode {
 	status: number;
 }
 
-export interface RemoteAgentJobPayload {
-	problem_statement: string;
-	event_type: string;
-	pull_request?: {
-		title?: string;
-		body_placeholder?: string;
-		body_suffix?: string;
-		base_ref?: string;
-		head_ref?: string;
-	};
-	run_name?: string;
-	custom_agent?: string;
-}
-
 export interface CustomAgentListItem {
 	name: string;
 	repo_owner_id: number;
@@ -220,7 +207,7 @@ export interface IOctoKitService {
 	 * Returns the list of Copilot pull requests for a given user on a specific repo.
 	 * @param authOptions - Authentication options. By default, uses silent auth and returns empty array if not authenticated.
 	 */
-	getCopilotPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
+	getOpenPullRequestsForUser(owner: string, repo: string, authOptions: AuthOptions): Promise<PullRequestSearchItem[]>;
 
 	/**
 	 * Returns the list of Copilot sessions for a given pull request.
@@ -360,6 +347,42 @@ export interface IOctoKitService {
 	 * @returns The prompt string or undefined if not available
 	 */
 	getOrgCustomInstructions(orgLogin: string, authOptions: AuthOptions): Promise<string | undefined>;
+
+	/**
+	 * Gets the list of repositories the authenticated user has access to.
+	 * This includes repositories the user owns, collaborates on, and has access to through organization membership.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @param query - Optional search query to filter repositories by name.
+	 * @returns An array of repositories with owner/name format
+	 */
+	getUserRepositories(authOptions: AuthOptions, query?: string): Promise<{ owner: string; name: string }[]>;
+
+	/**
+	 * Gets the list of repositories the authenticated user has recently committed to.
+	 * Uses the GitHub Events API to find repositories from recent PushEvent activity.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of repositories with owner/name format, ordered by most recent commit
+	 */
+	getRecentlyCommittedRepositories(authOptions: AuthOptions): Promise<{ owner: string; name: string }[]>;
+
+	/**
+	 * Gets the list of available models for the Copilot coding agent.
+	 * Returns an empty array if the user doesn't have access to the model picker
+	 * (e.g., Copilot Business or Enterprise users before rollout).
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of available models. The first model is always 'Auto' and should be the default.
+	 */
+	getCopilotAgentModels(authOptions: AuthOptions): Promise<CCAModel[]>;
+
+	/**
+	 * Gets the list of assignable actors (users/bots) for a repository.
+	 * This is used to check if partner agents like Copilot are available for assignment.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of assignable actors with their login names
+	 */
+	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;
 }
 
 /**
@@ -371,9 +394,9 @@ export interface IOctoKitService {
 export class BaseOctoKitService {
 	constructor(
 		protected readonly _capiClientService: ICAPIClientService,
-		private readonly _fetcherService: IFetcherService,
+		protected readonly _fetcherService: IFetcherService,
 		protected readonly _logService: ILogService,
-		private readonly _telemetryService: ITelemetryService
+		protected readonly _telemetryService: ITelemetryService
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
@@ -388,8 +411,8 @@ export class BaseOctoKitService {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body, '2022-11-28');
 	}
 
-	protected async getCopilotPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
-		const query = `repo:${owner}/${repo} is:open author:copilot-swe-agent[bot] involves:${user}`;
+	protected async getOpenPullRequestForUserWithToken(owner: string, repo: string, user: string, token: string) {
+		const query = `repo:${owner}/${repo} is:open involves:${user}`;
 		return makeSearchGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, query);
 	}
 
@@ -449,6 +472,89 @@ export class BaseOctoKitService {
 			return [];
 		}
 		return result.map((repo: { name: string }) => repo.name);
+	}
+
+	protected async getUserRepositoriesWithToken(token: string, query?: string): Promise<{ owner: string; name: string }[]> {
+		// If query provided, use GitHub search API
+		if (query && query.trim()) {
+			return this.searchUserRepositoriesWithToken(token, query.trim());
+		}
+
+		// Fetch the most recently updated repos with push access
+		const result = await this._makeGHAPIRequest(
+			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
+			'GET',
+			token
+		);
+
+		if (!result || !Array.isArray(result)) {
+			return [];
+		}
+
+		// Filter to repos with push access
+		const items = result
+			.filter((repo: { permissions?: { push?: boolean } }) => repo.permissions?.push)
+			.map((repo: { name: string; owner: { login: string } }) => ({
+				owner: repo.owner.login,
+				name: repo.name
+			}));
+		return items || [];
+	}
+
+	private async searchUserRepositoriesWithToken(token: string, query: string): Promise<{ owner: string; name: string }[]> {
+		// Use GitHub search API to find repos matching the query
+		// Search in repos the user has push access to
+		const searchQuery = encodeURIComponent(`${query} in:name fork:true`);
+		const result = await this._makeGHAPIRequest(
+			`search/repositories?q=${searchQuery}&sort=updated&per_page=100`,
+			'GET',
+			token
+		);
+
+		if (!result || !result.items || !Array.isArray(result.items)) {
+			return [];
+		}
+
+		// Filter to only repos with push access
+		const items = result.items
+			.filter((repo: { permissions?: { push?: boolean } }) => repo.permissions?.push)
+			.map((repo: { name: string; owner: { login: string } }) => ({
+				owner: repo.owner.login,
+				name: repo.name
+			}));
+		return items || [];
+	}
+
+	protected async getRecentlyCommittedReposWithToken(token: string): Promise<{ owner: string; name: string }[]> {
+		// First, get the authenticated user's login
+		const user = await this._makeGHAPIRequest('user', 'GET', token);
+		if (!user || !user.login) {
+			return [];
+		}
+
+		// Fetch recent events for the user (includes push events)
+		const events = await this._makeGHAPIRequest(
+			`users/${user.login}/events?per_page=100`,
+			'GET',
+			token
+		);
+
+		if (!events || !Array.isArray(events)) {
+			return [];
+		}
+
+		// Extract unique repos from PushEvent entries, preserving order (most recent first)
+		const repoSet = new Map<string, { owner: string; name: string }>();
+		for (const event of events) {
+			if (event.type === 'PushEvent' && event.repo?.name) {
+				const [owner, name] = event.repo.name.split('/');
+				if (owner && name && !repoSet.has(event.repo.name)) {
+					repoSet.set(event.repo.name, { owner, name });
+				}
+			}
+		}
+		const items = Array.from(repoSet.values());
+		return items || [];
 	}
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {

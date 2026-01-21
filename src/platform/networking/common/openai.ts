@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { OpenAI, OutputMode, Raw, toMode } from '@vscode/prompt-tsx';
+import { ChatCompletionContentPartImage } from '@vscode/prompt-tsx/dist/base/output/openaiTypes';
 import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import { rawPartAsThinkingData } from '../../endpoint/common/thinkingDataContainer';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -147,9 +148,20 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 	if (typeof out.content === 'string') {
 		out.content = out.content.trimEnd();
 	} else {
-		for (const part of out.content) {
+		for (let i = 0; i < out.content.length; i++) {
+			const part = out.content[i];
 			if (part.type === 'text') {
 				part.text = part.text.trimEnd();
+			} else if (part.type === 'image_url' && Array.isArray(message.content) && i < message.content.length) {
+				const rawPart = message.content[i] as Raw.ChatCompletionContentPart;
+				if (rawPart?.type === Raw.ChatCompletionContentPartKind.Image && rawPart.imageUrl?.mediaType) {
+					// CAPI expects `media_type` instead of `mediaType`. This is only used for CAPI and not OpenAI.
+					const { mediaType, ...rawImageUrl } = rawPart.imageUrl;
+					(part.image_url as ChatCompletionContentPartImage.ImageURL & { media_type: string }) = {
+						...rawImageUrl,
+						media_type: mediaType
+					};
+				}
 			}
 		}
 	}

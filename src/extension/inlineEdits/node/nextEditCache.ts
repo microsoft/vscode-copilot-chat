@@ -20,11 +20,16 @@ import { checkEditConsistency, EditDataWithIndex, tryRebase } from '../common/ed
 import { INesConfigs } from './nesConfigs';
 import { NextEditFetchRequest } from './nextEditProvider';
 
+export interface CachedEditOpts {
+	isFromCursorJump: boolean;
+}
+
 export interface CachedEdit {
 	docId: DocumentId;
 	documentBeforeEdit: StringText;
 	editWindow?: OffsetRange;
-	edit?: StringReplacement;
+	edit: StringReplacement | undefined;
+	isFromCursorJump: boolean;
 	edits?: StringReplacement[];
 	detailedEdits: AnnotatedStringReplacement<EditDataWithIndex>[][];
 	userEditSince?: StringEdit;
@@ -82,12 +87,12 @@ export class NextEditCache extends Disposable {
 		}).recomputeInitiallyAndOnChange(this._store);
 	}
 
-	public setKthNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, nextEdit: StringReplacement, subsequentN: number, nextEdits: StringReplacement[] | undefined, userEditSince: StringEdit | undefined, source: NextEditFetchRequest): CachedEdit | undefined {
+	public setKthNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, nextEdit: StringReplacement, subsequentN: number, nextEdits: StringReplacement[] | undefined, userEditSince: StringEdit | undefined, source: NextEditFetchRequest, opts: CachedEditOpts): CachedEdit | undefined {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return;
 		}
-		return docCache.setKthNextEdit(documentContents, editWindow, nextEdit, nextEdits, userEditSince, subsequentN, source);
+		return docCache.setKthNextEdit(documentContents, editWindow, nextEdit, nextEdits, userEditSince, subsequentN, source, opts);
 	}
 
 	public setNoNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
@@ -180,9 +185,9 @@ class DocumentEditCache {
 		this._trackedCachedEdits.length = 0;
 	}
 
-	public setKthNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, nextEdit: StringReplacement, nextEdits: StringReplacement[] | undefined, userEditSince: StringEdit | undefined, subsequentN: number, source: NextEditFetchRequest): CachedEdit {
+	public setKthNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, nextEdit: StringReplacement, nextEdits: StringReplacement[] | undefined, userEditSince: StringEdit | undefined, subsequentN: number, source: NextEditFetchRequest, opts: CachedEditOpts): CachedEdit {
 		const key = this._getKey(documentContents.value);
-		const cachedEdit: CachedEdit = { docId: this.docId, edit: nextEdit, edits: nextEdits, detailedEdits: [], userEditSince, subsequentN, source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now() };
+		const cachedEdit: CachedEdit = { docId: this.docId, edit: nextEdit, edits: nextEdits, detailedEdits: [], userEditSince, subsequentN, source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now(), isFromCursorJump: opts.isFromCursorJump };
 		if (userEditSince) {
 			if (!checkEditConsistency(cachedEdit.documentBeforeEdit.value, userEditSince, this._doc.value.get().value, this._tracer.sub('setKthNextEdit'))) {
 				cachedEdit.userEditSince = undefined;
@@ -203,7 +208,7 @@ class DocumentEditCache {
 
 	public setNoNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
 		const key = this._getKey(documentContents.value);
-		const cachedEdit: CachedEdit = { docId: this.docId, edits: [], detailedEdits: [], source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now() };
+		const cachedEdit: CachedEdit = { docId: this.docId, edit: undefined, edits: [], detailedEdits: [], source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now(), isFromCursorJump: false };
 		const existing = this._sharedCache.get(key);
 		if (existing) {
 			this.evictedCachedEdit(existing);
@@ -235,7 +240,7 @@ class DocumentEditCache {
 		return undefined;
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs) {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedEdit | undefined {
 		const tracer = this._tracer.sub('tryRebaseCacheEntry');
 		if (cachedEdit.userEditSince && !cachedEdit.rebaseFailed) {
 			const originalEdits = cachedEdit.edits || (cachedEdit.edit ? [cachedEdit.edit] : []);

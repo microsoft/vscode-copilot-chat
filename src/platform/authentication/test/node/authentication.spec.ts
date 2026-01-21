@@ -15,7 +15,7 @@ import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createPlatformServices } from '../../../test/node/services';
 import { StaticGitHubAuthenticationService } from '../../common/staticGitHubAuthenticationService';
-import { CopilotToken } from '../../common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../common/copilotToken';
 import { ICopilotTokenStore } from '../../common/copilotTokenStore';
 import { FixedCopilotTokenManager } from '../../node/copilotTokenManager';
 
@@ -75,15 +75,11 @@ suite('AuthenticationService', function () {
 	test('Emits onDidAuthenticationChange when a Copilot Token change is notified', async () => {
 		const promise = Event.toPromise(authenticationService.onDidAuthenticationChange);
 		const newToken = 'tid=new';
-		authenticationService.setCopilotToken(new CopilotToken({
-			expires_at: Date.now() + 1000,
-			refresh_in: 1000,
+		authenticationService.setCopilotToken(new CopilotToken(createTestExtendedTokenInfo({
 			token: newToken,
 			username: 'fake',
-			isVscodeTeamMember: false,
 			copilot_plan: 'unknown',
-
-		}));
+		})));
 		await promise;
 		expect(authenticationService.copilotToken?.token).toBe(newToken);
 	});

@@ -38,6 +38,10 @@ export interface FileVariableProps extends BasePromptElementProps {
 	alwaysIncludeSummary?: boolean;
 	omitReferences?: boolean;
 	description?: string;
+	/**
+	 * If true, file contents are omitted and only the file path is included.
+	 */
+	omitContents?: boolean;
 }
 
 export class FileVariable extends PromptElement<FileVariableProps, unknown> {
@@ -48,7 +52,8 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		@IFileSystemService private readonly fileService: IFileSystemService,
 		@INotebookService private readonly notebookService: INotebookService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
-		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
+		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
 		super(props);
 	}
@@ -63,6 +68,19 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		if (uri.scheme === 'untitled' && !this.workspaceService.textDocuments.some(doc => doc.uri.toString() === uri.toString())) {
 			// A previously open untitled document that isn't open anymore- opening it would open an empty text editor
 			return;
+		}
+
+		// When omitContents is true, just render the file path without reading the file contents
+		if (this.props.omitContents) {
+			const filePath = this.promptPathRepresentationService.getFilePath(uri);
+			const attrs: Record<string, string> = {};
+			if (this.props.variableName) {
+				attrs.id = this.props.variableName;
+			}
+			attrs.filePath = filePath;
+			return (
+				<Tag name='attachment' attrs={attrs} />
+			);
 		}
 
 		if (/\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(uri.path)) {

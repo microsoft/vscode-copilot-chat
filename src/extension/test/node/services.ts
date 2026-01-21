@@ -43,8 +43,13 @@ import { IGithubAvailableEmbeddingTypesService, MockGithubAvailableEmbeddingType
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IClaudeToolPermissionService } from '../../agents/claude/common/claudeToolPermissionService';
+import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
+import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
+import { MockClaudeCodeModels } from '../../agents/claude/node/test/mockClaudeCodeModels';
 import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
+import { MockClaudeToolPermissionService } from '../../agents/claude/node/test/mockClaudeToolPermissionService';
 import { ILanguageModelServer } from '../../agents/node/langModelServer';
 import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
@@ -97,6 +102,9 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(MockChatMLFetcher));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
 	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
+	testingServiceCollection.define(IClaudeToolPermissionService, new SyncDescriptor(MockClaudeToolPermissionService));
+	testingServiceCollection.define(IClaudeCodeModels, new SyncDescriptor(MockClaudeCodeModels));
+	testingServiceCollection.define(IClaudeSessionStateService, new SyncDescriptor(ClaudeSessionStateService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IProxyModelsService, new SyncDescriptor(NullProxyModelsService));
 	testingServiceCollection.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
