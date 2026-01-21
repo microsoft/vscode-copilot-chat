@@ -249,7 +249,7 @@ export const learnMoreLink = 'https://aka.ms/vscode-nes';
 
 export const clearCacheCommandId = 'github.copilot.debug.inlineEdit.clearCache';
 export const reportNotebookNESIssueCommandId = 'github.copilot.debug.inlineEdit.reportNotebookNESIssue';
-const captureExpectedStartCommandId = 'github.copilot.nes.captureExpected.start';
-const captureExpectedConfirmCommandId = 'github.copilot.nes.captureExpected.confirm';
-const captureExpectedAbortCommandId = 'github.copilot.nes.captureExpected.abort';
-const captureExpectedSubmitCommandId = 'github.copilot.nes.captureExpected.submit';
+export const captureExpectedStartCommandId = 'github.copilot.nes.captureExpected.start';
+export const captureExpectedConfirmCommandId = 'github.copilot.nes.captureExpected.confirm';
+export const captureExpectedAbortCommandId = 'github.copilot.nes.captureExpected.abort';
+export const captureExpectedSubmitCommandId = 'github.copilot.nes.captureExpected.submit';

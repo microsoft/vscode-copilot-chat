@@ -48,7 +48,7 @@ import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
 import { InlineCompletionProviderImpl, NesCompletionItem, NesCompletionList } from './inlineCompletionProvider';
 import { InlineEditModel } from './inlineEditModel';
-import { clearCacheCommandId, InlineEditProviderFeature, InlineEditProviderFeatureContribution, learnMoreCommandId, learnMoreLink, reportNotebookNESIssueCommandId } from './inlineEditProviderFeature';
+import { captureExpectedAbortCommandId, captureExpectedConfirmCommandId, captureExpectedStartCommandId, captureExpectedSubmitCommandId, clearCacheCommandId, InlineEditProviderFeature, InlineEditProviderFeatureContribution, learnMoreCommandId, learnMoreLink, reportNotebookNESIssueCommandId } from './inlineEditProviderFeature';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
@@ -184,6 +184,23 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 						const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, undefined);
 						logContext.recordingBookmark = model.debugRecorder.createBookmark();
 						void vscode.commands.executeCommand(reportFeedbackCommandId, { logContext });
+					}));
+
+					// Register expected edit capture commands
+					reader.store.add(vscode.commands.registerCommand(captureExpectedStartCommandId, () => {
+						void expectedEditCaptureController.startCapture('manual');
+					}));
+
+					reader.store.add(vscode.commands.registerCommand(captureExpectedConfirmCommandId, () => {
+						void expectedEditCaptureController.confirmCapture();
+					}));
+
+					reader.store.add(vscode.commands.registerCommand(captureExpectedAbortCommandId, () => {
+						void expectedEditCaptureController.abortCapture();
+					}));
+
+					reader.store.add(vscode.commands.registerCommand(captureExpectedSubmitCommandId, () => {
+						void expectedEditCaptureController.submitCaptures();
 					}));
 				}
 
