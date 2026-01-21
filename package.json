@@ -543,7 +543,6 @@
 				],
 				"icon": "$(new-folder)",
 				"userDescription": "%github.copilot.tools.createNewWorkspace.userDescription%",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"modelDescription": "Get comprehensive setup steps to help the user create complete project structures in a VS Code workspace. This tool is designed for full project initialization and scaffolding, not for creating individual files.\n\nWhen to use this tool:\n- User wants to create a new complete project from scratch\n- Setting up entire project frameworks (TypeScript projects, React apps, Node.js servers, etc.)\n- Initializing Model Context Protocol (MCP) servers with full structure\n- Creating VS Code extensions with proper scaffolding\n- Setting up Next.js, Vite, or other framework-based projects\n- User asks for \"new project\", \"create a workspace\", \"set up a [framework] project\"\n- Need to establish complete development environment with dependencies, config files, and folder structure\n\nWhen NOT to use this tool:\n- Creating single files or small code snippets\n- Adding individual files to existing projects\n- Making modifications to existing codebases\n- User asks to \"create a file\" or \"add a component\"\n- Simple code examples or demonstrations\n- Debugging or fixing existing code\n\nThis tool provides complete project setup including:\n- Folder structure creation\n- Package.json and dependency management\n- Configuration files (tsconfig, eslint, etc.)\n- Initial boilerplate code\n- Development environment setup\n- Build and run instructions\n\nUse other file creation tools for individual files within existing projects.",
 				"inputSchema": {
 					"type": "object",
@@ -565,7 +564,6 @@
 			{
 				"name": "copilot_getProjectSetupInfo",
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "getProjectSetupInfo",
 				"legacyToolReferenceFullNames": [
 					"new/getProjectSetupInfo"
@@ -588,7 +586,6 @@
 			{
 				"name": "copilot_installExtension",
 				"displayName": "Install Extension in VS Code",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "installExtension",
 				"legacyToolReferenceFullNames": [
 					"new/installExtension"
@@ -616,7 +613,6 @@
 			{
 				"name": "copilot_runVscodeCommand",
 				"displayName": "Run VS Code Command",
-				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "runCommand",
 				"legacyToolReferenceFullNames": [
 					"new/runVscodeCommand"
@@ -3355,20 +3351,9 @@
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.inline.typescript.enabled%"
 					},
-					"github.copilot.chat.newWorkspaceCreation.enabled": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
-					},
 					"github.copilot.chat.newWorkspace.useContext7": {
 						"type": "boolean",
 						"default": false,
-						"tags": [
-							"experimental"
-						],
 						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
 					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
