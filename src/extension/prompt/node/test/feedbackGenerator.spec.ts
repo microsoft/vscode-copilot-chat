@@ -24,131 +24,132 @@ import { CurrentChangeInput } from '../../../prompts/node/feedback/currentChange
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FeedbackGenerator, parseFeedbackResponse, parseReviewComments, sendReviewActionTelemetry } from '../feedbackGenerator';
 
-class MockTextDocument implements TextDocument {
-	readonly uri: Uri;
-	readonly fileName: string;
-	readonly isUntitled = false;
-	readonly languageId: string;
-	readonly version = 1;
-	readonly isDirty = false;
-	readonly isClosed = false;
-	readonly eol: EndOfLine = 1;
-	readonly encoding = 'utf8';
-	private readonly _lines: string[];
+suite('feedbackGenerator', () => {
 
-	constructor(uri: Uri, content: string, languageId = 'typescript') {
-		this.uri = uri;
-		this.fileName = uri.fsPath;
-		this.languageId = languageId;
-		this._lines = content.split('\n');
-	}
+	class MockTextDocument implements TextDocument {
+		readonly uri: Uri;
+		readonly fileName: string;
+		readonly isUntitled = false;
+		readonly languageId: string;
+		readonly version = 1;
+		readonly isDirty = false;
+		readonly isClosed = false;
+		readonly eol: EndOfLine = 1;
+		readonly encoding = 'utf8';
+		private readonly _lines: string[];
 
-	get lineCount(): number {
-		return this._lines.length;
-	}
-
-	lineAt(lineOrPosition: number | Position): TextLine {
-		const lineNumber = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
-		if (lineNumber < 0 || lineNumber >= this._lines.length) {
-			throw new Error('Invalid line number');
+		constructor(uri: Uri, content: string, languageId = 'typescript') {
+			this.uri = uri;
+			this.fileName = uri.fsPath;
+			this.languageId = languageId;
+			this._lines = content.split('\n');
 		}
-		const text = this._lines[lineNumber];
+
+		get lineCount(): number {
+			return this._lines.length;
+		}
+
+		lineAt(lineOrPosition: number | Position): TextLine {
+			const lineNumber = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
+			if (lineNumber < 0 || lineNumber >= this._lines.length) {
+				throw new Error('Invalid line number');
+			}
+			const text = this._lines[lineNumber];
+			return {
+				lineNumber,
+				text,
+				range: new Range(lineNumber, 0, lineNumber, text.length),
+				rangeIncludingLineBreak: new Range(lineNumber, 0, lineNumber + 1, 0),
+				firstNonWhitespaceCharacterIndex: text.match(/^\s*/)?.[0].length ?? 0,
+				isEmptyOrWhitespace: text.trim().length === 0,
+			};
+		}
+
+		getText(range?: Range): string {
+			if (!range) {
+				return this._lines.join('\n');
+			}
+			// Clamp range to valid document bounds (like VS Code's TextDocument does)
+			const startLine = Math.max(0, Math.min(range.start.line, this._lines.length - 1));
+			const endLine = Math.max(0, Math.min(range.end.line, this._lines.length));
+			const startChar = Math.max(0, Math.min(range.start.character, this._lines[startLine]?.length ?? 0));
+
+			if (startLine === endLine || endLine >= this._lines.length) {
+				// For ranges ending at or beyond lineCount, get text from start to end of document
+				if (endLine >= this._lines.length) {
+					const lines: string[] = [];
+					lines.push(this._lines[startLine].substring(startChar));
+					for (let i = startLine + 1; i < this._lines.length; i++) {
+						lines.push(this._lines[i]);
+					}
+					return lines.join('\n');
+				}
+				return this._lines[startLine].substring(startChar, range.end.character);
+			}
+			const lines: string[] = [];
+			lines.push(this._lines[startLine].substring(startChar));
+			for (let i = startLine + 1; i < endLine; i++) {
+				lines.push(this._lines[i]);
+			}
+			const endChar = Math.min(range.end.character, this._lines[endLine]?.length ?? 0);
+			lines.push(this._lines[endLine].substring(0, endChar));
+			return lines.join('\n');
+		}
+
+		offsetAt(position: Position): number {
+			let offset = 0;
+			for (let i = 0; i < position.line; i++) {
+				offset += this._lines[i].length + 1;
+			}
+			return offset + position.character;
+		}
+
+		positionAt(offset: number): Position {
+			let remaining = offset;
+			for (let line = 0; line < this._lines.length; line++) {
+				if (remaining <= this._lines[line].length) {
+					return new Position(line, remaining);
+				}
+				remaining -= this._lines[line].length + 1;
+			}
+			return new Position(this._lines.length - 1, this._lines[this._lines.length - 1].length);
+		}
+
+		getWordRangeAtPosition(_position: Position): Range | undefined {
+			return undefined;
+		}
+
+		validateRange(range: Range): Range {
+			return range;
+		}
+
+		validatePosition(position: Position): Position {
+			return position;
+		}
+
+		save(): Thenable<boolean> {
+			return Promise.resolve(true);
+		}
+	}
+
+	function createTestSnapshot(uri: Uri, content: string, languageId = 'typescript'): TextDocumentSnapshot {
+		const mockDoc = new MockTextDocument(uri, content, languageId);
+		return TextDocumentSnapshot.create(mockDoc);
+	}
+
+	function createReviewRequest(overrides?: Partial<ReviewRequest>): ReviewRequest {
 		return {
-			lineNumber,
-			text,
-			range: new Range(lineNumber, 0, lineNumber, text.length),
-			rangeIncludingLineBreak: new Range(lineNumber, 0, lineNumber + 1, 0),
-			firstNonWhitespaceCharacterIndex: text.match(/^\s*/)?.[0].length ?? 0,
-			isEmptyOrWhitespace: text.trim().length === 0,
+			source: 'vscodeCopilotChat',
+			promptCount: 1,
+			messageId: 'test-message-id',
+			inputType: 'change',
+			inputRanges: [],
+			...overrides,
 		};
 	}
 
-	getText(range?: Range): string {
-		if (!range) {
-			return this._lines.join('\n');
-		}
-		// Clamp range to valid document bounds (like VS Code's TextDocument does)
-		const startLine = Math.max(0, Math.min(range.start.line, this._lines.length - 1));
-		const endLine = Math.max(0, Math.min(range.end.line, this._lines.length));
-		const startChar = Math.max(0, Math.min(range.start.character, this._lines[startLine]?.length ?? 0));
+	describe('parseFeedbackResponse', () => {
 
-		if (startLine === endLine || endLine >= this._lines.length) {
-			// For ranges ending at or beyond lineCount, get text from start to end of document
-			if (endLine >= this._lines.length) {
-				const lines: string[] = [];
-				lines.push(this._lines[startLine].substring(startChar));
-				for (let i = startLine + 1; i < this._lines.length; i++) {
-					lines.push(this._lines[i]);
-				}
-				return lines.join('\n');
-			}
-			return this._lines[startLine].substring(startChar, range.end.character);
-		}
-		const lines: string[] = [];
-		lines.push(this._lines[startLine].substring(startChar));
-		for (let i = startLine + 1; i < endLine; i++) {
-			lines.push(this._lines[i]);
-		}
-		const endChar = Math.min(range.end.character, this._lines[endLine]?.length ?? 0);
-		lines.push(this._lines[endLine].substring(0, endChar));
-		return lines.join('\n');
-	}
-
-	offsetAt(position: Position): number {
-		let offset = 0;
-		for (let i = 0; i < position.line; i++) {
-			offset += this._lines[i].length + 1;
-		}
-		return offset + position.character;
-	}
-
-	positionAt(offset: number): Position {
-		let remaining = offset;
-		for (let line = 0; line < this._lines.length; line++) {
-			if (remaining <= this._lines[line].length) {
-				return new Position(line, remaining);
-			}
-			remaining -= this._lines[line].length + 1;
-		}
-		return new Position(this._lines.length - 1, this._lines[this._lines.length - 1].length);
-	}
-
-	getWordRangeAtPosition(_position: Position): Range | undefined {
-		return undefined;
-	}
-
-	validateRange(range: Range): Range {
-		return range;
-	}
-
-	validatePosition(position: Position): Position {
-		return position;
-	}
-
-	save(): Thenable<boolean> {
-		return Promise.resolve(true);
-	}
-}
-
-function createTestSnapshot(uri: Uri, content: string, languageId = 'typescript'): TextDocumentSnapshot {
-	const mockDoc = new MockTextDocument(uri, content, languageId);
-	return TextDocumentSnapshot.create(mockDoc);
-}
-
-function createReviewRequest(overrides?: Partial<ReviewRequest>): ReviewRequest {
-	return {
-		source: 'vscodeCopilotChat',
-		promptCount: 1,
-		messageId: 'test-message-id',
-		inputType: 'change',
-		inputRanges: [],
-		...overrides,
-	};
-}
-
-suite('parseFeedbackResponse', () => {
-
-	describe('basic parsing', () => {
 		test('parses single comment with all fields including linkOffset and linkLength', () => {
 			const response = '1. Line 10 in `file.ts`, bug, high severity: This is a bug.';
 			const matches = parseFeedbackResponse(response);
@@ -202,9 +203,7 @@ suite('parseFeedbackResponse', () => {
 			assert.strictEqual(matches[0].from, 9);
 			assert.strictEqual(matches[0].relativeDocumentPath, 'file.ts');
 		});
-	});
 
-	describe('multiple comments', () => {
 		test('parses multiple comments separated by newlines or next numbered item', () => {
 			const response = `1. Line 10 in \`file.ts\`, bug, high severity: First issue.
 
@@ -217,9 +216,7 @@ suite('parseFeedbackResponse', () => {
 			assert.strictEqual(matches[1].content, 'Second issue.');
 			assert.strictEqual(matches[2].content, 'Third issue.');
 		});
-	});
 
-	describe('dropPartial option', () => {
 		test('keeps partial comment when dropPartial is false, drops when true', () => {
 			const partialResponse = '1. Line 10 in `file.ts`, bug: Incomplete';
 
@@ -242,9 +239,7 @@ suite('parseFeedbackResponse', () => {
 			assert.strictEqual(matches.length, 1);
 			assert.strictEqual(matches[0].content, 'First complete.');
 		});
-	});
 
-	describe('code block handling', () => {
 		test('removes trailing complete code block', () => {
 			const response = `1. Line 33 in \`file.ts\`, readability, low severity: The lambda function could be extracted.
 \`\`\`typescript
@@ -301,9 +296,7 @@ const y = 2;
 			assert.ok(matches[0].content.includes('const x = 1;'));
 			assert.strictEqual(matches[0].content.includes('const y = 2;'), false);
 		});
-	});
 
-	describe('path handling', () => {
 		test('normalizes path separators for subdirectories', () => {
 			const response = '1. Line 10 in `src/utils/helpers.ts`, bug: Issue.\n\n';
 			const matches = parseFeedbackResponse(response);
@@ -318,9 +311,7 @@ const y = 2;
 				assert.strictEqual(matches[0].relativeDocumentPath, 'src/utils/helpers.ts');
 			}
 		});
-	});
 
-	describe('edge cases', () => {
 		test('returns empty array for empty or invalid response', () => {
 			assert.strictEqual(parseFeedbackResponse('').length, 0);
 			assert.strictEqual(parseFeedbackResponse('This is just some text without the expected format.').length, 0);
@@ -365,11 +356,9 @@ multiple lines.
 			assert.strictEqual(matches[0].linkOffset, 4);
 		});
 	});
-});
 
-suite('parseReviewComments', () => {
+	describe('parseReviewComments', () => {
 
-	describe('basic parsing', () => {
 		test('parses valid comment and creates ReviewComment', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
@@ -427,9 +416,7 @@ suite('parseReviewComments', () => {
 			assert.strictEqual(typeof comments[1].body === 'string' ? comments[1].body : comments[1].body.value, 'Second issue.');
 			assert.strictEqual(comments[1].originalIndex, 1);
 		});
-	});
 
-	describe('kind filtering', () => {
 		test('filters out unknown kind', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2';
@@ -475,9 +462,7 @@ suite('parseReviewComments', () => {
 				assert.strictEqual(comments[i].kind, kind);
 			});
 		});
-	});
 
-	describe('input matching', () => {
 		test('skips comment when relativeDocumentPath does not match any input', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
@@ -533,9 +518,7 @@ suite('parseReviewComments', () => {
 			assert.strictEqual(comments.length, 1);
 			assert.strictEqual(comments[0].uri, uri2);
 		});
-	});
 
-	describe('line clamping', () => {
 		test('uses line 0 correctly when Line 1 is specified (0-indexed)', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = '  indented line\nline 1';
@@ -585,9 +568,7 @@ suite('parseReviewComments', () => {
 			// End line should be clamped to lineCount-1 = 2
 			assert.strictEqual(comments[0].range.end.line, 2);
 		});
-	});
 
-	describe('range intersection filtering', () => {
 		test('filters out comment outside change hunk range', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
@@ -675,9 +656,7 @@ suite('parseReviewComments', () => {
 
 			assert.strictEqual(comments.length, 1);
 		});
-	});
 
-	describe('dropPartial parameter', () => {
 		test('passes dropPartial to parseFeedbackResponse', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
@@ -703,9 +682,7 @@ suite('parseReviewComments', () => {
 			const commentsDropped = parseReviewComments(request, input, partialMessage, true);
 			assert.strictEqual(commentsDropped.length, 0);
 		});
-	});
 
-	describe('edge cases', () => {
 		test('returns empty array for empty message', () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0';
@@ -809,167 +786,165 @@ suite('parseReviewComments', () => {
 			assert.strictEqual(comments[0].document, snapshot);
 		});
 	});
-});
 
-class MockIgnoreService implements IIgnoreService {
-	declare _serviceBrand: undefined;
+	class MockIgnoreService implements IIgnoreService {
+		declare _serviceBrand: undefined;
 
-	isEnabled = true;
-	isRegexExclusionsEnabled = true;
-	dispose(): void { }
+		isEnabled = true;
+		isRegexExclusionsEnabled = true;
+		dispose(): void { }
 
-	private _ignoredUris = new Set<string>();
-	private _alwaysIgnore = false;
+		private _ignoredUris = new Set<string>();
+		private _alwaysIgnore = false;
 
-	init(): Promise<void> {
-		return Promise.resolve();
-	}
-
-	isCopilotIgnored(file: Uri, _token?: CancellationToken): Promise<boolean> {
-		if (this._alwaysIgnore) {
-			return Promise.resolve(true);
+		init(): Promise<void> {
+			return Promise.resolve();
 		}
-		return Promise.resolve(this._ignoredUris.has(file.toString()));
-	}
 
-	asMinimatchPattern(): Promise<string | undefined> {
-		return Promise.resolve(undefined);
-	}
-
-	setAlwaysIgnore(): void {
-		this._alwaysIgnore = true;
-	}
-
-	setIgnoredUris(uris: Uri[]): void {
-		this._ignoredUris = new Set(uris.map(u => u.toString()));
-	}
-
-	reset(): void {
-		this._alwaysIgnore = false;
-		this._ignoredUris.clear();
-	}
-}
-
-class MockChatEndpoint {
-	model = 'gpt-4.1-test';
-	family = 'gpt-4.1';
-	name = 'Test Endpoint';
-	maxOutputTokens = 8000;
-	modelMaxPromptTokens = 128000;
-	supportsToolCalls = true;
-	supportsVision = true;
-	supportsPrediction = true;
-	showInModelPicker = true;
-	isDefault = true;
-	isFallback = false;
-	policy: 'enabled' | { terms: string } = 'enabled';
-	urlOrRequestMetadata = 'https://test.com';
-	version = '1.0';
-	tokenizer = 'o200k_base';
-
-	private _response: ChatResponse = { type: ChatFetchResponseType.Success, value: '', requestId: 'test-request-id', serverRequestId: undefined, usage: undefined, resolvedModel: 'gpt-4.1-test' };
-
-	setResponse(response: ChatResponse): void {
-		this._response = response;
-	}
-
-	async makeChatRequest(
-		_debugName: string,
-		_messages: Raw.ChatMessage[],
-		finishedCb: ((text: string) => Promise<void>) | undefined,
-		_token: CancellationToken,
-	): Promise<ChatResponse> {
-		if (this._response.type === ChatFetchResponseType.Success && finishedCb) {
-			await finishedCb(this._response.value);
+		isCopilotIgnored(file: Uri, _token?: CancellationToken): Promise<boolean> {
+			if (this._alwaysIgnore) {
+				return Promise.resolve(true);
+			}
+			return Promise.resolve(this._ignoredUris.has(file.toString()));
 		}
-		return this._response;
-	}
 
-	acquireTokenizer(): any {
-		return {
-			tokenize: (text: string) => ({ bpe: text.split(' ').map((_, i) => i), text }),
-			tokenLength: (text: string) => Math.ceil(text.length / 4),
-			encode: (text: string) => text.split(' ').map((_, i) => i),
-			decode: (tokens: number[]) => tokens.join(' '),
-		};
-	}
-}
-
-class MockEndpointProvider implements IEndpointProvider {
-	declare readonly _serviceBrand: undefined;
-
-	private _endpoint = new MockChatEndpoint();
-
-	get mockEndpoint(): MockChatEndpoint {
-		return this._endpoint;
-	}
-
-	async getChatEndpoint(): Promise<IChatEndpoint> {
-		return this._endpoint as unknown as IChatEndpoint;
-	}
-
-	async getEmbeddingsEndpoint(): Promise<any> {
-		throw new Error('Not implemented');
-	}
-
-	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
-		return [this._endpoint as unknown as IChatEndpoint];
-	}
-
-	async getAllCompletionModels(): Promise<any[]> {
-		return [];
-	}
-}
-
-suite('FeedbackGenerator.generateComments', () => {
-	let disposables: DisposableStore;
-	let mockIgnoreService: MockIgnoreService;
-	let mockEndpointProvider: MockEndpointProvider;
-	let feedbackGenerator: FeedbackGenerator;
-	let instantiationService: IInstantiationService;
-
-	beforeEach(() => {
-		disposables = new DisposableStore();
-		mockIgnoreService = new MockIgnoreService();
-		mockEndpointProvider = new MockEndpointProvider();
-
-		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
-		serviceCollection.define(IIgnoreService, mockIgnoreService);
-		serviceCollection.define(IEndpointProvider, mockEndpointProvider);
-		serviceCollection.define(ITelemetryService, new NullTelemetryService());
-		instantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
-		feedbackGenerator = instantiationService.createInstance(FeedbackGenerator);
-	});
-
-	afterEach(() => {
-		disposables.dispose();
-	});
-
-	function createInput(
-		uri: Uri,
-		content: string,
-		relativeDocumentPath: string,
-		options?: { selection?: Range; hunks?: { range: Range; text: string }[] }
-	): CurrentChangeInput {
-		const snapshot = createTestSnapshot(uri, content);
-		const input: CurrentChangeInput = {
-			document: snapshot,
-			relativeDocumentPath,
-		};
-		if (options?.selection) {
-			input.selection = options.selection;
+		asMinimatchPattern(): Promise<string | undefined> {
+			return Promise.resolve(undefined);
 		}
-		if (options?.hunks) {
-			input.change = {
-				repository: {} as any,
-				uri,
-				hunks: options.hunks,
+
+		setAlwaysIgnore(): void {
+			this._alwaysIgnore = true;
+		}
+
+		setIgnoredUris(uris: Uri[]): void {
+			this._ignoredUris = new Set(uris.map(u => u.toString()));
+		}
+
+		reset(): void {
+			this._alwaysIgnore = false;
+			this._ignoredUris.clear();
+		}
+	}
+
+	class MockChatEndpoint {
+		model = 'gpt-4.1-test';
+		family = 'gpt-4.1';
+		name = 'Test Endpoint';
+		maxOutputTokens = 8000;
+		modelMaxPromptTokens = 128000;
+		supportsToolCalls = true;
+		supportsVision = true;
+		supportsPrediction = true;
+		showInModelPicker = true;
+		isDefault = true;
+		isFallback = false;
+		policy: 'enabled' | { terms: string } = 'enabled';
+		urlOrRequestMetadata = 'https://test.com';
+		version = '1.0';
+		tokenizer = 'o200k_base';
+
+		private _response: ChatResponse = { type: ChatFetchResponseType.Success, value: '', requestId: 'test-request-id', serverRequestId: undefined, usage: undefined, resolvedModel: 'gpt-4.1-test' };
+
+		setResponse(response: ChatResponse): void {
+			this._response = response;
+		}
+
+		async makeChatRequest(
+			_debugName: string,
+			_messages: Raw.ChatMessage[],
+			finishedCb: ((text: string) => Promise<void>) | undefined,
+			_token: CancellationToken,
+		): Promise<ChatResponse> {
+			if (this._response.type === ChatFetchResponseType.Success && finishedCb) {
+				await finishedCb(this._response.value);
+			}
+			return this._response;
+		}
+
+		acquireTokenizer(): any {
+			return {
+				tokenize: (text: string) => ({ bpe: text.split(' ').map((_, i) => i), text }),
+				tokenLength: (text: string) => Math.ceil(text.length / 4),
+				encode: (text: string) => text.split(' ').map((_, i) => i),
+				decode: (tokens: number[]) => tokens.join(' '),
 			};
 		}
-		return input;
 	}
 
-	describe('basic functionality', () => {
+	class MockEndpointProvider implements IEndpointProvider {
+		declare readonly _serviceBrand: undefined;
+
+		private _endpoint = new MockChatEndpoint();
+
+		get mockEndpoint(): MockChatEndpoint {
+			return this._endpoint;
+		}
+
+		async getChatEndpoint(): Promise<IChatEndpoint> {
+			return this._endpoint as unknown as IChatEndpoint;
+		}
+
+		async getEmbeddingsEndpoint(): Promise<any> {
+			throw new Error('Not implemented');
+		}
+
+		async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
+			return [this._endpoint as unknown as IChatEndpoint];
+		}
+
+		async getAllCompletionModels(): Promise<any[]> {
+			return [];
+		}
+	}
+
+	describe('FeedbackGenerator.generateComments', () => {
+		let disposables: DisposableStore;
+		let mockIgnoreService: MockIgnoreService;
+		let mockEndpointProvider: MockEndpointProvider;
+		let feedbackGenerator: FeedbackGenerator;
+		let instantiationService: IInstantiationService;
+
+		beforeEach(() => {
+			disposables = new DisposableStore();
+			mockIgnoreService = new MockIgnoreService();
+			mockEndpointProvider = new MockEndpointProvider();
+
+			const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+			serviceCollection.define(IIgnoreService, mockIgnoreService);
+			serviceCollection.define(IEndpointProvider, mockEndpointProvider);
+			serviceCollection.define(ITelemetryService, new NullTelemetryService());
+			instantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
+			feedbackGenerator = instantiationService.createInstance(FeedbackGenerator);
+		});
+
+		afterEach(() => {
+			disposables.dispose();
+		});
+
+		function createInput(
+			uri: Uri,
+			content: string,
+			relativeDocumentPath: string,
+			options?: { selection?: Range; hunks?: { range: Range; text: string }[] }
+		): CurrentChangeInput {
+			const snapshot = createTestSnapshot(uri, content);
+			const input: CurrentChangeInput = {
+				document: snapshot,
+				relativeDocumentPath,
+			};
+			if (options?.selection) {
+				input.selection = options.selection;
+			}
+			if (options?.hunks) {
+				input.change = {
+					repository: {} as any,
+					uri,
+					hunks: options.hunks,
+				};
+			}
+			return input;
+		}
+
 		test('returns success with comments when endpoint returns valid response', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
@@ -1049,9 +1024,7 @@ suite('FeedbackGenerator.generateComments', () => {
 				assert.strictEqual(result.comments[1].kind, 'performance');
 			}
 		});
-	});
 
-	describe('ignored documents handling', () => {
 		test('returns error when all inputs are ignored', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
@@ -1102,9 +1075,7 @@ suite('FeedbackGenerator.generateComments', () => {
 				assert.strictEqual(result.comments[0].uri.toString(), uri2.toString());
 			}
 		});
-	});
 
-	describe('cancellation handling', () => {
 		test('returns cancelled when token is cancelled before request', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
@@ -1119,9 +1090,7 @@ suite('FeedbackGenerator.generateComments', () => {
 
 			assert.strictEqual(result.type, 'cancelled');
 		});
-	});
 
-	describe('error handling', () => {
 		test('returns error when endpoint returns error', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1';
@@ -1143,9 +1112,7 @@ suite('FeedbackGenerator.generateComments', () => {
 				assert.strictEqual(result.reason, 'API error');
 			}
 		});
-	});
 
-	describe('progress reporting', () => {
 		test('reports progress when progress callback is provided', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
@@ -1174,9 +1141,7 @@ suite('FeedbackGenerator.generateComments', () => {
 			// Progress should have been reported at least once
 			assert.ok(reportedComments.length > 0);
 		});
-	});
 
-	describe('input types', () => {
 		test('handles selection input correctly', async () => {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2\nline 3\nline 4';
@@ -1236,9 +1201,7 @@ suite('FeedbackGenerator.generateComments', () => {
 				assert.strictEqual(result.comments[1].uri.toString(), uri2.toString());
 			}
 		});
-	});
 
-	describe('edge cases', () => {
 		test('handles empty input array', async () => {
 			const result = await feedbackGenerator.generateComments([], CancellationToken.None);
 
@@ -1267,114 +1230,112 @@ suite('FeedbackGenerator.generateComments', () => {
 			assert.strictEqual(result.type, 'success');
 		});
 	});
-});
 
-class MockLogService implements ILogService {
-	declare _serviceBrand: undefined;
+	class MockLogService implements ILogService {
+		declare _serviceBrand: undefined;
 
-	readonly debugMessages: string[] = [];
-	readonly warnMessages: string[] = [];
+		readonly debugMessages: string[] = [];
+		readonly warnMessages: string[] = [];
 
-	trace(_message: string): void { }
-	debug(message: string): void { this.debugMessages.push(message); }
-	info(_message: string): void { }
-	warn(message: string): void { this.warnMessages.push(message); }
-	error(_error: string | Error, _message?: string): void { }
-	show(_preserveFocus?: boolean): void { }
+		trace(_message: string): void { }
+		debug(message: string): void { this.debugMessages.push(message); }
+		info(_message: string): void { }
+		warn(message: string): void { this.warnMessages.push(message); }
+		error(_error: string | Error, _message?: string): void { }
+		show(_preserveFocus?: boolean): void { }
 
-	reset(): void {
-		this.debugMessages.length = 0;
-		this.warnMessages.length = 0;
-	}
-}
-
-interface TelemetryCall {
-	eventName: string;
-	properties?: TelemetryEventProperties;
-	measurements?: TelemetryEventMeasurements;
-}
-
-class MockTelemetryService implements ITelemetryService {
-	declare readonly _serviceBrand: undefined;
-
-	readonly msftEvents: TelemetryCall[] = [];
-	readonly internalMsftEvents: TelemetryCall[] = [];
-
-	dispose(): void { }
-
-	sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
-		this.msftEvents.push({ eventName, properties, measurements });
+		reset(): void {
+			this.debugMessages.length = 0;
+			this.warnMessages.length = 0;
+		}
 	}
 
-	sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
-		this.internalMsftEvents.push({ eventName, properties, measurements });
+	interface TelemetryCall {
+		eventName: string;
+		properties?: TelemetryEventProperties;
+		measurements?: TelemetryEventMeasurements;
 	}
 
-	sendMSFTTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	sendGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	sendGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	sendGHTelemetryException(_maybeError: unknown, _origin: string): void { }
-	sendTelemetryEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	sendTelemetryErrorEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	setSharedProperty(_name: string, _value: string): void { }
-	setAdditionalExpAssignments(_expAssignments: string[]): void { }
-	postEvent(_eventName: string, _props: Map<string, string>): void { }
-	sendEnhancedGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
-	sendEnhancedGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+	class MockTelemetryService implements ITelemetryService {
+		declare readonly _serviceBrand: undefined;
 
-	reset(): void {
-		this.msftEvents.length = 0;
-		this.internalMsftEvents.length = 0;
-	}
-}
+		readonly msftEvents: TelemetryCall[] = [];
+		readonly internalMsftEvents: TelemetryCall[] = [];
 
-suite('sendReviewActionTelemetry', () => {
-	let mockLogService: MockLogService;
-	let mockTelemetryService: MockTelemetryService;
-	let mockInstantiationService: IInstantiationService;
-	let disposables: DisposableStore;
+		dispose(): void { }
 
-	function createTestReviewComment(overrides?: Partial<ReviewComment>): ReviewComment {
-		const uri = Uri.file('/test/file.ts');
-		const content = 'line 0\nline 1\nline 2';
-		const mockDoc = new MockTextDocument(uri, content);
-		const snapshot = TextDocumentSnapshot.create(mockDoc);
+		sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+			this.msftEvents.push({ eventName, properties, measurements });
+		}
 
-		return {
-			request: {
-				source: 'vscodeCopilotChat',
-				promptCount: 1,
-				messageId: 'test-message-id',
-				inputType: 'change',
-				inputRanges: [{ uri, ranges: [new Range(0, 0, 2, 6)] }],
-			},
-			document: snapshot,
-			uri,
-			languageId: 'typescript',
-			range: new Range(1, 0, 1, 6),
-			body: new MarkdownString('Test comment body'),
-			kind: 'bug',
-			severity: 'high',
-			originalIndex: 0,
-			actionCount: 0,
-			...overrides,
-		};
+		sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+			this.internalMsftEvents.push({ eventName, properties, measurements });
+		}
+
+		sendMSFTTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		sendGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		sendGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		sendGHTelemetryException(_maybeError: unknown, _origin: string): void { }
+		sendTelemetryEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		sendTelemetryErrorEvent(_eventName: string, _destination: any, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		setSharedProperty(_name: string, _value: string): void { }
+		setAdditionalExpAssignments(_expAssignments: string[]): void { }
+		postEvent(_eventName: string, _props: Map<string, string>): void { }
+		sendEnhancedGHTelemetryEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+		sendEnhancedGHTelemetryErrorEvent(_eventName: string, _properties?: TelemetryEventProperties, _measurements?: TelemetryEventMeasurements): void { }
+
+		reset(): void {
+			this.msftEvents.length = 0;
+			this.internalMsftEvents.length = 0;
+		}
 	}
 
-	beforeEach(() => {
-		disposables = new DisposableStore();
-		mockLogService = new MockLogService();
-		mockTelemetryService = new MockTelemetryService();
+	describe('sendReviewActionTelemetry', () => {
+		let mockLogService: MockLogService;
+		let mockTelemetryService: MockTelemetryService;
+		let mockInstantiationService: IInstantiationService;
+		let disposables: DisposableStore;
 
-		const serviceCollection = disposables.add(createExtensionUnitTestingServices());
-		mockInstantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
-	});
+		function createTestReviewComment(overrides?: Partial<ReviewComment>): ReviewComment {
+			const uri = Uri.file('/test/file.ts');
+			const content = 'line 0\nline 1\nline 2';
+			const mockDoc = new MockTextDocument(uri, content);
+			const snapshot = TextDocumentSnapshot.create(mockDoc);
 
-	afterEach(() => {
-		disposables.dispose();
-	});
+			return {
+				request: {
+					source: 'vscodeCopilotChat',
+					promptCount: 1,
+					messageId: 'test-message-id',
+					inputType: 'change',
+					inputRanges: [{ uri, ranges: [new Range(0, 0, 2, 6)] }],
+				},
+				document: snapshot,
+				uri,
+				languageId: 'typescript',
+				range: new Range(1, 0, 1, 6),
+				body: new MarkdownString('Test comment body'),
+				kind: 'bug',
+				severity: 'high',
+				originalIndex: 0,
+				actionCount: 0,
+				...overrides,
+			};
+		}
 
-	describe('helpful/unhelpful actions', () => {
+		beforeEach(() => {
+			disposables = new DisposableStore();
+			mockLogService = new MockLogService();
+			mockTelemetryService = new MockTelemetryService();
+
+			const serviceCollection = disposables.add(createExtensionUnitTestingServices());
+			mockInstantiationService = serviceCollection.createTestingAccessor().get(IInstantiationService);
+		});
+
+		afterEach(() => {
+			disposables.dispose();
+		});
+
 		test('sends review.comment.vote telemetry for helpful action', () => {
 			const comment = createTestReviewComment();
 
@@ -1410,9 +1371,7 @@ suite('sendReviewActionTelemetry', () => {
 
 			assert.strictEqual(comment.actionCount, 2);
 		});
-	});
 
-	describe('other actions', () => {
 		test('sends review.comment.action telemetry for apply action', () => {
 			const comment = createTestReviewComment();
 
@@ -1439,9 +1398,7 @@ suite('sendReviewActionTelemetry', () => {
 
 			assert.strictEqual(comment.actionCount, 2);
 		});
-	});
 
-	describe('edge cases', () => {
 		test('returns early and warns when no comments provided', () => {
 			sendReviewActionTelemetry([], 0, 'helpful', mockLogService, mockTelemetryService, mockInstantiationService);
 
@@ -1513,9 +1470,7 @@ suite('sendReviewActionTelemetry', () => {
 			// (5-0) + (15-10) + (25-20) = 5 + 5 + 5 = 15
 			assert.strictEqual(mockTelemetryService.msftEvents[0].measurements?.inputLineCount, 15);
 		});
-	});
 
-	describe('telemetry properties', () => {
 		test('includes all expected properties', () => {
 			const comment = createTestReviewComment();
 
