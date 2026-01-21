@@ -287,10 +287,11 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 			return [];
 		}
 		const [auth, { getCustomAgents }] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage()]);
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
 			return [];
 		}
-		const workingDirectory = this.workspaceService.getWorkspaceFolders()[0];
+		const workingDirectory = workspaceFolders[0];
 		const agents = await getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
 		return agents.map(agent => this.cloneAgent(agent));
 	}
