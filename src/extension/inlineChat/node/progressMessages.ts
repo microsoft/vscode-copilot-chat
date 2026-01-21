@@ -37,8 +37,10 @@ export class InlineChatProgressMessages {
 		this._caches.set('generate', { messages: [...InlineChatProgressMessages._FALLBACK_GENERATE], fetchInProgress: false });
 		this._caches.set('edit', { messages: [...InlineChatProgressMessages._FALLBACK_EDIT], fetchInProgress: false });
 
-		// Prewarm the cache with LLM-generated messages
-		this.prewarm();
+		// Prewarm the cache with LLM-generated messages (best-effort, background)
+		this.prewarm().catch(err => {
+			this._logService.error('[InlineChatProgressMessages] Failed to prewarm progress messages', err);
+		});
 	}
 
 	private static readonly _FALLBACK_GENERATE: readonly string[] = [
