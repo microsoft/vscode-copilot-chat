@@ -234,6 +234,7 @@ declare module 'vscode' {
 	export interface LanguageModelToolInvocationOptions<T> {
 		chatRequestId?: string;
 		chatSessionId?: string;
+		chatSessionResource?: string;
 		chatInteractionId?: string;
 		terminalCommand?: string;
 		subAgentInvocationId?: string;
@@ -247,6 +248,7 @@ declare module 'vscode' {
 		input: T;
 		chatRequestId?: string;
 		chatSessionId?: string;
+		chatSessionResource?: string;
 		chatInteractionId?: string;
 	}
 

@@ -42,6 +42,7 @@ import { unificationStateObservable } from '../../completions/vscode-node/comple
 import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
+import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -152,7 +153,13 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 
 					const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
 
-					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
+					// Create the expected edit capture controller
+					const expectedEditCaptureController = reader.store.add(this._instantiationService.createInstance(
+						ExpectedEditCaptureController,
+						model.debugRecorder
+					));
+
+					inlineEditProvider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender, expectedEditCaptureController);
 
 					reader.store.add(vscode.commands.registerCommand(learnMoreCommandId, () => {
 						this._envService.openExternal(URI.parse(learnMoreLink));
@@ -481,10 +488,13 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 
 		tracer.trace('requesting completions and/or NES');
 
+		// we don't want to trigger completions on selection change events
+		const isTriggeredDueToSelectionChange = context && (context as NESInlineCompletionContext).changeHint !== undefined;
+
 		if (!lastNesSuggestion || !lastNesSuggestion.completionItem.wasShown) {
 			// prefer completions unless there are none
 			tracer.trace(`defaulting to yielding to completions; last NES suggestion is ${lastNesSuggestion ? 'not shown' : 'not available'}`);
-			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
+			const completionsP = isTriggeredDueToSelectionChange ? undefined : this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
 			const nesP = this._invokeNESProvider(tracer, document, position, true, context, tokens.nesCts.token, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
 		}
@@ -495,7 +505,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		const nesP = this._invokeNESProvider(tracer, document, position, enforceCacheDelay, context, tokens.nesCts.token, sw);
 		if (!nesP) {
 			tracer.trace(`no NES provider`);
-			const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
+			const completionsP = isTriggeredDueToSelectionChange ? undefined : this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
 			return this._returnCompletionsOrOtherwiseNES(completionsP, nesP, docSnapshot, sw, tracer, tokens);
 		}
 
@@ -530,7 +540,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 
 		tracer.trace(`the NES provider did not return in ${NES_CACHE_WAIT_MS}ms so we are triggering the completions provider too`);
-		const completionsP = this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
+		const completionsP = isTriggeredDueToSelectionChange ? undefined : this._invokeCompletionsProvider(tracer, document, position, context, tokens.completionsCts.token, sw);
 
 		const suggestionsList = await raceCancellation(
 			Promise.race(coalesce([

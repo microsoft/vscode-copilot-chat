@@ -256,7 +256,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		worktree.setSupported(true);
 		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
 		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-			autoCommit: false,
+			autoCommit: true,
 			baseCommit: 'deadbeef',
 			branchName: 'test',
 			repositoryPath: `${sep}repo`,

@@ -137,7 +137,8 @@
 		"chatSessionsProvider@3",
 		"devDeviceId",
 		"contribEditorContentMenu",
-		"chatPromptFiles"
+		"chatPromptFiles",
+		"mcpServerDefinitions"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1350,7 +1351,6 @@
 				"name": "vscode",
 				"description": "",
 				"tools": [
-					"askQuestions",
 					"getProjectSetupInfo",
 					"installExtension",
 					"newWorkspace",
@@ -2134,6 +2134,11 @@
 				"category": "Claude Agent"
 			},
 			{
+				"command": "copilot.claude.memory",
+				"title": "Open Memory Files",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -2551,6 +2556,26 @@
 				"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"title": "Export All Prompt Logs as JSON...",
 				"icon": "$(export)"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"title": "Record Expected Edit (NES)",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"title": "Confirm and Save Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"title": "Cancel Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.submit",
+				"title": "Submit NES Captures",
+				"category": "Copilot"
 			},
 			{
 				"command": "github.copilot.chat.showAsChatSession",
@@ -4149,15 +4174,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.cli.autoCommit.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4517,6 +4533,14 @@
 				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.start",
+					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.submit",
+					"when": "github.copilot.inlineEditsEnabled"
 				}
 			],
 			"view/title": [
@@ -4992,6 +5016,23 @@
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"key": "ctrl+k ctrl+r",
+				"mac": "cmd+k cmd+r",
+				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
+				"when": "copilotNesCaptureMode && editorTextFocus"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"key": "escape",
+				"when": "copilotNesCaptureMode && editorTextFocus"
 			}
 		],
 		"walkthroughs": [
@@ -5206,6 +5247,10 @@
 					{
 						"name": "hooks",
 						"description": "Configure Claude Code hooks for tool execution and events"
+					},
+					{
+						"name": "memory",
+						"description": "Open memory files (CLAUDE.md) for editing"
 					}
 				]
 			},

@@ -43,6 +43,7 @@ export import ChatResponseMarkdownWithVulnerabilitiesPart = vscode.ChatResponseM
 export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart;
 export import ChatResponseTextEditPart = vscode.ChatResponseTextEditPart;
 export import ChatResponseNotebookEditPart = vscode.ChatResponseNotebookEditPart;
+export import ChatResponseWorkspaceEditPart = vscode.ChatResponseWorkspaceEditPart;
 export import ChatResponseConfirmationPart = vscode.ChatResponseConfirmationPart;
 export import ChatRequest = vscode.ChatRequest;
 export import ChatRequestTurn = vscode.ChatRequestTurn;

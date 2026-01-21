@@ -7,6 +7,7 @@
 // Add new command imports here as they are created
 
 import './hooksCommand';
+import './memoryCommand';
 
 // Future commands can be added here:
 // import './settingsCommand';

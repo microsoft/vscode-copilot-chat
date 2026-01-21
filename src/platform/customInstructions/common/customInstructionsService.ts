@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Emitter } from '../../../util/vs/base/common/event';
 import { match } from '../../../util/vs/base/common/glob';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
@@ -47,6 +48,11 @@ export interface IInstruction {
 
 export const ICustomInstructionsService = createServiceIdentifier<ICustomInstructionsService>('ICustomInstructionsService');
 
+export interface IExtensionPromptFile {
+	uri: URI;
+	type: 'instructions' | 'prompt' | 'agent' | 'skill';
+}
+
 export interface ICustomInstructionsService {
 	readonly _serviceBrand: undefined;
 	fetchInstructionsFromSetting(configKey: Config<CodeGenerationInstruction[]>): Promise<ICustomInstructions[]>;
@@ -59,6 +65,16 @@ export interface ICustomInstructionsService {
 	isSkillFile(uri: URI): boolean;
 	isSkillMdFile(uri: URI): boolean;
 	getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+
+	/**
+	 * Refreshes the cached extension prompt files by querying VS Code's extension prompt file provider.
+	 * The cache is normally initialized lazily on first use in {@link isExternalInstructionsFile}, so
+	 * callers only need to invoke this explicitly when they require the latest extension state before
+	 * that first lookup or want to force a manual refresh of the cached prompt file list.
+	 */
+	refreshExtensionPromptFiles(): Promise<void>;
+	/** Gets skill info for extension-contributed skill files */
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -94,6 +110,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	readonly _matchInstructionLocationsFromConfig: IObservable<(uri: URI) => boolean>;
 	readonly _matchInstructionLocationsFromExtensions: IObservable<(uri: URI) => boolean>;
 	readonly _matchInstructionLocationsFromSkills: IObservable<(uri: URI) => { skillName: string; skillFolderUri: URI } | undefined>;
+
+	private _extensionPromptFilesCache: IExtensionPromptFile[] | undefined;
+	private readonly _onDidChangeExtensionPromptFilesCache = this._register(new Emitter<void>());
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -176,10 +195,12 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					}
 				});
 				const workspaceDisposable = workspaceService.onDidChangeWorkspaceFolders(handleChange);
+				const cacheDisposable = this._onDidChangeExtensionPromptFilesCache.event(handleChange);
 				return {
 					dispose: () => {
 						configurationDisposable.dispose();
 						workspaceDisposable.dispose();
+						cacheDisposable.dispose();
 					}
 				};
 			},
@@ -192,6 +213,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					// List of **/skills folder URIs
 					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
 					return ((uri: URI) => {
+						// Check workspace and personal skill folders
 						for (const topLevelSkillFolderUri of topLevelSkillsFolderUris) {
 							if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, topLevelSkillFolderUri)) {
 								// Get the path segments relative to the skill folder
@@ -204,7 +226,8 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 								}
 							}
 						}
-						return undefined;
+						// Check extension-contributed skills
+						return this.getExtensionSkillInfo(uri);
 					});
 				}
 				return (() => undefined);
@@ -305,6 +328,47 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		}
 	}
 
+	public async refreshExtensionPromptFiles(): Promise<void> {
+		try {
+			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as IExtensionPromptFile[] | undefined;
+			this._extensionPromptFilesCache = extensionPromptFiles ?? [];
+		} catch (e) {
+			this.logService.warn(`Error fetching extension prompt files: ${e}`);
+			this._extensionPromptFilesCache = [];
+		}
+		this._onDidChangeExtensionPromptFilesCache.fire();
+	}
+
+	private isExtensionPromptFile(uri: URI): boolean {
+		if (!this._extensionPromptFilesCache) {
+			return false;
+		}
+		return this._extensionPromptFilesCache.some(file => {
+			if (file.type === 'skill') {
+				// For skills, the URI points to SKILL.md - allow everything under the parent folder
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+				return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
+			}
+			return extUriBiasedIgnorePathCase.isEqual(file.uri, uri);
+		});
+	}
+
+	public getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+		if (!this._extensionPromptFilesCache) {
+			return undefined;
+		}
+		for (const file of this._extensionPromptFilesCache) {
+			if (file.type === 'skill') {
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri)) {
+					const skillName = extUriBiasedIgnorePathCase.basename(skillFolderUri);
+					return { skillName, skillFolderUri };
+				}
+			}
+		}
+		return undefined;
+	}
+
 	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
@@ -315,27 +379,12 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 			return true;
 		}
 
-		// Check for external extension-contributed prompt files
-		try {
-			const extensionPromptFiles = await this.runCommandExecutionService.executeCommand('vscode.extensionPromptFileProvider') as {
-				uri: URI; type: 'instructions' | 'prompt' | 'agent' | 'skill';
-			}[] | undefined;
-			if (extensionPromptFiles) {
-				return extensionPromptFiles.some(file => {
-					if (file.type === 'skill') {
-						// For skills, the URI points to SKILL.md - allow everything under the parent folder
-						const skillFolderUri = extUriBiasedIgnorePathCase.dirname(file.uri);
-						return extUriBiasedIgnorePathCase.isEqualOrParent(uri, skillFolderUri);
-					}
-					return extUriBiasedIgnorePathCase.isEqual(file.uri, uri);
-				});
-			}
-		} catch (e) {
-			this.logService.warn('Error checking for extension prompt files');
-			// Command may not be available, ignore
+		// Check cached extension-contributed prompt files
+		if (this._extensionPromptFilesCache === undefined) {
+			// Cache not initialized yet, fetch it now
+			await this.refreshExtensionPromptFiles();
 		}
-
-		return false;
+		return this.isExtensionPromptFile(uri);
 	}
 
 	public isExternalInstructionsFolder(uri: URI): boolean {

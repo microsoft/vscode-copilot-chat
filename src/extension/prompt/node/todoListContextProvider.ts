@@ -11,7 +11,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 
 export const ITodoListContextProvider = createServiceIdentifier<ITodoListContextProvider>('ITodoListContextProvider');
 export interface ITodoListContextProvider {
-	getCurrentTodoContext(sessionId: string): Promise<string | undefined>;
+	getCurrentTodoContext(sessionResource: string): Promise<string | undefined>;
 }
 
 export class TodoListContextProvider implements ITodoListContextProvider {
@@ -19,12 +19,12 @@ export class TodoListContextProvider implements ITodoListContextProvider {
 		@IToolsService private readonly toolsService: IToolsService,
 	) { }
 
-	async getCurrentTodoContext(sessionId: string): Promise<string | undefined> {
+	async getCurrentTodoContext(sessionResource: string): Promise<string | undefined> {
 		try {
 			const result = await this.toolsService.invokeTool(
 				ToolName.CoreManageTodoList,
 				{
-					input: { operation: 'read', chatSessionId: sessionId }
+					input: { operation: 'read', chatSessionResource: sessionResource }
 				} as any,
 				CancellationToken.None
 			);

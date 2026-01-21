@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { CancellationToken } from 'vscode';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { createDecorator, IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getClaudeSlashCommandRegistry, IClaudeSlashCommandHandler } from './slashCommands/claudeSlashCommandRegistry';
 
@@ -41,16 +43,17 @@ export interface IClaudeSlashCommandService {
 
 export const IClaudeSlashCommandService = createDecorator<IClaudeSlashCommandService>('claudeSlashCommandService');
 
-export class ClaudeSlashCommandService implements IClaudeSlashCommandService {
+export class ClaudeSlashCommandService extends Disposable implements IClaudeSlashCommandService {
 	readonly _serviceBrand: undefined;
 
 	private _handlerCache = new Map<string, IClaudeSlashCommandHandler>();
-	private _commandDisposables: vscode.Disposable[] = [];
 	private _initialized = false;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ILogService private readonly logService: ILogService,
 	) {
+		super();
 		// Initialize eagerly to register VS Code commands at startup
 		this._ensureInitialized();
 	}
@@ -95,28 +98,23 @@ export class ClaudeSlashCommandService implements IClaudeSlashCommandService {
 		const ctors = getClaudeSlashCommandRegistry();
 		for (const ctor of ctors) {
 			const handler = this.instantiationService.createInstance(ctor);
-			this._handlerCache.set(handler.commandName.toLowerCase(), handler);
+			const commandKey = handler.commandName.toLowerCase();
+			// This shouldn't happen unless we accidentally register duplicates
+			if (this._handlerCache.has(commandKey)) {
+				this.logService.warn(`Duplicate Claude slash command name "${handler.commandName}" detected. Ignoring handler ${ctor.name || 'unknown constructor'}.`);
+				continue;
+			}
+			this._handlerCache.set(commandKey, handler);
 
 			// Register VS Code command if commandId is provided
 			if (handler.commandId) {
-				const disposable = vscode.commands.registerCommand(handler.commandId, () => {
-					// Invoke with no args, no stream (Command Palette mode), and a cancellation token
-					const tokenSource = new vscode.CancellationTokenSource();
-					handler.handle('', undefined, tokenSource.token).catch(err => {
-						vscode.window.showErrorMessage(`Command failed: ${err.message || err}`);
-					});
-				});
-				this._commandDisposables.push(disposable);
+				this._register(vscode.commands.registerCommand(handler.commandId, () => {
+					// Invoke with no args and no stream (Command Palette mode)
+					return handler.handle('', undefined, CancellationToken.None);
+				}));
 			}
 		}
 
 		this._initialized = true;
-	}
-
-	dispose(): void {
-		for (const disposable of this._commandDisposables) {
-			disposable.dispose();
-		}
-		this._commandDisposables = [];
 	}
 }
