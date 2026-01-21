@@ -125,7 +125,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
 				Don't repeat yourself after a tool call, pick up where you left off.<br />
 				{!this.props.codesearchMode && tools.hasSomeEditTool && <>NEVER print out a codeblock with file changes unless the user asked for it. Use the appropriate edit tool instead.<br /></>}
-				{tools[ToolName.CoreRunInTerminal] && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.CoreRunInTerminal} tool instead.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use {ToolName.ExecutionSubagent}, especially for commands that might have verbose output. Alternatively, for simple commands or when you want the entire command output without truncation, use {ToolName.CoreRunInTerminal}.<br /></>}
 				You don't need to read a file if it's already provided in context.
 			</Tag>
 			<Tag name='toolUseInstructions'>
@@ -139,6 +139,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}. This helps avoid output truncation for commands with very verbose output.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
 				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />

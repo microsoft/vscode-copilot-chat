@@ -36,7 +36,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
 				Don't repeat yourself after a tool call, pick up where you left off.<br />
 				{!this.props.codesearchMode && tools.hasSomeEditTool && <>NEVER print out a codeblock with file changes unless the user asked for it. Use the appropriate edit tool instead.<br /></>}
-				{tools[ToolName.CoreRunInTerminal] && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.CoreRunInTerminal} tool instead.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use {ToolName.ExecutionSubagent}, especially for commands that might have verbose output. Alternatively, for simple commands or when you want the entire command output without truncation, use {ToolName.CoreRunInTerminal}.<br /></>}
 				You don't need to read a file if it's already provided in context.
 			</Tag>
 			<Tag name='toolUseInstructions'>
@@ -49,55 +49,58 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
-				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>Don't call the {ToolName.ExecutionSubagent} sub-agent or the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
 				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
-				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
+				When invoking a tool that takes a file path, always use the absolute file path.If the file has a scheme like untitled: or vscode - userdata:, then use a URI with the scheme.< br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
-				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
-			</Tag>
+				Tools can be disabled by the user.You may see tools used previously in the conversation that are not currently available.Be careful to only use the tools that are currently available to you.
+			</Tag >
 			{this.props.codesearchMode && <CodesearchModeInstructions {...this.props} />}
-			{tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='editFileInstructions'>
-				{tools[ToolName.ReplaceString] ?
-					<>
-						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-						{tools[ToolName.MultiReplaceString]
-							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>
-							: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
-						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
-						When editing files, group your changes by file.<br />
-						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
-					: <>
-						Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
-						Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
-						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
-					</>}
-				<GenericEditingTips {...this.props} />
-				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
-				When you use the {ToolName.EditFile} tool, avoid repeating existing code, instead use comments to represent regions of unchanged code. The tool prefers that you are as concise as possible. For example:<br />
+			{
+				tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='editFileInstructions'>
+					{tools[ToolName.ReplaceString] ?
+						<>
+							Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
+							{tools[ToolName.MultiReplaceString]
+								? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>
+								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
+							Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
+							When editing files, group your changes by file.<br />
+							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+							NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+							For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
+						: <>
+							Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
+							Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
+							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+							NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
+							For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						</>}
+					<GenericEditingTips {...this.props} />
+					The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
+					When you use the {ToolName.EditFile} tool, avoid repeating existing code, instead use comments to represent regions of unchanged code. The tool prefers that you are as concise as possible. For example:<br />
 				// {EXISTING_CODE_MARKER}<br />
-				changed code<br />
+					changed code<br />
 				// {EXISTING_CODE_MARKER}<br />
-				changed code<br />
+					changed code<br />
 				// {EXISTING_CODE_MARKER}<br />
-				<br />
-				Here is an example of how you should format an edit to an existing Person class:<br />
-				{[
-					`class Person {`,
-					`	// ${EXISTING_CODE_MARKER}`,
-					`	age: number;`,
-					`	// ${EXISTING_CODE_MARKER}`,
-					`	getAge() {`,
-					`		return this.age;`,
-					`	}`,
-					`}`
-				].join('\n')}
-			</Tag>}
+					<br />
+					Here is an example of how you should format an edit to an existing Person class:<br />
+					{[
+						`class Person {`,
+						`	// ${EXISTING_CODE_MARKER}`,
+						`	age: number;`,
+						`	// ${EXISTING_CODE_MARKER}`,
+						`	getAge() {`,
+						`		return this.age;`,
+						`	}`,
+						`}`
+					].join('\n')}
+				</Tag>
+			}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
@@ -106,7 +109,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
-		</InstructionMessage>;
+		</InstructionMessage >;
 	}
 }
 
@@ -172,6 +175,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}

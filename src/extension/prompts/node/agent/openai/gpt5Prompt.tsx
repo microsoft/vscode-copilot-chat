@@ -123,6 +123,9 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				If you need to write a plan, only write high quality plans, not low quality ones.<br />
 			</Tag>
+			<Tag name='toolUseInstructions'>
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
+			</Tag>
 			<Tag name='task_execution'>
 				You are a coding agent. Please keep going until the query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved. Autonomously resolve the query to the best of your ability, using the tools available to you, before coming back to the user. Do NOT guess or make up an answer.<br />
 				<br />

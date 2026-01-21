@@ -893,6 +893,7 @@ export namespace ConfigKey {
 	export const ReviewAgent = defineSetting('chat.reviewAgent.enabled', ConfigType.Simple, true);
 	export const CodeFeedback = defineSetting('chat.reviewSelection.enabled', ConfigType.Simple, true);
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
+	export const ExecutionSubagentModel = defineSetting<string>('chat.executionSubagentModel', ConfigType.Simple, 'claude-sonnet-4.5');
 
 	export const UseProjectTemplates = defineSetting('chat.useProjectTemplates', ConfigType.Simple, true);
 	export const ExplainScopeSelection = defineSetting('chat.scopeSelection', ConfigType.Simple, false);

@@ -384,5 +384,9 @@
 	"copilot.tools.runSubagent.description": "Runs a task within an isolated subagent context. Enables efficient organization of tasks and context window management.",
 	"copilot.tools.searchSubagent.name": "Search Subagent",
 	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace.",
-	"github.copilot.config.searchSubagent.enabled": "Enable the search subagent tool for iterative code exploration in the workspace."
+	"github.copilot.config.searchSubagent.enabled": "Enable the search subagent tool for iterative code exploration in the workspace.",
+	"copilot.tools.executionSubagent.name": "Execution Subagent",
+	"copilot.tools.executionSubagent.description": "Launch an execution-focused subagent that runs a terminal command and extracts relevant information from its output.",
+	"github.copilot.config.disableExecutionSubagent": "Disable the Execution Subagent tool in Copilot Chat. The Execution Subagent is an improved version of the run_in_terminal tool that filters out non-essential terminal output to provide more relevant responses. Disabling this tool may lead to less accurate results when using terminal command execution in chat.",
+	"github.copilot.config.executionSubagentModel": "The model to use for the Execution Subagent tool in Copilot Chat. Ensure that the selected model is configured in the `github.copilot.chat.customOAIModels` setting."
 }
