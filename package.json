@@ -3470,7 +3470,7 @@
 					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
 						"tags": [
 							"experimental",
