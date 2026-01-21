@@ -46,7 +46,11 @@ export enum ChatLocation {
 	/**
 	 * A request coming through the OpenAILanguageModelServer
 	 */
-	ResponsesProxy = 8
+	ResponsesProxy = 8,
+	/**
+	 * A request coming through the ClaudeLanguageModelServer (Messages API)
+	 */
+	MessagesProxy = 9
 }
 
 export namespace ChatLocation {
@@ -211,7 +215,7 @@ function getRateLimitMessage(fetchResult: ChatFetchError, fallbackModel: IChatEn
 		return l10n.t({
 			message: 'Sorry, you have been rate-limited. Please wait {0} before trying again. [Learn More]({1})\n\nServer Error: {2}\nError Code: {3}',
 			args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error', fetchResult.capiError.message, fetchResult.capiError.code],
-			comment: ["{Locked=']({'}"]
+			comment: [`{Locked=']({'}`]
 		});
 	}
 
@@ -219,14 +223,14 @@ function getRateLimitMessage(fetchResult: ChatFetchError, fallbackModel: IChatEn
 		return l10n.t({
 			message: 'Sorry, you have exhausted this model\'s rate limit. Please wait {0} before trying again, or switch to {1}. [Learn More]({2})',
 			args: [retryAfterString, fallbackModel.name, 'https://aka.ms/github-copilot-rate-limit-error'],
-			comment: ["{Locked=']({'}"]
+			comment: [`{Locked=']({'}`]
 		});
 	}
 
 	return l10n.t({
 		message: 'Sorry, your request was rate-limited. Please wait {0} before trying again. [Learn More]({1})',
 		args: [retryAfterString, 'https://aka.ms/github-copilot-rate-limit-error'],
-		comment: ["{Locked=']({'}"]
+		comment: [`{Locked=']({'}`]
 	});
 }
 
@@ -246,13 +250,13 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 			case 'individual_pro':
 				return l10n.t(`You've exhausted your premium model quota. Please enable additional paid premium requests or wait for your allowance to renew.`);
 			default:
-				return l10n.t(`You've exhausted your premium model quota. Please reach out to your organization's Copilot admin to enable additional paid premium requests or wait for your allowance to renew.`);
+				return l10n.t(`You've exhausted your premium model quota. To continue working, switch to Auto. For additional paid premium requests, please reach out to your organization's Copilot admin or wait for your allowance to renew.`);
 		}
 	} else if (fetchResult.capiError?.code === 'overage_limit_reached') {
 		return l10n.t({
 			message: 'You cannot accrue additional premium requests at this time. Please contact [GitHub Support]({0}) to continue using Copilot.',
 			args: ['https://support.github.com/contact'],
-			comment: ["{Locked=']({'}"]
+			comment: [`{Locked=']({'}`]
 		});
 	} else if (fetchResult.capiError?.code && fetchResult.capiError?.message) {
 		return l10n.t({
@@ -325,7 +329,7 @@ export function getFilteredMessage(category: FilterReason, supportsMarkdown: boo
 				return l10n.t({
 					message:
 						`Sorry, the response matched public code so it was blocked. Please rephrase your prompt. [Learn more](https://aka.ms/copilot-chat-filtered-docs).`,
-					comment: ["{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}"]
+					comment: [`{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}`]
 				});
 			} else {
 				return l10n.t(`Sorry, the response matched public code so it was blocked. Please rephrase your prompt.`);
@@ -335,7 +339,7 @@ export function getFilteredMessage(category: FilterReason, supportsMarkdown: boo
 				return l10n.t({
 					message:
 						`Sorry, your prompt was filtered by the Responsible AI Service. Please rephrase your prompt and try again. [Learn more](https://aka.ms/copilot-chat-filtered-docs).`,
-					comment: ["{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}"]
+					comment: [`{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}`]
 				});
 			} else {
 				return l10n.t(`Sorry, your prompt was filtered by the Responsible AI Service. Please rephrase your prompt and try again.`);
@@ -345,7 +349,7 @@ export function getFilteredMessage(category: FilterReason, supportsMarkdown: boo
 				return l10n.t({
 					message:
 						`Sorry, the response was filtered by the Responsible AI Service. Please rephrase your prompt and try again. [Learn more](https://aka.ms/copilot-chat-filtered-docs).`,
-					comment: ["{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}"]
+					comment: [`{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}`]
 				});
 			} else {
 				return l10n.t(`Sorry, the response was filtered by the Responsible AI Service. Please rephrase your prompt and try again.`);

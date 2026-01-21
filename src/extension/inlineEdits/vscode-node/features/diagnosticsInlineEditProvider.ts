@@ -12,7 +12,7 @@ import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/
 import { ILogService } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
-import { timeout } from '../../../../util/vs/base/common/async';
+import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -35,6 +35,7 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			showRangePreference?: ShowNextEditPreference;
 			action?: Command;
 		} | undefined,
+		public workInProgress: boolean = false
 	) { }
 }
 
@@ -68,18 +69,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 	async getNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
 		this._lastTriggerTime = Date.now();
-
-		if (cancellationToken.isCancellationRequested) {
-			this._tracer.trace('cancellationRequested before started');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
-		}
-
-		let diagnosticEditResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
-		if (!diagnosticEditResult.item) {
-			diagnosticEditResult = await this._diagnosticsCompletionHandler.getNextUpdatedState(docId, cancellationToken);
-		}
-
-		return this._createNextEditResult(diagnosticEditResult, logContext, tb);
+		throw new BugIndicatingError('DiagnosticsNextEditProvider does not support getNextEdit, use runUntilNextEdit instead');
 	}
 
 	async runUntilNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
@@ -91,31 +81,40 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 			}
 
 			// Check if the last computed edit is still valid
-			let completionResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
-			let telemetry = new DiagnosticsTelemetryBuilder();
-			let diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
-
-			// If the last computed edit is not valid, wait until the state is updated or the operation is cancelled
-			while (!diagnosticEditResult.result && !cancellationToken.isCancellationRequested) {
-				completionResult = await this._diagnosticsCompletionHandler.getNextUpdatedState(docId, cancellationToken);
-				telemetry = new DiagnosticsTelemetryBuilder();
-				diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
+			const initialResult = this._getResultForCurrentState(docId, logContext, tb);
+			if (initialResult.result) {
+				return initialResult;
 			}
 
-			telemetry.populate(tb);
+			const asyncResult = await raceCancellation(new Promise<DiagnosticsNextEditResult>((resolve) => {
+				const onDidChangeDisposable = this._diagnosticsCompletionHandler.onDidChange((hasResult) => {
+					const completionResult = this._getResultForCurrentState(docId, logContext, tb);
+					if (completionResult.result || !completionResult.workInProgress) {
+						resolve(completionResult);
+						onDidChangeDisposable.dispose();
+					}
+				});
+			}), cancellationToken);
 
-			// TODO: Better incorporate diagnostics logging
-			if (completionResult.logContext) {
-				completionResult.logContext.getLogs().forEach(log => logContext.addLog(log));
-			}
-
-			return diagnosticEditResult;
+			return asyncResult ?? initialResult;
 		} catch (error) {
 			const errorMessage = `Error occurred while waiting for diagnostic edit: ${errors.toString(errors.fromUnknown(error))}`;
 			logContext.addLog(errorMessage);
 			this._tracer.trace(errorMessage);
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+		} finally {
+			this._tracer.trace('DiagnosticsInlineCompletionProvider runUntilNextEdit complete' + (cancellationToken.isCancellationRequested ? ' (cancelled)' : ''));
 		}
+	}
+
+	private _getResultForCurrentState(docId: DocumentId, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult {
+		const completionResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
+		const telemetry = new DiagnosticsTelemetryBuilder();
+		const diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
+		if (diagnosticEditResult.result) {
+			telemetry.populate(tb);
+		}
+		return diagnosticEditResult;
 	}
 
 	private _createNextEditResult(diagnosticEditResult: DiagnosticCompletionState, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult {
@@ -125,7 +124,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		if (item && this._hasRecentlyBeenAccepted(item)) {
 			tb.addDroppedReason(`${item.type}:recently-accepted`);
 			this._tracer.trace('recently accepted');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
 		telemetry.droppedReasons.forEach(reason => tb.addDroppedReason(reason));
@@ -133,7 +132,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 		if (!item) {
 			this._tracer.trace('no diagnostic edit result');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
 		tb.setType(item.type);
@@ -145,7 +144,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 			edit: item.toOffsetEdit(),
 			displayLocation: item.nextEditDisplayLocation,
 			item
-		});
+		}, diagnosticEditResult.workInProgress);
 	}
 
 	handleShown(suggestion: DiagnosticsNextEditResult): void { }

@@ -13,6 +13,7 @@ import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common
 
 export const buildLocalIndexCommandId = 'github.copilot.buildLocalWorkspaceIndex';
 export const buildRemoteIndexCommandId = 'github.copilot.buildRemoteWorkspaceIndex';
+export const deleteExternalIngestWorkspaceIndexCommandId = 'github.copilot.deleteExternalIngestWorkspaceIndex';
 
 export function register(accessor: ServicesAccessor): IDisposable {
 	const workspaceChunkSearch = accessor.get(IWorkspaceChunkSearchService);
@@ -35,9 +36,14 @@ export function register(accessor: ServicesAccessor): IDisposable {
 	disposableStore.add(vscode.commands.registerCommand(buildRemoteIndexCommandId, onlyRunOneAtATime(async () => {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Window,
-			title: t`Building remote workspace index...`,
-		}, async () => {
-			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing('manual', new TelemetryCorrelationId('BuildRemoteIndexCommand'));
+			title: t`Building remote workspace index`,
+		}, async (progress, token) => {
+			const triggerResult = await workspaceChunkSearch.triggerRemoteIndexing(
+				'manual',
+				(message) => progress.report({ message }),
+				new TelemetryCorrelationId('BuildRemoteIndexCommand'),
+				token
+			);
 			if (triggerResult.isError()) {
 				if (triggerResult.err.id === TriggerRemoteIndexingError.alreadyIndexed.id) {
 					vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
@@ -45,6 +51,16 @@ export function register(accessor: ServicesAccessor): IDisposable {
 					vscode.window.showWarningMessage(t`Could not build remote workspace index. ` + '\n\n' + triggerResult.err.userMessage);
 				}
 			}
+		});
+	})));
+
+	disposableStore.add(vscode.commands.registerCommand(deleteExternalIngestWorkspaceIndexCommandId, onlyRunOneAtATime(async () => {
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Window,
+			title: t`Deleting external ingest index...`,
+		}, async () => {
+			await workspaceChunkSearch.deleteExternalIngestWorkspaceIndex();
+			vscode.window.showInformationMessage(t`External ingest index deleted.`);
 		});
 	})));
 

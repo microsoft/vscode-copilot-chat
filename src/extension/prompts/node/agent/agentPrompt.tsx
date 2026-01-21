@@ -30,7 +30,7 @@ import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
-import { ChatVariables } from '../panel/chatVariables';
+import { ChatVariables, UserQuery } from '../panel/chatVariables';
 import { CustomInstructions } from '../panel/customInstructions';
 import { NotebookFormat, NotebookReminderInstructions } from '../panel/notebookEditCodePrompt';
 import { NotebookSummaryChange } from '../panel/notebookSummaryChangePrompt';
@@ -235,7 +235,9 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<UserOSPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
-				<AgentTasksInstructions availableTools={this.props.availableTools} />
+				<TokenLimit max={2000}>
+					<AgentTasksInstructions availableTools={this.props.availableTools} />
+				</TokenLimit>
 				<WorkspaceFoldersHint />
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
@@ -267,6 +269,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
+	readonly sessionResource?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -296,6 +299,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
+		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
 		...customizations,
 	};
 }
@@ -362,7 +366,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
-						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
+						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
@@ -370,7 +374,9 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<ReminderInstructionsClass {...reminderProps} />
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
-					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
+						<UserQuery chatVariables={this.props.chatVariables} query={query + attachmentHint} />
+					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>
@@ -404,7 +410,7 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 		if (part.type === Raw.ChatCompletionContentPartKind.Text) {
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} />;
+			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}

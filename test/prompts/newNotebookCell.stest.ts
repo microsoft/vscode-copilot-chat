@@ -22,20 +22,20 @@ ssuite({ title: 'newNotebook', subtitle: 'prompt', location: 'panel' }, () => {
 		const topic = 'Creating Random Arrays with Numpy';
 		const sections: INotebookSection[] = [
 			{
-				"title": "Import Required Libraries",
-				"content": "Import the necessary libraries, including NumPy."
+				'title': 'Import Required Libraries',
+				'content': 'Import the necessary libraries, including NumPy.'
 			},
 			{
-				"title": "Create Random Arrays",
-				"content": "Use NumPy to create random arrays of various shapes and sizes, including 1D, 2D, and 3D arrays."
+				'title': 'Create Random Arrays',
+				'content': 'Use NumPy to create random arrays of various shapes and sizes, including 1D, 2D, and 3D arrays.'
 			},
 			{
-				"title": "Seed the Random Number Generator",
-				"content": "Use the seed() function to seed the random number generator for reproducibility."
+				'title': 'Seed the Random Number Generator',
+				'content': 'Use the seed() function to seed the random number generator for reproducibility.'
 			},
 			{
-				"title": "Generate Random Integers",
-				"content": "Use the randint() function to generate random integers within a specified range."
+				'title': 'Generate Random Integers',
+				'content': 'Use the randint() function to generate random integers within a specified range.'
 			}
 		];
 

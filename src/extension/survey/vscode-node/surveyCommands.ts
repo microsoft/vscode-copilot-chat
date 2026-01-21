@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
-const SURVEY_SIGNAL_USAGE_ID = 'github.copilot.survey.signalUsage';
+export const SURVEY_SIGNAL_USAGE_ID = 'github.copilot.survey.signalUsage';
 
 export class SurveyCommandContribution extends Disposable {
 	constructor(@ISurveyService private readonly _surveyService: ISurveyService) {

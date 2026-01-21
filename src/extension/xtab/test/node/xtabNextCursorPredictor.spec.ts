@@ -76,6 +76,7 @@ function createTestPromptPieces(): PromptPieces {
 		'<area_around_code_to_edit>\nline 2\nline 3\n</area_around_code_to_edit>', // areaAroundCodeToEdit
 		undefined, // langCtx - can be undefined
 		AggressivenessLevel.Medium,
+		undefined, // lintErrors
 		computeTokens,
 		opts
 	);
@@ -99,7 +100,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		// Enable the next cursor prediction feature
 		const configService = accessor.get(IConfigurationService);
-		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionEnabled, NextCursorLinePrediction.OnlyWithEdit);
+		configService.setConfig(ConfigKey.InlineEditsNextCursorPredictionEnabled, true);
 		configService.setConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionModelName, 'test-model');
 	});
 
@@ -208,7 +209,7 @@ describe('XtabNextCursorPredictor', () => {
 				requestId: 'test-request-id',
 				serverRequestId: 'test-server-request-id',
 				usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, prompt_tokens_details: { cached_tokens: 0 } },
-				value: '42',
+				value: '0',
 				resolvedModel: 'test-model'
 			});
 
@@ -216,7 +217,7 @@ describe('XtabNextCursorPredictor', () => {
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {
-				expect(result.val).toBe(42);
+				expect(result.val).toBe(0);
 			}
 
 			// Predictor should still be enabled

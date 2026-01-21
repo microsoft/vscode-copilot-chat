@@ -52,7 +52,7 @@ export function isBYOKModel(endpoint: IChatEndpoint | undefined): number {
 	if (!endpoint) {
 		return -1;
 	}
-	return endpoint instanceof OpenAIEndpoint ? 1 : (endpoint.customModel ? 2 : -1);
+	return (endpoint instanceof OpenAIEndpoint || endpoint.isExtensionContributed) ? 1 : (endpoint.customModel ? 2 : -1);
 }
 
 export class OpenAIEndpoint extends ChatEndpoint {
@@ -282,7 +282,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (body?.tools) {
 			body.tools = body.tools.map(tool => {
 				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
-					tool.function.parameters = { type: "object", properties: {} };
+					tool.function.parameters = { type: 'object', properties: {} };
 				}
 				return tool;
 			});
@@ -308,7 +308,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {
-			"Content-Type": "application/json"
+			'Content-Type': 'application/json'
 		};
 		if (this._modelUrl.includes('openai.azure')) {
 			headers['api-key'] = this._apiKey;

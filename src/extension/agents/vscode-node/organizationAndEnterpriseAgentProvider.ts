@@ -8,19 +8,21 @@ import YAML from 'yaml';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
+import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
 
-export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
+export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentProvider {
+
+	label: string = vscode.l10n.t('GitHub Organization');
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
-	private memoryCache: vscode.CustomAgentResource[] | undefined = undefined;
+	private memoryCache: vscode.CustomAgentChatResource[] | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -29,6 +31,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 	) {
 		super();
+
+		// Trigger async fetch to update cache. Note: this provider is re-created each time
+		// the user signs in, so this will re-fetch on sign-in. See logic in conversationFeature.ts.
+		this.fetchAndUpdateCache().catch(error => {
+			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
+		});
 	}
 
 	private getCacheDir(): vscode.Uri {
@@ -36,31 +44,23 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	async provideCustomAgents(
-		options: vscode.CustomAgentQueryOptions,
+		_options: vscode.CustomAgentContext,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.CustomAgentChatResource[]> {
 		try {
-			// If we have successfully fetched and cached in memory, return from memory
 			if (this.memoryCache !== undefined) {
 				return this.memoryCache;
 			}
 
-			// Read from file cache first
-			const fileCachedAgents = await this.readFromCache();
-
-			// Trigger async fetch to update cache
-			this.fetchAndUpdateCache(options).catch(error => {
-				this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in background fetch: ${error}`);
-			});
-
-			return fileCachedAgents;
+			// Return results from file cache
+			return await this.readFromCache();
 		} catch (error) {
 			this.logService.error(`[OrganizationAndEnterpriseAgentProvider] Error in provideCustomAgents: ${error}`);
 			return [];
 		}
 	}
 
-	private async readFromCache(): Promise<vscode.CustomAgentResource[]> {
+	private async readFromCache(): Promise<vscode.CustomAgentChatResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -68,7 +68,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				return [];
 			}
 
-			const agents: vscode.CustomAgentResource[] = [];
+			const agents: vscode.CustomAgentChatResource[] = [];
 
 			// Check if cache directory exists
 			try {
@@ -93,11 +93,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					const metadata = this.parseAgentMetadata(text, filename);
 					if (metadata) {
 						const fileUri = vscode.Uri.joinPath(orgDir, filename);
-						agents.push({
-							name: metadata.name,
-							description: metadata.description,
-							uri: fileUri,
-						});
+						agents.push(new vscode.CustomAgentChatResource(fileUri));
 					}
 				}
 			}
@@ -110,17 +106,8 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
-	private async runWithAuthCheck<T>(operation: () => Promise<T>): Promise<T> {
-		const user = await this.octoKitService.getCurrentAuthedUser();
-		if (!user) {
-			throw new Error('User is not signed in');
-		}
-		return operation();
-	}
 
-	private async fetchAndUpdateCache(
-		options: vscode.CustomAgentQueryOptions
-	): Promise<void> {
+	private async fetchAndUpdateCache(): Promise<void> {
 		// Prevent concurrent fetches
 		if (this.isFetching) {
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetch already in progress, skipping');
@@ -138,7 +125,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace('[OrganizationAndEnterpriseAgentProvider] Fetching custom agents from all user organizations');
 
 			// Get all organizations the user belongs to
-			const organizations = await this.runWithAuthCheck(() => this.octoKitService.getUserOrganizations());
+			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
 			if (organizations.length === 0) {
 				this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User does not belong to any organizations');
 				return;
@@ -147,13 +134,16 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 			this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Found ${organizations.length} organizations: ${organizations.join(', ')}`);
 
 			// Convert VS Code API options to internal options
-			const internalOptions = options ? {
+			const internalOptions = {
 				includeSources: ['org', 'enterprise'] // don't include 'repo'
-			} satisfies CustomAgentListOptions : undefined;
+			} satisfies CustomAgentListOptions;
 
 			// Fetch agents from all organizations
 			const agentsByOrg = new Map<string, Map<string, CustomAgentListItem>>();
 			let hadAnyFetchErrors = false;
+
+			// Track unique agents globally to dedupe enterprise agents that appear across multiple orgs
+			const seenAgents = new Map<string, CustomAgentListItem>();
 
 			for (const org of organizations) {
 				try {
@@ -162,20 +152,30 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 
 					// Get the first repository for this organization to use in the API call
 					// We can't just use .github-private because user may not have access to it
-					const repos = await this.runWithAuthCheck(() => this.octoKitService.getOrganizationRepositories(org));
+					const repos = await this.octoKitService.getOrganizationRepositories(org, { createIfNone: false });
 					if (repos.length === 0) {
 						this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] No repositories found for ${org}, skipping`);
 						continue;
 					}
 
 					const repoName = repos[0];
-					const agents = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgents(org, repoName, internalOptions));
+					const agents = await this.octoKitService.getCustomAgents(org, repoName, internalOptions, { createIfNone: false });
 					for (const agent of agents) {
+						// Create unique key to identify agents (enterprise agents may appear in multiple orgs)
+						// Note: version is not included, so different versions are deduplicated
+						const agentKey = `${agent.repo_owner}/${agent.repo_name}/${agent.name}`;
+
+						// Skip if we've already seen this agent (dedupe enterprise agents)
+						if (seenAgents.has(agentKey)) {
+							continue;
+						}
+
+						seenAgents.set(agentKey, agent);
 						agentsForOrg.set(agent.name, agent);
 					}
-					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName}`);
+					this.logService.trace(`[OrganizationAndEnterpriseAgentProvider] Fetched ${agents.length} agents from ${org} using repo ${repoName} (${agentsForOrg.size} added after deduplication)`);
 				} catch (error) {
-					if (error instanceof Error && error.message === 'User is not signed in') {
+					if (error instanceof PermissiveAuthRequiredError) {
 						this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 						return;
 					}
@@ -240,12 +240,13 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 						const filename = this.sanitizeFilename(agent.name) + AgentFileExtension;
 
 						// Fetch full agent details including prompt content
-						const agentDetails = await this.runWithAuthCheck(() => this.octoKitService.getCustomAgentDetails(
+						const agentDetails = await this.octoKitService.getCustomAgentDetails(
 							agent.repo_owner,
 							agent.repo_name,
 							agent.name,
-							agent.version
-						));
+							agent.version,
+							{ createIfNone: false }
+						);
 
 						// Generate agent markdown file content
 						if (agentDetails) {
@@ -254,7 +255,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 							totalAgents++;
 						}
 					} catch (error) {
-						if (error instanceof Error && error.message === 'User is not signed in') {
+						if (error instanceof PermissiveAuthRequiredError) {
 							this.logService.trace('[OrganizationAndEnterpriseAgentProvider] User signed out during fetch, aborting');
 							return;
 						}
@@ -386,6 +387,12 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 		if (agent.target) {
 			frontmatterObj.target = agent.target;
+		}
+		if (agent.model) {
+			frontmatterObj.model = agent.model;
+		}
+		if (agent.infer) {
+			frontmatterObj.infer = agent.infer;
 		}
 
 		const frontmatter = YAML.stringify(frontmatterObj, { lineWidth: 0 }).trim();

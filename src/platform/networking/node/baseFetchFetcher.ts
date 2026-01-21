@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
+
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
 import { FetcherId, FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
@@ -87,14 +87,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			resp.status,
 			resp.statusText,
 			resp.headers,
-			() => resp.text(),
-			() => resp.json(),
-			async () => {
-				if (!resp.body) {
-					return Readable.from([]);
-				}
-				return Readable.fromWeb(resp.body);
-			},
+			resp.body,
 			this._fetcherId
 		);
 	}
@@ -107,7 +100,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	}
 	isAbortError(e: any): boolean {
 		// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-		return e && e.name === "AbortError";
+		return e && e.name === 'AbortError';
 	}
 	abstract isInternetDisconnectedError(e: any): boolean;
 	abstract isFetcherError(e: any): boolean;

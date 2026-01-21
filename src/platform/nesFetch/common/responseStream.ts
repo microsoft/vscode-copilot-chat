@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { AsyncIterableObject, DeferredPromise } from '../../../util/vs/base/common/async';
-import { safeStringify } from '../../../util/vs/base/common/objects';
 import { assertType } from '../../../util/vs/base/common/types';
+import { RequestId } from '../../networking/common/fetch';
+import { IHeaders, Response } from '../../networking/common/fetcherService';
 import { Completion } from './completionsAPI';
 
 export class ResponseStream {
@@ -31,7 +33,7 @@ export class ResponseStream {
 	 */
 	public readonly stream: AsyncIterableObject<Completion>;
 
-	constructor(stream: AsyncIterable<Completion>) {
+	constructor(private readonly fetcherResponse: Response, stream: AsyncIterable<Completion>, public readonly requestId: RequestId, public readonly headers: IHeaders) {
 		const tokensDeferredPromise = new DeferredPromise<Result<Completion[], Error>>();
 		this.aggregatedStream = tokensDeferredPromise.p;
 		this.response = this.aggregatedStream.then((completions) => {
@@ -53,19 +55,22 @@ export class ResponseStream {
 					completions.push(completion);
 					emitter.emitOne(completion);
 				}
-			} catch (e) {
-				if (e instanceof Error) {
-					error = e;
-				} else {
-					error = new Error(safeStringify(e));
-				}
-				emitter.reject(e);
+			} catch (e: unknown) {
+				error = errors.fromUnknown(e);
+				emitter.reject(error);
 			} finally {
 				tokensDeferredPromise.complete(
 					error ? Result.error(error) : Result.ok(completions)
 				);
 			}
 		});
+	}
+
+	/**
+	 * @throws client of the method should handle the error
+	 */
+	public async destroy(): Promise<void> {
+		await this.fetcherResponse.body.destroy();
 	}
 
 	private static aggregateCompletionsStream(stream: Completion[]): Completion {

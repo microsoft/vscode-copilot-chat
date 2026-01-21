@@ -108,7 +108,7 @@ suite('StreamedCompletionSplitter', function () {
 		Sinon.assert.calledWith(
 			cacheFunction,
 			'const result = [];\nfor (let i = 0; i < arg; i++) {\n\tresult.push(i);\n}',
-			Sinon.match({ completionText: "\nreturn result.join(', ');" })
+			Sinon.match({ completionText: `\nreturn result.join(', ');` })
 		);
 	});
 

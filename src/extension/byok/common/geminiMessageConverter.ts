@@ -6,18 +6,38 @@ import type { Content, FunctionCall, FunctionResponse, Part } from '@google/gena
 import { Raw } from '@vscode/prompt-tsx';
 import type { LanguageModelChatMessage } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
-import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
+import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 
-function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[]): Part[] {
+function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart)[]): Part[] {
 	const convertedContent: Part[] = [];
+	let pendingSignature: string | undefined;
+
 	for (const part of content) {
-		if (part instanceof LanguageModelToolCallPart) {
-			convertedContent.push({
+		if (part instanceof LanguageModelThinkingPart) {
+			// Extract thought signature from thinking part metadata
+			if (part.metadata && typeof part.metadata === 'object' && 'signature' in part.metadata) {
+				const metadataObj = part.metadata as Record<string, unknown>;
+				if (typeof metadataObj.signature === 'string') {
+					pendingSignature = metadataObj.signature;
+				}
+			}
+			// Note: We don't emit thinking content to Gemini as it's already been processed
+			// The signature will be attached to the next function call
+		} else if (part instanceof LanguageModelToolCallPart) {
+			const functionCallPart: Part = {
 				functionCall: {
 					name: part.name,
 					args: part.input as Record<string, unknown> || {}
-				}
-			});
+				},
+				// Attach pending thought signature if available (required by Gemini 3 for function calling)
+				...(pendingSignature ? { thoughtSignature: pendingSignature } : {})
+			};
+
+			if (pendingSignature) {
+				pendingSignature = undefined; // Clear after use
+			}
+
+			convertedContent.push(functionCallPart);
 		} else if (part instanceof LanguageModelDataPart) {
 			if (part.mimeType !== CustomDataPartMimeTypes.StatefulMarker && part.mimeType !== CustomDataPartMimeTypes.CacheControl) {
 				convertedContent.push({
@@ -57,7 +77,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				// Handle case with text content (may also have images)
 				try {
 					responsePayload = JSON.parse(textContent);
-					if (typeof responsePayload !== 'object' || responsePayload === null) {
+					if (typeof responsePayload !== 'object' || responsePayload === null || Array.isArray(responsePayload)) {
 						responsePayload = { result: responsePayload };
 					}
 				} catch {
@@ -88,7 +108,7 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 			};
 
 			convertedContent.push({ functionResponse });
-		} else {
+		} else if (part instanceof LanguageModelTextPart) {
 			// Text content - only filter completely empty strings, keep whitespace
 			if (part.value !== '') {
 				convertedContent.push({

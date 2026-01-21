@@ -37,7 +37,7 @@ export function compareTreeWithSpec<T>(
 
 	if (strictness === 'strict' && isLine(actual)) {
 		if (actual.indentation !== (expected as VirtualNode<T>).indentation) {
-			failCompare(actual, expected, "virtual node indentation doesn't match", treeParent, parentIndex);
+			failCompare(actual, expected, `virtual node indentation doesn't match`, treeParent, parentIndex);
 		}
 	}
 

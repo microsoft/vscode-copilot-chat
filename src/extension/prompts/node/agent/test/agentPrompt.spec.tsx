@@ -43,8 +43,7 @@ const testFamilies = [
 	'claude-sonnet-4.5',
 	'claude-opus-4.5',
 	'gemini-2.0-flash',
-	'grok-code-fast-1',
-	'arctic-fox'
+	'grok-code-fast-1'
 ];
 
 testFamilies.forEach(family => {
@@ -89,7 +88,7 @@ testFamilies.forEach(family => {
 
 		async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>): Promise<string> {
 			const instaService = accessor.get(IInstantiationService);
-			const endpoint = family === "default"
+			const endpoint = family === 'default'
 				? instaService.createInstance(MockEndpoint, undefined)
 				: instaService.createInstance(MockEndpoint, family);
 			if (!promptContext.conversation) {

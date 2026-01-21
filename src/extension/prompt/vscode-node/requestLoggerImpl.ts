@@ -12,7 +12,7 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
@@ -51,6 +51,41 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 				} catch (e) { }
 				return `🛠️ ${c.name} (${c.id}) ${argsStr}`;
 			}).join('\n');
+		}
+
+		// Handle context management
+		if (d.contextManagement) {
+			if (i > 0 || text.length > 0) {
+				text += '\n';
+			}
+
+			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+				0
+			);
+			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+				0
+			);
+			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
+				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+				0
+			);
+
+			const details: string[] = [];
+			if (totalClearedTokens > 0) {
+				details.push(`${totalClearedTokens} tokens`);
+			}
+			if (totalClearedToolUses > 0) {
+				details.push(`${totalClearedToolUses} tool uses`);
+			}
+			if (totalClearedThinkingTurns > 0) {
+				details.push(`${totalClearedThinkingTurns} thinking turns`);
+			}
+
+			if (details.length > 0) {
+				text += `🧹 Context cleared: ${details.join(', ')}`;
+			}
 		}
 
 		return text;
@@ -292,7 +327,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			debugName: 'modelList',
 			startTimeMs: Date.now(),
 			icon: Codicon.fileCode,
-			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models)
+			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models),
+			isConversationRequest: false
 		});
 	}
 
@@ -310,6 +346,20 @@ export class RequestLogger extends AbstractRequestLogger {
 			thinking,
 			edits,
 			toolMetadata
+		));
+	}
+
+	public override logServerToolCall(id: string, name: string, args: unknown): void {
+		const syntheticResponse: LanguageModelToolResult2 = {
+			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
+		};
+		this._addEntry(new LoggedToolCall(
+			id,
+			`${name} [server]`,
+			args,
+			syntheticResponse,
+			this.currentRequest,
+			Date.now()
 		));
 	}
 
@@ -539,7 +589,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		result.push(`## Metadata`);
-		result.push(`~~~`);
+		result.push(`<pre><code>`);
 
 		if (typeof entry.chatEndpoint.urlOrRequestMetadata === 'string') {
 			result.push(`url              : ${entry.chatEndpoint.urlOrRequestMetadata}`);
@@ -579,9 +629,15 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
 		if (entry.chatParams.body?.tools) {
-			result.push(`tools            : ${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`);
+			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
+			const numToolsString = `(${toolNames.length})`;
+			result.push(
+				`<details>`,
+				`<summary>tools ${numToolsString}${' '.repeat(9 - numToolsString.length)}: ${toolNames.join(', ')}</summary>${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`,
+				`</details>`
+			);
 		}
-		result.push(`~~~`);
+		result.push(`</code></pre>`);
 
 		result.push(`## Request Messages`);
 		for (const message of entry.chatParams.messages) {

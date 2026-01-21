@@ -6,12 +6,12 @@ import { createServiceIdentifier } from '../../../../../../util/common/services'
 import { ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICompletionsLogTargetService, Logger } from '../logger';
 import { postInsertionTasks, postRejectionTasks } from '../postInsertion';
-import { countLines, PartialAcceptTriggerKind, SuggestionStatus } from '../suggestions/partialSuggestions';
+import { countLines, SuggestionStatus } from '../suggestions/partialSuggestions';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, TextDocumentContents, TextDocumentIdentifier } from '../textDocument';
 import { CopilotCompletion } from './copilotCompletion';
-import { ResultType } from './ghostText';
-import { PostInsertionCategory, telemetryShown } from './telemetry';
+import { ResultType } from './resultType';
+import { GHOST_TEXT_CATEGORY, telemetryShown } from './telemetry';
 
 const ghostTextLogger = new Logger('ghostText');
 
@@ -168,7 +168,7 @@ export function handleGhostTextShown(accessor: ServicesAccessor, cmp: CopilotCom
 				`[${cmp.telemetry.properties.headerRequestId}] shown choiceIndex: ${cmp.telemetry.properties.choiceIndex}, fromCache ${fromCache}`
 			);
 			cmp.telemetry.measurements.compCharLen = cmp.displayText.length;
-			telemetryShown(accessor, 'ghostText', cmp);
+			telemetryShown(accessor, cmp);
 		}
 	}
 }
@@ -206,7 +206,6 @@ function handleLineAcceptance(accessor: ServicesAccessor, cmp: CopilotCompletion
 export function handleGhostTextPostInsert(
 	accessor: ServicesAccessor,
 	cmp: CopilotCompletion,
-	triggerCategory: PostInsertionCategory = 'ghostText'
 ) {
 	const last = accessor.get(ICompletionsLastGhostText);
 
@@ -232,7 +231,7 @@ export function handleGhostTextPostInsert(
 
 	return postInsertionTasks(
 		accessor,
-		triggerCategory,
+		GHOST_TEXT_CATEGORY,
 		cmp.displayText,
 		cmp.offset,
 		cmp.uri,
@@ -246,8 +245,6 @@ export function handlePartialGhostTextPostInsert(
 	accessor: ServicesAccessor,
 	cmp: CopilotCompletion,
 	acceptedLength: number,
-	triggerKind: PartialAcceptTriggerKind = PartialAcceptTriggerKind.Unknown,
-	triggerCategory: PostInsertionCategory = 'ghostText',
 ) {
 	const last = accessor.get(ICompletionsLastGhostText);
 
@@ -261,7 +258,7 @@ export function handlePartialGhostTextPostInsert(
 
 	return postInsertionTasks(
 		accessor,
-		triggerCategory,
+		GHOST_TEXT_CATEGORY,
 		cmp.displayText,
 		cmp.offset,
 		cmp.uri,

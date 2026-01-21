@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ProgressLocation, Uri, window } from 'vscode';
 import * as l10n from '@vscode/l10n';
+import { ProgressLocation, Uri, window } from 'vscode';
 import { compute4GramTextSimilarity } from '../../../platform/editSurvivalTracking/common/editSurvivalTracker';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
@@ -69,6 +69,13 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		}
 
 		return window.withProgress({ location: ProgressLocation.SourceControl }, async () => {
+			try {
+				// Explicitly refresh (best effort) the repository state to make
+				// sure that the repository state is up-to-date before generating
+				// the commit message.
+				await repository.status();
+			} catch (err) { }
+
 			const indexChanges = repository.state.indexChanges.length;
 			const workingTreeChanges = repository.state.workingTreeChanges.length;
 			const untrackedChanges = repository.state.untrackedChanges?.length ?? 0;
@@ -115,7 +122,7 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		});
 	}
 
-	getRepository(uri?: Uri): Repository | null {
+	async getRepository(uri?: Uri): Promise<Repository | null> {
 		if (!this._gitExtensionApi) {
 			return null;
 		}
@@ -125,7 +132,19 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		}
 
 		uri = uri ?? window.activeTextEditor?.document.uri;
-		return uri ? this._gitExtensionApi.getRepository(uri) : null;
+		if (!uri) {
+			return null;
+		}
+
+		const repository = this._gitExtensionApi.getRepository(uri);
+		if (!repository) {
+			return null;
+		}
+
+		// Refresh repository state
+		await repository.status();
+
+		return repository;
 	}
 
 	private _getAttemptCount(repository: Repository, changes: string[]): number {

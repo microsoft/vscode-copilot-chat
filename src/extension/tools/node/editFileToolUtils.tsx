@@ -21,7 +21,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { getLanguageId } from '../../../util/common/markdown';
 import { findNotebook } from '../../../util/common/notebooks';
 import * as glob from '../../../util/vs/base/common/glob';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
@@ -105,7 +105,7 @@ export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, 
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
-		maxComputationTimeMs: 5000,
+		maxComputationTimeMs: 20000,
 		computeMoves: false,
 	});
 
@@ -290,7 +290,7 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 			editPosition,
 			strategy: 'exact',
 			matchPositions,
-			suggestion: "Multiple exact matches found. Make your search string more specific."
+			suggestion: 'Multiple exact matches found. Make your search string more specific.'
 		};
 	}
 	// Exactly one exact match found.
@@ -344,7 +344,7 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 			type: 'multiple',
 			editPosition: [],
 			matchPositions: positions.map(p => convert.positionToOffset(p.start)),
-			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
+			suggestion: 'Multiple matches found with flexible whitespace. Make your search string more unique.',
 			strategy: 'whitespace',
 		};
 	}
@@ -399,7 +399,7 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 			text,
 			type: 'multiple',
 			editPosition: [],
-			suggestion: "Multiple fuzzy matches found. Try including more context in your search string.",
+			suggestion: 'Multiple fuzzy matches found. Try including more context in your search string.',
 			strategy: 'fuzzy',
 			matchPositions: matches.map(match => match.index || 0),
 		};
@@ -886,11 +886,11 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 }
 
-export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
+export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], allowedUris: ResourceSet | undefined, detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))
-	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
+	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation && !allowedUris?.has(r.uri));
 
 	if (!needsConfirmation.length) {
 		return { presentation: 'hidden' };
@@ -925,6 +925,9 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
 	const workspace = accessor.get(IWorkspaceService);
 	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
+	if (workspace.notebookDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
 		return Promise.resolve(true);
 	}
 

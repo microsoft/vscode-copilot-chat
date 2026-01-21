@@ -36,12 +36,16 @@ export class EditSurvivalTracker {
 	 * fourGram: Number between 0 (no edits survived) and 1 (all edits survived).
 	 * noRevert: Number between 0 (the text after user edits equals the text before the AI edits) and 1 (the text after user edits does not revert any text to the initial state)
 	 */
-	computeTrackedEditsSurvivalScore(): { fourGram: number; noRevert: number } {
+	computeTrackedEditsSurvivalScore(): { fourGram: number; noRevert: number; textBeforeAiEdits: string[]; textAfterAiEdits: string[]; textAfterUserEdits: string[] } {
 		let similarityScoreSumFourGram = 0;
 		let similarityScoreSumMax = 0;
 
 		let noRevertSum = 0;
 		let noRevertSumMax = 0;
+
+		const allTextBefore: string[] = [];
+		const allTextAfter: string[] = [];
+		const allTextCurrent: string[] = [];
 
 		const ranges = this._originalEdits.getNewRanges();
 		const updatedRanges = applyEditsToRanges(ranges, this._combinedEditsSinceStart);
@@ -53,6 +57,10 @@ export class EditSurvivalTracker {
 			const textAfterAiEdits = originalEdit.newText;
 			const newRange = updatedRanges[i];
 			const textAfterUserEdits = this._text.substring(newRange.start, newRange.endExclusive);
+
+			allTextBefore.push(textBeforeAiEdits);
+			allTextAfter.push(textAfterAiEdits);
+			allTextCurrent.push(textAfterUserEdits);
 
 			const similarity = compute4GramTextSimilarity(textAfterUserEdits, textAfterAiEdits);
 
@@ -75,6 +83,9 @@ export class EditSurvivalTracker {
 		return {
 			fourGram: similarityScoreSumMax === 0 ? 1 : (similarityScoreSumFourGram / similarityScoreSumMax),
 			noRevert: noRevertSumMax === 0 ? 1 : (noRevertSum / noRevertSumMax),
+			textBeforeAiEdits: allTextBefore,
+			textAfterAiEdits: allTextAfter,
+			textAfterUserEdits: allTextCurrent,
 		};
 	}
 }

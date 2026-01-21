@@ -3,9 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { FetchOptions, IAbortController, ICompletionsFetcherService, IHeaders, Response } from '../networking';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 
 type HeadersParameter = { [key: string]: string };
 
@@ -15,13 +14,11 @@ export function createFakeResponse(statusCode: number, response?: string, header
 	for (const [key, value] of Object.entries(headers || {})) {
 		fakeHeaders.set(key, value);
 	}
-	return new Response(
+	return Response.fromText(
 		statusCode,
 		'status text',
 		fakeHeaders,
-		() => Promise.resolve(response ?? ''),
-		() => Promise.resolve(response ? JSON.parse(response) : {}),
-		() => Promise.resolve(null),
+		response ?? '',
 		'test-stub'
 	);
 }
@@ -37,13 +34,11 @@ export function createFakeJsonResponse(statusCode: number, response: string | ob
 }
 
 export function createFakeStreamResponse(body: string): Response {
-	return new Response(
+	return Response.fromText(
 		200,
 		'Success',
 		new FakeHeaders(),
-		() => Promise.resolve(body),
-		() => Promise.resolve(JSON.parse(body.replace(/^data: /gm, '').replace(/\n\[DONE\]\n$/, ''))),
-		() => Promise.resolve(toStream(body)),
+		body,
 		'test-stub'
 	);
 }
@@ -131,16 +126,6 @@ export class NoFetchFetcher extends FakeFetcher {
 	fetch(url: string, options: FetchOptions): Promise<Response> {
 		throw new Error('NoFetchFetcher does not support fetching');
 	}
-}
-
-function toStream(...strings: string[]): NodeJS.ReadableStream {
-	const stream = new Readable();
-	stream._read = () => { };
-	for (const s of strings) {
-		stream.push(s);
-	}
-	stream.push(null);
-	return stream;
 }
 
 class FakeHeaders implements IHeaders {

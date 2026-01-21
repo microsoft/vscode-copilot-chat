@@ -213,15 +213,19 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
 					}
 
+					const subAgentInvocationId = props.promptContext.request?.subAgentInvocationId;
+					const subAgentName = props.promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
-						chatRequestId: props.requestId
+						chatRequestId: props.requestId,
+						subAgentInvocationId,
+						subAgentName,
+						// Split on `__vscode` so it's the chat stream id
+						// TODO @lramos15 - This is a gross hack
+						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
-					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
-						invocationOptions.fromSubAgent = true;
-					}
 
 					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
@@ -245,7 +249,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource) {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {
@@ -382,7 +386,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 			}
 		}
 
-		return <Image src={imageSource} />;
+		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
 }
 
@@ -523,7 +527,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	}
 
 	protected async onImage(part: LanguageModelDataPart) {
-		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+		const githubToken = (await this.authService.getGitHubSession('any', { silent: true }))?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
 			: false;

@@ -88,7 +88,7 @@ async function getFileEditConfirmationToolParams(instaService: IInstantiationSer
 	};
 
 	const getDetails = () => instaService.invokeFunction(details).then(d => d || '');
-	const confirmationInfo = await instaService.invokeFunction(createEditConfirmation, [file], getDetails);
+	const confirmationInfo = await instaService.invokeFunction(accessor => createEditConfirmation(accessor, [file], undefined, getDetails));
 	const confirmationMessage = confirmationInfo.confirmationMessages;
 	if (!confirmationMessage) {
 		return;

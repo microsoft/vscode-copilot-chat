@@ -184,7 +184,7 @@ class PatchEditFixRulesAndExample extends PromptElement {
 						<PatchEditInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C { }", "", "new C().Field = 9;"]}
+							code={['// This is my class', 'class C { }', '', 'new C().Field = 9;']}
 						/>
 					</Tag>
 					<Tag name='assistant'>
@@ -195,13 +195,13 @@ class PatchEditFixRulesAndExample extends PromptElement {
 								[
 									{
 										uri: exampleUri,
-										find: ["// This is my class", "class C { }"],
-										replace: ["// This is my class", "class C {", "public int Field { get; set; }", "}"]
+										find: ['// This is my class', 'class C { }'],
+										replace: ['// This is my class', 'class C {', 'public int Field { get; set; }', '}']
 									},
 									{
 										uri: exampleUri,
-										find: ["new C().Field = 9;"],
-										replace: ["// set the field to 9", "new C().Field = 9;"]
+										find: ['new C().Field = 9;'],
+										replace: ['// set the field to 9', 'new C().Field = 9;']
 									}
 								]
 							}
@@ -341,7 +341,7 @@ class CodeMapperRulesAndExample extends PromptElement {
 						<CodeMapperInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C { }", "", "new C().Field = 9;"].join('\n')}
+							code={['// This is my class', 'class C { }', '', 'new C().Field = 9;'].join('\n')}
 							shouldTrim={false}
 						/>
 					</Tag>
@@ -351,7 +351,7 @@ class CodeMapperRulesAndExample extends PromptElement {
 						<CodeMapperInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C {", "  public int Field { get; set; }", "}", ""].join('\n')}
+							code={['// This is my class', 'class C {', '  public int Field { get; set; }', '}', ''].join('\n')}
 							shouldTrim={false}
 						/>
 					</Tag>

@@ -68,8 +68,8 @@ export const CurrentRunPicker = mobxlite.observer(({ simulationRunsProvider, onC
 								<span>{run.friendlyName}</span>
 								<Button
 									icon={<Edit16Regular />}
-									appearance="subtle"
-									size="small"
+									appearance='subtle'
+									size='small'
 									onClick={(e) => {
 										e.stopPropagation();
 										handleRenameClick(run.name);
@@ -89,13 +89,13 @@ export const CurrentRunPicker = mobxlite.observer(({ simulationRunsProvider, onC
 							<Input
 								value={newName}
 								onChange={(e) => setNewName(e.target.value)}
-								placeholder="Enter new name"
+								placeholder='Enter new name'
 								onKeyDown={handleKeyDown}
 							/>
 						</DialogContent>
 						<DialogActions>
-							<Button appearance="secondary" onClick={() => setIsRenameDialogOpen(false)}>Cancel</Button>
-							<Button appearance="primary" onClick={handleRenameConfirm}>Rename ↵</Button>
+							<Button appearance='secondary' onClick={() => setIsRenameDialogOpen(false)}>Cancel</Button>
+							<Button appearance='primary' onClick={handleRenameConfirm}>Rename ↵</Button>
 						</DialogActions>
 					</DialogBody>
 				</DialogSurface>

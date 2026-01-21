@@ -187,7 +187,7 @@ class ReviewReplyInterpreter implements ReplyInterpreter {
 				this.updating = true;
 				const content = new MarkdownString(l10n.t({
 					message: 'Reviewing your code...\n',
-					comment: "{Locked='](command:workbench.panel.markers.view.focus)'}",
+					comment: `{Locked='](command:workbench.panel.markers.view.focus)'}`,
 				}));
 				content.isTrusted = {
 					enabledCommands: ['workbench.panel.markers.view.focus']

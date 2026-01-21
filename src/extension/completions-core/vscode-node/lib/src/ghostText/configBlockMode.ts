@@ -6,13 +6,13 @@
 
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
-import { BlockMode } from "../../../../../completions/common/config";
+import { BlockMode } from '../../../../../completions/common/config';
 import { isSupportedLanguageId } from '../../../prompt/src/parse';
 import { ConfigKey, getConfig } from '../config';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
-import { TelemetryWithExp } from "../telemetry";
+import { TelemetryWithExp } from '../telemetry';
 import { BlockTrimmer } from './blockTrimmer';
-import { StatementTree } from "./statementTree";
+import { StatementTree } from './statementTree';
 
 export const ICompletionsBlockModeConfig = createServiceIdentifier<ICompletionsBlockModeConfig>('ICompletionsBlockModeConfig');
 export interface ICompletionsBlockModeConfig {
