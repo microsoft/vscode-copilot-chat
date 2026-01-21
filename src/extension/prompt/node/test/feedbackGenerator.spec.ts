@@ -6,7 +6,6 @@
 import { Raw } from '@vscode/prompt-tsx';
 import assert from 'assert';
 import { afterEach, beforeEach, describe, suite, test } from 'vitest';
-import type { EndOfLine, TextDocument, TextLine } from 'vscode';
 import { ChatFetchResponseType, ChatResponse } from '../../../../platform/chat/common/commonTypes';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
@@ -16,126 +15,21 @@ import { IChatEndpoint } from '../../../../platform/networking/common/networking
 import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../platform/telemetry/common/telemetry';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { MarkdownString, Position, Range, Uri } from '../../../../vscodeTypes';
+import { MarkdownString, Range, Uri } from '../../../../vscodeTypes';
 import { CurrentChangeInput } from '../../../prompts/node/feedback/currentChange';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FeedbackGenerator, parseFeedbackResponse, parseReviewComments, sendReviewActionTelemetry } from '../feedbackGenerator';
 
 suite('feedbackGenerator', () => {
 
-	class MockTextDocument implements TextDocument {
-		readonly uri: Uri;
-		readonly fileName: string;
-		readonly isUntitled = false;
-		readonly languageId: string;
-		readonly version = 1;
-		readonly isDirty = false;
-		readonly isClosed = false;
-		readonly eol: EndOfLine = 1;
-		readonly encoding = 'utf8';
-		private readonly _lines: string[];
-
-		constructor(uri: Uri, content: string, languageId = 'typescript') {
-			this.uri = uri;
-			this.fileName = uri.fsPath;
-			this.languageId = languageId;
-			this._lines = content.split('\n');
-		}
-
-		get lineCount(): number {
-			return this._lines.length;
-		}
-
-		lineAt(lineOrPosition: number | Position): TextLine {
-			const lineNumber = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
-			if (lineNumber < 0 || lineNumber >= this._lines.length) {
-				throw new Error('Invalid line number');
-			}
-			const text = this._lines[lineNumber];
-			return {
-				lineNumber,
-				text,
-				range: new Range(lineNumber, 0, lineNumber, text.length),
-				rangeIncludingLineBreak: new Range(lineNumber, 0, lineNumber + 1, 0),
-				firstNonWhitespaceCharacterIndex: text.match(/^\s*/)?.[0].length ?? 0,
-				isEmptyOrWhitespace: text.trim().length === 0,
-			};
-		}
-
-		getText(range?: Range): string {
-			if (!range) {
-				return this._lines.join('\n');
-			}
-			// Clamp range to valid document bounds (like VS Code's TextDocument does)
-			const startLine = Math.max(0, Math.min(range.start.line, this._lines.length - 1));
-			const endLine = Math.max(0, Math.min(range.end.line, this._lines.length));
-			const startChar = Math.max(0, Math.min(range.start.character, this._lines[startLine]?.length ?? 0));
-
-			if (startLine === endLine || endLine >= this._lines.length) {
-				// For ranges ending at or beyond lineCount, get text from start to end of document
-				if (endLine >= this._lines.length) {
-					const lines: string[] = [];
-					lines.push(this._lines[startLine].substring(startChar));
-					for (let i = startLine + 1; i < this._lines.length; i++) {
-						lines.push(this._lines[i]);
-					}
-					return lines.join('\n');
-				}
-				return this._lines[startLine].substring(startChar, range.end.character);
-			}
-			const lines: string[] = [];
-			lines.push(this._lines[startLine].substring(startChar));
-			for (let i = startLine + 1; i < endLine; i++) {
-				lines.push(this._lines[i]);
-			}
-			const endChar = Math.min(range.end.character, this._lines[endLine]?.length ?? 0);
-			lines.push(this._lines[endLine].substring(0, endChar));
-			return lines.join('\n');
-		}
-
-		offsetAt(position: Position): number {
-			let offset = 0;
-			for (let i = 0; i < position.line; i++) {
-				offset += this._lines[i].length + 1;
-			}
-			return offset + position.character;
-		}
-
-		positionAt(offset: number): Position {
-			let remaining = offset;
-			for (let line = 0; line < this._lines.length; line++) {
-				if (remaining <= this._lines[line].length) {
-					return new Position(line, remaining);
-				}
-				remaining -= this._lines[line].length + 1;
-			}
-			return new Position(this._lines.length - 1, this._lines[this._lines.length - 1].length);
-		}
-
-		getWordRangeAtPosition(_position: Position): Range | undefined {
-			return undefined;
-		}
-
-		validateRange(range: Range): Range {
-			return range;
-		}
-
-		validatePosition(position: Position): Position {
-			return position;
-		}
-
-		save(): Thenable<boolean> {
-			return Promise.resolve(true);
-		}
-	}
-
 	function createTestSnapshot(uri: Uri, content: string, languageId = 'typescript'): TextDocumentSnapshot {
-		const mockDoc = new MockTextDocument(uri, content, languageId);
-		return TextDocumentSnapshot.create(mockDoc);
+		const docData = createTextDocumentData(uri, content, languageId);
+		return TextDocumentSnapshot.create(docData.document);
 	}
 
 	function createReviewRequest(overrides?: Partial<ReviewRequest>): ReviewRequest {
@@ -1329,8 +1223,8 @@ multiple lines.
 		function createTestReviewComment(overrides?: Partial<ReviewComment>): ReviewComment {
 			const uri = Uri.file('/test/file.ts');
 			const content = 'line 0\nline 1\nline 2';
-			const mockDoc = new MockTextDocument(uri, content);
-			const snapshot = TextDocumentSnapshot.create(mockDoc);
+			const docData = createTextDocumentData(uri, content, 'typescript');
+			const snapshot = TextDocumentSnapshot.create(docData.document);
 
 			return {
 				request: {
