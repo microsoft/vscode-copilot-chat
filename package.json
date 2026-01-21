@@ -3667,7 +3667,10 @@
 						"properties": {
 							"triggerType": {
 								"type": "string",
-								"enum": ["input_tokens", "tool_uses"],
+								"enum": [
+									"input_tokens",
+									"tool_uses"
+								],
 								"description": "Type of trigger for context editing"
 							},
 							"triggerValue": {
@@ -3684,7 +3687,9 @@
 							},
 							"excludeTools": {
 								"type": "array",
-								"items": { "type": "string" },
+								"items": {
+									"type": "string"
+								},
 								"description": "Tool names to exclude from clearing"
 							},
 							"clearInputs": {
@@ -3920,6 +3925,16 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.chatSessionContextProvider.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.inlineEdits.chatSessionContextProvider.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
