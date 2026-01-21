@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260115",
+		"vscode": "^1.109.0-20260121",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -97,6 +97,7 @@
 		"commentReveal",
 		"contribCommentThreadAdditionalMenu",
 		"contribCommentsViewThreadMenus",
+		"contribChatEditorInlineGutterMenu",
 		"documentFiltersExclusive",
 		"embeddings",
 		"findTextInFiles",
@@ -4277,6 +4278,13 @@
 					"command": "github.copilot.chat.generateTests",
 					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
 					"group": "copilotGenerate@2"
+				}
+			],
+			"chat/editor/inlineGutter": [
+				{
+					"command": "github.copilot.chat.explain",
+					"when": "!github.copilot.interactiveSession.disabled",
+					"group": "2_chat@2"
 				}
 			],
 			"chat/input/editing/sessionToolbar": [
