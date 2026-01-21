@@ -2645,6 +2645,11 @@
 				"title": "GitHub Copilot Chat",
 				"id": "stable",
 				"properties": {
+					"github.copilot.chat.newWorkspace.useContext7": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
+					},
 					"github.copilot.chat.backgroundAgent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3350,11 +3355,6 @@
 							"onExP"
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.inline.typescript.enabled%"
-					},
-					"github.copilot.chat.newWorkspace.useContext7": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
 					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
