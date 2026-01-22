@@ -55,7 +55,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _db: sql.DatabaseSync;
 
-	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(5));
+	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(20));
 	private readonly _watcher = this._register(new MutableDisposable<DisposableStore>());
 
 	private static readonly _checkpointStorageKey = 'externalIngest.checkpoint';
@@ -195,7 +195,7 @@ export class ExternalIngestIndex extends Disposable {
 			const result = await this._client.updateIndex(
 				this.getFilesetName(primaryRoot),
 				currentCheckpoint,
-				this.getFilesToIndexFromDb(),
+				this.getFilesToIndexFromDb(token),
 				token,
 				onProgress
 			);
@@ -317,8 +317,8 @@ export class ExternalIngestIndex extends Disposable {
 		return !await this._ignoreService.isCopilotIgnored(uri, token);
 	}
 
-	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
-		if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }, token: CancellationToken): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
+		if (!await this.shouldTrackFile(uri, token)) {
 			return Result.error(false);
 		}
 
@@ -370,7 +370,7 @@ export class ExternalIngestIndex extends Disposable {
 		return uri.fsPath;
 	}
 
-	private async *getFilesToIndexFromDb(): AsyncIterable<ExternalIngestFile> {
+	private async *getFilesToIndexFromDb(token: CancellationToken): AsyncIterable<ExternalIngestFile> {
 		// Get files that are either already marked Yes or need to be evaluated (Undetermined)
 		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest IN (?, ?)').all(ShouldIngestState.Yes, ShouldIngestState.Undetermined) as unknown as Array<DbFileEntry>;
 
@@ -378,12 +378,12 @@ export class ExternalIngestIndex extends Disposable {
 			const uri = URI.parse(row.path);
 
 			// Skip files that are now under code search repos
-			if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+			if (!await this.shouldTrackFile(uri, token)) {
 				this.delete(uri);
 				continue;
 			}
 
-			const stat = await this.safeStat(uri);
+			const stat = await raceCancellationError(this.safeStat(uri), token);
 			if (!stat) {
 				this.delete(uri);
 				continue;
@@ -395,7 +395,7 @@ export class ExternalIngestIndex extends Disposable {
 
 			// If file state is undetermined, we need to evaluate it
 			if (row.shouldIngest === ShouldIngestState.Undetermined) {
-				const result = await this.shouldIngestFile(uri, stat);
+				const result = await this.shouldIngestFile(uri, stat, token);
 				if (result.isOk()) {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, docSha = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.Yes, result.val.docSha, stat.size, stat.mtime, uri.toString());
@@ -417,7 +417,7 @@ export class ExternalIngestIndex extends Disposable {
 			let docSha: Uint8Array | undefined = fileUnchanged ? row.docSha ?? undefined : undefined;
 
 			if (!docSha) {
-				docSha = await this.computeIngestDocSha(uri);
+				docSha = await raceCancellationError(this.computeIngestDocSha(uri), token);
 				if (!docSha) {
 					continue;
 				}
