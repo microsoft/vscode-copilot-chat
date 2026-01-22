@@ -638,13 +638,3 @@ export class McpHttpServerDefinition {
 		this.version = version;
 	}
 }
-
-/**
- * Mock for CustomAgentChatResource used in plan agent provider tests.
- */
-export class CustomAgentChatResource {
-	resource: { id: string; content: string };
-	constructor(resource: { id: string; content: string }) {
-		this.resource = resource;
-	}
-}

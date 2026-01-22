@@ -5,6 +5,9 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
@@ -186,14 +189,19 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
  * with settings-based customization (additional tools and model override).
  * No external file loading or YAML parsing dependencies required.
  */
-export class PlanAgentProvider extends Disposable implements vscode.CustomAgentProvider {
+export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAgentProvider {
 	readonly label = vscode.l10n.t('Plan Agent');
+
+	private static readonly CACHE_DIR = 'plan-agent';
+	private static readonly AGENT_FILENAME = `Plan${AGENT_FILE_EXTENSION}`;
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
 	) {
 		super();
@@ -208,23 +216,38 @@ export class PlanAgentProvider extends Disposable implements vscode.CustomAgentP
 		}));
 	}
 
-	provideCustomAgents(
-		_context: vscode.CustomAgentContext,
+	async provideCustomAgents(
+		_context: unknown,
 		_token: vscode.CancellationToken
-	): vscode.CustomAgentChatResource[] {
+	): Promise<vscode.ChatResource[]> {
 		// Build config with settings-based customization
 		const config = this.buildCustomizedConfig();
 
 		// Generate .agent.md content
 		const content = buildAgentMarkdown(config);
 
-		// Return inline content - VS Code will parse the YAML frontmatter
-		return [
-			new vscode.CustomAgentChatResource({
-				id: 'github.copilot.plan',
-				content
-			})
-		];
+		// Write to cache file and return URI
+		const fileUri = await this.writeCacheFile(content);
+		return [{ uri: fileUri }];
+	}
+
+	private async writeCacheFile(content: string): Promise<vscode.Uri> {
+		const cacheDir = vscode.Uri.joinPath(
+			this.extensionContext.globalStorageUri,
+			PlanAgentProvider.CACHE_DIR
+		);
+
+		// Ensure cache directory exists
+		try {
+			await this.fileSystemService.stat(cacheDir);
+		} catch {
+			await this.fileSystemService.createDirectory(cacheDir);
+		}
+
+		const fileUri = vscode.Uri.joinPath(cacheDir, PlanAgentProvider.AGENT_FILENAME);
+		await this.fileSystemService.writeFile(fileUri, new TextEncoder().encode(content));
+		this.logService.trace(`[PlanAgentProvider] Wrote agent file: ${fileUri.toString()}`);
+		return fileUri;
 	}
 
 	private buildCustomizedConfig(): PlanAgentConfig {

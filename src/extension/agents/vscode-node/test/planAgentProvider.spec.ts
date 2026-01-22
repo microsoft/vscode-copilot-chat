@@ -8,36 +8,38 @@ import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
-import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { buildAgentMarkdown, PlanAgentProvider } from '../planAgentProvider';
-
-/**
- * Helper to extract content from CustomAgentChatResource
- */
-function getAgentContent(agent: vscode.CustomAgentChatResource): string {
-	const resource = agent.resource as { id: string; content: string };
-	return resource.content;
-}
+import * as os from 'os';
+import * as path from 'path';
 
 suite('PlanAgentProvider', () => {
 	let disposables: DisposableStore;
 	let mockConfigurationService: InMemoryConfigurationService;
+	let fileSystemService: IFileSystemService;
 	let accessor: ITestingServicesAccessor;
 	let instantiationService: IInstantiationService;
 
 	beforeEach(() => {
 		disposables = new DisposableStore();
 
-		// Set up testing services
+		// Set up testing services with a mock extension context that has globalStorageUri
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
+		const globalStoragePath = path.join(os.tmpdir(), 'plan-agent-test-' + Date.now());
+		testingServiceCollection.define(IVSCodeExtensionContext, new SyncDescriptor(MockExtensionContext, [globalStoragePath]));
 		accessor = testingServiceCollection.createTestingAccessor();
 		disposables.add(accessor);
 		instantiationService = accessor.get(IInstantiationService);
 
 		mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		fileSystemService = accessor.get(IFileSystemService);
 	});
 
 	afterEach(() => {
@@ -50,15 +52,19 @@ suite('PlanAgentProvider', () => {
 		return provider;
 	}
 
+	async function getAgentContent(agent: vscode.ChatResource): Promise<string> {
+		const content = await fileSystemService.readFile(agent.uri);
+		return new TextDecoder().decode(content);
+	}
+
 	test('provideCustomAgents() returns a Plan agent with correct structure', async () => {
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const resource = agents[0].resource as { id: string; content: string };
-		assert.equal(resource.id, 'github.copilot.plan');
-		assert.ok(resource.content, 'Agent should have inline content');
+		assert.ok(agents[0].uri, 'Agent should have a URI');
+		assert.ok(agents[0].uri.path.endsWith('.agent.md'), 'Agent URI should end with .agent.md');
 	});
 
 	test('returns agent content with base frontmatter when no settings configured', async () => {
@@ -67,7 +73,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should contain base tools
 		assert.ok(content.includes('github/issue_read'));
@@ -87,7 +93,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should contain base tools
 		assert.ok(content.includes('github/issue_read'));
@@ -106,7 +112,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Count occurrences of 'agent' in tools list (flow-style array)
 		// Should appear only once due to deduplication
@@ -127,7 +133,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should contain model override
 		assert.ok(content.includes('model: Claude Haiku 4.5 (copilot)'));
@@ -141,7 +147,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should contain additional tool
 		assert.ok(content.includes('extraTool'));
@@ -201,7 +207,7 @@ suite('PlanAgentProvider', () => {
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should preserve body content
 		assert.ok(content.includes('You are a PLANNING AGENT, NOT an implementation agent.'));
@@ -215,7 +221,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should have base tools only
 		assert.ok(content.includes('github/issue_read'));
@@ -229,7 +235,7 @@ suite('PlanAgentProvider', () => {
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should not have model field added
 		assert.ok(!content.includes('model:'));
@@ -239,7 +245,7 @@ suite('PlanAgentProvider', () => {
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
-		const content = getAgentContent(agents[0]);
+		const content = await getAgentContent(agents[0]);
 
 		// Should contain handoffs
 		assert.ok(content.includes('handoffs:'));
