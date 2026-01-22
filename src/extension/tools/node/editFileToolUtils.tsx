@@ -102,6 +102,10 @@ function escapeRegex(str: string): string {
  * This outputs the entire file with all changes marked.
  */
 export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, oldContent: string, newContent: string): Promise<string> {
+	if (oldContent.trim() === newContent.trim()) {
+		return '```\n<' + t('contents are identical') + '>\n```';
+	}
+
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
