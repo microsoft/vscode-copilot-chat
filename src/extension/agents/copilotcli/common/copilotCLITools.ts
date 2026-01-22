@@ -9,7 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatR
 import { isLocation } from '../../../../util/common/types';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, Range, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -577,8 +577,9 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	if (!args.path) {
 		return;
 	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
-		const display = formatUriForFileWidget(Uri.file(args.path));
 		const [start, end] = args.view_range;
+		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
+		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);

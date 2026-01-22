@@ -212,3 +212,4 @@ suite('Debug recorder', () => {
 	});
 
 });
+

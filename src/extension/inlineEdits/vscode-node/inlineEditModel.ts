@@ -20,7 +20,7 @@ import { InlineEditTriggerer } from './inlineEditTriggerer';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 
 export class InlineEditModel extends Disposable {
-	public readonly debugRecorder = this._register(new DebugRecorder(this.workspace));
+	public readonly debugRecorder: DebugRecorder;
 	public readonly nextEditProvider: NextEditProvider;
 
 	private readonly _predictor: IStatelessNextEditProvider;
@@ -40,6 +40,8 @@ export class InlineEditModel extends Disposable {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
+
+		this.debugRecorder = this._register(new DebugRecorder(this.workspace));
 
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);

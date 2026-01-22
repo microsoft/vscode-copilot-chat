@@ -107,7 +107,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank; lastRoutedPrompt?: string }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -189,8 +189,12 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}
 
+		// Only call the router if the prompt has changed since the last routing decision.
+		// This ensures routing happens once per turn (user message), not on every iteration
+		// during tool calling where the prompt remains the same.
 		const prompt = chatRequest?.prompt?.trim();
-		if (prompt?.length) {
+		const shouldRoute = prompt?.length && (!entry || entry.lastRoutedPrompt !== prompt);
+		if (shouldRoute) {
 			try {
 				const routedModel = await this._routerDecisionFetcher.getRoutedModel(prompt, availableModels, preferredModels);
 				selectedModel = knownEndpoints.find(e => e.model === routedModel);
@@ -199,7 +203,12 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			}
 		}
 		if (!selectedModel) {
-			selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
+			selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+			if (!selectedModel) {
+				const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
+				this._logService.error(errorMsg);
+				throw new Error(errorMsg);
+			}
 		}
 		const existingEndpoints = entry?.endpoints || [];
 		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
@@ -207,7 +216,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 			existingEndpoints.push(autoEndpoint);
 		}
-		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank });
+		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastRoutedPrompt: prompt });
 		return autoEndpoint;
 	}
 
@@ -223,7 +232,12 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			const entryToken = await entry.tokenBank.getToken();
 			if (entry.endpoints.length && entry.endpoints[0].model !== entryToken.selected_model) {
 				// Model changed during a token refresh -> map to new endpoint
-				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model) || knownEndpoints[0];
+				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model);
+				if (!newModel) {
+					const errorMsg = `Auto mode failed: selected model '${entryToken.selected_model}' not found in known endpoints.`;
+					this._logService.error(errorMsg);
+					throw new Error(errorMsg);
+				}
 				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
 			}
 			return entry.endpoints[0];
@@ -236,7 +250,12 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
-		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model) || knownEndpoints[0];
+		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+		if (!selectedModel) {
+			const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
+			this._logService.error(errorMsg);
+			throw new Error(errorMsg);
+		}
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 
 		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank });

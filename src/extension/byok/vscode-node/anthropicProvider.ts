@@ -15,6 +15,7 @@ import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -33,7 +34,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		@ILogService logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
 
@@ -86,6 +88,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 	}
 
 	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+		const issuedTime = Date.now();
 		const apiKey = model.configuration?.apiKey;
 		if (!apiKey) {
 			throw new Error('API key not found for the model');
@@ -219,9 +222,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		// Build context management configuration
 		const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
-			this._experimentationService,
-			thinkingBudget,
-			model.maxInputTokens
+			this._configurationService,
+			(thinkingBudget ?? 0) > 0
 		) : undefined;
 
 		// Build betas array for beta API features
@@ -253,7 +255,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token);
+			const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token, issuedTime);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -294,6 +296,45 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				value: ['value'],
 				resolvedModel: model.id
 			}, responseDeltas);
+
+			// Send success telemetry matching response.success format
+			/* __GDPR__
+				"response.success" : {
+					"owner": "lramos15",
+					"comment": "Report quality details for a successful BYOK Anthropic response.",
+					"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+					"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+					"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+					"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
+					"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+					"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+					"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
+					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+					"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
+					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+					"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
+					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
+				source: 'byok.anthropic',
+				model: model.id,
+				requestId,
+			}, {
+				totalTokenMax: model.maxInputTokens ?? -1,
+				tokenCountMax: model.maxOutputTokens ?? -1,
+				promptTokenCount: result.usage?.prompt_tokens,
+				promptCacheTokenCount: result.usage?.prompt_tokens_details?.cached_tokens,
+				tokenCount: result.usage?.total_tokens,
+				completionTokens: result.usage?.completion_tokens,
+				timeToFirstToken: result.ttft,
+				timeToFirstTokenEmitted: result.ttfte,
+				timeToComplete: Date.now() - issuedTime,
+				issuedTime,
+				isBYOK: 1,
+			});
 		} catch (err) {
 			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
@@ -332,9 +373,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
+	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken, issuedTime: number): Promise<{ ttft: number | undefined; ttfte: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
+		let ttfte: number | undefined;
 
 		const stream = await anthropicClient.beta.messages.create({
 			...params,
@@ -469,6 +511,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			if (chunk.type === 'content_block_delta') {
 				if (chunk.delta.type === 'text_delta') {
 					progress.report(new LanguageModelTextPart(chunk.delta.text || ''));
+					if (!hasText && chunk.delta.text?.length > 0) {
+						ttfte = Date.now() - issuedTime;
+					}
 					hasText ||= chunk.delta.text?.length > 0;
 				} else if (chunk.delta.type === 'citations_delta') {
 					if ('citation' in chunk.delta) {
@@ -592,6 +637,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 		}
 
-		return { ttft, usage, contextManagement: contextManagementResponse };
+		return { ttft, ttfte, usage, contextManagement: contextManagementResponse };
 	}
 }

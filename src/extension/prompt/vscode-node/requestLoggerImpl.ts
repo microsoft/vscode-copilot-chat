@@ -12,7 +12,7 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
@@ -589,7 +589,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		result.push(`## Metadata`);
-		result.push(`~~~`);
+		result.push(`<pre><code>`);
 
 		if (typeof entry.chatEndpoint.urlOrRequestMetadata === 'string') {
 			result.push(`url              : ${entry.chatEndpoint.urlOrRequestMetadata}`);
@@ -629,7 +629,13 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
 		}
 		if (entry.chatParams.body?.tools) {
-			result.push(`tools            : ${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`);
+			const toolNames = entry.chatParams.body.tools.map(t => isOpenAiFunctionTool(t) ? t.function.name : t.name);
+			const numToolsString = `(${toolNames.length})`;
+			result.push(
+				`<details>`,
+				`<summary>tools ${numToolsString}${' '.repeat(9 - numToolsString.length)}: ${toolNames.join(', ')}</summary>${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`,
+				`</details>`
+			);
 		}
 		if (entry.customMetadata) {
 			for (const [key, value] of Object.entries(entry.customMetadata)) {
@@ -640,6 +646,7 @@ export class RequestLogger extends AbstractRequestLogger {
 			}
 		}
 		result.push(`~~~`);
+		result.push(`</code></pre>`);
 
 		result.push(`## Request Messages`);
 		for (const message of entry.chatParams.messages) {

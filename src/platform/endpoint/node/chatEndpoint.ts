@@ -172,6 +172,11 @@ export class ChatEndpoint implements IChatEndpoint {
 	public getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
+		const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
+		if (modelProviderPreference) {
+			headers['X-Model-Provider-Preference'] = modelProviderPreference;
+		}
+
 		if (this.useMessagesApi) {
 			const betaFeatures: string[] = [];
 

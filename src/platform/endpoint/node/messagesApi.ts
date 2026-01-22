@@ -12,7 +12,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
@@ -106,7 +106,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Build context management configuration
-	const contextManagement = getContextManagementFromConfig(experimentationService, thinkingBudget, endpoint.modelMaxPromptTokens);
+	const contextManagement = isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+		? getContextManagementFromConfig(configurationService, (thinkingBudget ?? 0) > 0)
+		: undefined;
 
 	return {
 		model,
@@ -119,7 +121,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			type: 'enabled',
 			budget_tokens: thinkingBudget,
 		} : undefined,
-		context_management: contextManagement,
+		...(contextManagement ? { context_management: contextManagement } : {}),
 	};
 }
 
