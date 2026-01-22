@@ -29,11 +29,12 @@ export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
 	readonly isWorktreeSupportedObs: IObservable<boolean>;
+	readonly activeRepository: IObservable<RepoContext | undefined>;
 
-	readonly selectedRepository: IObservable<RepoContext | undefined>;
-	setSelectedRepository(repositoryPath: string): Promise<void>;
+	getSelectedRepository(sessionId: string): RepoContext | undefined;
+	trackSessionRepository(sessionId: string, repositoryPath: string): Promise<void>;
 
-	createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(sessionId: string | undefined, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
