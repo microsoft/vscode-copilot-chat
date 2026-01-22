@@ -756,3 +756,97 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 		});
 	});
 });
+
+describe('ChatEndpoint - Image Count Validation', () => {
+	let mockServices: ReturnType<typeof createMockServices>;
+
+	beforeEach(() => {
+		mockServices = createMockServices();
+	});
+
+	const createImageMessage = (): Raw.ChatMessage => ({
+		role: Raw.ChatRole.User,
+		content: [
+			{ type: Raw.ChatCompletionContentPartKind.Text, text: 'What is in this image?' },
+			{ type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: 'data:image/png;base64,test' } }
+		]
+	});
+
+	it('should throw error when image count exceeds maxPromptImages', () => {
+		const modelMetadata: IChatModelInformation = {
+			...createAnthropicModelMetadata('gemini-3', 50000),
+			capabilities: {
+				...createAnthropicModelMetadata('gemini-3', 50000).capabilities,
+				supports: {
+					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.supports,
+					vision: true
+				},
+				limits: {
+					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.limits,
+					vision: {
+						max_prompt_images: 2
+					}
+				}
+			}
+		};
+
+		const endpoint = new ChatEndpoint(
+			modelMetadata,
+			mockServices.domainService,
+			mockServices.capiClientService,
+			mockServices.fetcherService,
+			mockServices.telemetryService,
+			mockServices.authService,
+			mockServices.chatMLFetcher,
+			mockServices.tokenizerProvider,
+			mockServices.instantiationService,
+			mockServices.configurationService,
+			mockServices.expService,
+			mockServices.logService
+		);
+
+		// Create 3 messages each with 1 image (total 3 images)
+		const options = createTestOptions([createImageMessage(), createImageMessage(), createImageMessage()]);
+
+		expect(() => endpoint.createRequestBody(options)).toThrow(/Too many images in request/);
+	});
+
+	it('should allow requests within image limit', () => {
+		const modelMetadata: IChatModelInformation = {
+			...createAnthropicModelMetadata('gemini-3', 50000),
+			capabilities: {
+				...createAnthropicModelMetadata('gemini-3', 50000).capabilities,
+				supports: {
+					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.supports,
+					vision: true
+				},
+				limits: {
+					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.limits,
+					vision: {
+						max_prompt_images: 5
+					}
+				}
+			}
+		};
+
+		const endpoint = new ChatEndpoint(
+			modelMetadata,
+			mockServices.domainService,
+			mockServices.capiClientService,
+			mockServices.fetcherService,
+			mockServices.telemetryService,
+			mockServices.authService,
+			mockServices.chatMLFetcher,
+			mockServices.tokenizerProvider,
+			mockServices.instantiationService,
+			mockServices.configurationService,
+			mockServices.expService,
+			mockServices.logService
+		);
+
+		// Create 2 messages each with 1 image (total 2 images)
+		const options = createTestOptions([createImageMessage(), createImageMessage()]);
+
+		expect(() => endpoint.createRequestBody(options)).not.toThrow();
+	});
+});
