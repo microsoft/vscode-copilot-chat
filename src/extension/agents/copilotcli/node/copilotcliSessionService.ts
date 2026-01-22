@@ -43,7 +43,7 @@ export interface ICopilotCLISessionService {
 	onDidChangeSessions: Event<void>;
 
 	// Session metadata querying
-	getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
@@ -80,6 +80,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.monitorSessionFiles();
@@ -104,7 +105,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
-	async getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		if (!this._getAllSessionsProgress) {
 			this._getAllSessionsProgress = this._getAllSessions(filter, token);
 		}
@@ -113,16 +114,38 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 	}
 
-	async _getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async _getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
-			await this._sessionTracker.initialize(sessionMetadataList.map(s => s.sessionId));
+			await this._sessionTracker.initialize();
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
-					if (!filter(metadata.sessionId) && !this._sessionTracker.shouldShowSession(metadata.sessionId)) {
+					let showSession: boolean = false;
+					if (this.workspaceService.getWorkspaceFolders().length === 0) {
+						// If we're in empty workspace then show all sessions.
+						showSession = true;
+					} else {
+						const sessionFilterResult = filter(metadata.sessionId);
+						const sessionTrackerVisibility = this._sessionTracker.shouldShowSession(metadata.sessionId);
+						// This session was started from a specified workspace (e.g. multiroot, untitled or other), hence continue showing it.
+						if (sessionTrackerVisibility.isWorkspaceSession) {
+							showSession = true;
+						}
+						if (!showSession && sessionFilterResult === true) {
+							showSession = true;
+						}
+						// If this is an old global session, then show it as well.
+						if (!showSession && sessionTrackerVisibility.isOldGlobalSession) {
+							// But if not required to be displayed, do not show it.
+							if (typeof sessionFilterResult === 'undefined') {
+								showSession = true;
+							}
+						}
+					}
+					if (!showSession) {
 						return;
 					}
 					const id = metadata.sessionId;
@@ -363,14 +386,8 @@ export class CopilotCLISessionWorkspaceTracker {
 		void this._initializeSessionStorageFiles.value;
 	}
 
-	public async initialize(oldSessions: string[]): Promise<void> {
-		const { global } = await this._initializeSessionStorageFiles.value;
-		if (this._oldGlobalSessions) {
-			return;
-		}
-		this._oldGlobalSessions = new Set<string>(oldSessions);
-		// No need to block caller anymore, we've tracked in memory for now.
-		void this.fileSystem.writeFile(global, Buffer.from(oldSessions.join(',')));
+	public async initialize(): Promise<void> {
+		await this._initializeSessionStorageFiles.value;
 	}
 
 	public async trackSession(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
@@ -393,11 +410,11 @@ export class CopilotCLISessionWorkspaceTracker {
 	/**
 	 * InitializeOldSessions should have been called before this.
 	 */
-	public shouldShowSession(sessionId: string): boolean {
-		if (this._oldGlobalSessions?.has(sessionId) || this.workspaceService.getWorkspaceFolders().length === 0) {
-			return true;
-		}
-		return this._workspaceSessions.has(sessionId);
+	public shouldShowSession(sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
+		return {
+			isOldGlobalSession: this._oldGlobalSessions?.has(sessionId),
+			isWorkspaceSession: this._workspaceSessions.has(sessionId),
+		};
 	}
 }
 
