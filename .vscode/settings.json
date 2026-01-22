@@ -151,4 +151,7 @@
 	"githubPullRequests.codingAgent.enabled": true,
 	"githubPullRequests.codingAgent.uiIntegration": true,
 	"chat.inlineReferences.style": "link",
+	"inlineChat.enableV2": true,
+	"inlineChat.affordance": "gutter",
+	"inlineChat.renderMode": "hover",
 }
