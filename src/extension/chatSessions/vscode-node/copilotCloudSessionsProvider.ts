@@ -450,7 +450,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		try {
 			// Fetch agents (requires repo), models (global), and partner agents in parallel
-			const [customAgents, models, partnerAgents] = await Promise.all([
+			const [customAgents, models, partnerAgents] = await Promise.allSettled([
 				repoId ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
 				this._octoKitService.getCopilotAgentModels({ createIfNone: false }),
 				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve([])
@@ -459,8 +459,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Partner agents
 			// Only show if repo provides a choice of agent (>1)
-			if (partnerAgents.length > 1) {
-				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.map(agent => ({
+			if (partnerAgents.status === 'fulfilled' && partnerAgents.value.length > 1) {
+				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.value.map(agent => ({
 					id: agent.id,
 					name: agent.name,
 					...(agent.id === DEFAULT_PARTNER_AGENT_ID && { default: true }),
@@ -474,10 +474,10 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 			}
 
-			if (customAgents.length > 0) {
+			if (customAgents.status === 'fulfilled' && customAgents.value.length > 0) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 					{ id: DEFAULT_CUSTOM_AGENT_ID, default: true, name: vscode.l10n.t('Default'), icon: new vscode.ThemeIcon('file-text') },
-					...customAgents.map(agent => ({
+					...customAgents.value.map(agent => ({
 						id: agent.name,
 						name: agent.display_name || agent.name
 					}))
@@ -487,16 +487,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					name: vscode.l10n.t('Custom Agents'),
 					description: vscode.l10n.t('Select which custom agent to use'),
 					items: agentItems,
-					when: `chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
+					when: `!chatSessionOption.partnerAgents || chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
 			}
 
-			if (models.length > 0) {
-				const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
+			if (models.status === 'fulfilled' && models.value.length > 0) {
+				const modelItems: vscode.ChatSessionProviderOptionItem[] = models.value.map(model => ({
 					id: model.id,
 					name: model.name,
 				}));
-				if (!models.find(m => m.id === DEFAULT_MODEL_ID)) {
+				if (!models.value.find(m => m.id === DEFAULT_MODEL_ID)) {
 					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
 				}
 				optionGroups.push({
@@ -504,7 +504,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					name: vscode.l10n.t('Model'),
 					description: vscode.l10n.t('Select which model to use'),
 					items: modelItems,
-					when: `chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
+					when: `!chatSessionOption.partnerAgents || chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
 			}
 
