@@ -5372,9 +5372,6 @@
 			}
 		]
 	},
-	"extensionPack": [
-		"GitHub.copilot"
-	],
 	"prettier": {
 		"useTabs": true,
 		"tabWidth": 4,
