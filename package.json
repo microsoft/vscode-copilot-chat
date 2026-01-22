@@ -2837,6 +2837,11 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
+					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
+					},
 					"github.copilot.chat.customInstructions.useOrganizationInstructions": {
 						"type": "boolean",
 						"default": true,
@@ -3648,12 +3653,6 @@
 							"electron-fetch",
 							"node-fetch"
 						]
-					},
-					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
-						"type": "boolean",
-						"default": true,
-						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
-						"tags": []
 					}
 				}
 			},
