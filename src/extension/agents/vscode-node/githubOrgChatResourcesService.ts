@@ -89,7 +89,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	private static readonly CACHE_ROOT = 'github';
 
 	private readonly _pollingSubscriptions = this._register(new DisposableStore());
-	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
+	private _cachedPreferredOrgName: string | undefined;
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -110,30 +110,33 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 
 	async getPreferredOrganizationName(): Promise<string | undefined> {
 		if (!this._cachedPreferredOrgName) {
-			this._cachedPreferredOrgName = this.computePreferredOrganizationName();
+			this._cachedPreferredOrgName = await this.computePreferredOrganizationName();
 		}
 		return this._cachedPreferredOrgName;
 	}
 
 	private async computePreferredOrganizationName(): Promise<string | undefined> {
-		// Check if workspace repo belongs to an organization
-		const workspaceOrg = await this.getWorkspaceRepositoryOrganization();
-		if (workspaceOrg) {
-			return workspaceOrg;
-		}
-
-		// Fall back to getting any organization the user belongs to
+		// Get the organizations the user is a member of
+		let userOrganizations: string[];
 		try {
-			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
-			if (organizations.length === 0) {
+			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
+			if (userOrganizations.length === 0) {
 				this.logService.trace('[GitHubOrgChatResourcesService] No organizations found for user');
 				return undefined;
 			}
-			return organizations[0];
 		} catch (error) {
 			this.logService.error(`[GitHubOrgChatResourcesService] Error getting user organizations: ${error}`);
 			return undefined;
 		}
+
+		// Check if workspace repo belongs to an organization the user is a member of
+		const workspaceOrg = await this.getWorkspaceRepositoryOrganization();
+		if (workspaceOrg && userOrganizations.includes(workspaceOrg)) {
+			return workspaceOrg;
+		}
+
+		// Fall back to the first organization the user belongs to
+		return userOrganizations[0];
 	}
 
 	/**

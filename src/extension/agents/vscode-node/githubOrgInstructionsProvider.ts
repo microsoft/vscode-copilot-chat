@@ -26,7 +26,7 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 		super();
 
 		// Set up polling with provider-specific interval
-		this._register(this.githubOrgChatResourcesService.startPolling(REFRESH_INTERVAL_MS, this.pollInstructions));
+		this._register(this.githubOrgChatResourcesService.startPolling(REFRESH_INTERVAL_MS, this.pollInstructions.bind(this)));
 	}
 
 	async provideInstructions(
