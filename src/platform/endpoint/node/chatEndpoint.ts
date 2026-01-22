@@ -385,7 +385,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

@@ -15,8 +15,10 @@ import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
+import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
 interface AnthropicStreamEvent {
@@ -287,6 +289,7 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
+	telemetryService: ITelemetryService,
 	logService: ILogService,
 	response: Response,
 	finishCallback: FinishedCallback,
@@ -311,6 +314,25 @@ export async function processResponseFromMessagesEndpoint(
 				}
 				const completion = processor.push({ ...parsed, type } as AnthropicStreamEvent, finishCallback);
 				if (completion) {
+					logService.info(`[messagesAPI] message ${completion.choiceIndex} returned. finish reason: [${completion.finishReason}]`);
+
+					const dataToSendToTelemetry = telemetryData.extendedBy({
+						completionChoiceFinishReason: completion.finishReason,
+						headerRequestId: completion.requestId.headerRequestId
+					});
+					telemetryService.sendGHTelemetryEvent('completion.finishReason', dataToSendToTelemetry.properties, dataToSendToTelemetry.measurements);
+
+					const telemetryMessage = rawMessageToCAPI(completion.message);
+					let telemetryDataWithUsage = telemetryData;
+					if (completion.usage) {
+						telemetryDataWithUsage = telemetryData.extendedBy({}, {
+							promptTokens: completion.usage.prompt_tokens,
+							completionTokens: completion.usage.completion_tokens,
+							totalTokens: completion.usage.total_tokens
+						});
+					}
+					sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
+
 					feed.emitOne(completion);
 				}
 			} catch (e) {
@@ -564,9 +586,6 @@ export class AnthropicMessagesProcessor {
 				// Track stop_reason for determining finish reason in message_stop
 				if (chunk.delta?.stop_reason) {
 					this.stopReason = chunk.delta.stop_reason;
-					if (this.stopReason === 'refusal') {
-						this.logService.warn(`[messagesAPI] Message was refused by Claude`);
-					}
 				}
 				return;
 			case 'message_stop': {
@@ -589,9 +608,20 @@ export class AnthropicMessagesProcessor {
 						toolSearchRequests: this.toolSearchRequests.toString(),
 					});
 				}
-				const finishReason = this.stopReason === 'refusal'
-					? FinishedCompletionReason.ClientDone
-					: FinishedCompletionReason.Stop;
+
+				let finishReason: FinishedCompletionReason;
+				switch (this.stopReason) {
+					case 'refusal':
+						finishReason = FinishedCompletionReason.ClientDone;
+						break;
+					case 'max_tokens':
+					case 'model_context_window_exceeded':
+						finishReason = FinishedCompletionReason.Length;
+						break;
+					default:
+						finishReason = FinishedCompletionReason.Stop;
+						break;
+				}
 
 				return {
 					blockFinished: true,
