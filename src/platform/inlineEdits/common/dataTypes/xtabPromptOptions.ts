@@ -181,6 +181,21 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 	'lintOptions': vUnion(LINT_OPTIONS_VALIDATOR, vUndefined()),
 });
 
+export function parseLintOptionString(optionString: string): LintOptions | undefined {
+	try {
+		const parsed = JSON.parse(optionString);
+
+		const lintValidation = LINT_OPTIONS_VALIDATOR.validate(parsed);
+		if (lintValidation.error) {
+			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
+		}
+
+		return lintValidation.content;
+	} catch (e) {
+		throw new Error(`Failed to parse lint options string: ${e}`);
+	}
+}
+
 export interface UserHappinessScoreConfiguration {
 	/** Score for accepted actions */
 	acceptedScore: number;
@@ -301,20 +316,5 @@ export function parseUserHappinessScoreConfigurationString(optionString: string)
 		return validation.content;
 	} catch (e) {
 		throw new Error(`Failed to parse user happiness score configuration string: ${e}`);
-	}
-}
-
-export function parseLintOptionString(optionString: string): LintOptions | undefined {
-	try {
-		const parsed = JSON.parse(optionString);
-
-		const lintValidation = LINT_OPTIONS_VALIDATOR.validate(parsed);
-		if (lintValidation.error) {
-			throw new Error(`Lint options validation failed: ${lintValidation.error.message}`);
-		}
-
-		return lintValidation.content;
-	} catch (e) {
-		throw new Error(`Failed to parse lint options string: ${e}`);
 	}
 }
