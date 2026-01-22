@@ -566,17 +566,19 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		}
 
 		// Convert MCP content to VS Code ChatMcpToolInvocationData format
-		const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
-		if (mcpContent && mcpContent.length > 0) {
-			const output = convertMcpContentToToolInvocationData(mcpContent);
-			const toolCall = invocation[1];
-			// Use tool arguments as input, formatted as JSON
-			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
+		if ('mcpContent' in event.data) {
+			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
+			if (mcpContent && mcpContent.length > 0) {
+				const output = convertMcpContentToToolInvocationData(mcpContent);
+				const toolCall = invocation[1];
+				// Use tool arguments as input, formatted as JSON
+				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
 
-			invocation[0].toolSpecificData = {
-				input,
-				output
-			} as ChatMcpToolInvocationData;
+				invocation[0].toolSpecificData = {
+					input,
+					output
+				} as ChatMcpToolInvocationData;
+			}
 		}
 	}
 
