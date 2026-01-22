@@ -174,14 +174,23 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	startPolling(intervalMs: number, callback: (orgName: string) => Promise<void>): IDisposable {
 		const disposables = new DisposableStore();
 
+		let isPolling = false;
 		const poll = async () => {
-			const orgName = await this.getPreferredOrganizationName();
-			if (orgName) {
-				try {
-					await callback(orgName);
-				} catch (error) {
-					this.logService.error(`[GitHubOrgChatResourcesService] Error in polling callback: ${error}`);
+			if (isPolling) {
+				return;
+			}
+			isPolling = true;
+			try {
+				const orgName = await this.getPreferredOrganizationName();
+				if (orgName) {
+					try {
+						await callback(orgName);
+					} catch (error) {
+						this.logService.error(`[GitHubOrgChatResourcesService] Error in polling callback: ${error}`);
+					}
 				}
+			} finally {
+				isPolling = false;
 			}
 		};
 
