@@ -6,6 +6,7 @@
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
+import { ILogger } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
@@ -308,7 +309,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -426,7 +427,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'tool.execution_complete': {
-				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations) ?? [undefined, undefined];
+				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger) ?? [undefined, undefined];
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
@@ -477,7 +478,7 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
  * tool invocation renderer understands, so that MCP tool results can be displayed
  * consistently alongside other chat responses.
  */
-function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[]): McpToolInvocationContentData[] {
+function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[], logger: ILogger): McpToolInvocationContentData[] {
 	const output: McpToolInvocationContentData[] = [];
 	const encoder = new TextEncoder();
 
@@ -542,7 +543,7 @@ function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[]): McpT
 			}
 		} catch (error) {
 			// Log conversion errors but continue processing other blocks
-			console.error(`Failed to convert MCP content block of type ${block.type}:`, error);
+			logger.error(error, `Failed to convert MCP content block of type ${block.type}:`);
 		}
 	}
 
@@ -558,7 +559,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -576,7 +577,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		if ('mcpContent' in event.data) {
 			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
 			if (mcpContent && mcpContent.length > 0) {
-				const output = convertMcpContentToToolInvocationData(mcpContent);
+				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
 				const toolCall = invocation[1];
 				// Use tool arguments as input, formatted as JSON
 				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
