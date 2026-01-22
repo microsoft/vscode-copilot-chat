@@ -24,7 +24,7 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		// Register custom agent provider
 		if ('registerCustomAgentProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
-			if (configurationService.getConfig(ConfigKey.ShowOrganizationAndEnterpriseAgents)) {
+			if (configurationService.getConfig(ConfigKey.EnableOrganizationCustomAgents)) {
 				const githubOrgAgentProvider: vscode.ChatCustomAgentProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgCustomAgentProvider));
 				this._register(vscode.chat.registerCustomAgentProvider(githubOrgAgentProvider));
 			}
@@ -33,7 +33,7 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 		// Register instructions provider
 		if ('registerInstructionsProvider' in vscode.chat) {
 			// Only register the provider if the setting is enabled
-			if (configurationService.getConfig(ConfigKey.UseOrganizationInstructions)) {
+			if (configurationService.getConfig(ConfigKey.EnableOrganizationInstructions)) {
 				const githubOrgInstructionsProvider: vscode.ChatInstructionsProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgInstructionsProvider));
 				this._register(vscode.chat.registerInstructionsProvider(githubOrgInstructionsProvider));
 			}

@@ -2837,15 +2837,15 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
-					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
+					"github.copilot.chat.organizationCustomAgents.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%"
+						"description": "%github.copilot.config.organizationCustomAgents.enabled%"
 					},
-					"github.copilot.chat.customInstructions.useOrganizationInstructions": {
+					"github.copilot.chat.organizationInstructions.enabled": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.customInstructions.useOrganizationInstructions%"
+						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",

@@ -924,11 +924,9 @@ export namespace ConfigKey {
 	export const EnableAlternateGptPrompt = defineSetting<boolean>('chat.alternateGptPrompt.enabled', ConfigType.ExperimentBased, false);
 	export const EnableAlternateGeminiModelFPrompt = defineSetting<boolean>('chat.alternateGeminiModelFPrompt.enabled', ConfigType.ExperimentBased, false);
 
-	/** Enable custom agents from GitHub Enterprise/Organizations */
-	export const ShowOrganizationAndEnterpriseAgents = defineSetting<boolean>('chat.customAgents.showOrganizationAndEnterpriseAgents', ConfigType.Simple, true);
-
-	/** Enable custom instructions from GitHub Organizations */
-	export const UseOrganizationInstructions = defineSetting<boolean>('chat.customInstructions.useOrganizationInstructions', ConfigType.Simple, true);
+	/** Propmt  */
+	export const EnableOrganizationCustomAgents = defineSetting<boolean>('github.copilot.chat.organizationCustomAgents.enabled', ConfigType.Simple, true);
+	export const EnableOrganizationInstructions = defineSetting<boolean>('github.copilot.chat.organizationInstructions.enabled', ConfigType.Simple, true);
 
 	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', ConfigType.ExperimentBased, undefined);
 	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', ConfigType.ExperimentBased, undefined);
