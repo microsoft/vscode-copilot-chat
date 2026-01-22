@@ -159,7 +159,9 @@ suite('GitHubOrgInstructionsProvider', () => {
 			`default${INSTRUCTION_FILE_EXTENSION}`
 		);
 
-		assert.equal(cachedContent, instructionContent);
+		// The implementation adds applyTo front matter to the cached content
+		const expectedContent = `---\napplyTo: '**'\n---\n${instructionContent}`;
+		assert.equal(cachedContent, expectedContent);
 	});
 
 	test('pollInstructions does nothing when no instructions found', async () => {
@@ -316,7 +318,9 @@ suite('GitHubOrgInstructionsProvider', () => {
 			`default${INSTRUCTION_FILE_EXTENSION}`
 		);
 
-		assert.equal(cachedContent, instructionContent);
+		// The implementation adds applyTo front matter to the cached content
+		const expectedContent = `---\napplyTo: '**'\n---\n${instructionContent}`;
+		assert.equal(cachedContent, expectedContent);
 
 		// Prepopulate so we can list it
 		prepopulateCache('testorg', new Map([
