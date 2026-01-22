@@ -214,6 +214,9 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 	'limitTotalIgnored': vRequired(vBoolean()),
 });
 
+/**
+ * Default configuration for user happiness score calculation. Mimics v1 behavior.
+ */
 export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
 	acceptedScore: 1,
 	rejectedScore: 0,
