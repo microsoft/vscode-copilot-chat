@@ -102,7 +102,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
-		this.userInteractionMonitor = new UserInteractionMonitor(this.configService, this.expService);
+		this.userInteractionMonitor = this.instaService.createInstance(UserInteractionMonitor);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 

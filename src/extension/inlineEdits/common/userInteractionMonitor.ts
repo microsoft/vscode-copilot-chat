@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DelaySession } from './delay';
 
@@ -155,6 +156,7 @@ export class UserInteractionMonitor {
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ILogService private readonly _logService: ILogService,
 	) { }
 
 	// Capture user interactions
@@ -263,7 +265,7 @@ export class UserInteractionMonitor {
 			return parseUserHappinessScoreConfigurationString(configString);
 		}
 		catch (e) {
-
+			this._logService.error('Failed to parse user happiness score configuration, using default config', e);
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}

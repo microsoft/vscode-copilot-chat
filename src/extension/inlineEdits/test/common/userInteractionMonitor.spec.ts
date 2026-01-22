@@ -8,8 +8,25 @@ import { ConfigKey } from '../../../../platform/configuration/common/configurati
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
+
+/**
+ * Null log service for testing.
+ */
+class NullLogService implements ILogService {
+	declare _serviceBrand: undefined;
+	trace(_message: string): void { }
+	debug(_message: string): void { }
+	info(_message: string): void { }
+	warn(_message: string): void { }
+	error(_error: string | Error, _message?: string): void { }
+	show(_preserveFocus?: boolean): void { }
+	createSubLogger(_topic: string | readonly string[]): ILogger {
+		return this;
+	}
+}
 
 /**
  * Test-friendly subclass of UserInteractionMonitor that exposes internal state for verification.
@@ -43,12 +60,14 @@ class MockConfigurationService extends InMemoryConfigurationService {
 describe('UserInteractionMonitor', () => {
 	let configurationService: MockConfigurationService;
 	let experimentationService: IExperimentationService;
+	let logService: ILogService;
 	let monitor: TestUserInteractionMonitor;
 
 	beforeEach(() => {
 		configurationService = new MockConfigurationService();
 		experimentationService = new NullExperimentationService();
-		monitor = new TestUserInteractionMonitor(configurationService, experimentationService);
+		logService = new NullLogService();
+		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
 	});
 
 	describe('history logging', () => {
@@ -214,7 +233,7 @@ describe('UserInteractionMonitor', () => {
 			const levelRejectionsRecent = monitor.getAggressivenessLevel().aggressivenessLevel;
 
 			// Reset and do opposite order
-			monitor = new TestUserInteractionMonitor(configurationService, experimentationService);
+			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
 			for (let i = 0; i < 5; i++) {
 				monitor.handleRejection();
 			}
