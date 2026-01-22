@@ -224,8 +224,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
 			if (createIngestResponse.status === 429) {
-				throw new Error('Create ingest failed with 429 Too Many Requests even after cleanup.');
+				throw new Error('Create ingest failed with 429 even after cleanup.');
 			}
+		}
+		// Handle 409 (conflict) by retrying once
+		else if (createIngestResponse.status === 409) {
+			createIngestResponse = await createIngest();
 		}
 
 		// Fail fast on non-OK responses before attempting to parse JSON
@@ -330,6 +334,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
 				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
+				if (toUpload.size === 0) {
+					break;
+				}
 
 				for (const requestedDocSha of toUpload) {
 					if (token.isCancellationRequested) {
