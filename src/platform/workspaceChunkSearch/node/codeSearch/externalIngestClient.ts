@@ -6,10 +6,10 @@
 import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
 import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
-import fs from 'fs';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -64,7 +64,7 @@ export interface IExternalIngestClient {
 // You can change this to `null` to ignore the throttle
 
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
-	private static readonly PROMISE_POOL_SIZE = 32;
+	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
 
 	private readonly _ingestFilter = new IngestFilter();
@@ -146,7 +146,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		// Initial setup
-		const mappings = new Map<string, { full: string; relative: string }>();
+		const mappings = new Map</* sha */ string, ExternalIngestFile>();
 		const geoFilter = new GeoFilter();
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
@@ -161,14 +161,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				throw new CancellationError();
 			}
 
-			const relativePath = file.relativePath;
-			const full = file.uri.fsPath;
-
 			geoFilter.push(file.docSha);
 			allDocShas.push(file.docSha);
 
 			const docShaBase64 = Buffer.from(file.docSha).toString('base64');
-			mappings.set(docShaBase64, { full, relative: relativePath });
+			mappings.set(docShaBase64, file);
 		}
 
 		this.logService.debug(`ExternalIngestClient::updateIndex(). Found ${mappings.size} ingestable files in ${Math.round(performance.now() - ingestableCheckStart)}ms`,);
@@ -342,23 +339,23 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
 						try {
-							const paths = mappings.get(requestedDocSha);
-							if (!paths) {
+							const fileEntry = mappings.get(requestedDocSha);
+							if (!fileEntry) {
 								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
 							}
-							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${paths.relative}`);
-							const bytes = await fs.promises.readFile(paths.full);
-							const content = bytes.toString('base64');
+							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
+							const bytes = await fileEntry.read();
+							const content = encodeBase64(VSBuffer.wrap(bytes));
 							const res = await this.post(authToken, '/external/code/ingest/document', {
 								ingest_id: ingestId,
 								content,
-								file_path: paths.relative,
+								file_path: fileEntry.relativePath,
 								doc_id: requestedDocSha,
 							}, { retries: 3 }, token);
 							if (!res.ok) {
 								const requestId = res.headers.get(githubHeaders.requestId);
 								const responseBody = await res.text();
-								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${paths.relative} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
+								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
 							}
 						} catch (e) {
 							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
@@ -379,15 +376,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					});
 					uploading.add(p);
 
-					// Have a max of $PROMISE_POOL_SIZE in-flight uploads. For me, at 32 we seem to be limited
-					// by vLLM/Metis so a larger batch size might not yield improvements. YMMV.
+					// Have a max of $PROMISE_POOL_SIZE in-flight uploads
 					if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
 						await Promise.race(uploading);
 					}
 				}
 			}
-
-			// await raceCancellationError(Promise.all(uploading), token);
 
 			pageToken = nextPageToken;
 		} while (pageToken);
@@ -404,7 +398,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			ingest_id: ingestId,
 		}, {}, token);
 
-		this.logService.info('ExternalIngestClient::updateIndex(): SUCCESS!!');
+		this.logService.info('ExternalIngestClient::updateIndex(): Successfully finalized ingest.');
 		const requestId = resp.headers.get('x-github-request-id');
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);

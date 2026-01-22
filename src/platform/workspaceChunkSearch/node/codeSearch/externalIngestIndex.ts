@@ -436,6 +436,9 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private async reconcileDbFiles(): Promise<void> {
+		await this._workspaceService.ensureWorkspaceIsFullyLoaded();
+		await this._ignoreService.init();
+
 		const initialDbFiles = new ResourceSet();
 		for (const uri of this.iterateDbFiles()) {
 			initialDbFiles.add(uri);
