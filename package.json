@@ -3654,7 +3654,6 @@
 						"default": false,
 						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
 						"tags": [
-							"experimental"
 						]
 					}
 				}

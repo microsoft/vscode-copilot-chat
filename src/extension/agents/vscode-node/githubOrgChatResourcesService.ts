@@ -4,8 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { PromptsType } from '../../../platform/customInstructions/common/promptTypes';
-import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../platform/customInstructions/common/promptTypes';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../platform/filesystem/common/fileTypes';
+import { getGithubRepoIdFromFetchUrl, IGitService } from '../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { ILogService } from '../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 export interface IGitHubOrgChatResourcesService extends IDisposable {
@@ -21,7 +28,7 @@ export interface IGitHubOrgChatResourcesService extends IDisposable {
 	 * @param callback The callback to invoke on each poll cycle
 	 * @returns A disposable that stops the polling when disposed
 	 */
-	createPollingSubscription(intervalMs: number, callback: (orgName: string) => void): IDisposable;
+	startPolling(intervalMs: number, callback: (orgName: string) => Promise<void>): IDisposable;
 
 	/**
 	 * Reads a specific cached resource.
@@ -50,23 +57,257 @@ export interface IGitHubOrgChatResourcesService extends IDisposable {
 
 export const IGitHubOrgChatResourcesService = createDecorator<IGitHubOrgChatResourcesService>('IGitHubPromptFileService');
 
+/**
+ * Maps PromptsType to the cache subdirectory name.
+ */
+function getCacheSubdirectory(type: PromptsType): string {
+	switch (type) {
+		case PromptsType.instructions:
+			return 'instructions';
+		case PromptsType.agent:
+			return 'agents';
+		default:
+			throw new Error(`Unsupported PromptsType: ${type}`);
+	}
+}
+
+/**
+ * Returns true if the filename is valid for the given PromptsType.
+ */
+function isValidFile(type: PromptsType, fileName: string): boolean {
+	switch (type) {
+		case PromptsType.instructions:
+			return fileName.endsWith(INSTRUCTION_FILE_EXTENSION);
+		case PromptsType.agent:
+			return fileName.endsWith(AGENT_FILE_EXTENSION);
+		default:
+			throw new Error(`Unsupported PromptsType: ${type}`);
+	}
+}
+
 export class GitHubOrgChatResourcesService extends Disposable implements IGitHubOrgChatResourcesService {
-	getPreferredOrganizationName(): Promise<string | undefined> {
-		throw new Error('Method not implemented.');
+	private static readonly CACHE_ROOT = 'github';
+
+	private readonly _pollingSubscriptions = this._register(new DisposableStore());
+	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
+
+	constructor(
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IGitService private readonly gitService: IGitService,
+		@ILogService private readonly logService: ILogService,
+		@IOctoKitService private readonly octoKitService: IOctoKitService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+	) {
+		super();
+
+		// Invalidate cached org name when workspace folders change
+		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
+			this.logService.trace('[GitHubOrgChatResourcesService] Workspace folders changed, invalidating cached org name');
+			this._cachedPreferredOrgName = undefined;
+		}));
 	}
-	createPollingSubscription(intervalMs: number, callback: (orgName: string, token: vscode.CancellationToken) => void): IDisposable {
-		throw new Error('Method not implemented.');
+
+	async getPreferredOrganizationName(): Promise<string | undefined> {
+		if (!this._cachedPreferredOrgName) {
+			this._cachedPreferredOrgName = this.computePreferredOrganizationName();
+		}
+		return this._cachedPreferredOrgName;
 	}
-	readCacheFile(type: PromptsType, orgName: string, filename: string): Promise<string | undefined> {
-		throw new Error('Method not implemented.');
+
+	private async computePreferredOrganizationName(): Promise<string | undefined> {
+		// Check if workspace repo belongs to an organization
+		const workspaceOrg = await this.getWorkspaceRepositoryOrganization();
+		if (workspaceOrg) {
+			return workspaceOrg;
+		}
+
+		// Fall back to getting any organization the user belongs to
+		try {
+			const organizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
+			if (organizations.length === 0) {
+				this.logService.trace('[GitHubOrgChatResourcesService] No organizations found for user');
+				return undefined;
+			}
+			return organizations[0];
+		} catch (error) {
+			this.logService.error(`[GitHubOrgChatResourcesService] Error getting user organizations: ${error}`);
+			return undefined;
+		}
 	}
-	writeCacheFile(type: PromptsType, orgName: string, filename: string, content: string, options?: { checkForChanges?: boolean }): Promise<boolean> {
-		throw new Error('Method not implemented.');
+
+	/**
+	 * Gets the organization from the current workspace's git repository, if any.
+	 */
+	private async getWorkspaceRepositoryOrganization(): Promise<string | undefined> {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
+			return undefined;
+		}
+
+		try {
+			// TODO: Support multi-root workspaces by checking all folders.
+			// This would need workspace-aware context for deciding when to use which org, which is currently not in scope.
+			const repoInfo = await this.gitService.getRepositoryFetchUrls(workspaceFolders[0]);
+			if (!repoInfo?.remoteFetchUrls?.length) {
+				return undefined;
+			}
+
+			// Try each remote URL to find a GitHub repo
+			for (const fetchUrl of repoInfo.remoteFetchUrls) {
+				if (!fetchUrl) {
+					continue;
+				}
+				const repoId = getGithubRepoIdFromFetchUrl(fetchUrl);
+				if (repoId) {
+					this.logService.trace(`[GitHubOrgChatResourcesService] Found GitHub repo: ${repoId.org}/${repoId.repo}`);
+					return repoId.org;
+				}
+			}
+		} catch (error) {
+			this.logService.trace(`[GitHubOrgChatResourcesService] Error getting workspace repository: ${error}`);
+		}
+
+		return undefined;
 	}
-	clearCache(type: PromptsType, orgName: string): Promise<void> {
-		throw new Error('Method not implemented.');
+
+	startPolling(intervalMs: number, callback: (orgName: string) => Promise<void>): IDisposable {
+		const disposables = new DisposableStore();
+
+		const poll = async () => {
+			const orgName = await this.getPreferredOrganizationName();
+			if (orgName) {
+				try {
+					await callback(orgName);
+				} catch (error) {
+					this.logService.error(`[GitHubOrgChatResourcesService] Error in polling callback: ${error}`);
+				}
+			}
+		};
+
+		// Initial poll
+		void poll();
+
+		// Set up interval polling
+		const intervalId = setInterval(() => poll(), intervalMs);
+		disposables.add(toDisposable(() => clearInterval(intervalId)));
+
+		this._pollingSubscriptions.add(disposables);
+
+		return disposables;
 	}
-	listCachedFiles(type: PromptsType, orgName: string): Promise<vscode.ChatResource[]> {
-		throw new Error('Method not implemented.');
+
+	private getCacheDir(orgName: string, type: PromptsType): vscode.Uri {
+		const sanitizedOrg = this.sanitizeFilename(orgName);
+		const subdirectory = getCacheSubdirectory(type);
+		return vscode.Uri.joinPath(
+			this.extensionContext.globalStorageUri,
+			GitHubOrgChatResourcesService.CACHE_ROOT,
+			sanitizedOrg,
+			subdirectory
+		);
+	}
+
+	private getCacheFileUri(orgName: string, type: PromptsType, filename: string): vscode.Uri {
+		return vscode.Uri.joinPath(this.getCacheDir(orgName, type), filename);
+	}
+
+	private sanitizeFilename(name: string): string {
+		return name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+	}
+
+	private async ensureCacheDir(orgName: string, type: PromptsType): Promise<void> {
+		const cacheDir = this.getCacheDir(orgName, type);
+		try {
+			await this.fileSystem.stat(cacheDir);
+		} catch {
+			// createDirectory should create parent directories recursively
+			await this.fileSystem.createDirectory(cacheDir);
+		}
+	}
+
+	async readCacheFile(type: PromptsType, orgName: string, filename: string): Promise<string | undefined> {
+		try {
+			const fileUri = this.getCacheFileUri(orgName, type, filename);
+			const content = await this.fileSystem.readFile(fileUri);
+			return new TextDecoder().decode(content);
+		} catch {
+			this.logService.error(`[GitHubOrgChatResourcesService] Cache file not found: ${filename}`);
+			return undefined;
+		}
+	}
+
+	async writeCacheFile(type: PromptsType, orgName: string, filename: string, content: string, options?: { checkForChanges?: boolean }): Promise<boolean> {
+		await this.ensureCacheDir(orgName, type);
+		const fileUri = this.getCacheFileUri(orgName, type, filename);
+		const contentBytes = new TextEncoder().encode(content);
+
+		// Check for changes if requested
+		let hasChanges = true;
+		if (options?.checkForChanges) {
+			try {
+				hasChanges = false;
+
+				// First check file size to avoid reading file if size differs
+				const stat = await this.fileSystem.stat(fileUri);
+				if (stat.size !== contentBytes.length) {
+					hasChanges = true;
+				}
+
+				// Sizes match, need to compare content
+				const existingContent = await this.fileSystem.readFile(fileUri);
+				const existingText = new TextDecoder().decode(existingContent);
+				if (existingText !== content) {
+					this.logService.trace(`[GitHubOrgChatResourcesService] Skipped writing cache file: ${fileUri.toString()}`);
+					hasChanges = true;
+				} else {
+					// Content is the same, no need to write
+					return false;
+				}
+			} catch {
+				// File doesn't exist, so we have changes
+				hasChanges = true;
+			}
+		}
+
+		await this.fileSystem.writeFile(fileUri, contentBytes);
+		this.logService.trace(`[GitHubOrgChatResourcesService] Wrote cache file: ${fileUri.toString()}`);
+		return hasChanges;
+	}
+
+	async clearCache(type: PromptsType, orgName: string, exclude?: Set<string>): Promise<void> {
+		const cacheDir = this.getCacheDir(orgName, type);
+
+		try {
+			const files = await this.fileSystem.readDirectory(cacheDir);
+			for (const [filename, fileType] of files) {
+				if (fileType === FileType.File && isValidFile(type, filename) && !exclude?.has(filename)) {
+					await this.fileSystem.delete(vscode.Uri.joinPath(cacheDir, filename));
+					this.logService.trace(`[GitHubOrgChatResourcesService] Deleted cache file: ${filename}`);
+				}
+			}
+		} catch {
+			// Directory might not exist
+		}
+	}
+
+	async listCachedFiles(type: PromptsType, orgName: string): Promise<vscode.ChatResource[]> {
+		const resources: vscode.ChatResource[] = [];
+		const cacheDir = this.getCacheDir(orgName, type);
+
+		try {
+			const files = await this.fileSystem.readDirectory(cacheDir);
+			for (const [filename, fileType] of files) {
+				if (fileType === FileType.File && isValidFile(type, filename)) {
+					const fileUri = vscode.Uri.joinPath(cacheDir, filename);
+					resources.push({ uri: fileUri });
+				}
+			}
+		} catch {
+			// Directory might not exist yet
+			this.logService.trace(`[GitHubOrgChatResourcesService] Cache directory does not exist: ${cacheDir.toString()}`);
+		}
+
+		return resources;
 	}
 }

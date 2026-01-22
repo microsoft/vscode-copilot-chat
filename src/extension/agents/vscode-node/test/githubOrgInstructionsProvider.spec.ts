@@ -5,16 +5,17 @@
 
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test } from 'vitest';
-import * as vscode from 'vscode';
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { GithubRepoId, IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { constObservable, observableValue } from '../../../../util/vs/base/common/observable';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OrganizationInstructionsProvider } from '../organizationInstructionsProvider';
-import { MockGitHubPromptFileService } from './mockGitHubPromptFileService';
+import { MockGithubOrgChatResourcesService } from './mockGitHubOrgChatResourcesService';
 import { MockOctoKitService } from './mockOctoKitService';
 
 /**
@@ -105,13 +106,51 @@ class MockGitService implements IGitService {
 }
 
 /**
- * Mock implementation of extension context for testing
+ * Mock implementation of file system for testing
  */
-class MockExtensionContext {
-	storageUri: vscode.Uri | undefined;
+class MockFileSystem {
+	private readonly files = new Map<string, Uint8Array>();
+	private readonly directories = new Map<string, [string, FileType][]>();
 
-	constructor(storageUri?: vscode.Uri) {
-		this.storageUri = storageUri;
+	mockFile(uri: URI, content: string): void {
+		this.files.set(uri.toString(), new TextEncoder().encode(content));
+	}
+
+	mockDirectory(uri: URI, entries: [string, FileType][]): void {
+		this.directories.set(uri.toString(), entries);
+	}
+
+	async readFile(uri: URI): Promise<Uint8Array> {
+		const content = this.files.get(uri.toString());
+		if (!content) {
+			throw new Error(`File not found: ${uri.toString()}`);
+		}
+		return content;
+	}
+
+	async readDirectory(uri: URI): Promise<[string, FileType][]> {
+		const entries = this.directories.get(uri.toString());
+		if (!entries) {
+			throw new Error(`Directory not found: ${uri.toString()}`);
+		}
+		return entries;
+	}
+
+	async stat(uri: URI): Promise<{ type: FileType; size: number }> {
+		const content = this.files.get(uri.toString());
+		if (content) {
+			return { type: FileType.File, size: content.length };
+		}
+		const entries = this.directories.get(uri.toString());
+		if (entries) {
+			return { type: FileType.Directory, size: 0 };
+		}
+		throw new Error(`Not found: ${uri.toString()}`);
+	}
+
+	clear(): void {
+		this.files.clear();
+		this.directories.clear();
 	}
 }
 
@@ -119,10 +158,13 @@ suite('OrganizationInstructionsProvider', () => {
 	let disposables: DisposableStore;
 	let mockGitService: MockGitService;
 	let mockOctoKitService: MockOctoKitService;
-	let mockPromptFileService: MockGitHubPromptFileService;
+	let mockPromptFileService: MockGithubOrgChatResourcesService;
 	let mockExtensionContext: MockExtensionContext;
+	let mockFileSystem: MockFileSystem;
 	let accessor: any;
 	let provider: OrganizationInstructionsProvider;
+
+	const storagePath = '/test/storage';
 
 	beforeEach(() => {
 		disposables = new DisposableStore();
@@ -130,9 +172,9 @@ suite('OrganizationInstructionsProvider', () => {
 		// Create mocks first
 		mockGitService = new MockGitService();
 		mockOctoKitService = new MockOctoKitService();
-		const storageUri = URI.file('/test/storage');
-		mockExtensionContext = new MockExtensionContext(storageUri);
-		mockPromptFileService = new MockGitHubPromptFileService(storageUri);
+		mockExtensionContext = new MockExtensionContext(storagePath, undefined, storagePath);
+		mockPromptFileService = new MockGithubOrgChatResourcesService(URI.file(storagePath));
+		mockFileSystem = new MockFileSystem();
 
 		// Set up testing services
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
@@ -143,15 +185,18 @@ suite('OrganizationInstructionsProvider', () => {
 		disposables.dispose();
 		mockOctoKitService.clearInstructions();
 		mockPromptFileService.clearAllStorage();
+		mockFileSystem.clear();
 	});
 
 	function createProvider() {
 		// Create provider manually with all dependencies
+		// Note: OrganizationInstructionsProvider uses IFileSystemService directly, not IGitHubOrgChatResourcesService
 		provider = new OrganizationInstructionsProvider(
 			mockOctoKitService,
 			accessor.get(ILogService),
 			mockGitService,
-			mockPromptFileService,
+			mockExtensionContext as any,
+			mockFileSystem as any,
 		);
 		disposables.add(provider);
 		return provider;
@@ -179,11 +224,14 @@ suite('OrganizationInstructionsProvider', () => {
 	test('returns cached instructions on first call', async () => {
 		mockGitService.setActiveRepository(new GithubRepoId('testorg', 'testrepo'));
 
-		// Pre-populate cache - implementation uses org name from repoId.org
+		// Pre-populate cache - provider uses IFileSystemService directly with {orgLogin}.instruction.md naming
 		const instructionContent = `# Organization Instructions
 
 Always follow our coding standards.`;
-		mockPromptFileService.setStorage('testorg', GitHubResourceType.Instructions, new Map([['default.instructions.md', instructionContent]]));
+		const cacheDir = URI.joinPath(mockExtensionContext.storageUri!, 'githubInstructionsCache');
+		const instructionFile = URI.joinPath(cacheDir, 'testorg.instruction.md');
+		mockFileSystem.mockFile(instructionFile, instructionContent);
+		mockFileSystem.mockDirectory(cacheDir, [['testorg.instruction.md', FileType.File]]);
 
 		const provider = createProvider();
 

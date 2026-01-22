@@ -29,7 +29,7 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 		super();
 
 		// Set up polling with provider-specific interval
-		this._register(this.githubOrgChatResourcesService.createPollingSubscription(REFRESH_INTERVAL_MS, this.pollAgents));
+		this._register(this.githubOrgChatResourcesService.startPolling(REFRESH_INTERVAL_MS, this.pollAgents));
 	}
 
 	async provideCustomAgents(_context: unknown, token: vscode.CancellationToken): Promise<vscode.ChatResource[]> {
