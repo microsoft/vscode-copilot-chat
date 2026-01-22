@@ -20,6 +20,7 @@ import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ApiClient } from './externalIngestApi';
 
 
@@ -71,8 +72,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
 
@@ -82,8 +84,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public async getAuthToken(): Promise<string | undefined> {
-		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
-			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
+		return (await this.authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this.authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
@@ -109,13 +111,27 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 
-		// Retry on 500 errors as these can be transient
-		if (response.status === 500 && retries > 0) {
-			this.logService.warn(`ExternalIngestClient::post(): Got 500, retrying... (${retries} retries remaining)`);
+		// Retry on 500 errors as these are often transient
+		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
+
+		/* __GDPR__
+			"externalIngestClient.post.error" : {
+				"owner": "copilot-core",
+				"comment": "Logging when a external ingest POST request fails",
+				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+
+		if (shouldRetry) {
+			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
 			return this.post(authToken, path, body, { retries: retries - 1 }, token);
 		}
 
 		if (!response.ok) {
+			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
 			throw new Error(`POST to ${url} failed with status ${response.status}`);
 		}
 
