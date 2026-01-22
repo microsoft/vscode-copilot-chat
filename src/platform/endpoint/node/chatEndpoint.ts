@@ -30,7 +30,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily } from '../common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -302,8 +302,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		// Validate image count if endpoint has max_prompt_images limit
-		if (this.maxPromptImages !== undefined) {
+		// Validate image count if endpoint has max_prompt_images limit (Gemini only for now)
+		if (isGeminiFamily(this) && this.maxPromptImages !== undefined) {
 			const imageCount = this.countImages(options.messages, this.maxPromptImages);
 			if (imageCount > this.maxPromptImages) {
 				const errorMsg = l10n.t('Too many images in request: {0} images provided, but the model supports a maximum of {1} images.', imageCount, this.maxPromptImages);

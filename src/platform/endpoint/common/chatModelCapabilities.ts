@@ -212,6 +212,10 @@ export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boo
 	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
 }
 
+export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().startsWith('gemini');
+}
+
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
 	if (!model) {
 		return false;
