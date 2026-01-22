@@ -6,6 +6,7 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import type { ExtensionContext } from 'vscode';
+import { Scalar } from 'yaml';
 import { PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions } from '../../../../platform/github/common/githubService';
@@ -14,9 +15,10 @@ import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mock
 import { ILogService } from '../../../../platform/log/common/logService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { parse } from '../../../../util/vs/base/common/yaml';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { GitHubOrgChatResourcesService } from '../githubOrgChatResourcesService';
-import { GitHubOrgCustomAgentProvider } from '../githubOrgCustomAgentProvider';
+import { GitHubOrgCustomAgentProvider, looksLikeNumber, yamlString } from '../githubOrgCustomAgentProvider';
 import { MockOctoKitService } from './mockOctoKitService';
 
 suite('GitHubOrgCustomAgentProvider', () => {
@@ -833,10 +835,11 @@ Test prompt with special characters
 
 		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'multiline_agent.agent.md');
 
-		// Newlines should be escaped to keep description on a single line
+		// Newlines should be escaped using double quotes to keep description on a single line
+		// (the custom YAML parser doesn't support multi-line strings)
 		const expectedContent = `---
 name: Multiline Agent
-description: First line of description.\\nSecond line of description.\\nThird line.
+description: "First line of description.\\nSecond line of description.\\nThird line."
 ---
 Test prompt
 `;
@@ -1145,5 +1148,303 @@ Test prompt
 		assert.equal(agents.length, 1);
 		const multiVersionAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(multiVersionAgentName, 'multi_version_agent');
+	});
+});
+
+suite('looksLikeNumber', () => {
+
+	test('returns false for empty string', () => {
+		assert.strictEqual(looksLikeNumber(''), false);
+	});
+
+	test('returns true for integers', () => {
+		assert.strictEqual(looksLikeNumber('0'), true);
+		assert.strictEqual(looksLikeNumber('123'), true);
+		assert.strictEqual(looksLikeNumber('-456'), true);
+	});
+
+	test('returns true for decimals', () => {
+		assert.strictEqual(looksLikeNumber('3.14'), true);
+		assert.strictEqual(looksLikeNumber('-0.5'), true);
+		assert.strictEqual(looksLikeNumber('.5'), true);
+	});
+
+	test('returns false for non-numeric strings', () => {
+		assert.strictEqual(looksLikeNumber('abc'), false);
+		assert.strictEqual(looksLikeNumber('12abc'), false);
+		assert.strictEqual(looksLikeNumber('hello'), false);
+	});
+
+	test('returns false for special number representations', () => {
+		// These don't match the regex /^-?\d*\.?\d+$/
+		assert.strictEqual(looksLikeNumber('1e10'), false);
+		assert.strictEqual(looksLikeNumber('1.5e-3'), false);
+		assert.strictEqual(looksLikeNumber('Infinity'), false);
+		assert.strictEqual(looksLikeNumber('-Infinity'), false);
+		assert.strictEqual(looksLikeNumber('NaN'), false);
+	});
+
+	test('returns false for hex/octal representations', () => {
+		assert.strictEqual(looksLikeNumber('0x1F'), false);
+		assert.strictEqual(looksLikeNumber('0o17'), false);
+		assert.strictEqual(looksLikeNumber('0b101'), false);
+	});
+
+	test('returns false for strings with spaces', () => {
+		assert.strictEqual(looksLikeNumber(' 123'), false);
+		assert.strictEqual(looksLikeNumber('123 '), false);
+	});
+});
+
+suite('yamlString', () => {
+
+	test('returns plain string for simple text', () => {
+		const result = yamlString('hello');
+		assert.strictEqual(result, 'hello');
+	});
+
+	test('returns plain string for text with spaces', () => {
+		const result = yamlString('hello world');
+		assert.strictEqual(result, 'hello world');
+	});
+
+	suite('quoting for special characters', () => {
+
+		test('quotes strings containing hash (comment)', () => {
+			const result = yamlString('value with # hash');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'value with # hash');
+			assert.strictEqual(result.type, Scalar.QUOTE_SINGLE);
+		});
+
+		test('quotes strings containing colon', () => {
+			const result = yamlString('key: value');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'key: value');
+		});
+
+		test('quotes strings containing brackets', () => {
+			const result = yamlString('array [1, 2]');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'array [1, 2]');
+		});
+
+		test('quotes strings containing braces', () => {
+			const result = yamlString('object {a: 1}');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'object {a: 1}');
+		});
+
+		test('quotes strings containing comma', () => {
+			const result = yamlString('a, b, c');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'a, b, c');
+		});
+
+		test('quotes strings containing newline', () => {
+			const result = yamlString('line1\nline2');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'line1\nline2');
+			// Newlines require double quotes for escape sequence support
+			assert.strictEqual(result.type, Scalar.QUOTE_DOUBLE);
+		});
+
+		test('quotes strings containing carriage return', () => {
+			const result = yamlString('line1\rline2');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'line1\rline2');
+			// Carriage returns require double quotes for escape sequence support
+			assert.strictEqual(result.type, Scalar.QUOTE_DOUBLE);
+		});
+	});
+
+	suite('quoting for values starting with quotes', () => {
+
+		test('quotes strings starting with single quote', () => {
+			const result = yamlString(`'quoted value`);
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, `'quoted value`);
+		});
+
+		test('quotes strings starting with double quote', () => {
+			const result = yamlString(`"quoted value`);
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, `"quoted value`);
+		});
+	});
+
+	suite('quoting for whitespace', () => {
+
+		test('quotes strings with leading space', () => {
+			const result = yamlString(' leading space');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, ' leading space');
+		});
+
+		test('quotes strings with trailing space', () => {
+			const result = yamlString('trailing space ');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'trailing space ');
+		});
+	});
+
+	suite('quoting for YAML keywords', () => {
+
+		test('quotes "true" to preserve as string', () => {
+			const result = yamlString('true');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'true');
+		});
+
+		test('quotes "false" to preserve as string', () => {
+			const result = yamlString('false');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'false');
+		});
+
+		test('quotes "null" to preserve as string', () => {
+			const result = yamlString('null');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, 'null');
+		});
+
+		test('quotes "~" to preserve as string', () => {
+			const result = yamlString('~');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, '~');
+		});
+
+		test('does not quote "True" (case sensitive)', () => {
+			const result = yamlString('True');
+			assert.strictEqual(result, 'True');
+		});
+
+		test('does not quote "FALSE" (case sensitive)', () => {
+			const result = yamlString('FALSE');
+			assert.strictEqual(result, 'FALSE');
+		});
+	});
+
+	suite('quoting for numeric strings', () => {
+
+		test('quotes integer strings', () => {
+			const result = yamlString('123');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, '123');
+		});
+
+		test('quotes negative integers', () => {
+			const result = yamlString('-456');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, '-456');
+		});
+
+		test('quotes decimal strings', () => {
+			const result = yamlString('3.14');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.value, '3.14');
+		});
+
+		test('does not quote non-numeric strings that look similar', () => {
+			const result = yamlString('v1.0');
+			assert.strictEqual(result, 'v1.0');
+		});
+	});
+
+	suite('quote type selection', () => {
+
+		test('uses single quotes by default when quoting', () => {
+			const result = yamlString('value with # hash');
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.type, Scalar.QUOTE_SINGLE);
+		});
+
+		test('does not quote string with only single quote (no special chars)', () => {
+			// `it's a value` has no special YAML characters, so no quoting is needed
+			const result = yamlString(`it's a value`);
+			assert.strictEqual(result, `it's a value`);
+		});
+
+		test('uses double quotes when value has single quote and special chars', () => {
+			const result = yamlString(`it's a value: with colon`);
+			assert.ok(result instanceof Scalar);
+			assert.strictEqual(result.type, Scalar.QUOTE_DOUBLE);
+		});
+	});
+});
+
+suite('yamlString round-trip with custom YAML parser', () => {
+	/**
+	 * These tests verify that values processed by yamlString() can be
+	 * correctly parsed back by the custom YAML parser in yaml.ts
+	 */
+
+	function roundTrip(value: string): string | undefined {
+		const yamlValue = yamlString(value);
+		let yamlStr: string;
+
+		if (yamlValue instanceof Scalar) {
+			// Simulate how YAML library would stringify this
+			if (yamlValue.type === Scalar.QUOTE_SINGLE) {
+				yamlStr = `'${value}'`;
+			} else {
+				// Double quotes - need to escape internal double quotes
+				yamlStr = `"${value.replace(/"/g, '\\"')}"`;
+			}
+		} else {
+			yamlStr = value;
+		}
+
+		// Parse as a simple key-value YAML
+		const yaml = `key: ${yamlStr}`;
+		const parsed = parse(yaml);
+
+		if (parsed?.type === 'object' && parsed.properties.length > 0) {
+			const prop = parsed.properties[0];
+			if (prop.value.type === 'string') {
+				return prop.value.value;
+			}
+		}
+		return undefined;
+	}
+
+	test('round-trips plain string', () => {
+		assert.strictEqual(roundTrip('hello world'), 'hello world');
+	});
+
+	test('round-trips string with hash', () => {
+		assert.strictEqual(roundTrip('value # comment'), 'value # comment');
+	});
+
+	test('round-trips string with colon', () => {
+		assert.strictEqual(roundTrip('key: value'), 'key: value');
+	});
+
+	test('round-trips boolean keyword as string', () => {
+		assert.strictEqual(roundTrip('true'), 'true');
+		assert.strictEqual(roundTrip('false'), 'false');
+	});
+
+	test('round-trips null keyword as string', () => {
+		assert.strictEqual(roundTrip('null'), 'null');
+	});
+
+	test('round-trips numeric string', () => {
+		assert.strictEqual(roundTrip('123'), '123');
+		assert.strictEqual(roundTrip('3.14'), '3.14');
+	});
+
+	test('round-trips string with leading/trailing whitespace', () => {
+		assert.strictEqual(roundTrip('  padded  '), '  padded  ');
+	});
+
+	test('round-trips string with single quotes (no special chars)', () => {
+		// Apostrophes without other special chars don't need quoting
+		assert.strictEqual(roundTrip(`it's working`), `it's working`);
+	});
+
+	test('round-trips string with single quotes and special chars', () => {
+		// When both single quote and special char are present, double quotes are used
+		assert.strictEqual(roundTrip(`it's a value: with colon`), `it's a value: with colon`);
 	});
 });

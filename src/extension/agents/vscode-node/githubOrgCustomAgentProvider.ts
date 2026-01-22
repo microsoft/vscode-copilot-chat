@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import YAML from 'yaml';
+import YAML, { Scalar } from 'yaml';
 import { AGENT_FILE_EXTENSION, PromptsType } from '../../../platform/customInstructions/common/promptTypes';
 import { CustomAgentDetails, CustomAgentListOptions, IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -115,27 +115,14 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private escapeYamlString(value: string): string {
-		// Escape backslashes first, then quotes and hash symbols
-		return value
-			.replace(/\\/g, '\\\\')
-			.replace(/"/g, '\\"')
-			.replace(/'/g, '\\\'')
-			.replace(/#/g, '\\#');
-	}
-
 	private generateAgentMarkdown(agent: CustomAgentDetails): string {
 		const frontmatterObj: Record<string, unknown> = {};
 
 		if (agent.display_name) {
-			frontmatterObj.name = this.escapeYamlString(agent.display_name);
+			frontmatterObj.name = yamlString(agent.display_name);
 		}
 		if (agent.description) {
-			// Escape newlines in description to keep it on a single line
-			frontmatterObj.description = agent.description.replace(
-				/\n/g,
-				'\\n',
-			);
+			frontmatterObj.description = yamlString(agent.description);
 		}
 		if (agent.tools && agent.tools.length > 0 && agent.tools[0] !== '*') {
 			frontmatterObj.tools = agent.tools;
@@ -155,9 +142,67 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 
 		const frontmatter = YAML.stringify(frontmatterObj, {
 			lineWidth: 0,
+			// Force double-quoted strings with newlines to use escape sequences rather than multi-line blocks.
+			// The custom YAML parser doesn't support multi-line strings.
+			doubleQuotedMinMultiLineLength: Infinity,
 		}).trim();
 		const body = agent.prompt ?? '';
 
 		return `---\n${frontmatter}\n---\n${body}\n`;
 	}
+}
+
+/**
+ * Returns a YAML-safe value for a string. If the string contains characters
+ * that need quoting (like #, :, etc.), wraps it in a Scalar with appropriate quoting.
+ * The custom YAML parser doesn't handle escape sequences, so we prefer single quotes
+ * unless the value contains single quotes or newlines (in which case we use double quotes).
+ */
+export function yamlString(value: string): string | Scalar {
+	// Characters/patterns that require quoting in YAML values:
+	// - # starts a comment, : is key-value separator, [] {} are collection syntax, , is separator
+	// - Values starting with quotes need quoting to preserve as strings
+	// - Values with leading/trailing whitespace need quoting
+	// - Boolean keywords (true, false) would be parsed as booleans
+	// - Null keywords (null, ~) would be parsed as null
+	// - Numeric-looking strings would be parsed as numbers
+	// - Newlines would corrupt the value (parser splits on newlines)
+	// - Single quotes in value require double quotes (parser doesn't handle escapes)
+	const needsQuoting =
+		/[#:\[\]{},\n\r]/.test(value) ||
+		value.startsWith('\'') ||
+		value.startsWith('"') ||
+		value !== value.trim() ||
+		value === 'true' ||
+		value === 'false' ||
+		value === 'null' ||
+		value === '~' ||
+		looksLikeNumber(value);
+
+	if (needsQuoting) {
+		const scalar = new Scalar(value);
+		// Use double quotes if value contains single quotes OR newlines.
+		// - Single quotes can't be escaped in YAML single-quoted strings
+		// - Newlines in single-quoted strings become multi-line blocks, but the custom
+		//   YAML parser doesn't support multi-line strings. Double quotes preserve
+		//   newlines as \n escape sequences.
+		scalar.type = (value.includes('\'') || value.includes('\n') || value.includes('\r'))
+			? Scalar.QUOTE_DOUBLE
+			: Scalar.QUOTE_SINGLE;
+		return scalar;
+	}
+	return value;
+}
+
+/**
+ * Checks if a string looks like a number that would be parsed as a numeric value.
+ * Matches the logic in the custom YAML parser's isValidNumber and createValueNode.
+ */
+export function looksLikeNumber(value: string): boolean {
+	if (value === '') {
+		return false;
+	}
+	const num = Number(value);
+	// Matches parser logic: !isNaN && isFinite && passes regex /^-?\d*\.?\d+$/
+	return !isNaN(num) && isFinite(num) && /^-?\d*\.?\d+$/.test(value);
 }
