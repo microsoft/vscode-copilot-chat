@@ -188,38 +188,71 @@ class TrajectoryBuilder {
 	}
 
 	public build(): IAgentTrajectory {
-		// Calculate final metrics
+		// Infer a default model name for the trajectory if not provided at start.
+		// ATIF allows a root-level agent.model_name which step-level model_name can override.
+		let inferredModelName: string | undefined;
+		if (!this.agentInfo.model_name) {
+			for (const step of this.steps) {
+				if (step.source === 'agent' && step.model_name) {
+					inferredModelName = step.model_name;
+					break;
+				}
+			}
+		}
+
+		// Calculate final metrics (ATIF v1.5): only include fields that actually
+		// appeared in per-step metrics. The final_metrics object itself is optional.
+		let hasAnyStepMetrics = false;
+		let sawPromptTokens = false;
+		let sawCompletionTokens = false;
+		let sawCachedTokens = false;
+		let sawCostUsd = false;
+
 		let totalPromptTokens = 0;
 		let totalCompletionTokens = 0;
 		let totalCachedTokens = 0;
 		let totalCostUsd = 0;
-		let totalToolCalls = 0;
 
 		for (const step of this.steps) {
-			if (step.metrics) {
-				totalPromptTokens += step.metrics.prompt_tokens || 0;
-				totalCompletionTokens += step.metrics.completion_tokens || 0;
-				totalCachedTokens += step.metrics.cached_tokens || 0;
-				totalCostUsd += step.metrics.cost_usd || 0;
+			const metrics = step.metrics;
+			if (!metrics) {
+				continue;
 			}
-			if (step.tool_calls) {
-				totalToolCalls += step.tool_calls.length;
+			hasAnyStepMetrics = true;
+			if (metrics.prompt_tokens !== undefined) {
+				sawPromptTokens = true;
+				totalPromptTokens += metrics.prompt_tokens;
+			}
+			if (metrics.completion_tokens !== undefined) {
+				sawCompletionTokens = true;
+				totalCompletionTokens += metrics.completion_tokens;
+			}
+			if (metrics.cached_tokens !== undefined) {
+				sawCachedTokens = true;
+				totalCachedTokens += metrics.cached_tokens;
+			}
+			if (metrics.cost_usd !== undefined) {
+				sawCostUsd = true;
+				totalCostUsd += metrics.cost_usd;
 			}
 		}
+
+		const finalMetrics = hasAnyStepMetrics ? {
+			...(sawPromptTokens ? { total_prompt_tokens: totalPromptTokens } : undefined),
+			...(sawCompletionTokens ? { total_completion_tokens: totalCompletionTokens } : undefined),
+			...(sawCachedTokens ? { total_cached_tokens: totalCachedTokens } : undefined),
+			...(sawCostUsd ? { total_cost_usd: totalCostUsd } : undefined),
+			total_steps: this.steps.length
+		} : undefined;
+
+		const agent = inferredModelName ? { ...this.agentInfo, model_name: inferredModelName } : this.agentInfo;
 
 		return {
 			schema_version: TRAJECTORY_SCHEMA_VERSION,
 			session_id: this.sessionId,
-			agent: this.agentInfo,
+			agent,
 			steps: [...this.steps],
-			final_metrics: {
-				total_prompt_tokens: totalPromptTokens,
-				total_completion_tokens: totalCompletionTokens,
-				total_cached_tokens: totalCachedTokens,
-				total_cost_usd: totalCostUsd,
-				total_steps: this.steps.length,
-				total_tool_calls: totalToolCalls
-			}
+			final_metrics: finalMetrics
 		};
 	}
 }

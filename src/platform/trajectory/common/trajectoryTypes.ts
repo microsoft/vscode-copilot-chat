@@ -104,10 +104,6 @@ export interface IToolCall {
 	readonly function_name: string;
 	/** Arguments passed to the tool (structured object) */
 	readonly arguments: Record<string, unknown>;
-	/** Optional MCP server context if this is an MCP tool */
-	readonly mcp_server?: string;
-	/** Execution mode for parallel calls */
-	readonly execution_mode?: 'sequential' | 'parallel';
 }
 
 /**
@@ -128,11 +124,6 @@ export interface IObservationResult {
 	readonly content?: string;
 	/** Reference to subagent trajectory if this was a subagent invocation */
 	readonly subagent_trajectory_ref?: ISubagentTrajectoryRef[];
-	/** Error information if the tool call failed */
-	readonly error?: {
-		readonly message: string;
-		readonly code?: string;
-	};
 }
 
 /**
@@ -181,8 +172,6 @@ export interface IFinalMetrics {
 	readonly total_cost_usd?: number;
 	/** Total number of steps */
 	readonly total_steps?: number;
-	/** Total number of tool calls */
-	readonly total_tool_calls?: number;
 	/** Custom aggregate metrics */
 	readonly extra?: Record<string, unknown>;
 }
@@ -190,7 +179,7 @@ export interface IFinalMetrics {
 /**
  * Current trajectory format version
  */
-export const TRAJECTORY_SCHEMA_VERSION = 'VSCode-Copilot-Trajectory-v1.0';
+export const TRAJECTORY_SCHEMA_VERSION = 'ATIF-v1.5';
 
 /**
  * File extension for trajectory files

@@ -16,12 +16,15 @@ import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolC
  */
 export class TrajectoryLoggerAdapter extends Disposable {
 	private sessionMap = new WeakMap<CapturingToken, string>();
+	private sessionInfoBySessionId = new Map<string, { label: string; firstSeenTime: number }>();
 	private processedEntries = new Set<string>();
 	private processedToolCalls = new Set<string>(); // Track processed tool calls by their ID
 	private lastUserMessageBySession = new Map<string, string>();
 	// Track pending step contexts by both session and request ID to handle parallel tool calls
 	private pendingStepContexts = new Map<string, IAgentStepContext>();
 	private requestToStepContext = new Map<string, { sessionId: string; context: IAgentStepContext; toolCallCount: number; processedToolCalls: number }>();
+	private runSubagentToolCallToSessionId = new Map<string, string>();
+	private claimedSubagentSessionIds = new Set<string>();
 
 	constructor(
 		private readonly requestLogger: IRequestLogger,
@@ -40,6 +43,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	public startTrajectory(token: CapturingToken, agentInfo: IAgentInfo): string {
 		const sessionId = this.generateSessionId(token.label);
 		this.sessionMap.set(token, sessionId);
+		this.sessionInfoBySessionId.set(sessionId, { label: token.label, firstSeenTime: Date.now() });
 		this.trajectoryLogger.startTrajectory(sessionId, agentInfo);
 		return sessionId;
 	}
@@ -67,6 +71,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 				// Auto-create session if tracking is enabled
 				sessionId = this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
+				this.sessionInfoBySessionId.set(sessionId, { label: entry.token.label, firstSeenTime: this.getEntryTimeMs(entry) });
 				this.trajectoryLogger.startTrajectory(sessionId, {
 					name: this.extractAgentName(entry.token.label),
 					version: '1.0.0'
@@ -82,6 +87,17 @@ export class TrajectoryLoggerAdapter extends Disposable {
 
 			await this.processEntry(entry, sessionId);
 			this.processedEntries.add(entry.id);
+		}
+	}
+
+	private getEntryTimeMs(entry: LoggedInfo): number {
+		switch (entry.kind) {
+			case LoggedInfoKind.Request:
+				return 'startTime' in entry.entry ? entry.entry.startTime.getTime() : entry.entry.startTimeMs;
+			case LoggedInfoKind.ToolCall:
+				return entry.time;
+			case LoggedInfoKind.Element:
+				return Date.now();
 		}
 	}
 
@@ -284,8 +300,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		const toolCall: IToolCall = {
 			tool_call_id: entry.id,
 			function_name: entry.name,
-			arguments: this.parseArguments(entry.args),
-			execution_mode: stepInfo && stepInfo.toolCallCount > 1 ? 'parallel' : undefined
+			arguments: this.parseArguments(entry.args)
 		};
 
 		stepContext.addToolCalls([toolCall]);
@@ -302,9 +317,9 @@ export class TrajectoryLoggerAdapter extends Disposable {
 
 		// Check if this is a subagent tool call (runSubagent)
 		if (entry.name === 'runSubagent') {
-			// This is a subagent invocation - add subagent reference
+			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForRunSubagent(entry, sessionId);
 			stepContext.addSubagentReference(entry.id, {
-				session_id: `subagent-${entry.id}`
+				session_id: resolvedSubagentSessionId
 			});
 		}
 
@@ -316,6 +331,82 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			}
 			this.pendingStepContexts.delete(sessionId);
 		}
+	}
+
+	private resolveSubagentSessionIdForRunSubagent(entry: ILoggedToolCall, currentSessionId: string): string {
+		const cached = this.runSubagentToolCallToSessionId.get(entry.id);
+		if (cached) {
+			return cached;
+		}
+
+		const args = this.parseArguments(entry.args);
+		const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : undefined;
+		const description = typeof args.description === 'string' ? args.description.trim() : undefined;
+
+		const bestMatch = this.findBestMatchingSubagentSessionId(prompt, description, entry.time, currentSessionId);
+		const resolved = bestMatch ?? `subagent-${entry.id}`;
+		this.runSubagentToolCallToSessionId.set(entry.id, resolved);
+		if (bestMatch) {
+			this.claimedSubagentSessionIds.add(bestMatch);
+		}
+		return resolved;
+	}
+
+	private findBestMatchingSubagentSessionId(prompt: string | undefined, description: string | undefined, toolCallTime: number, currentSessionId: string): string | undefined {
+		if (!prompt && !description) {
+			return undefined;
+		}
+
+		const windowMs = 10 * 60 * 1000;
+		let best: { sessionId: string; score: number; timeDelta: number } | undefined;
+
+		for (const [sessionId, info] of this.sessionInfoBySessionId) {
+			if (sessionId === currentSessionId) {
+				continue;
+			}
+			if (this.claimedSubagentSessionIds.has(sessionId)) {
+				continue;
+			}
+			const timeDelta = Math.abs(info.firstSeenTime - toolCallTime);
+			if (timeDelta > windowMs) {
+				continue;
+			}
+
+			const label = info.label.trim();
+			let score = 0;
+			if (prompt) {
+				if (label === prompt) {
+					score = Math.max(score, 1000);
+				} else if (label.startsWith(prompt) || prompt.startsWith(label)) {
+					score = Math.max(score, 900);
+				} else if (label.includes(prompt) || prompt.includes(label)) {
+					score = Math.max(score, 700);
+				} else {
+					const promptFirstLine = prompt.split(/\r?\n/)[0]?.trim();
+					if (promptFirstLine && (label === promptFirstLine || label.startsWith(promptFirstLine) || promptFirstLine.startsWith(label))) {
+						score = Math.max(score, 650);
+					}
+				}
+			}
+
+			if (description) {
+				if (label === description) {
+					score = Math.max(score, 600);
+				} else if (label.includes(description) || description.includes(label)) {
+					score = Math.max(score, 400);
+				}
+			}
+
+			if (score === 0) {
+				continue;
+			}
+
+			if (!best || score > best.score || (score === best.score && timeDelta < best.timeDelta)) {
+				best = { sessionId, score, timeDelta };
+			}
+		}
+
+		return best?.sessionId;
 	}
 
 	private parseArguments(args: unknown): Record<string, unknown> {
