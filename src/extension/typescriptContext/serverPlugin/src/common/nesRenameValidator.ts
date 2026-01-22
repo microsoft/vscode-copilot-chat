@@ -15,12 +15,14 @@ export class PrepareNesRenameResult {
 	private oldName: string | undefined;
 	private reason: string | undefined;
 	private timedOut: boolean;
+	private onOldState: boolean;
 
 	constructor() {
 		this.canRename = undefined;
 		this.oldName = undefined;
 		this.reason = undefined;
 		this.timedOut = false;
+		this.onOldState = false;
 	}
 
 	public getCanRename(): RenameKind | undefined {
@@ -28,14 +30,25 @@ export class PrepareNesRenameResult {
 	}
 
 	public setCanRename(value: RenameKind.no, reason?: string): PrepareNesRenameResult;
-	public setCanRename(value: RenameKind.yes | RenameKind.maybe, oldName: string): PrepareNesRenameResult;
-	public setCanRename(value: RenameKind, str?: string): PrepareNesRenameResult {
+	public setCanRename(value: RenameKind.yes | RenameKind.maybe, oldName: string, onOldState?: boolean): PrepareNesRenameResult;
+	public setCanRename(value: RenameKind, str?: string, onOldState?: boolean): PrepareNesRenameResult {
 		this.canRename = value;
 		if (value !== RenameKind.no) {
 			this.oldName = str;
+			if (onOldState !== undefined) {
+				this.onOldState = onOldState;
+			}
 		} else {
 			this.reason = str;
 		}
+		return this;
+	}
+
+	public setOnOldState(value: boolean): PrepareNesRenameResult {
+		if (this.canRename === RenameKind.no) {
+			throw new Error('Cannot set onOldState when canRename is no');
+		}
+		this.onOldState = value;
 		return this;
 	}
 
@@ -56,6 +69,7 @@ export class PrepareNesRenameResult {
 				return {
 					canRename: this.canRename,
 					oldName: this.oldName!,
+					onOldState: this.onOldState,
 				};
 			} else {
 				return {

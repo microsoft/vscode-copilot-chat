@@ -7,10 +7,13 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
+import { isDisposable } from '../../../util/vs/base/common/lifecycle';
+import { autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
-import { ICopilotTool, ICopilotToolExtension, ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotTool, ICopilotToolExtension, modelSpecificToolApplies, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
@@ -20,6 +23,13 @@ export class ToolsService extends BaseToolsService {
 
 	// Extensions to override definitions for existing tools.
 	private readonly _toolExtensions: Lazy<Map<ToolName, ICopilotToolExtension<unknown>>>;
+
+	private _connectedModelSpecificTools = false;
+
+	override get modelSpecificTools() {
+		this.getModelSpecificTools();
+		return super.modelSpecificTools;
+	}
 
 	private readonly _contributedToolCache: {
 		input: readonly vscode.LanguageModelToolInformation[];
@@ -46,7 +56,7 @@ export class ToolsService extends BaseToolsService {
 				return aIsBuiltin ? -1 : 1;
 			})
 			.map(tool => {
-				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
+				const owned = this.getCopilotTool(getToolName(tool.name));
 				return owned?.alternativeDefinition?.(tool) ?? tool;
 			});
 
@@ -70,12 +80,37 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService logService: ILogService
 	) {
 		super(logService);
-		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
-		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
+		this._toolExtensions = new Lazy(() => new Map(ToolRegistry.getToolExtensions().map(t => [t.toolName, _instantiationService.createInstance(t)] as const)));
+	}
+
+	private getModelSpecificTools() {
+		if (!this._connectedModelSpecificTools) {
+			this._register(autorunIterableDelta(
+				reader => ToolRegistry.modelSpecificTools.read(reader),
+				({ addedValues, removedValues }) => {
+					for (const { definition } of removedValues) {
+						const prev = this._modelSpecificTools.get(definition.name);
+						if (isDisposable(prev)) {
+							prev.dispose();
+						}
+						this._modelSpecificTools.delete(definition.name);
+					}
+					for (const { definition, tool } of addedValues) {
+						const instance = this._instantiationService.createInstance(tool);
+						this._modelSpecificTools.set(definition.name, { definition, tool: instance });
+					}
+				},
+				v => v.definition,
+			));
+			this._connectedModelSpecificTools = true;
+		}
+
+		return this._modelSpecificTools;
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
@@ -83,9 +118,21 @@ export class ToolsService extends BaseToolsService {
 		return vscode.lm.invokeTool(getContributedToolName(name), options, token);
 	}
 
+	override invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		if (endpoint) {
+			const toolName = getToolName(name);
+			for (const [overridesTool] of this.getToolOverridesForEndpoint(endpoint)) {
+				if (overridesTool === toolName) {
+					return this.invokeTool(toolName, options, token);
+				}
+			}
+		}
+
+		return this.invokeTool(name, options, token);
+	}
+
 	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
-		const tool = this._copilotTools.value.get(name as ToolName);
-		return tool;
+		return this._copilotTools.value.get(name as ToolName) || this.getModelSpecificTools().get(name)?.tool;
 	}
 
 	getTool(name: string | ToolName): vscode.LanguageModelToolInformation | undefined {
@@ -100,25 +147,21 @@ export class ToolsService extends BaseToolsService {
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
 		const tools = this.tools;
 		const toolMap = new Map(tools.map(t => [t.name, t]));
+		// todo@connor4312: string check here is for back-compat for 1.109 Insiders
+		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [typeof t === 'string' ? t : t.name, enabled]));
+
+		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint, tools));
+		const modelSpecificTools = this.getModelSpecificTools();
+
 		return tools
-			.map(tool => {
-				// Apply model-specific alternative if available via alternativeDefinition
-				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
-				let resultTool = tool;
-				if (owned?.alternativeDefinition) {
-					resultTool = owned.alternativeDefinition(resultTool, endpoint);
-				}
-
-				const extension = this._toolExtensions.value.get(getToolName(tool.name) as ToolName);
-				if (extension?.alternativeDefinition) {
-					resultTool = extension.alternativeDefinition(resultTool, endpoint);
-				}
-
-				return resultTool;
-			})
 			.filter(tool => {
+				// 0. If the tool was a model specific tool with an override, it'll be mixed in in the 'map' later.
+				if (modelSpecificTools.get(tool.name)?.tool.overridesTool) {
+					return false;
+				}
+
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
-				const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
 				if (toolPickerSelection === false) {
 					return false;
 				}
@@ -149,6 +192,43 @@ export class ToolsService extends BaseToolsService {
 				}
 
 				return false;
+			})
+			.map(tool => {
+				// Apply model-specific alternative if available via alternativeDefinition
+				const toolName = getToolName(tool.name) as ToolName;
+				const override = modelSpecificOverrides.get(toolName);
+				let resultTool = tool;
+				if (override?.tool) {
+					resultTool = { ...override.info, name: resultTool.name };
+				}
+
+				const owned = override?.tool || this.getCopilotTool(toolName);
+				if (owned?.alternativeDefinition) {
+					resultTool = owned.alternativeDefinition(resultTool, endpoint);
+				}
+
+				const extension = this._toolExtensions.value.get(toolName);
+				if (extension?.alternativeDefinition) {
+					resultTool = extension.alternativeDefinition(resultTool, endpoint);
+				}
+
+				return resultTool;
 			});
+	}
+
+	private *getToolOverridesForEndpoint(endpoint: IChatEndpoint, tools = this.tools) {
+		for (const tool of tools) {
+			const modelSpecificTool = this.getModelSpecificTools().get(tool.name);
+			if (!modelSpecificTool) {
+				continue;
+			}
+			if (!modelSpecificToolApplies(modelSpecificTool.definition, endpoint)) {
+				continue;
+			}
+
+			if (modelSpecificTool.tool.overridesTool) {
+				yield [modelSpecificTool.tool.overridesTool, { info: tool, tool: modelSpecificTool.tool }] as const;
+			}
+		}
 	}
 }

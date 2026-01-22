@@ -150,5 +150,4 @@
 	},
 	"githubPullRequests.codingAgent.enabled": true,
 	"githubPullRequests.codingAgent.uiIntegration": true,
-	"chat.inlineReferences.style": "link",
 }

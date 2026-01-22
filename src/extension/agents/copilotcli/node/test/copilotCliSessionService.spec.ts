@@ -12,8 +12,8 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
-import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { Event } from '../../../../../util/vs/base/common/event';
@@ -136,7 +136,8 @@ describe('CopilotCLISessionService', () => {
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
+		const nullMcpServer = disposables.add(new NullMcpService());
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -267,7 +268,7 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(CancellationToken.None);
+			const result = await service.getAllSessions(() => true, CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
@@ -298,7 +299,7 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
 			expect(item?.label).includes('Line1');
 			expect(item?.label).includes('Line2');

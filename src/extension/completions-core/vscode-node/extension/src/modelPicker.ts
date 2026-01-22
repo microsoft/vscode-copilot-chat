@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { env, QuickPick, QuickPickItem, QuickPickItemKind, Uri, window, workspace } from 'vscode';
-import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { ConfigKey, getConfig } from '../../lib/src/config';
+import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
 import { AsyncCompletionManager, ICompletionsAsyncManagerService } from '../../lib/src/ghostText/asyncCompletions';
 import { CompletionsCache, ICompletionsCacheService } from '../../lib/src/ghostText/completionsCache';
 import { ICompletionsLogTargetService, Logger } from '../../lib/src/logger';
 import { AvailableModelsManager, ICompletionsModelManagerService, ModelItem } from '../../lib/src/openai/model';
 import { telemetry, TelemetryData } from '../../lib/src/telemetry';
+import { getUserSelectedModelConfiguration } from './modelPickerUserSelection';
 const logger = new Logger('modelPicker');
 
 interface ModelPickerItem extends Omit<ModelItem, 'preview' | 'tokenizer'>, QuickPickItem {
@@ -142,7 +143,4 @@ export class ModelPickerManager {
 	}
 }
 
-function getUserSelectedModelConfiguration(accessor: ServicesAccessor): string | null {
-	const value = getConfig<string | null>(accessor, ConfigKey.UserSelectedCompletionModel);
-	return typeof value === 'string' && value.length > 0 ? value : null;
-}
+

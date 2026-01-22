@@ -195,21 +195,6 @@ export function modelSupportsMemory(modelId: string): boolean {
 		normalized.startsWith('claude-opus-4');
 }
 
-
-export function isAnthropicMemoryEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-): boolean {
-
-	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!modelSupportsMemory(effectiveModelId)) {
-		return false;
-	}
-
-	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
-}
-
 export function isAnthropicToolSearchEnabled(
 	endpoint: IChatEndpoint | string,
 	configurationService: IConfigurationService,

@@ -48,6 +48,22 @@ function containsMicrosoftOrg(orgList: string[]): boolean {
 	return false;
 }
 
+/**
+ * A function used to determine if the org list contains a VS Code organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a VS Code org
+ */
+function containsVSCodeOrg(orgList: string[]): boolean {
+	const VSCODE_ORGANIZATIONS = ['551cca60ce19654d894e786220822482'];
+	// Check if the user is part of a VS Code organization.
+	for (const org of orgList) {
+		if (VSCODE_ORGANIZATIONS.includes(org)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export class CopilotToken {
 	private readonly tokenMap: Map<string, string>;
 	constructor(private readonly _info: ExtendedTokenInfo) {
@@ -127,7 +143,7 @@ export class CopilotToken {
 	}
 
 	get isVscodeTeamMember(): boolean {
-		return this._info.isVscodeTeamMember;
+		return this._info.isVscodeTeamMember || containsVSCodeOrg(this.organizationList);
 	}
 
 	get codexAgentEnabled(): boolean {

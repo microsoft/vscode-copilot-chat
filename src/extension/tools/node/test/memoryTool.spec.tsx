@@ -10,7 +10,7 @@ import { ITestingServicesAccessor } from '../../../../platform/test/node/service
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { ToolName } from '../../common/toolNames';
+import { ContributedToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
 import { toolResultToString } from './toolTestUtils';
 
@@ -54,7 +54,7 @@ suite('MemoryTool', () => {
 			file_text: 'I prefer TypeScript for all projects'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('created successfully');
@@ -75,7 +75,7 @@ suite('MemoryTool', () => {
 			path: '/memories'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		// Should either list the file or indicate path not found (if dir doesn't exist yet)
@@ -98,7 +98,7 @@ suite('MemoryTool', () => {
 			path: '/memories/notes.md'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('Line 1');
@@ -122,7 +122,7 @@ suite('MemoryTool', () => {
 			view_range: [2, 4]
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('Line 2');
@@ -152,7 +152,7 @@ suite('MemoryTool', () => {
 			new_str: 'React'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('successfully');
@@ -181,7 +181,7 @@ suite('MemoryTool', () => {
 			new_str: 'example'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('must be unique');
@@ -206,7 +206,7 @@ suite('MemoryTool', () => {
 			insert_text: 'Inserted Line'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toMatch(/inserted at line/);
@@ -233,7 +233,7 @@ suite('MemoryTool', () => {
 			path: '/memories/todelete.md'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toMatch(/deleted/i);
@@ -258,7 +258,7 @@ suite('MemoryTool', () => {
 			new_path: '/memories/new.md'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toMatch(/renamed|moved/i);
@@ -281,7 +281,7 @@ suite('MemoryTool', () => {
 			file_text: 'malicious'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('must start with /memories');
@@ -296,7 +296,7 @@ suite('MemoryTool', () => {
 			file_text: 'malicious'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('escape /memories directory');
@@ -311,7 +311,7 @@ suite('MemoryTool', () => {
 			file_text: 'nested file'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('created successfully');
@@ -337,7 +337,7 @@ suite('MemoryTool', () => {
 			path: '/memories'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('No workspace is currently open');
@@ -364,7 +364,7 @@ suite('MemoryTool', () => {
 			new_str: ''
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('successfully');
@@ -392,7 +392,7 @@ suite('MemoryTool', () => {
 			insert_text: 'First Line'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toMatch(/inserted at line 0/);
@@ -422,7 +422,7 @@ suite('MemoryTool', () => {
 			file_text: 'new content'
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('created successfully');
@@ -449,7 +449,7 @@ suite('MemoryTool', () => {
 			view_range: [10, 20] // beyond file length
 		};
 
-		const result = await toolsService.invokeTool(ToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
 
 		// Should still work, just return empty or partial content
 		// The implementation uses slice which handles out of bounds gracefully

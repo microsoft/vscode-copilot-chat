@@ -30,6 +30,10 @@ const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
+/**
+ * @deprecated Use empty strings to represent default model/agent instead.
+ * Left here for backward compatibility (for state stored by older versions of Chat extension).
+ */
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotCLISessionOptions {
@@ -247,13 +251,13 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, COPILOT_CLI_DEFAULT_AGENT_ID).toLowerCase();
-		if (agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
-			return agentId;
+		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, '').toLowerCase();
+		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+			return '';
 		}
 
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? COPILOT_CLI_DEFAULT_AGENT_ID;
+		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? '';
 	}
 	async setDefaultAgent(agent: string | undefined): Promise<void> {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
@@ -314,7 +318,6 @@ export interface ICopilotCLISDK {
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
 	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
-	getDefaultWorkingDirectory(): Promise<Uri | undefined>;
 }
 
 type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
@@ -328,7 +331,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 	}
@@ -374,17 +376,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			token: copilotToken?.accessToken ?? '',
 			host: 'https://github.com'
 		};
-	}
-
-	public async getDefaultWorkingDirectory(): Promise<Uri | undefined> {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return undefined;
-		}
-		if (this.workspaceService.getWorkspaceFolders().length === 1) {
-			return this.workspaceService.getWorkspaceFolders()[0];
-		}
-		const folder = await this.workspaceService.showWorkspaceFolderPicker();
-		return folder?.uri;
 	}
 }
 

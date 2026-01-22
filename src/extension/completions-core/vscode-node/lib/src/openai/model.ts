@@ -8,10 +8,12 @@ import { ICompletionModelInformation, IEndpointProvider } from '../../../../../.
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { Disposable } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { getUserSelectedModelConfiguration } from '../../../extension/src/modelPickerUserSelection';
 import { TokenizerName } from '../../../prompt/src/tokenization';
 import { onCopilotToken } from '../auth/copilotTokenNotifier';
 import { ConfigKey, getConfig } from '../config';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
+import { ICompletionsLogTargetService, LogLevel } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
 import { CompletionHeaders } from './fetch';
 
@@ -37,6 +39,7 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 		@ICompletionsFeaturesService private readonly _featuresService: ICompletionsFeaturesService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IAuthenticationService authenticationService: IAuthenticationService,
+		@ICompletionsLogTargetService private readonly _logService: ICompletionsLogTargetService,
 	) {
 		super();
 
@@ -125,6 +128,22 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 
 	getCurrentModelRequestInfo(featureSettings: TelemetryWithExp | undefined = undefined): ModelRequestInfo {
 		const defaultModelId = this.getDefaultModelId();
+		let userSelectedCompletionModel = this._instantiationService.invokeFunction(getUserSelectedModelConfiguration);
+		if (userSelectedCompletionModel) {
+			const genericModels = this.getGenericCompletionModels().map(model => model.modelId);
+			if (!genericModels.includes(userSelectedCompletionModel)) {
+				if (genericModels.length > 0) {
+					this._logService.logIt(
+						LogLevel.INFO,
+						`User selected model ${userSelectedCompletionModel} is not in the list of generic models: ${genericModels.join(', ')}, falling back to default model.`
+					);
+				}
+				userSelectedCompletionModel = null;
+			}
+			if (defaultModelId === userSelectedCompletionModel) {
+				userSelectedCompletionModel = null;
+			}
+		}
 
 		const debugOverride =
 			this._instantiationService.invokeFunction(getConfig<string>, ConfigKey.DebugOverrideEngine) ||
@@ -134,7 +153,18 @@ export class AvailableModelsManager extends Disposable implements ICompletionsMo
 			return new ModelRequestInfo(debugOverride, 'override');
 		}
 
-		const customEngine = featureSettings ? this._featuresService.customEngine(featureSettings) : '';
+		const customEngine = featureSettings ? this._featuresService.customEngine(featureSettings) : undefined;
+		const targetEngine = featureSettings ? this._featuresService.customEngineTargetEngine(featureSettings) : undefined;
+
+		if (userSelectedCompletionModel) {
+			// If the user selected completion model matches the targetEngine, use the custom engine
+			if (customEngine && targetEngine && userSelectedCompletionModel === targetEngine) {
+				return new ModelRequestInfo(customEngine, 'exp');
+			}
+
+			return new ModelRequestInfo(userSelectedCompletionModel, 'modelpicker');
+		}
+
 		if (customEngine) {
 			return new ModelRequestInfo(customEngine, 'exp');
 		}

@@ -389,7 +389,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 		super(props);
 	}
 
-	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
+	override async render(state: void, sizing: PromptSizing, _progress: unknown, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
 		const { tools, toolCallResults } = this.props.promptContext;
 		if (!tools || !tools.toolReferences.length) {
 			return;
@@ -413,7 +413,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 
 			const name = toolReference.range ? this.props.promptContext.query.slice(toolReference.range[0], toolReference.range[1]) : undefined;
 			try {
-				const result = await this.toolsService.invokeTool(tool.name, { input: { ...toolArgs, ...internalToolArgs }, toolInvocationToken: tools.toolInvocationToken }, CancellationToken.None);
+				const result = await this.toolsService.invokeToolWithEndpoint(tool.name, { input: { ...toolArgs, ...internalToolArgs }, toolInvocationToken: tools.toolInvocationToken }, this.promptEndpoint, token || CancellationToken.None);
 				sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, tool.name, result);
 				results.push({ name, value: result });
 			} catch (err) {

@@ -84,7 +84,8 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentProvider"
+		"onCustomAgentProvider",
+		"onInstructionsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -102,6 +103,7 @@
 		"embeddings",
 		"findTextInFiles",
 		"findTextInFiles2",
+		"languageModelToolSupportsModel@1",
 		"findFiles2@2",
 		"textSearchProvider",
 		"terminalDataWriteEvent",
@@ -139,7 +141,8 @@
 		"devDeviceId",
 		"contribEditorContentMenu",
 		"chatPromptFiles",
-		"mcpServerDefinitions"
+		"mcpServerDefinitions",
+		"tabInputMultiDiff"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1143,78 +1146,7 @@
 					}
 				}
 			},
-			{
-				"name": "copilot_memory",
-				"toolReferenceName": "memory",
-				"displayName": "%copilot.tools.memory.name%",
-				"userDescription": "%copilot.tools.memory.description%",
-				"modelDescription": "Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).",
-				"icon": "$(database)",
-				"when": "config.github.copilot.chat.tools.memory.enabled",
-				"canBeReferencedInPrompt": true,
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"command": {
-							"type": "string",
-							"enum": [
-								"view",
-								"create",
-								"str_replace",
-								"insert",
-								"delete",
-								"rename"
-							],
-							"description": "The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory"
-						},
-						"path": {
-							"type": "string",
-							"description": "Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)"
-						},
-						"view_range": {
-							"type": "array",
-							"items": {
-								"type": "number"
-							},
-							"minItems": 2,
-							"maxItems": 2,
-							"description": "[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]"
-						},
-						"file_text": {
-							"type": "string",
-							"description": "[create only] Content to write to the file. Required for create command."
-						},
-						"old_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command."
-						},
-						"new_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command."
-						},
-						"insert_line": {
-							"type": "number",
-							"description": "[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command."
-						},
-						"insert_text": {
-							"type": "string",
-							"description": "[insert only] Text to insert at the specified line. Required for insert command."
-						},
-						"old_path": {
-							"type": "string",
-							"description": "[rename only] Current path of the file or directory. Must start with /memories. Required for rename command."
-						},
-						"new_path": {
-							"type": "string",
-							"description": "[rename only] New path for the file or directory. Must start with /memories. Required for rename command."
-						}
-					},
-					"required": [
-						"command"
-					]
-				}
-			},
+
 			{
 				"name": "copilot_askQuestions",
 				"toolReferenceName": "askQuestions",
@@ -2292,12 +2224,6 @@
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"command": "github.copilot.chat.tools.memory.openFolder",
-				"title": "%github.copilot.command.openMemoryFolder%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.tools.memory.enabled"
-			},
-			{
 				"command": "github.copilot.chat.review.markUnhelpful",
 				"title": "%github.copilot.command.unhelpfulReviewSuggestion%",
 				"icon": "$(thumbsdown)",
@@ -2835,6 +2761,16 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
+					},
+					"github.copilot.chat.organizationCustomAgents.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationCustomAgents.enabled%"
+					},
+					"github.copilot.chat.organizationInstructions.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
@@ -3470,7 +3406,7 @@
 					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
 						"tags": [
 							"experimental",
@@ -3604,15 +3540,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.tools.memory.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",
@@ -3642,14 +3569,6 @@
 							"electron-fetch",
 							"node-fetch"
 						]
-					},
-					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
-						"tags": [
-							"experimental"
-						]
 					}
 				}
 			},
@@ -3667,7 +3586,10 @@
 						"properties": {
 							"triggerType": {
 								"type": "string",
-								"enum": ["input_tokens", "tool_uses"],
+								"enum": [
+									"input_tokens",
+									"tool_uses"
+								],
 								"description": "Type of trigger for context editing"
 							},
 							"triggerValue": {
@@ -3684,7 +3606,9 @@
 							},
 							"excludeTools": {
 								"type": "array",
-								"items": { "type": "string" },
+								"items": {
+									"type": "string"
+								},
 								"description": "Tool names to exclude from clearing"
 							},
 							"clearInputs": {
@@ -3926,6 +3850,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.inlineEdits.chatSessionContextProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.chatSessionContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.codesearch.agent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4083,6 +4017,14 @@
 						"tags": [
 							"advanced",
 							"experimental"
+						]
+					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"advanced"
 						]
 					},
 					"github.copilot.chat.gpt5AlternativePatch": {
@@ -5272,6 +5214,7 @@
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
+					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
@@ -5282,7 +5225,8 @@
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
 					}
-				]
+				],
+				"customAgentTarget": "github-copilot"
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -5348,9 +5292,6 @@
 			}
 		]
 	},
-	"extensionPack": [
-		"GitHub.copilot"
-	],
 	"prettier": {
 		"useTabs": true,
 		"tabWidth": 4,
@@ -5478,7 +5419,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.4.3",
+		"tar": "^7.5.4",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -5491,7 +5432,8 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"yargs": "^17.7.2"
+		"yargs": "^17.7.2",
+		"zod": "3.25.76"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
