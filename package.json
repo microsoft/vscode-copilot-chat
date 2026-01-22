@@ -3935,6 +3935,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.inlineEdits.chatSessionContextProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.chatSessionContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.codesearch.agent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -5281,6 +5291,7 @@
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
+					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
@@ -5487,7 +5498,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.4.3",
+		"tar": "^7.5.4",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",

@@ -1055,7 +1055,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
-				enabledDiagnostics: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService),
+				enableAllContextProviders: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService)
+					|| this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.ChatSessionContextProvider, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
 				traitPosition: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextTraitsPosition, this.expService),
 			}),
@@ -1111,12 +1112,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enabledDiagnostics: diagnosticsEnabled, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enabledDiagnostics: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
+	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enableAllContextProviders, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enableAllContextProviders: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
 		if (languageId in enabledLanguages) {
 			return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
 		}
 
-		if (diagnosticsEnabled) {
+		if (enableAllContextProviders) {
 			return { enabled: true, maxTokens, traitPosition };
 		}
 

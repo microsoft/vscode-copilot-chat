@@ -14,6 +14,7 @@ export enum PromptsType {
 }
 
 export const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
+export const SKILLS_LOCATION_KEY = 'chat.agentSkillsLocations';
 
 export const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
 export const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
