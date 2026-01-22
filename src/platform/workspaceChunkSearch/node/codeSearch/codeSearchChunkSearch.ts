@@ -831,7 +831,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		// Update external ingest index if enabled
 		const externalIndexEnabled = this.isExternalIngestEnabled();
 		if (externalIndexEnabled) {
-			await this._externalIngestIndex.value.doIngest(onProgress, token);
+			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(onProgress, token), token);
+			if (result.isError()) {
+				return Result.error(result.err);
+			}
 
 			// If we are forcing external ingest only, we don't want to update the code search repos
 			if (externalIndexEnabled === 'force') {

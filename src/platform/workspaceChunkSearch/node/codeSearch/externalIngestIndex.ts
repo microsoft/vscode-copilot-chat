@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
+import * as l10n from '@vscode/l10n';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
@@ -25,6 +26,7 @@ import { ISearchService } from '../../../search/common/searchService';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
+import { TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
 
 const debug = false;
@@ -176,13 +178,12 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<void> {
-
-		await this.initialize();
+	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		await raceCancellationError(this.initialize(), token);
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
-			return;
+			return Result.error(TriggerRemoteIndexingError.noWorkspace);
 		}
 
 		// Use the first workspace folder as the "root" for the fileset
@@ -200,6 +201,12 @@ export class ExternalIngestIndex extends Disposable {
 
 		if (result.isOk()) {
 			this.setCurrentIndexCheckpoint(result.val.checkpoint);
+			return Result.ok(true);
+		} else {
+			return Result.error({
+				id: 'external-ingest-error',
+				userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+			});
 		}
 	}
 
