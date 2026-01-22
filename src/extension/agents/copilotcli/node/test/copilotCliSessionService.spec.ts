@@ -12,9 +12,11 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
+import { Event } from '../../../../../util/vs/base/common/event';
 import { DisposableStore, IReference, toDisposable } from '../../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -38,6 +40,9 @@ export class MockCliSdkSession {
 	abort(): void { this.aborted = true; }
 	emit(event: string, args: { content: string | undefined }): void {
 		this.emittedEvents.push({ event, content: args.content });
+	}
+	clearCustomAgent() {
+		return;
 	}
 }
 
@@ -65,6 +70,7 @@ export class MockCliSdkSessionManager {
 
 export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	_serviceBrand: undefined;
+	readonly onDidChangeAgents: Event<void> = Event.None;
 	async getAgents(): Promise<SweCustomAgent[]> {
 		return [];
 	}
@@ -126,7 +132,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
@@ -261,13 +267,11 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(CancellationToken.None);
+			const result = await service.getAllSessions(() => true, CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
 			expect(item.id).toBe('s1');
-			expect(item.label.endsWith('...')).toBe(true); // truncated
-			expect(item.label.length).toBeLessThanOrEqual(50);
 		});
 	});
 
@@ -294,9 +298,10 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
-			expect(item?.label).toBe('Line1');
+			expect(item?.label).includes('Line1');
+			expect(item?.label).includes('Line2');
 		});
 	});
 

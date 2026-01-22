@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { NoNextEditReason, PushEdit, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { Result } from '../../../util/common/result';
+import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { fromUnknown } from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
@@ -56,24 +56,26 @@ class Patch {
 
 export class XtabCustomDiffPatchResponseHandler {
 
-	public static async handleResponse(
-		pushEdit: PushEdit,
+	public static async *handleResponse(
 		linesStream: AsyncIterableObject<string>,
 		documentBeforeEdits: StringText,
 		window: OffsetRange | undefined,
-	): Promise<void> {
-		let editCount = 0;
-		for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
-			editCount++;
-			pushEdit(Result.ok({
-				edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
-				window,
-				// targetDocument, // TODO@ulugbekna: implement target document resolution
-			} satisfies StreamedEdit));
+	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
+		try {
+			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
+				yield {
+					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
+					window,
+					isFromCursorJump: true,
+					// targetDocument, // TODO@ulugbekna: implement target document resolution
+				} satisfies StreamedEdit;
+			}
+		} catch (e: unknown) {
+			const err = fromUnknown(e);
+			return new NoNextEditReason.Unexpected(err);
 		}
-		if (editCount === 0) {
-			pushEdit(Result.error(new NoNextEditReason.NoSuggestions(documentBeforeEdits, window, undefined)));
-		}
+
+		return new NoNextEditReason.NoSuggestions(documentBeforeEdits, window, undefined);
 	}
 
 	private static resolveEdit(patch: Patch): LineReplacement {

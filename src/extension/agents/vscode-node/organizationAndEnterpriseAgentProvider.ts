@@ -14,13 +14,13 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const AgentFileExtension = '.agent.md';
 
-export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.CustomAgentsProvider {
+export class OrganizationAndEnterpriseAgentProvider extends Disposable implements vscode.ChatCustomAgentProvider {
 
 	private readonly _onDidChangeCustomAgents = this._register(new vscode.EventEmitter<void>());
 	readonly onDidChangeCustomAgents = this._onDidChangeCustomAgents.event;
 
 	private isFetching = false;
-	private memoryCache: vscode.CustomAgentResource[] | undefined;
+	private memoryCache: vscode.ChatResource[] | undefined;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -42,9 +42,9 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 	}
 
 	async provideCustomAgents(
-		_options: vscode.CustomAgentQueryOptions,
+		_context: unknown,
 		_token: vscode.CancellationToken
-	): Promise<vscode.CustomAgentResource[]> {
+	): Promise<vscode.ChatResource[]> {
 		try {
 			if (this.memoryCache !== undefined) {
 				return this.memoryCache;
@@ -58,7 +58,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 		}
 	}
 
-	private async readFromCache(): Promise<vscode.CustomAgentResource[]> {
+	private async readFromCache(): Promise<vscode.ChatResource[]> {
 		try {
 			const cacheDir = this.getCacheDir();
 			if (!cacheDir) {
@@ -66,7 +66,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 				return [];
 			}
 
-			const agents: vscode.CustomAgentResource[] = [];
+			const agents: vscode.ChatResource[] = [];
 
 			// Check if cache directory exists
 			try {
@@ -91,11 +91,7 @@ export class OrganizationAndEnterpriseAgentProvider extends Disposable implement
 					const metadata = this.parseAgentMetadata(text, filename);
 					if (metadata) {
 						const fileUri = vscode.Uri.joinPath(orgDir, filename);
-						agents.push({
-							name: metadata.name,
-							description: metadata.description,
-							uri: fileUri,
-						});
+						agents.push({ uri: fileUri });
 					}
 				}
 			}

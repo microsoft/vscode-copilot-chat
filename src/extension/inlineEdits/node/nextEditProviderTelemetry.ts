@@ -728,6 +728,8 @@ export class TelemetrySender implements IDisposable {
 			hadDiagnosticsNES,
 			hadLlmNES,
 			pickedNES,
+			xtabAggressivenessLevel,
+			xtabUserHappinessScore,
 		} = telemetry;
 
 		let usage: APIUsage | undefined;
@@ -822,7 +824,9 @@ export class TelemetrySender implements IDisposable {
 				"diagnosticDistanceToAlternativeDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the alternative diagnostic", "isMeasurement": true },
 				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true },
 				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
-				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" }
+				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" },
+				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
+				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -847,6 +851,7 @@ export class TelemetrySender implements IDisposable {
 				notebookId,
 				notebookCellLines,
 				nextCursorLineError: telemetry.nextCursorPrediction?.nextCursorLineError,
+				xtabAggressivenessLevel,
 			},
 			{
 				requestN,
@@ -902,6 +907,7 @@ export class TelemetrySender implements IDisposable {
 				diagnosticDistanceToAlternativeDiagnostic: diagnosticDistanceToAlternativeDiagnostic,
 				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
 				nextCursorLineDistance: telemetry.nextCursorPrediction?.nextCursorLineDistance,
+				xtabUserHappinessScore,
 			}
 		);
 	}
@@ -925,6 +931,8 @@ export class TelemetrySender implements IDisposable {
 			postProcessingOutcome,
 			activeDocumentRepository,
 			repositoryUrls,
+			cursorJumpPrompt,
+			cursorJumpResponse,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -942,6 +950,8 @@ export class TelemetrySender implements IDisposable {
 				postProcessingOutcome,
 				activeDocumentRepository,
 				repositories: JSON.stringify(repositoryUrls),
+				cursorJumpPrompt,
+				cursorJumpResponse,
 			})
 		);
 	}

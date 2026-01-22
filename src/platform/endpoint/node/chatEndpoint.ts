@@ -17,6 +17,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
@@ -171,8 +172,32 @@ export class ChatEndpoint implements IChatEndpoint {
 	public getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi && this._getThinkingBudget()) {
-			headers['anthropic-beta'] = 'interleaved-thinking-2025-05-14';
+		const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
+		if (modelProviderPreference) {
+			headers['X-Model-Provider-Preference'] = modelProviderPreference;
+		}
+
+		if (this.useMessagesApi) {
+			const betaFeatures: string[] = [];
+
+			// Add thinking beta if enabled
+			if (this._getThinkingBudget()) {
+				betaFeatures.push('interleaved-thinking-2025-05-14');
+			}
+
+			// Add context management beta if enabled
+			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
+				betaFeatures.push('context-management-2025-06-27');
+			}
+
+			// Add tool search beta if enabled
+			if (isAnthropicToolSearchEnabled(this.model, this._configurationService, this._expService)) {
+				betaFeatures.push('advanced-tool-use-2025-11-20');
+			}
+
+			if (betaFeatures.length > 0) {
+				headers['anthropic-beta'] = betaFeatures.join(',');
+			}
 		}
 
 		return headers;
@@ -216,6 +241,11 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected get useMessagesApi(): boolean {
+		// TODO: Messages API is temporarily disabled for Sonnet models due to quality issues
+		if (this.model.toLowerCase().startsWith('claude-sonnet-4')) {
+			return false;
+		}
+
 		const enableMessagesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, this._expService);
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
@@ -301,6 +331,20 @@ export class ChatEndpoint implements IChatEndpoint {
 				body.thinking_budget = thinkingBudget;
 			}
 		}
+
+		// Apply Gemini function calling mode if configured
+		const hasTools = !!options.requestOptions?.tools?.length;
+		if (hasTools && this.family.toLowerCase().includes('gemini-3')) {
+			const geminiFunctionCallingMode = this._configurationService.getExperimentBasedConfig(
+				ConfigKey.TeamInternal.GeminiFunctionCallingMode,
+				this._expService
+			);
+			// Only override tool_choice if experiment provides a value and user hasn't specified a function call
+			if (geminiFunctionCallingMode && typeof body.tool_choice !== 'object') {
+				body.tool_choice = geminiFunctionCallingMode;
+			}
+		}
+
 		return body;
 	}
 
@@ -316,7 +360,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

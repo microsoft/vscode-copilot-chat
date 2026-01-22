@@ -379,6 +379,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 
 export class RepoContextImpl implements RepoContext {
 	public readonly rootUri = this._repo.rootUri;
+	public readonly kind = this._repo.kind;
 	public readonly headBranchName = this._repo.state.HEAD?.name;
 	public readonly headCommitHash = this._repo.state.HEAD?.commit;
 	public readonly upstreamBranchName = this._repo.state.HEAD?.upstream?.name;

@@ -25,7 +25,7 @@ const configs: RepetitionConfig[] = [
  * Return whether the given token array ends in a repetition of a pattern.
  * Controlling the necessary pattern length is set in the configs array.
  */
-export function isRepetitive(tokens: string[]): boolean {
+export function isRepetitive(tokens: readonly string[]): boolean {
 	const tokensBackwards = tokens.slice();
 	tokensBackwards.reverse();
 	return (

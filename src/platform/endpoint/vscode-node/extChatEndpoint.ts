@@ -14,6 +14,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
+import { ContextManagementResponse } from '../../networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
@@ -21,11 +22,11 @@ import { ChatCompletion } from '../../networking/common/openai';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { EndpointEditToolName, IEndpointProvider, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
+import { ExtensionContributedChatTokenizer } from './extChatTokenizer';
 
 enum ChatImageMimeType {
 	PNG = 'image/png',
@@ -46,7 +47,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
-		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
@@ -129,8 +129,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	public acquireTokenizer(): ITokenizer {
-		// TODO @lramos15, this should be driven by the extension API.
-		return this._tokenizerProvider.acquireTokenizer(this);
+		// Use the extension-contributed tokenizer that leverages the VS Code language model API
+		return new ExtensionContributedChatTokenizer(this.languageModel);
 	}
 
 	async makeChatRequest(
@@ -222,6 +222,9 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
 						const decoded = decodeStatefulMarker(chunk.data);
 						await streamRecorder.callback?.(text, 0, { text: '', statefulMarker: decoded.marker });
+					} else if (chunk.mimeType === CustomDataPartMimeTypes.ContextManagement) {
+						const contextManagement = JSON.parse(new TextDecoder().decode(chunk.data)) as ContextManagementResponse;
+						await streamRecorder.callback?.(text, 0, { text: '', contextManagement });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field

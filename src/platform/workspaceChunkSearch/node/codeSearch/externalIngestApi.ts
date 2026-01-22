@@ -3,7 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
+import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ILogService } from '../../../log/common/logService';
 
 // Sliding window that holds at least N entries and all entries in the time window.
 // This allows the sliding window to always hold some entries if inserts are infrequent,
@@ -184,12 +188,21 @@ class Throttler {
 		this.sendPeriodWindow.destroy();
 	}
 }
+export const githubHeaders = Object.freeze({
+	requestId: 'x-github-request-id',
+	totalQuotaUsed: 'x-github-total-quota-used',
+});
 
-// This API client performs requests and will manage back-off when being rate limited
-class ApiClient {
-	private throttler: Throttler | null;
+/**
+ * This API client performs requests and will manage back-off when being rate limited
+ */
+export class ApiClient implements IDisposable {
+	private readonly throttler: Throttler | null;
 
-	constructor(target: number | null = 80) {
+	constructor(
+		target: number | null = 80,
+		@ILogService private readonly logService: ILogService,
+	) {
 		if (target === null) {
 			this.throttler = null;
 		} else {
@@ -208,10 +221,15 @@ class ApiClient {
 			while (!this.throttler.shouldSendRequest()) {
 				// Sleep a little while so that we don't have a constantly running loop.
 				// We probably shouldn't send requests more than this frequently anyway.
-				await sleep(5);
+				await raceCancellationError(sleep(5), token);
 			}
 			this.throttler.requestStarted();
 		}
+
+		if (token.isCancellationRequested) {
+			throw new CancellationError();
+		}
+
 		try {
 			const res = await fetch(url, {
 				method,
@@ -219,34 +237,27 @@ class ApiClient {
 				body: body ? JSON.stringify(body) : undefined,
 			});
 			if (!res.ok) {
-				const requestId = res.headers.get('x-github-request-id');
+				const requestId = res.headers.get(githubHeaders.requestId);
 				const responseBody = await res.text();
-				const message = `${method} to ${url} request failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`;
-				console.error(message);
-				throw new Error(message);
+				this.logService.error(`${method} to ${url} request failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
+				return res;
 			}
-			const quotaUsedHeader = res.headers.get('x-github-total-quota-used');
+			const quotaUsedHeader = res.headers.get(githubHeaders.totalQuotaUsed);
 			const quotaUsed = quotaUsedHeader ? parseFloat(quotaUsedHeader) : 0;
 			if (this.throttler && quotaUsed > 0) {
 				this.throttler.recordQuotaUsed(quotaUsed);
 			}
 			return res;
 		} finally {
-			if (this.throttler) {
-				this.throttler.requestFinished();
-			}
+			this.throttler?.requestFinished();
 		}
 	}
 
-	destroy(): void {
-		if (this.throttler) {
-			this.throttler.destroy();
-		}
+	dispose(): void {
+		this.throttler?.destroy();
 	}
 }
 
 async function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-export { ApiClient };
