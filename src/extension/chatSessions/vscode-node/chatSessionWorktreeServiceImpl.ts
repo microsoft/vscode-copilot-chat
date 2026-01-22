@@ -29,8 +29,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
-	readonly activeRepository: IObservable<RepoContext | undefined>;
-
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile[] | undefined> = new Map();
 	private _sessionRepositories = new Map<string, RepoContext | undefined>();
@@ -48,8 +46,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const activeRepository = this.gitService.activeRepository.read(reader);
 			return activeRepository !== undefined;
 		});
-
-		this.activeRepository = this.gitService.activeRepository;
 	}
 
 	private loadWorktreeProperties(): void {
@@ -70,7 +66,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	getSelectedRepository(sessionId: string): RepoContext | undefined {
+	getSessionRepository(sessionId: string): RepoContext | undefined {
 		// For untitled sessions, if we have just one repo, then return that as the selected repo
 		if (!this._sessionRepositories.get(sessionId) && isUntitledSessionId(sessionId) &&
 			this.gitService.repositories
@@ -80,7 +76,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		return this._sessionRepositories.get(sessionId);
 	}
 
-	async trackSessionRepository(sessionId: string, repositoryPath: string) {
+	async setSessionRepository(sessionId: string, repositoryPath: string) {
 		const repository = await this.gitService.getRepository(vscode.Uri.file(repositoryPath));
 		this._sessionRepositories.set(sessionId, repository);
 	}
@@ -104,7 +100,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private async _createWorktree(sessionId: string | undefined, progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
-			const activeRepository = sessionId ? this.getSelectedRepository(sessionId) : this.activeRepository.get();
+			const activeRepository = sessionId ? this.getSessionRepository(sessionId) : this.gitService.activeRepository.get();
 			if (!activeRepository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');

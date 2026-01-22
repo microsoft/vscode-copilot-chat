@@ -29,10 +29,9 @@ export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
 	readonly isWorktreeSupportedObs: IObservable<boolean>;
-	readonly activeRepository: IObservable<RepoContext | undefined>;
 
-	getSelectedRepository(sessionId: string): RepoContext | undefined;
-	trackSessionRepository(sessionId: string, repositoryPath: string): Promise<void>;
+	getSessionRepository(sessionId: string): RepoContext | undefined;
+	setSessionRepository(sessionId: string, repositoryPath: string): Promise<void>;
 
 	createWorktree(sessionId: string | undefined, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 

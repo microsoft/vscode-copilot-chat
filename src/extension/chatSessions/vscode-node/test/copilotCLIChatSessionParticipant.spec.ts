@@ -19,7 +19,7 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { IObservable, ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
+import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -60,20 +60,13 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
-	override readonly activeRepository: IObservable<RepoContext | undefined>;
-	private _activeRepository: ISettableObservable<RepoContext | undefined>;
 	private _selectedRepository: RepoContext | undefined;
 	constructor(_isSupported: boolean = false) {
 		super();
 		this.isWorktreeSupportedObs = observableValue(this, _isSupported);
-		this._activeRepository = observableValue(this, undefined);
-		this.activeRepository = this._activeRepository;
 	}
 	setSupported(supported: boolean) {
 		this.isWorktreeSupportedObs.set(supported, undefined);
-	}
-	setActiveRepository(repo: RepoContext | undefined) {
-		this._activeRepository.set(repo, undefined);
 	}
 	setSelectedRepository(repo: RepoContext | undefined) {
 		this._selectedRepository = repo;
@@ -83,10 +76,10 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override handleRequestCompleted = vi.fn(async () => { });
-	override trackSessionRepository(sessionId: string, repositoryPath: string): Promise<void> {
+	override setSessionRepository(sessionId: string, repositoryPath: string): Promise<void> {
 		return Promise.resolve();
 	}
-	override getSelectedRepository(sessionId: string): RepoContext | undefined {
+	override getSessionRepository(sessionId: string): RepoContext | undefined {
 		return this._selectedRepository;
 	}
 	override getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined> {
@@ -378,7 +371,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const parts: vscode.ExtendedChatResponsePart[] = [];
 		const stream = new MockChatResponseStream((part) => parts.push(part));
 		const token = disposables.add(new CancellationTokenSource()).token;
-		worktree.setActiveRepository((git.activeRepository.get() as RepoContext));
 
 		await participant.createHandler()(request, context, stream, token);
 

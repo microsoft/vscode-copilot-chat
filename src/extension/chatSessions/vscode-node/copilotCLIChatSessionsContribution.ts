@@ -273,7 +273,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				};
 			} else if (isUntitledSessionId(copilotcliSessionId)) {
 				options[REPOSITORY_OPTION_ID] = repositories[0].id;
-				await this.copilotCLIWorktreeManagerService.trackSessionRepository(copilotcliSessionId, repositories[0].id);
+				await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, repositories[0].id);
 			} else {
 				// This is an existing session without a worktree, display current workspace folder.
 				options[REPOSITORY_OPTION_ID] = {
@@ -373,7 +373,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					await this.selectAgentModel(resource, agent, token);
 				}
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string') {
-				await this.copilotCLIWorktreeManagerService.trackSessionRepository(sessionId, update.value);
+				await this.copilotCLIWorktreeManagerService.setSessionRepository(sessionId, update.value);
 			}
 		}
 	}
@@ -501,12 +501,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			let selectedRepository: RepoContext | undefined;
 			if (chatSessionContext?.chatSessionItem) {
 				if (chatSessionContext.isUntitled) {
-					selectedRepository = await this.copilotCLIWorktreeManagerService.getSelectedRepository(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
+					selectedRepository = this.copilotCLIWorktreeManagerService.getSessionRepository(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 				} else {
 					// Existing session, get worktree repository, and no need to migrate changes.
 				}
 			} else {
-				selectedRepository = this.copilotCLIWorktreeManagerService.activeRepository.get();
+				selectedRepository = this.gitService.activeRepository.get();
 			}
 			const hasUncommittedChanges = (this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get() && selectedRepository?.changes)
 				? (selectedRepository.changes.indexChanges.length > 0 || selectedRepository.changes.workingTree.length > 0)
@@ -886,7 +886,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
 	}> {
 		const createWorkingTreeIfRequired = async (create: boolean, sessionId: string | undefined) => {
-			const selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSelectedRepository(sessionId) : undefined;
+			const selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSessionRepository(sessionId) : undefined;
 			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository.rootUri) : undefined;
 			if (!create) {
 				return { workingDirectory, worktreeProperties: undefined };
