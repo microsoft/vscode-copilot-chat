@@ -218,16 +218,31 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
  * Default configuration for user happiness score calculation. Mimics v1 behavior.
  */
 export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
-	acceptedScore: 1,
-	rejectedScore: 0,
+	acceptedScore: 1.0,
+	rejectedScore: 0.2,
 	ignoredScore: 0.5,
-	highThreshold: 0.7,
+	highThreshold: 0.6,
 	mediumThreshold: 0.4,
-	includeIgnored: false,
-	ignoredLimit: 0,
+	includeIgnored: true,
+	ignoredLimit: 5,
 	limitConsecutiveIgnored: false,
 	limitTotalIgnored: true,
 };
+
+export function parseUserHappinessScoreConfigurationString(optionString: string): UserHappinessScoreConfiguration {
+	try {
+		const parsed = JSON.parse(optionString);
+
+		const validation = USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR.validate(parsed);
+		if (validation.error) {
+			throw new Error(`User happiness score configuration validation failed: ${validation.error.message}`);
+		}
+
+		return validation.content;
+	} catch (e) {
+		throw new Error(`Failed to parse user happiness score configuration string: ${e}`);
+	}
+}
 
 export function parseLintOptionString(optionString: string): LintOptions | undefined {
 	try {

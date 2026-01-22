@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DelaySession } from './delay';
 
@@ -257,13 +257,10 @@ export class UserInteractionMonitor {
 		}
 
 		try {
-			const parsed = JSON.parse(configString);
-			const validation = USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR.validate(parsed);
-			if (validation.error) {
-				return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
-			}
-			return validation.content;
-		} catch {
+			return parseUserHappinessScoreConfigurationString(configString);
+		}
+		catch (e) {
+
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
