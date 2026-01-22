@@ -127,6 +127,8 @@ export interface DiffChange extends Change {
 	readonly deletions: number;
 }
 
+export type RepositoryKind = 'repository' | 'submodule' | 'worktree';
+
 export interface RepositoryState {
 	readonly HEAD: Branch | undefined;
 	readonly refs: Ref[];
@@ -224,6 +226,7 @@ export interface Repository {
 	readonly inputBox: InputBox;
 	readonly state: RepositoryState;
 	readonly ui: RepositoryUIState;
+	readonly kind: RepositoryKind;
 
 	readonly onDidCommit: Event<void>;
 
