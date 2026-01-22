@@ -4100,6 +4100,14 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.gpt5AlternativePatch": {
 						"type": "boolean",
 						"default": false,
