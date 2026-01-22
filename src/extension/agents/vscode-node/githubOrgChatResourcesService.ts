@@ -89,7 +89,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	private static readonly CACHE_ROOT = 'github';
 
 	private readonly _pollingSubscriptions = this._register(new DisposableStore());
-	private _cachedPreferredOrgName: string | undefined;
+	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -110,16 +110,23 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 
 	async getPreferredOrganizationName(): Promise<string | undefined> {
 		if (!this._cachedPreferredOrgName) {
-			this._cachedPreferredOrgName = await this.computePreferredOrganizationName();
+			this._cachedPreferredOrgName = this.computePreferredOrganizationName();
 		}
 		return this._cachedPreferredOrgName;
 	}
 
 	private async computePreferredOrganizationName(): Promise<string | undefined> {
+		// Check if user is signed in first
+		const currentUser = await this.octoKitService.getCurrentAuthedUser();
+		if (!currentUser) {
+			this.logService.trace('[GitHubOrgChatResourcesService] User is not signed in');
+			return undefined;
+		}
+
 		// Get the organizations the user is a member of
 		let userOrganizations: string[];
 		try {
-			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: false });
+			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: true });
 			if (userOrganizations.length === 0) {
 				this.logService.trace('[GitHubOrgChatResourcesService] No organizations found for user');
 				return undefined;

@@ -88,13 +88,14 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 				if (agentDetails) {
 					const filename = `${agent.name}${AGENT_FILE_EXTENSION}`;
 					const content = this.generateAgentMarkdown(agentDetails);
-					hasChanges ||= await this.githubOrgChatResourcesService.writeCacheFile(
+					const result = await this.githubOrgChatResourcesService.writeCacheFile(
 						PromptsType.agent,
 						orgId,
 						filename,
 						content,
 						{ checkForChanges: !hasChanges }
 					);
+					hasChanges ||= result;
 					newFiles.add(filename);
 				}
 			}

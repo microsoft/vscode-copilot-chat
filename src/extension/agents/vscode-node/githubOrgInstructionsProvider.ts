@@ -56,6 +56,7 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 		try {
 			const instructions = await this.octoKitService.getOrgCustomInstructions(orgId, { createIfNone: false });
 			if (!instructions) {
+				await this.githubOrgChatResourcesService.clearCache(PromptsType.instructions, orgId);
 				this.logService.trace(`[GitHubOrgInstructionsProvider] No custom instructions found for org ${orgId}`);
 				return;
 			}
@@ -72,7 +73,8 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 
 			// Otherwise, fire event to notify consumers that instructions have changed
 			this._onDidChangeInstructions.fire();
-		} finally {
+		} catch (error) {
+			this.logService.error(`[GitHubOrgCustomAgentProvider] Error polling for agents: ${error}`);
 		}
 	}
 }
