@@ -18,8 +18,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { clamp } from '../../../util/vs/base/common/numbers';
-import { dirname } from '../../../util/vs/base/common/path';
-import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
+import { dirname, extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
@@ -177,7 +176,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 					accessor => assertFileNotContentExcluded(accessor, uri!)
 				);
 
-				const folderUri = uri.with({ path: dirname(uri.path) });
+				const folderUri = dirname(uri);
 
 				const message = this.workspaceService.getWorkspaceFolders().length === 1 ? new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current folder in ${formatUriForFileWidget(folderUri)}.`) : new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current workspace in ${formatUriForFileWidget(folderUri)}.`);
 
