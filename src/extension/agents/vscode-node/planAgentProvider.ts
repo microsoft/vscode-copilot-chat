@@ -208,8 +208,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 
 		// Listen for settings changes to refresh agents
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.PlanAgent.AdditionalTools.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.PlanAgent.Model.fullyQualifiedId)) {
+			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId)) {
 				this.logService.trace('[PlanAgentProvider] Settings changed, refreshing agent');
 				this._onDidChangeCustomAgents.fire();
 			}
@@ -251,8 +251,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 	}
 
 	private buildCustomizedConfig(): PlanAgentConfig {
-		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgent.AdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgent.Model);
+		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
+		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
 
 		// Start with base config
 		const config: PlanAgentConfig = {

@@ -1146,7 +1146,6 @@
 					}
 				}
 			},
-
 			{
 				"name": "copilot_askQuestions",
 				"toolReferenceName": "askQuestions",
@@ -3577,13 +3576,19 @@
 						},
 						"default": [],
 						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.additionalTools%"
+						"markdownDescription": "%github.copilot.config.planAgent.additionalTools%",
+						"tags": [
+							"experimental"
+						]
 					},
 					"github.copilot.chat.planAgent.model": {
 						"type": "string",
 						"default": "",
 						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.model%"
+						"markdownDescription": "%github.copilot.config.planAgent.model%",
+						"tags": [
+							"experimental"
+						]
 					}
 				}
 			},

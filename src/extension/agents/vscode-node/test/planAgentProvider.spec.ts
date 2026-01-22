@@ -87,7 +87,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('merges additionalTools setting with base tools', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.AdditionalTools, ['customTool1', 'customTool2']);
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['customTool1', 'customTool2']);
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -106,7 +106,7 @@ suite('PlanAgentProvider', () => {
 
 	test('deduplicates tools when additionalTools overlaps with base tools', async () => {
 		// Add a tool that already exists in base
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.AdditionalTools, ['agent', 'newTool']);
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['agent', 'newTool']);
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -127,7 +127,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('applies model override from settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'Claude Haiku 4.5 (copilot)');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'Claude Haiku 4.5 (copilot)');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -140,8 +140,8 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('applies both additionalTools and model settings together', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.AdditionalTools, ['extraTool']);
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'claude-3-sonnet');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['extraTool']);
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'claude-3-sonnet');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -164,7 +164,7 @@ suite('PlanAgentProvider', () => {
 			eventFired = true;
 		});
 
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.AdditionalTools, ['newTool']);
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['newTool']);
 
 		assert.equal(eventFired, true);
 	});
@@ -177,7 +177,7 @@ suite('PlanAgentProvider', () => {
 			eventFired = true;
 		});
 
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'new-model');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'new-model');
 
 		assert.equal(eventFired, true);
 	});
@@ -202,7 +202,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('preserves body content after frontmatter when applying settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, 'test-model');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'test-model');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -215,7 +215,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('handles empty additionalTools array gracefully', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.AdditionalTools, []);
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, []);
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -229,7 +229,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('handles empty model string gracefully', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgent.Model, '');
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, '');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
