@@ -23,7 +23,7 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 	async provideChatTitle(
 		context: vscode.ChatContext,
 		token: vscode.CancellationToken,
-	): Promise<string> {
+	): Promise<string | undefined> {
 
 		// Get the first user message directly from the context
 		// Use instanceof to properly check if the first item is a ChatRequestTurn
@@ -50,6 +50,10 @@ export class ChatTitleProvider implements vscode.ChatTitleProvider {
 			let title = response.value.trim();
 			if (title.match(/^".*"$/)) {
 				title = title.slice(1, -1);
+			}
+
+			if (title.includes('can\'t assist with that')) {
+				return undefined;
 			}
 
 			return title;

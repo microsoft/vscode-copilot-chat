@@ -480,7 +480,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}, token);
 
 		fetchStreamSource?.resolve();
-		const chatResult = await processResponsePromise ?? undefined;
+		let chatResult = await processResponsePromise ?? undefined;
+
+		// hydrate the token usage into the chat result as this renders the context window widget
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+			chatResult = {
+				...chatResult, usage: {
+					completionTokens: fetchResult.usage.completion_tokens,
+					promptTokens: fetchResult.usage.prompt_tokens
+				}
+			};
+		}
 
 		// Validate authentication session upgrade and handle accordingly
 		if (
