@@ -112,7 +112,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 
 		// Retry on 500 errors as these are often transient
-		const shouldRetry = response.statusText.startsWith('5') && retries > 0;
+		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
 
 		/* __GDPR__
 			"externalIngestClient.post.error" : {
