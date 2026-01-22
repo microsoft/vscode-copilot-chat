@@ -271,15 +271,6 @@ export class ClaudeCodeSession extends Disposable {
 
 		this._promptQueue.push(request);
 
-		// Handle cancellation
-		token.onCancellationRequested(() => {
-			const index = this._promptQueue.indexOf(request);
-			if (index !== -1) {
-				this._promptQueue.splice(index, 1);
-				deferred.error(new Error('Request was cancelled'));
-			}
-		});
-
 		// If there's a pending prompt request, fulfill it immediately
 		if (this._pendingPrompt) {
 			const pendingPrompt = this._pendingPrompt;
