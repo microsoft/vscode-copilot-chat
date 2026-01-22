@@ -14,7 +14,6 @@ import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCa
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
-import { isAnthropicContextEditingEnabled } from '../../../platform/networking/common/anthropic';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -119,7 +118,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 	) {
 		super();
@@ -500,8 +499,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
-			// Store token usage metadata for Anthropic models using Messages API with context editing
-			if (fetchResult.usage && isAnthropicFamily(endpoint) && isAnthropicContextEditingEnabled(this._configurationService, this._experimentationService)) {
+			// Store token usage metadata for Anthropic models using Messages API
+			if (fetchResult.usage && isAnthropicFamily(endpoint)) {
 				this.turn.setMetadata(new AnthropicTokenUsageMetadata(
 					fetchResult.usage.prompt_tokens,
 					fetchResult.usage.completion_tokens

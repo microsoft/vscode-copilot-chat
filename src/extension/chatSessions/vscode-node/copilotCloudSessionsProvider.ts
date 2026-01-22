@@ -7,8 +7,7 @@ import { RemoteAgentJobPayload } from '@vscode/copilot-api';
 import MarkdownIt from 'markdown-it';
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
-import { Uri } from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
+import { l10n, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -16,6 +15,7 @@ import { GithubRepoId, IGitService } from '../../../platform/git/common/gitServi
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { DeferredPromise, retry, RunOnceScheduler } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
@@ -23,6 +23,7 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
+import { isUntitledSessionId } from '../common/utils';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -200,6 +201,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
+		this.registerCommands();
 
 		// Background refresh
 		getRepoId(this._gitService).then(async repoIds => {
@@ -258,6 +260,41 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this._register(onDebouncedAuthRefresh(() => this.refresh()));
 			this.telemetry.sendTelemetryEvent('copilotCloudSessions.refreshInterval', { microsoft: true, github: false }, telemetryObj);
 		});
+	}
+
+	private registerCommands() {
+		const checkoutPullRequestReroute = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+			const resource = sessionItemOrResource instanceof vscode.Uri
+				? sessionItemOrResource
+				: sessionItemOrResource?.resource;
+
+			if (!resource) {
+				return;
+			}
+
+			const pullRequestNumber = SessionIdForPr.parsePullRequestNumber(resource);
+			if (!pullRequestNumber) {
+				return;
+			}
+			const repoIds = await getRepoId(this._gitService);
+			if (!repoIds || repoIds.length === 0) {
+				vscode.window.showErrorMessage(l10n.t('No active repository found to checkout pull request.'));
+				return;
+			}
+
+			const installLabel = l10n.t('Install and Checkout');
+			const result = await vscode.window.showInformationMessage(
+				l10n.t('The GitHub Pull Requests extension is required to checkout this PR. Would you like to install and checkout?'),
+				{ modal: true },
+				installLabel
+			);
+
+			if (result === installLabel) {
+				await vscode.commands.executeCommand('workbench.extensions.installExtension', 'github.vscode-pull-request-github', { enable: true });
+				await vscode.commands.executeCommand('pr.checkoutFromDescription', { owner: repoIds[0].org, repo: repoIds[0].repo, number: pullRequestNumber });
+			}
+		};
+		this._register(vscode.commands.registerCommand('github.copilot.chat.checkoutPullRequestReroute', checkoutPullRequestReroute));
 	}
 
 	private getRefreshIntervalTime(hasHistoricalSessions: boolean): number {
@@ -426,6 +463,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const partnerAgentItems: vscode.ChatSessionProviderOptionItem[] = partnerAgents.map(agent => ({
 					id: agent.id,
 					name: agent.name,
+					...(agent.id === DEFAULT_PARTNER_AGENT_ID && { default: true }),
+					icon: new vscode.ThemeIcon('agent')
 				}));
 				optionGroups.push({
 					id: PARTNER_AGENTS_OPTION_GROUP_ID,
@@ -437,7 +476,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			if (customAgents.length > 0) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-					{ id: DEFAULT_CUSTOM_AGENT_ID, name: vscode.l10n.t('Default') },
+					{ id: DEFAULT_CUSTOM_AGENT_ID, default: true, name: vscode.l10n.t('Default'), icon: new vscode.ThemeIcon('file-text') },
 					...customAgents.map(agent => ({
 						id: agent.name,
 						name: agent.display_name || agent.name
@@ -922,7 +961,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const sessionId = resource ? resource.path.slice(1) : undefined;
 		return {
 			history: [],
-			...(sessionId && sessionId.startsWith('untitled-')
+			...(sessionId && isUntitledSessionId(sessionId)
 				? {
 					options: {
 						[CUSTOM_AGENTS_OPTION_GROUP_ID]:

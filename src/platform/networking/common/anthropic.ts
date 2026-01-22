@@ -5,6 +5,7 @@
 
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { IChatEndpoint } from './networking';
 
 /**
  * Types for Anthropic Messages API
@@ -138,19 +139,102 @@ export interface ContextManagementResponse {
 }
 
 /**
- * Checks if Anthropic context editing is enabled.
- * This requires both the Messages API to be enabled and context editing to be enabled.
- * @param configurationService The configuration service
- * @param experimentationService The experimentation service
- * @returns true if Anthropic context editing is enabled
+ * Context editing is supported by:
+ * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
+ * - Claude Opus 4 (claude-opus-4-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports context editing
  */
-export function isAnthropicContextEditingEnabled(
+export function modelSupportsContextEditing(modelId: string): boolean {
+	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-5') ||
+		normalized.startsWith('claude-opus-4-1') ||
+		normalized.startsWith('claude-opus-4');
+}
+
+/**
+ * Tool search is only supported by:
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports tool search
+ */
+export function modelSupportsToolSearch(modelId: string): boolean {
+	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	// TODO: Enable sonnet tool search when supported by all providers
+	// return normalized.startsWith('claude-sonnet-4-5') ||
+	return normalized.startsWith('claude-opus-4-5');
+}
+
+/**
+ * Memory is supported by:
+ * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
+ * - Claude Opus 4 (claude-opus-4-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports memory
+ */
+export function modelSupportsMemory(modelId: string): boolean {
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-5') ||
+		normalized.startsWith('claude-opus-4-1') ||
+		normalized.startsWith('claude-opus-4');
+}
+
+
+export function isAnthropicMemoryEnabled(
+	endpoint: IChatEndpoint | string,
 	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService
+	experimentationService: IExperimentationService,
 ): boolean {
-	const useMessagesApi = configurationService.getExperimentBasedConfig(ConfigKey.UseAnthropicMessagesApi, experimentationService);
-	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
-	return !!(useMessagesApi && contextEditingEnabled);
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
+		return false;
+	}
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
+}
+
+export function isAnthropicToolSearchEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsToolSearch(effectiveModelId)) {
+		return false;
+	}
+
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicToolSearchEnabled, experimentationService);
+}
+
+export function isAnthropicContextEditingEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsContextEditing(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
 }
 
 export interface ContextEditingConfig {
@@ -166,19 +250,17 @@ export interface ContextEditingConfig {
 /**
  * Builds the context_management configuration object for the Messages API request.
  * @param config The context editing configuration from individual settings
- * @param hasThinking Whether extended thinking is enabled (the thinking budget value)
- * @param modelMaxTokens The maximum input tokens supported by the model
+ * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if no edits
  */
 export function buildContextManagement(
 	config: ContextEditingConfig,
-	hasThinking: number | undefined,
-	modelMaxTokens: number
+	thinkingEnabled: boolean
 ): ContextManagement | undefined {
 	const edits: ContextManagementEdit[] = [];
 
 	// Add thinking block clearing if extended thinking is enabled
-	if (hasThinking) {
+	if (thinkingEnabled) {
 		const thinkingKeepTurns = config.thinkingKeepTurns;
 		edits.push({
 			type: 'clear_thinking_20251015',
@@ -206,34 +288,44 @@ export function buildContextManagement(
 }
 
 /**
+ * Default values for context editing configuration.
+ */
+export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
+	triggerType: 'input_tokens',
+	triggerValue: 80000,
+	keepCount: 3,
+	clearAtLeastTokens: 10000,
+	excludeTools: [],
+	clearInputs: true,
+	thinkingKeepTurns: 1,
+};
+
+/**
  * Reads context editing configuration from settings and builds the context_management object.
  * This is a convenience function that combines reading configuration with buildContextManagement.
  * @param configurationService The configuration service to read settings from
- * @param experimentationService The experimentation service for experiment-based config
- * @param thinkingBudget The thinking budget value (undefined if thinking is disabled)
- * @param modelMaxInputTokens The maximum input tokens supported by the model
+ * @param thinkingEnabled Whether extended thinking is enabled
  * @returns The context_management object to include in the request, or undefined if disabled
  */
 export function getContextManagementFromConfig(
 	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-	thinkingBudget: number | undefined,
-	modelMaxInputTokens: number
+	thinkingEnabled: boolean,
 ): ContextManagement | undefined {
-	const contextEditingEnabled = configurationService.getConfig(ConfigKey.AnthropicContextEditingEnabled);
-	if (!contextEditingEnabled) {
-		return undefined;
+
+	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
+	if (!userConfig) {
+		return buildContextManagement(CONTEXT_EDITING_DEFAULTS, thinkingEnabled);
 	}
 
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: (experimentationService.getTreatmentVariable<string>('copilotchat.anthropic.contextEditing.toolResult.triggerType') ?? 'input_tokens') as 'input_tokens' | 'tool_uses',
-		triggerValue: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.triggerValue') ?? 75000,
-		keepCount: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.keepCount') ?? 5,
-		clearAtLeastTokens: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.toolResult.clearAtLeastTokens') ?? 5000,
-		excludeTools: [],
-		clearInputs: experimentationService.getTreatmentVariable<boolean>('copilotchat.anthropic.contextEditing.toolResult.clearInputs') ?? true,
-		thinkingKeepTurns: experimentationService.getTreatmentVariable<number>('copilotchat.anthropic.contextEditing.thinking.keepTurns') ?? 1,
+		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
+		triggerValue: userConfig.triggerValue ?? CONTEXT_EDITING_DEFAULTS.triggerValue,
+		keepCount: userConfig.keepCount ?? CONTEXT_EDITING_DEFAULTS.keepCount,
+		clearAtLeastTokens: userConfig.clearAtLeastTokens ?? CONTEXT_EDITING_DEFAULTS.clearAtLeastTokens,
+		excludeTools: userConfig.excludeTools ?? CONTEXT_EDITING_DEFAULTS.excludeTools,
+		clearInputs: userConfig.clearInputs ?? CONTEXT_EDITING_DEFAULTS.clearInputs,
+		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
 	};
 
-	return buildContextManagement(contextEditingConfig, thinkingBudget, modelMaxInputTokens);
+	return buildContextManagement(contextEditingConfig, thinkingEnabled);
 }

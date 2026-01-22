@@ -285,6 +285,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const resourceToOperation = new ResourceMap<{ action: ActionType.ADD | ActionType.DELETE } | { action: ActionType.UPDATE; updated: TextDocumentSnapshot | NotebookDocumentSnapshot | undefined }>();
 			const workspaceEdit = new WorkspaceEdit();
 			const notebookEdits = new ResourceMap<(vscode.NotebookEdit | [vscode.Uri, vscode.TextEdit[]])[]>();
+			const deletedFiles = new ResourceSet();
 			for (const [file, changes] of Object.entries(commit.changes)) {
 				let path = resolveToolInputPath(file, this.promptPathRepresentationService);
 				await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, path));
@@ -300,6 +301,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					case ActionType.DELETE: {
 						workspaceEdit.deleteFile(path);
 						resourceToOperation.set(path, { action: ActionType.DELETE });
+						deletedFiles.add(path);
 						break;
 					}
 					case ActionType.UPDATE: {
@@ -397,6 +399,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				}
 				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: opResult?.action ?? ActionType.UPDATE });
 			}
+			if (deletedFiles.size > 0) {
+				responseStream.workspaceEdit([...deletedFiles].map(oldResource => ({ oldResource })));
+				for (const uri of deletedFiles) {
+					files.push({ uri, isNotebook: false, existingDiagnostics: [], operation: ActionType.DELETE });
+				}
+			}
+
 			if (healed && files.length) {
 				files[0].healed = healed;
 			}
@@ -640,6 +649,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uris,
+			this._promptContext?.allowedEditUris,
 			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
 		);
 	}

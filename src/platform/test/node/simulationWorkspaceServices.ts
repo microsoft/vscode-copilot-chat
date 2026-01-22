@@ -716,6 +716,7 @@ export class TestingGitService implements IGitService {
 		if (this._createImplicitRepos) {
 			return [{
 				rootUri: workspaceFolderPath,
+				kind: 'repository',
 				headBranchName: undefined,
 				headCommitHash: undefined,
 				upstreamBranchName: undefined,

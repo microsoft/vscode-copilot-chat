@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
@@ -20,12 +19,14 @@ import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -47,10 +48,12 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
+import { ProgressMessageScenario } from '../../prompts/node/inline/progressMessages';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { InlineChatProgressMessages } from './progressMessages';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from './promptCraftingTypes';
 
 
@@ -83,6 +86,8 @@ export class InlineChatIntent implements IIntent {
 
 	readonly description: string = '';
 
+	private readonly _progressMessages: InlineChatProgressMessages;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -95,7 +100,9 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-	) { }
+	) {
+		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
+	}
 
 	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
@@ -210,6 +217,16 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
+		// Determine scenario for progress messages
+		const progressScenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+
+		// Show progress message after ~1 second delay (unless request completes first)
+		const progressTimeout = setTimeout(() => {
+			if (!token.isCancellationRequested) {
+				stream.progress(this._progressMessages.getNextMessage(progressScenario));
+			}
+		}, 1000);
+
 		let result: IInlineChatEditResult;
 		try {
 			const strategy: IInlineChatEditStrategy = useToolsForEdit
@@ -226,6 +243,8 @@ export class InlineChatIntent implements IIntent {
 						: toErrorMessage(err),
 				}
 			};
+		} finally {
+			clearTimeout(progressTimeout);
 		}
 
 		if (token.isCancellationRequested) {
@@ -417,8 +436,6 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 					toolExecutions.push((async () => {
 						try {
-							stream.progress(l10n.t('Applying edits...'));
-
 							let input = isValidatedToolInput(validationResult)
 								? validationResult.inputObj
 								: JSON.parse(toolCall.arguments);
@@ -431,6 +448,7 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 									query: request.prompt,
 									chatVariables: new ChatVariablesCollection([...request.references]),
 									history: [],
+									allowedEditUris: request.location2 instanceof ChatRequestEditorData ? new ResourceSet([request.location2.document.uri]) : undefined,
 								}, CopilotToolMode.FullContext);
 							}
 

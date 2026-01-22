@@ -43,8 +43,6 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 
 	public readonly ID: string = ServerPoweredInlineEditProvider.ID;
 
-	public readonly dependsOnSelection = true;
-
 	constructor(
 		@IChatMLFetcher private readonly fetcher: IChatMLFetcher,
 	) {

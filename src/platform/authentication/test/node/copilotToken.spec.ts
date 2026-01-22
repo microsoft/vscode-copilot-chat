@@ -257,7 +257,6 @@ describe('Token envelope validators', function () {
 			sku: 'free_limited_copilot',
 			individual: true,
 			blackbird_clientside_indexing: false,
-			chat_enabled: true,
 			code_quote_enabled: false,
 			code_review_enabled: false,
 			codesearch: false,
@@ -278,7 +277,6 @@ describe('Token envelope validators', function () {
 			sku: 'free_limited_copilot',
 			individual: true,
 			blackbird_clientside_indexing: false,
-			chat_enabled: true,
 			code_quote_enabled: false,
 			code_review_enabled: false,
 			codesearch: false,
@@ -345,7 +343,6 @@ describe('Token envelope validators', function () {
 				sku: 'free_limited_copilot',
 				individual: true,
 				blackbird_clientside_indexing: false,
-				chat_enabled: true,
 				code_quote_enabled: false,
 				code_review_enabled: false,
 				codesearch: false,
@@ -363,7 +360,6 @@ describe('Token envelope validators', function () {
 				expect(result.envelope.expires_at).toBe(1234567890);
 				expect(result.envelope.refresh_in).toBe(300);
 				expect(result.envelope.sku).toBe('free_limited_copilot');
-				expect(result.envelope.chat_enabled).toBe(true);
 			}
 		});
 
@@ -505,13 +501,6 @@ describe('CopilotToken class', function () {
 		const token = new CopilotToken(createTestExtendedTokenInfo({ sku: 'no_auth_limited_copilot' }));
 		expect(token.isFreeUser).toBe(false);
 		expect(token.isNoAuthUser).toBe(true);
-	});
-
-	it('isChatEnabled reflects token state', function () {
-		const enabledToken = new CopilotToken(createTestExtendedTokenInfo({ chat_enabled: true }));
-		const disabledToken = new CopilotToken(createTestExtendedTokenInfo({ chat_enabled: false }));
-		expect(enabledToken.isChatEnabled()).toBe(true);
-		expect(disabledToken.isChatEnabled()).toBe(false);
 	});
 
 	it('isTelemetryEnabled reflects token state', function () {

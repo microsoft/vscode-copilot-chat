@@ -238,4 +238,123 @@ describe('ToolSchemaNormalizer', () => {
 			}
 		`);
 	});
+
+	test('converts nullable types to OpenAPI format for Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_FLASH, makeTool({
+			nullableString: {
+				type: ['string', 'null'] as any,
+				description: 'A nullable string',
+			},
+			nullableNumber: {
+				type: ['number', 'null'] as any,
+				description: 'A nullable number',
+			},
+			regularString: {
+				type: 'string',
+				description: 'A regular string',
+			}
+		}));
+
+		expect(schema![0].function.parameters).toMatchInlineSnapshot(`
+			{
+			  "properties": {
+			    "nullableNumber": {
+			      "description": "A nullable number",
+			      "nullable": true,
+			      "type": "number",
+			    },
+			    "nullableString": {
+			      "description": "A nullable string",
+			      "nullable": true,
+			      "type": "string",
+			    },
+			    "regularString": {
+			      "description": "A regular string",
+			      "type": "string",
+			    },
+			  },
+			  "type": "object",
+			}
+		`);
+	});
+
+	test('converts nullable types in nested objects for Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_25_PRO, makeTool({
+			person: {
+				type: 'object',
+				properties: {
+					name: {
+						type: 'string',
+					},
+					email: {
+						type: ['string', 'null'] as any,
+						description: 'Optional email',
+					},
+					age: {
+						type: ['integer', 'null'] as any,
+					}
+				}
+			}
+		}));
+
+		const personProp = (schema![0].function.parameters as any).properties.person;
+		expect(personProp.properties.email).toEqual({
+			type: 'string',
+			nullable: true,
+			description: 'Optional email',
+		});
+		expect(personProp.properties.age).toEqual({
+			type: 'integer',
+			nullable: true,
+		});
+		expect(personProp.properties.name).toEqual({
+			type: 'string',
+		});
+	});
+
+	test('converts nullable types in array items for Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_20_PRO, makeTool({
+			items: {
+				type: 'array',
+				items: {
+					type: ['string', 'null'] as any,
+					description: 'Nullable array items',
+				}
+			}
+		}));
+
+		const itemsProp = (schema![0].function.parameters as any).properties.items;
+		expect(itemsProp.items).toEqual({
+			type: 'string',
+			nullable: true,
+			description: 'Nullable array items',
+		});
+	});
+
+	test('does not convert nullable types for non-Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GPT41, makeTool({
+			nullableString: {
+				type: ['string', 'null'] as any,
+				description: 'A nullable string',
+			}
+		}));
+
+		// For non-Gemini models, the type array should remain unchanged
+		expect((schema![0].function.parameters as any).properties.nullableString.type).toEqual(['string', 'null']);
+		expect((schema![0].function.parameters as any).properties.nullableString.nullable).toBeUndefined();
+	});
+
+	test('handles multi-type union with null for Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_FLASH, makeTool({
+			multiType: {
+				type: ['string', 'number', 'null'] as any,
+				description: 'Multi-type with null',
+			}
+		}));
+
+		// When there are multiple non-null types, we can't use nullable keyword
+		// so we just remove null from the union
+		expect((schema![0].function.parameters as any).properties.multiType.type).toEqual(['string', 'number']);
+		expect((schema![0].function.parameters as any).properties.multiType.nullable).toBeUndefined();
+	});
 });

@@ -172,7 +172,7 @@ Test prompt content`;
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
 		assert.equal(agents.length, 1);
-		const agentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const agentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(agentName, 'test_agent');
 	});
 
@@ -205,13 +205,13 @@ Test prompt content`;
 		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		const agentName2 = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const agentName2 = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(agentName2, 'api_agent');
 
 		// Third call should also return from memory cache without file I/O
 		const agents3 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents3.length, 1);
-		const agentName3 = (agents3[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const agentName3 = agents3[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(agentName3, 'api_agent');
 	});
 
@@ -363,9 +363,7 @@ Detailed prompt content
 			return [];
 		};
 
-		const queryOptions: vscode.CustomAgentContext = {};
-
-		await provider.provideCustomAgents(queryOptions, {} as any);
+		await provider.provideCustomAgents({}, {} as any);
 		await new Promise(resolve => setTimeout(resolve, 100));
 
 		assert.ok(capturedOptions);
@@ -447,7 +445,7 @@ Agent 1 prompt`;
 		// So the existing file cache is returned with the one successful agent
 		const cachedAgents = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents.length, 1);
-		const cachedAgentName = (cachedAgents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const cachedAgentName = cachedAgents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(cachedAgentName, 'agent1');
 	});
 
@@ -476,7 +474,7 @@ Agent 1 prompt`;
 		// After successful fetch, subsequent calls return from memory
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents1.length, 1);
-		const agentName1 = (agents1[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const agentName1 = agents1[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(agentName1, 'initial_agent');
 
 		// Even if API is updated, memory cache is used
@@ -500,7 +498,7 @@ Agent 1 prompt`;
 		// Memory cache returns old results without refetching
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		const agentName2ForMemory = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const agentName2ForMemory = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(agentName2ForMemory, 'initial_agent');
 	});
 
@@ -547,8 +545,8 @@ Agent 1 prompt`;
 		// Memory cache still returns both agents (no refetch)
 		const cachedAgents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(cachedAgents2.length, 2);
-		const cachedAgent2Name1 = (cachedAgents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
-		const cachedAgent2Name2 = (cachedAgents2[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const cachedAgent2Name1 = cachedAgents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		const cachedAgent2Name2 = cachedAgents2[1].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(cachedAgent2Name1, 'agent1');
 		assert.equal(cachedAgent2Name2, 'agent2');
 	});
@@ -621,7 +619,7 @@ Agent 1 prompt`;
 		// Memory cache still returns the agent (no refetch)
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
 		assert.equal(agents2.length, 1);
-		const temporaryAgentName = (agents2[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const temporaryAgentName = agents2[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(temporaryAgentName, 'temporary_agent');
 	});
 
@@ -735,9 +733,9 @@ Valid prompt`;
 
 		// Parser is lenient - both agents are returned, one with empty description
 		assert.equal(agents.length, 2);
-		const validAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const validAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(validAgentName, 'valid_agent');
-		const noFrontmatterAgentName = (agents[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const noFrontmatterAgentName = agents[1].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(noFrontmatterAgentName, 'no_frontmatter');
 	});
 
@@ -956,7 +954,7 @@ Test prompt
 
 		// Should only have one agent, not two (deduped)
 		assert.equal(agents.length, 1);
-		const enterpriseAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const enterpriseAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(enterpriseAgentName, 'enterprise_agent');
 
 		// Verify it was only written to one org directory
@@ -1043,7 +1041,7 @@ Test prompt
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		const versionedAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const versionedAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(versionedAgentName, 'versioned_agent');
 	});
 
@@ -1102,8 +1100,8 @@ Test prompt
 
 		// Should have 2 agents since they're from different repos (not duplicates)
 		assert.equal(agents.length, 2);
-		const orgAgentName1 = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
-		const orgAgentName2 = (agents[1].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const orgAgentName1 = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		const orgAgentName2 = agents[1].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(orgAgentName1, 'org_agent');
 		assert.equal(orgAgentName2, 'org_agent');
 	});
@@ -1167,7 +1165,7 @@ Test prompt
 		assert.equal(agents.length, 2);
 
 		// Verify both agent names are present
-		const agentNames = agents.map(a => (a.resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '')).sort();
+		const agentNames = agents.map(a => a.uri.path.split('/').pop()?.replace('.agent.md', '')).sort();
 		assert.deepEqual(agentNames, ['enterprise_agent1', 'enterprise_agent2']);
 	});
 
@@ -1213,7 +1211,7 @@ Test prompt
 
 		// Different versions are deduplicated, only the first one is kept
 		assert.equal(agents.length, 1);
-		const multiVersionAgentName = (agents[0].resource as vscode.Uri).path.split('/').pop()?.replace('.agent.md', '');
+		const multiVersionAgentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
 		assert.equal(multiVersionAgentName, 'multi_version_agent');
 	});
 });
