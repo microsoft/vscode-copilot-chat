@@ -4199,7 +4199,7 @@
 					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.searchSubagent.enabled%",
 						"tags": [
 							"advanced",

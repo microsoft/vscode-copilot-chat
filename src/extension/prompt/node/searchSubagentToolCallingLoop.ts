@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ProxyAgenticSearchEndpoint } from '../../../platform/endpoint/node/proxyAgenticSearchEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -39,11 +39,11 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 		@IRequestLogger requestLogger: IRequestLogger,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IConfigurationService configurationService: IConfigurationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
@@ -64,8 +64,11 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	}
 
 	private async getEndpoint() {
-		// return this.endpointProvider.getChatEndpoint(this.options.request);
-		return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
+		const useAgenticProxy = this.configurationService.getConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy);
+		if (useAgenticProxy) {
+			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint);
+		}
+		return this.endpointProvider.getChatEndpoint(this.options.request);
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
