@@ -6,7 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import { EOL } from 'os';
-import { toArray } from 'shiki/core';
+
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -21,6 +21,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { createSha256Hash } from '../../../util/common/crypto';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { findCell, findNotebook, isJupyterNotebook } from '../../../util/common/notebooks';
+import { asArray } from '../../../util/vs/base/common/arrays';
 import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { raceCancellation, StatefulPromise } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -310,14 +311,14 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			[uri],
 			this.promptContext?.allowedEditUris,
 			async () => {
-				const codeblock = '\n\n' + createFencedCodeBlock(options.input.language || 'python', toArray(options.input.newCode || '').join('\n'));
+				const codeblock = '\n\n' + createFencedCodeBlock(options.input.language || 'python', asArray(options.input.newCode || '').join('\n'));
 				switch (options.input.editType) {
 					case 'insert':
 						return l10n.t('Insert a new cell in {0}:', formatUriForFileWidget(uri)) + codeblock;
 					case 'edit':
 						return l10n.t('Replace cell in {0}:', formatUriForFileWidget(uri)) + codeblock;
 					case 'delete':
-						return l10n.t('Delete cell {1} from {0}.', formatUriForFileWidget(uri), options.input.cellId);
+						return l10n.t('Delete cell from {0}.', formatUriForFileWidget(uri));
 					default:
 						return l10n.t('Edit {0}', formatUriForFileWidget(uri));
 				}
