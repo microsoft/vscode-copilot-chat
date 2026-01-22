@@ -249,13 +249,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.start === 0 &&
 			codedSymbolRange.end === 0
 		) {
-			this.logService.info('Ingest has already run successfully');
+			this.logService.info('ExternalIngestClient::updateIndex(): Ingest has already run successfully');
 			return Result.ok({ checkpoint: newCheckpoint });
 		}
-		this.logService.debug(`Got ingest ID: ${ingestId}`);
+		this.logService.debug(`ExternalIngestClient::updateIndex(): Got ingest ID: ${ingestId}`);
 
 		onProgress?.(l10n.t('Reconciling with server...'));
-		this.logService.debug('Starting set reconciliation...');
+		this.logService.debug('ExternalIngestClient::updateIndex(): Starting set reconciliation...');
 
 		// Create snapshot
 		while (codedSymbolRange) {
@@ -263,9 +263,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				throw new CancellationError();
 			}
 
-			this.logService.debug(
-				`Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`,
-			);
+			this.logService.debug(`ExternalIngestClient::updateIndex(): Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`);
 			const codedSymbols = createCodedSymbols(
 				allDocShas,
 				codedSymbolRange.start,
@@ -294,7 +292,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Document upload
 		onProgress?.(l10n.t('Uploading documents...'));
-		this.logService.debug('Starting document upload...');
+		this.logService.debug('ExternalIngestClient::updateIndex(): Starting document upload...');
 
 		let pageToken = undefined;
 		const seenDocShas = new Set<string>();
