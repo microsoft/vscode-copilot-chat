@@ -25,7 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
+import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -222,7 +222,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
 		}));
-
+		const originalRepos = this.getRepositoryOptionItems().length;
+		this._register(this.gitService.onDidFinishInitialization(() => {
+			if (originalRepos !== this.getRepositoryOptionItems().length) {
+				this._onDidChangeChatSessionProviderOptions.fire();
+			}
+		}));
 		this._register(this.copilotCLIAgents.onDidChangeAgents(() => {
 			this._onDidChangeChatSessionProviderOptions.fire();
 		}));
@@ -459,10 +464,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@ILogService private readonly logService: ILogService,
 		@IPromptsService private readonly promptsService: IPromptsService,
 		@IChatDelegationSummaryService private readonly chatDelegationSummaryService: IChatDelegationSummaryService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 	}
@@ -880,10 +885,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		workingDirectory: Uri | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
 	}> {
-		const defaultWorkingDirectory = this.copilotCLISDK.getDefaultWorkingDirectory();
 		const createWorkingTreeIfRequired = async (create: boolean, sessionId: string | undefined) => {
+			const selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSelectedRepository(sessionId) : undefined;
+			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository.rootUri) : undefined;
 			if (!create) {
-				const workingDirectory = await defaultWorkingDirectory;
 				return { workingDirectory, worktreeProperties: undefined };
 			}
 
@@ -892,7 +897,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return { workingDirectory: Uri.file(worktreeProperties.worktreePath), worktreeProperties };
 			} else {
 				stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				const workingDirectory = await defaultWorkingDirectory;
 				return { workingDirectory, worktreeProperties: undefined };
 			}
 		};

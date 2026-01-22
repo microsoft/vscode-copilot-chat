@@ -314,7 +314,6 @@ export interface ICopilotCLISDK {
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
 	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
-	getDefaultWorkingDirectory(): Promise<Uri | undefined>;
 }
 
 type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
@@ -328,7 +327,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 	}
@@ -374,17 +372,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			token: copilotToken?.accessToken ?? '',
 			host: 'https://github.com'
 		};
-	}
-
-	public async getDefaultWorkingDirectory(): Promise<Uri | undefined> {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return undefined;
-		}
-		if (this.workspaceService.getWorkspaceFolders().length === 1) {
-			return this.workspaceService.getWorkspaceFolders()[0];
-		}
-		const folder = await this.workspaceService.showWorkspaceFolderPicker();
-		return folder?.uri;
 	}
 }
 

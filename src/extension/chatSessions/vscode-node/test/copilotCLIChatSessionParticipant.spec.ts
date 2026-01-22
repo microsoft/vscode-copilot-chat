@@ -7,10 +7,7 @@ import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IEnvService } from '../../../../platform/env/common/envService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
-import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -28,7 +25,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
-import { CopilotCLISDK, type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
+import { type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISession } from '../../../agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../../../agents/copilotcli/node/copilotcliSessionService';
@@ -191,8 +188,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
-		const vscodeExtensionContext = accessor.get(IVSCodeExtensionContext);
-		const copilotSDK = new CopilotCLISDK(vscodeExtensionContext, accessor.get(IEnvService), logger, accessor.get(IInstantiationService), accessor.get(IAuthenticationService), workspaceService);
 		const logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override loadMcpConfig = vi.fn(async (_workingDirectory: Uri | undefined) => {
@@ -247,10 +242,10 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			telemetry,
 			tools,
 			instantiationService,
-			copilotSDK,
 			logger,
 			new PromptsServiceImpl(new NullWorkspaceService()),
-			delegationService
+			delegationService,
+			workspaceService
 		);
 	});
 
@@ -310,7 +305,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const context = createChatContext('temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
-
+		worktree.setSelectedRepository({ rootUri: Uri.file(`${sep}workspace`) } as RepoContext);
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(cliSessions.length).toBe(1);
@@ -694,7 +689,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const parts1: vscode.ExtendedChatResponsePart[] = [];
 		const stream1 = new MockChatResponseStream((part) => parts1.push(part));
 		const token1 = disposables.add(new CancellationTokenSource()).token;
-		worktree.setSelectedRepository((git.activeRepository.get() as RepoContext));
+		worktree.setSelectedRepository({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 
 		await participant.createHandler()(request1, context1, stream1, token1);
 
