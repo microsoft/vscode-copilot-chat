@@ -75,6 +75,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['https://github.com/myorg/myrepo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['myorg']);
 
 			const service = createService();
 			const orgName = await service.getPreferredOrganizationName();
@@ -88,6 +89,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['git@github.com:sshorg/myrepo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['sshorg']);
 
 			const service = createService();
 			const orgName = await service.getPreferredOrganizationName();
@@ -135,6 +137,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['https://github.com/cachedorg/repo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['cachedorg']);
 
 			const service = createService();
 
@@ -175,6 +178,7 @@ suite('GitHubOrgChatResourcesService', () => {
 					'https://github.com/foundorg/repo.git'
 				]
 			});
+			mockOctoKitService.setUserOrganizations(['foundorg']);
 
 			const service = createService();
 			const orgName = await service.getPreferredOrganizationName();
@@ -191,6 +195,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['https://github.com/pollingorg/repo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['pollingorg']);
 
 			const service = createService();
 
@@ -257,6 +262,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['https://github.com/concurrent/repo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['concurrent']);
 
 			const service = createService();
 
@@ -284,6 +290,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace'),
 				remoteFetchUrls: ['https://github.com/errororg/repo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['errororg']);
 
 			const service = createService();
 
@@ -682,6 +689,7 @@ suite('GitHubOrgChatResourcesService', () => {
 				rootUri: URI.file('/workspace1'),
 				remoteFetchUrls: ['https://github.com/org1/repo.git']
 			});
+			mockOctoKitService.setUserOrganizations(['org1', 'org2']);
 
 			const service = createService();
 

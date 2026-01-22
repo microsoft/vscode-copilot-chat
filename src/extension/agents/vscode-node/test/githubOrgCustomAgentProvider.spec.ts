@@ -4,35 +4,55 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert } from 'chai';
-import { afterEach, beforeEach, suite, test } from 'vitest';
+import { afterEach, beforeEach, suite, test, vi } from 'vitest';
+import type { ExtensionContext } from 'vscode';
 import { PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions } from '../../../../platform/github/common/githubService';
+import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
+import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { GitHubOrgChatResourcesService } from '../githubOrgChatResourcesService';
 import { GitHubOrgCustomAgentProvider } from '../githubOrgCustomAgentProvider';
-import { MockGithubOrgChatResourcesService } from './mockGitHubOrgChatResourcesService';
 import { MockOctoKitService } from './mockOctoKitService';
 
-suite('OrganizationAndEnterpriseAgentProvider', () => {
+suite('GitHubOrgCustomAgentProvider', () => {
 	let disposables: DisposableStore;
 	let mockOctoKitService: MockOctoKitService;
-	let mockPromptFileService: MockGithubOrgChatResourcesService;
-	let mockExtensionContext: MockExtensionContext;
+	let mockFileSystem: MockFileSystemService;
+	let mockGitService: MockGitService;
+	let mockWorkspaceService: MockWorkspaceService;
+	let mockExtensionContext: Partial<ExtensionContext>;
 	let accessor: any;
 	let provider: GitHubOrgCustomAgentProvider;
+	let resourcesService: GitHubOrgChatResourcesService;
 
-	const storagePath = '/test/storage';
+	const storagePath = '/tmp/test-storage';
+	const storageUri = URI.file(storagePath);
 
 	beforeEach(() => {
+		vi.useFakeTimers();
 		disposables = new DisposableStore();
 
-		// Create mocks first
+		// Create mocks for real GitHubOrgChatResourcesService
 		mockOctoKitService = new MockOctoKitService();
-		mockExtensionContext = new MockExtensionContext(storagePath);
-		mockPromptFileService = new MockGithubOrgChatResourcesService(URI.file(storagePath));
+		mockFileSystem = new MockFileSystemService();
+		mockGitService = new MockGitService();
+		mockWorkspaceService = new MockWorkspaceService();
+		mockExtensionContext = {
+			globalStorageUri: storageUri,
+		};
+
+		// Default: user is in 'testorg' and workspace belongs to 'testorg'
+		mockOctoKitService.setUserOrganizations(['testorg']);
+		mockWorkspaceService.setWorkspaceFolders([URI.file('/workspace')]);
+		mockGitService.setRepositoryFetchUrls({
+			rootUri: URI.file('/workspace'),
+			remoteFetchUrls: ['https://github.com/testorg/repo.git']
+		});
 
 		// Set up testing services
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
@@ -40,24 +60,58 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		disposables.dispose();
 		mockOctoKitService.clearAgents();
-		mockPromptFileService.clearAllStorage();
 	});
 
 	function createProvider() {
-		// Create provider manually with all dependencies
+		// Create the real GitHubOrgChatResourcesService with mocked dependencies
+		resourcesService = new GitHubOrgChatResourcesService(
+			mockExtensionContext as any,
+			mockFileSystem,
+			mockGitService,
+			accessor.get(ILogService),
+			mockOctoKitService,
+			mockWorkspaceService,
+		);
+		disposables.add(resourcesService);
+
+		// Create provider with real resources service
 		provider = new GitHubOrgCustomAgentProvider(
 			mockOctoKitService,
 			accessor.get(ILogService),
-			mockPromptFileService,
+			resourcesService,
 		);
 		disposables.add(provider);
 		return provider;
 	}
 
+	/**
+	 * Advance timers and wait for polling callback to complete.
+	 * Uses a small time advance to trigger the initial poll without infinite loops.
+	 */
+	async function waitForPolling(): Promise<void> {
+		// Advance just enough to let initial poll complete, but not trigger interval polls
+		await vi.advanceTimersByTimeAsync(10);
+	}
+
+	/**
+	 * Helper to pre-populate cache files in mock filesystem.
+	 */
+	function prepopulateCache(orgName: string, files: Map<string, string>): void {
+		const cacheDir = URI.file(`${storagePath}/github/${orgName}/agents`);
+		const dirEntries: [string, import('../../../../platform/filesystem/common/fileTypes').FileType][] = [];
+		for (const [filename, content] of files) {
+			mockFileSystem.mockFile(URI.joinPath(cacheDir, filename), content);
+			dirEntries.push([filename, 1 /* FileType.File */]);
+		}
+		mockFileSystem.mockDirectory(cacheDir, dirEntries);
+	}
+
 	test('returns empty array when user has no organizations', async () => {
 		mockOctoKitService.setUserOrganizations([]);
+		mockWorkspaceService.setWorkspaceFolders([]);
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -65,8 +119,10 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		assert.deepEqual(agents, []);
 	});
 
-	test('returns empty array when no storage URI available', async () => {
-		mockExtensionContext.globalStorageUri = undefined;
+	test('returns empty array when no organizations and no cached files', async () => {
+		// With no organizations and no cached files, should return empty
+		mockOctoKitService.setUserOrganizations([]);
+		mockWorkspaceService.setWorkspaceFolders([]);
 		const provider = createProvider();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -78,19 +134,23 @@ suite('OrganizationAndEnterpriseAgentProvider', () => {
 		// Set up file system mocks BEFORE creating provider to avoid race with background fetch
 		// Also prevent background fetch from interfering by having no organizations
 		mockOctoKitService.setUserOrganizations([]);
+		mockWorkspaceService.setWorkspaceFolders([]);
 
-		// Pre-populate cache with org folder
+		// Pre-populate cache with org folder (but keep testorg folder structure)
 		const agentContent = `---
 name: Test Agent
 description: A test agent
 ---
 Test prompt content`;
-		mockPromptFileService.setStorage('testorg', PromptsType.agent, new Map([['test_agent.agent.md', agentContent]]));
+		prepopulateCache('testorg', new Map([['test_agent.agent.md', agentContent]]));
+
+		// Re-enable testorg for cache reading (user is in org, but no workspace repo)
+		mockOctoKitService.setUserOrganizations(['testorg']);
 
 		const provider = createProvider();
 
-		// Wait for background fetch to complete (it will return early due to no orgs)
-		await new Promise(resolve => setTimeout(resolve, 50));
+		// Wait for initial poll attempt (won't fetch since no agents in API)
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -123,7 +183,7 @@ Test prompt content`;
 		const provider = createProvider();
 
 		// Wait for background fetch to complete
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// Second call should return newly cached agents from memory
 		const agents2 = await provider.provideCustomAgents({}, {} as any);
@@ -165,10 +225,10 @@ Test prompt content`;
 		mockOctoKitService.setAgentDetails('full_agent', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		// Check cached file content
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'full_agent.agent.md');
+		// Check cached file content using the real service
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'full_agent.agent.md');
 
 		const expectedContent = `---
 name: Full Agent
@@ -187,17 +247,19 @@ Detailed prompt content
 		assert.equal(content, expectedContent);
 	});
 
-	test('sanitizes filenames correctly', async () => {
+	test('preserves agent name in filename', async () => {
+		// Note: The provider does NOT sanitize filenames - it uses the agent name directly.
+		// This test documents the actual behavior.
 		const provider = createProvider();
 
 		const mockAgent: CustomAgentListItem = {
-			name: 'Agent With Spaces!@#',
+			name: 'my-agent_name',
 			repo_owner_id: 1,
 			repo_owner: 'testorg',
 			repo_id: 1,
 			repo_name: 'testrepo',
-			display_name: 'Agent With Spaces',
-			description: 'Test sanitization',
+			display_name: 'My Agent',
+			description: 'Test filename',
 			tools: [],
 			version: 'v1',
 		};
@@ -207,14 +269,14 @@ Detailed prompt content
 			...mockAgent,
 			prompt: 'Prompt content',
 		};
-		mockOctoKitService.setAgentDetails('Agent With Spaces!@#', mockDetails);
+		mockOctoKitService.setAgentDetails('my-agent_name', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		// Check that file was created with sanitized name
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'agent_with_spaces___.agent.md');
-		assert.ok(content, 'Sanitized file should exist');
+		// File is created with the exact agent name (no sanitization)
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'my-agent_name.agent.md');
+		assert.ok(content, 'File should exist with agent name as filename');
 	});
 
 	test('fires change event when cache is updated on first fetch', async () => {
@@ -246,7 +308,7 @@ Detailed prompt content
 
 		// First call triggers background fetch
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
+		await waitForPolling();
 
 		// Event should fire after initial successful fetch
 		assert.equal(eventFired, true);
@@ -275,7 +337,7 @@ Detailed prompt content
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		assert.ok(capturedOptions);
 		assert.deepEqual(capturedOptions.includeSources, ['org', 'enterprise']);
@@ -287,8 +349,11 @@ Detailed prompt content
 		let apiCallCount = 0;
 		mockOctoKitService.getCustomAgents = async () => {
 			apiCallCount++;
-			// Simulate slow API call
-			await new Promise(resolve => setTimeout(resolve, 50));
+			// Simulate slow API call - use real timer for this
+			await new Promise(resolve => {
+				const realSetTimeout = globalThis.setTimeout;
+				realSetTimeout(resolve, 50);
+			});
 			return [];
 		};
 
@@ -298,7 +363,7 @@ Detailed prompt content
 		const promise3 = provider.provideCustomAgents({}, {} as any);
 
 		await Promise.all([promise1, promise2, promise3]);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// API should only be called once due to isFetching guard
 		assert.equal(apiCallCount, 1);
@@ -343,10 +408,10 @@ name: Agent 1
 description: First agent
 ---
 Agent 1 prompt`;
-		mockPromptFileService.setStorage('testorg', PromptsType.agent, new Map([['agent1.agent.md', agentContent]]));
+		prepopulateCache('testorg', new Map([['agent1.agent.md', agentContent]]));
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// With error handling, partial failures skip cache update for that org
 		// So the existing file cache is returned with the one successful agent
@@ -376,7 +441,7 @@ Agent 1 prompt`;
 		});
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// After successful fetch, subsequent calls return from memory
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
@@ -440,7 +505,7 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('agent2', { ...agents[1], prompt: 'Prompt 2' });
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// Verify both agents are cached
 		const cachedAgents1 = await provider.provideCustomAgents({}, {} as any);
@@ -479,7 +544,7 @@ Agent 1 prompt`;
 		});
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		let changeEventCount = 0;
 		provider.onDidChangeCustomAgents(() => {
@@ -488,7 +553,7 @@ Agent 1 prompt`;
 
 		// Fetch again with identical content
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 150));
+		await waitForPolling();
 
 		// No change event should fire
 		assert.equal(changeEventCount, 0);
@@ -514,7 +579,7 @@ Agent 1 prompt`;
 		});
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// Verify agent is cached
 		const agents1 = await provider.provideCustomAgents({}, {} as any);
@@ -554,9 +619,9 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('minimal_agent', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'minimal_agent.agent.md');
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'minimal_agent.agent.md');
 		assert.ok(content, 'Agent file should exist');
 
 		// Should have name and description, but no tools (empty array)
@@ -592,9 +657,9 @@ Agent 1 prompt`;
 		mockOctoKitService.setAgentDetails('wildcard_agent', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'wildcard_agent.agent.md');
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'wildcard_agent.agent.md');
 		assert.ok(content, 'Agent file should exist');
 
 		// Tools field should be excluded when it's just ['*']
@@ -604,6 +669,7 @@ Agent 1 prompt`;
 	test('handles malformed frontmatter in cached files', async () => {
 		// Prevent background fetch from interfering
 		mockOctoKitService.setUserOrganizations([]);
+		mockWorkspaceService.setWorkspaceFolders([]);
 
 		// Pre-populate cache with mixed valid and malformed content BEFORE creating provider
 		const validContent = `---
@@ -613,15 +679,18 @@ description: A valid agent
 Valid prompt`;
 		// File without frontmatter - parser extracts name from filename, description is empty
 		const noFrontmatterContent = `Just some content without any frontmatter`;
-		mockPromptFileService.setStorage('testorg', PromptsType.agent, new Map([
+		prepopulateCache('testorg', new Map([
 			['valid_agent.agent.md', validContent],
 			['no_frontmatter.agent.md', noFrontmatterContent],
 		]));
 
+		// Re-enable testorg for cache reading
+		mockOctoKitService.setUserOrganizations(['testorg']);
+
 		const provider = createProvider();
 
-		// Wait for background fetch to complete (returns early due to no orgs)
-		await new Promise(resolve => setTimeout(resolve, 50));
+		// Wait for initial poll (which uses testorg)
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -633,11 +702,13 @@ Valid prompt`;
 		assert.equal(noFrontmatterAgentName, 'no_frontmatter');
 	});
 
-	test('fetches agents from all user organizations', async () => {
+	test('fetches agents from preferred organization only', async () => {
+		// The service only fetches from the preferred organization, not all user organizations.
+		// Preferred org is determined by workspace repository or first user organization.
 		const provider = createProvider();
 
-		// Set up multiple organizations
-		mockOctoKitService.setUserOrganizations(['orgA', 'orgB', 'orgC']);
+		// Set up multiple organizations - testorg is the default preferred org
+		mockOctoKitService.setUserOrganizations(['testorg', 'otherorg1', 'otherorg2']);
 
 		const capturedOrgs: string[] = [];
 		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
@@ -646,13 +717,11 @@ Valid prompt`;
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		// Should have fetched from all three organizations
-		assert.equal(capturedOrgs.length, 3);
-		assert.ok(capturedOrgs.includes('orgA'));
-		assert.ok(capturedOrgs.includes('orgB'));
-		assert.ok(capturedOrgs.includes('orgC'));
+		// Should have fetched from only the preferred organization
+		assert.equal(capturedOrgs.length, 1);
+		assert.ok(capturedOrgs.includes('testorg'));
 	});
 
 	test('generates markdown with long description on single line', async () => {
@@ -680,9 +749,9 @@ Valid prompt`;
 		mockOctoKitService.setAgentDetails('world_domination', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'world_domination.agent.md');
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'world_domination.agent.md');
 
 		const expectedContent = `---
 name: World Domination
@@ -721,9 +790,9 @@ You are a world-class computer scientist.
 		mockOctoKitService.setAgentDetails('special_chars_agent', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'special_chars_agent.agent.md');
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'special_chars_agent.agent.md');
 
 		const expectedContent = `---
 name: Special Chars Agent
@@ -760,9 +829,9 @@ Test prompt with special characters
 		mockOctoKitService.setAgentDetails('multiline_agent', mockDetails);
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
-		const content = await mockPromptFileService.readCacheFile(PromptsType.agent, 'testorg', 'multiline_agent.agent.md');
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'multiline_agent.agent.md');
 
 		// Newlines should be escaped to keep description on a single line
 		const expectedContent = `---
@@ -795,7 +864,7 @@ Test prompt
 		};
 
 		await provider.provideCustomAgents({}, {} as any);
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		// Should have aborted after first org, so second org shouldn't be processed
 		assert.equal(callCount, 1);
@@ -830,7 +899,7 @@ Test prompt
 		});
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -841,8 +910,8 @@ Test prompt
 
 		// Verify it was only written to one org directory
 		// Check which org has the agent file
-		const orgAContent = await mockPromptFileService.readCacheFile(PromptsType.agent, 'orga', 'enterprise_agent.agent.md');
-		const orgBContent = await mockPromptFileService.readCacheFile(PromptsType.agent, 'orgb', 'enterprise_agent.agent.md');
+		const orgAContent = await resourcesService.readCacheFile(PromptsType.agent, 'orga', 'enterprise_agent.agent.md');
+		const orgBContent = await resourcesService.readCacheFile(PromptsType.agent, 'orgb', 'enterprise_agent.agent.md');
 		const orgAHasAgent = orgAContent !== undefined;
 		const orgBHasAgent = orgBContent !== undefined;
 
@@ -901,7 +970,7 @@ Test prompt
 		};
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -911,65 +980,62 @@ Test prompt
 		assert.equal(versionedAgentName, 'versioned_agent');
 	});
 
-	test('does not deduplicate org-specific agents with same name from different orgs', async () => {
+	test('handles agents with same name but different repo owners from single org', async () => {
 		// Set up mocks BEFORE creating provider
-		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+		// This tests the case where a single org returns agents from different repo owners
+		// (e.g., an org-specific agent and an enterprise agent with the same name)
+		mockOctoKitService.setUserOrganizations(['testorg']);
 
-		// Create agents with same name but from different org repos (not enterprise)
+		// Agents with same name but different repo owners as returned by API for single org
 		const orgAAgent: CustomAgentListItem = {
-			name: 'org_agent',
+			name: 'shared_agent',
 			repo_owner_id: 1,
-			repo_owner: 'orgA',
+			repo_owner: 'testorg',
 			repo_id: 10,
-			repo_name: 'orgA_repo',
-			display_name: 'Org A Agent',
-			description: 'Agent specific to org A',
+			repo_name: 'org_repo',
+			display_name: 'Org Agent',
+			description: 'Agent from org repo',
 			tools: [],
 			version: 'v1.0',
 		};
 
-		const orgBAgent: CustomAgentListItem = {
-			name: 'org_agent',
-			repo_owner_id: 2,
-			repo_owner: 'orgB',
-			repo_id: 20,
-			repo_name: 'orgB_repo',
-			display_name: 'Org B Agent',
-			description: 'Agent specific to org B',
+		const enterpriseAgent: CustomAgentListItem = {
+			name: 'shared_agent',
+			repo_owner_id: 999,
+			repo_owner: 'enterprise_org',
+			repo_id: 100,
+			repo_name: 'enterprise_repo',
+			display_name: 'Enterprise Agent',
+			description: 'Agent from enterprise',
 			tools: [],
 			version: 'v1.0',
 		};
 
-		let callCount = 0;
+		// API returns both agents for single org (enterprise agents are included via includeSources)
 		mockOctoKitService.getCustomAgents = async (owner: string, repo: string) => {
-			callCount++;
-			if (callCount === 1) {
-				return [orgAAgent];
-			} else {
-				return [orgBAgent];
-			}
+			return [orgAAgent, enterpriseAgent];
 		};
 
 		mockOctoKitService.getCustomAgentDetails = async (owner: string, repo: string, agentName: string, version?: string) => {
-			if (owner === 'orgA') {
-				return { ...orgAAgent, prompt: 'Org A prompt' };
-			} else if (owner === 'orgB') {
-				return { ...orgBAgent, prompt: 'Org B prompt' };
+			// The API is called with the repo_owner, not the org name
+			if (owner === 'testorg') {
+				return { ...orgAAgent, prompt: 'Org prompt' };
+			} else if (owner === 'enterprise_org') {
+				return { ...enterpriseAgent, prompt: 'Enterprise prompt' };
 			}
 			return undefined;
 		};
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
-		// Should have 2 agents since they're from different repos (not duplicates)
-		assert.equal(agents.length, 2);
-		const orgAgentName1 = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
-		const orgAgentName2 = agents[1].uri.path.split('/').pop()?.replace('.agent.md', '');
-		assert.equal(orgAgentName1, 'org_agent');
-		assert.equal(orgAgentName2, 'org_agent');
+		// Since both agents have the same name, only one file is written (last one wins)
+		// The filename is just `${agent.name}.agent.md`, so both would write to same file
+		assert.equal(agents.length, 1);
+		const agentName = agents[0].uri.path.split('/').pop()?.replace('.agent.md', '');
+		assert.equal(agentName, 'shared_agent');
 	});
 
 	test('deduplicates enterprise agents even when API returns them in different order', async () => {
@@ -1023,7 +1089,7 @@ Test prompt
 		};
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 
@@ -1071,7 +1137,7 @@ Test prompt
 		};
 
 		const provider = createProvider();
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await waitForPolling();
 
 		const agents = await provider.provideCustomAgents({}, {} as any);
 

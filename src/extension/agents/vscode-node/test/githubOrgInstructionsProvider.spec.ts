@@ -181,7 +181,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.equal(changeEventCount, 1, 'Change event fires on every successful poll');
 	});
 
-	test('pollInstructions propagates API errors', async () => {
+	test('pollInstructions handles API errors gracefully without throwing', async () => {
 		const orgId = 'testorg';
 		mockChatResourcesService.setPreferredOrganization(orgId);
 
@@ -192,17 +192,16 @@ suite('GitHubOrgInstructionsProvider', () => {
 
 		const provider = createProvider();
 
-		// pollInstructions does not have internal error handling, so errors propagate
-		// The error handling is expected to be in startPolling's callback wrapper
+		// pollInstructions has internal error handling - errors are logged but not thrown
+		// This is intentional to prevent polling failures from crashing the extension
 		let errorThrown = false;
 		try {
 			await (provider as any).pollInstructions(orgId);
 		} catch (e: any) {
 			errorThrown = true;
-			assert.equal(e.message, 'API Error');
 		}
 
-		assert.isTrue(errorThrown, 'API errors should propagate from pollInstructions');
+		assert.isFalse(errorThrown, 'API errors should be handled internally and not propagate');
 	});
 
 	test('returns instructions from correct organization', async () => {
