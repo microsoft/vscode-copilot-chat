@@ -381,6 +381,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				shouldRemoveCursorTagFromResponse,
 				responseFormat,
 				retryState,
+				aggressivenessLevel,
+				userHappinessScore,
 			},
 			delaySession,
 			tracer,
@@ -521,6 +523,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			responseFormat: xtabPromptOptions.ResponseFormat;
 			shouldRemoveCursorTagFromResponse: boolean;
 			retryState: RetryState.t;
+			aggressivenessLevel: xtabPromptOptions.AggressivenessLevel;
+			userHappinessScore: number | undefined;
 		},
 		delaySession: DelaySession,
 		parentTracer: ITracer,
@@ -578,6 +582,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					requestId: request.id,
 				},
 				useFetcher,
+				customMetadata: {
+					aggressivenessLevel: opts.aggressivenessLevel,
+					userHappinessScore: opts.userHappinessScore,
+				},
 			},
 			cancellationToken,
 		);

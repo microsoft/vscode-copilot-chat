@@ -631,6 +631,14 @@ export class RequestLogger extends AbstractRequestLogger {
 		if (entry.chatParams.body?.tools) {
 			result.push(`tools            : ${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`);
 		}
+		if (entry.customMetadata) {
+			for (const [key, value] of Object.entries(entry.customMetadata)) {
+				if (value !== undefined) {
+					const paddedKey = key.padEnd(16);
+					result.push(`${paddedKey} : ${value}`);
+				}
+			}
+		}
 		result.push(`~~~`);
 
 		result.push(`## Request Messages`);
