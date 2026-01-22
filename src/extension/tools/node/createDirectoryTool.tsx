@@ -58,6 +58,7 @@ export class CreateDirectoryTool implements ICopilotTool<ICreateDirectoryParams>
 
 		return {
 			...confirmation,
+			presentation: undefined,
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
 		};
