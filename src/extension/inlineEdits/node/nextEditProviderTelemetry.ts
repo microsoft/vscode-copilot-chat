@@ -931,6 +931,8 @@ export class TelemetrySender implements IDisposable {
 			postProcessingOutcome,
 			activeDocumentRepository,
 			repositoryUrls,
+			cursorJumpPrompt,
+			cursorJumpResponse,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -948,6 +950,8 @@ export class TelemetrySender implements IDisposable {
 				postProcessingOutcome,
 				activeDocumentRepository,
 				repositories: JSON.stringify(repositoryUrls),
+				cursorJumpPrompt,
+				cursorJumpResponse,
 			})
 		);
 	}

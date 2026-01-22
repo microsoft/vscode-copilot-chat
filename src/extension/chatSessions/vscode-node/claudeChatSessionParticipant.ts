@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
@@ -19,6 +20,7 @@ export class ClaudeChatSessionParticipant {
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		private readonly sessionItemProvider: ClaudeChatSessionItemProvider,
 		private readonly contentProvider: ClaudeChatSessionContentProvider,
+		private readonly slashCommandService: IClaudeSlashCommandService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -26,6 +28,12 @@ export class ClaudeChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		// Try to handle as a slash command first
+		const slashResult = await this.slashCommandService.tryHandleCommand(request.prompt, stream, token);
+		if (slashResult.handled) {
+			return slashResult.result ?? {};
+		}
+
 		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
 			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
 			if (!claudeSessionId) {

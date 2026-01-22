@@ -7,6 +7,7 @@ import { PermissionMode, SDKAssistantMessage, SDKMessage } from '@anthropic-ai/c
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -29,6 +30,9 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
 	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 
+	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
+	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
+
 	// Track the last known option values for each session to detect actual changes
 	private readonly _lastKnownOptions = new Map<string, { modelId?: string; permissionMode?: PermissionMode }>();
 
@@ -36,8 +40,16 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
+
+		// Listen for configuration changes to update available options
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Advanced.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId)) {
+				this._onDidChangeChatSessionProviderOptions.fire();
+			}
+		}));
 
 		// Listen for state changes and notify UI only if value actually changed
 		this._register(this.sessionStateService.onDidChangeSessionState(e => {
@@ -97,6 +109,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			{ id: 'acceptEdits', name: l10n.t('Edit automatically') },
 			{ id: 'plan', name: l10n.t('Plan mode') },
 		];
+
+		// Add bypass permissions option if enabled via setting
+		if (this.configurationService.getConfig(ConfigKey.Advanced.ClaudeAgentAllowDangerouslySkipPermissions)) {
+			permissionModeItems.push({ id: 'bypassPermissions', name: l10n.t('Bypass all permissions') });
+		}
 
 		return {
 			optionGroups: [

@@ -218,7 +218,7 @@ export namespace NoNextEditReason {
 	}
 	export class GotCancelled extends NoNextEditReason {
 		public readonly kind = 'gotCancelled';
-		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay') {
+		constructor(public readonly message: 'afterDebounce' | 'afterGettingEndpoint' | 'afterLanguageContextAwait' | 'afterPromptConstruction' | 'afterFetchCall' | 'duringStreaming' | 'afterResponse' | 'afterFailedRebase' | 'beforeExecutingNewRequest' | 'afterArtificialDelay' | 'afterNextCursorPredictionFetch') {
 			super();
 		}
 
@@ -358,6 +358,10 @@ export interface IStatelessNextEditTelemetry {
 	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
+
+	/* cursor jump info */
+	readonly cursorJumpPrompt: string | undefined;
+	readonly cursorJumpResponse: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -430,6 +434,8 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
+			cursorJumpResponse: this._cursorJumpResponse,
 		};
 	}
 
@@ -512,6 +518,19 @@ export class StatelessNextEditTelemetryBuilder {
 			};
 		});
 
+		return this;
+	}
+
+
+	private _cursorJumpPrompt: Raw.ChatMessage[] | undefined;
+	public setCursorJumpPrompt(prompt: Raw.ChatMessage[] | undefined): this {
+		this._cursorJumpPrompt = prompt;
+		return this;
+	}
+
+	private _cursorJumpResponse: string | undefined;
+	public setCursorJumpResponse(response: string | undefined): this {
+		this._cursorJumpResponse = response;
 		return this;
 	}
 

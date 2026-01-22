@@ -48,10 +48,12 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
+import { ProgressMessageScenario } from '../../prompts/node/inline/progressMessages';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { InlineChatProgressMessages } from './progressMessages';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from './promptCraftingTypes';
 
 
@@ -84,6 +86,8 @@ export class InlineChatIntent implements IIntent {
 
 	readonly description: string = '';
 
+	private readonly _progressMessages: InlineChatProgressMessages;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -96,7 +100,9 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-	) { }
+	) {
+		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
+	}
 
 	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
@@ -211,6 +217,16 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
+		// Determine scenario for progress messages
+		const progressScenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+
+		// Show progress message after ~1 second delay (unless request completes first)
+		const progressTimeout = setTimeout(() => {
+			if (!token.isCancellationRequested) {
+				stream.progress(this._progressMessages.getNextMessage(progressScenario));
+			}
+		}, 1000);
+
 		let result: IInlineChatEditResult;
 		try {
 			const strategy: IInlineChatEditStrategy = useToolsForEdit
@@ -227,6 +243,8 @@ export class InlineChatIntent implements IIntent {
 						: toErrorMessage(err),
 				}
 			};
+		} finally {
+			clearTimeout(progressTimeout);
 		}
 
 		if (token.isCancellationRequested) {
@@ -418,8 +436,6 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 					toolExecutions.push((async () => {
 						try {
-							stream.progress(l10n.t('Applying edits...'));
-
 							let input = isValidatedToolInput(validationResult)
 								? validationResult.inputObj
 								: JSON.parse(toolCall.arguments);

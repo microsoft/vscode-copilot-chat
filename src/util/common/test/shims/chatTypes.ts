@@ -202,6 +202,13 @@ export class ChatResponseNotebookEditPart implements vscode.ChatResponseNotebook
 	}
 }
 
+export class ChatResponseWorkspaceEditPart implements vscode.ChatResponseWorkspaceEditPart {
+	edits: vscode.ChatWorkspaceFileEdit[];
+	constructor(edits: vscode.ChatWorkspaceFileEdit[]) {
+		this.edits = edits;
+	}
+}
+
 export class ChatResponseConfirmationPart {
 	title: string;
 	message: string;
@@ -524,12 +531,12 @@ export class LanguageModelError extends Error {
 }
 
 /**
- * Represents a custom agent resource file (e.g., .agent.md).
+ * Represents a chat-related resource, such as a custom agent, instructions, prompt file, or skill.
  */
-export class CustomAgentChatResource implements vscode.CustomAgentChatResource {
-	readonly resource: vscode.ChatResourceDescriptor;
+export class ChatResource implements vscode.ChatResource {
+	readonly uri: vscode.Uri;
 
-	constructor(resource: vscode.ChatResourceDescriptor) {
-		this.resource = resource;
+	constructor(uri: vscode.Uri) {
+		this.uri = uri;
 	}
 }

@@ -312,6 +312,13 @@ export class SSEProcessor {
 		let extraData = '';
 		// This flag is set when at least for one solution we finished early (via `finishedCb`).
 		let hadEarlyFinishedSolution = false;
+
+		// The platform agent can return a 'function_call' finish_reason, which isn't a real function call
+		// but is echoing internal function call messages back to us. So don't treat them as real function calls
+		// if we received more data after that
+		let allowCompletingSolution = true;
+		let thinkingFound = false;
+
 		// Iterate over arbitrarily sized chunks coming in from the network.
 		for await (const chunk of this.body) {
 			if (await this.maybeCancel('after awaiting body chunk')) {
@@ -324,12 +331,6 @@ export class SSEProcessor {
 
 			// Each dataLine is complete since we've seen at least one \n after it
 
-			// The platform agent can return a 'function_call' finish_reason, which isn't a real function call
-			// but is echoing internal function call messages back to us. So don't treat them as real function calls
-			// if we received more data after that
-			let allowCompletingSolution = true;
-			let thinkingFound = false;
-
 			for (const dataLine of dataLines) {
 				// Lines which start with a `:` are SSE Comments per the spec and can be ignored
 				if (dataLine.startsWith(':')) {
@@ -337,7 +338,6 @@ export class SSEProcessor {
 				}
 				const lineWithoutData = dataLine.slice('data:'.length).trim();
 				if (lineWithoutData === '[DONE]') {
-					thinkingFound = false;
 					yield* this.finishSolutions();
 					return;
 				}
