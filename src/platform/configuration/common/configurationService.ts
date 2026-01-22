@@ -869,8 +869,6 @@ export namespace ConfigKey {
 		country?: string;
 		timezone?: string;
 	} | null>('chat.anthropic.tools.websearch.userLocation', ConfigType.Simple, null);
-	/** Enable memory tool */
-	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, false);
 
 	/** User provided code generation instructions for the chat */
 	export const CodeGenerationInstructions = defineSetting('chat.codeGeneration.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);

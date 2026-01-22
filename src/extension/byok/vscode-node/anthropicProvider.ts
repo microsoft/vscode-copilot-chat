@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -142,7 +142,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory' && isAnthropicMemoryEnabled(model.id, this._configurationService, this._experimentationService)) {
+			if (tool.name === 'memory') {
 				hasMemoryTool = true;
 				tools.push({
 					name: 'memory',

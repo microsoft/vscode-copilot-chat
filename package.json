@@ -2147,12 +2147,6 @@
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"command": "github.copilot.chat.tools.memory.openFolder",
-				"title": "%github.copilot.command.openMemoryFolder%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.tools.memory.enabled"
-			},
-			{
 				"command": "github.copilot.chat.review.markUnhelpful",
 				"title": "%github.copilot.command.unhelpfulReviewSuggestion%",
 				"icon": "$(thumbsdown)",
