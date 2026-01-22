@@ -3651,10 +3651,9 @@
 					},
 					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
-						"tags": [
-						]
+						"tags": []
 					}
 				}
 			},
@@ -3672,7 +3671,10 @@
 						"properties": {
 							"triggerType": {
 								"type": "string",
-								"enum": ["input_tokens", "tool_uses"],
+								"enum": [
+									"input_tokens",
+									"tool_uses"
+								],
 								"description": "Type of trigger for context editing"
 							},
 							"triggerValue": {
@@ -3689,7 +3691,9 @@
 							},
 							"excludeTools": {
 								"type": "array",
-								"items": { "type": "string" },
+								"items": {
+									"type": "string"
+								},
 								"description": "Tool names to exclude from clearing"
 							},
 							"clearInputs": {
