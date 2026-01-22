@@ -25,6 +25,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Position, Range, Selection } from '../../../../vscodeTypes';
 import { Intent } from '../../../common/constants';
+import { IChatContextCounterStatus } from '../../../prompt/common/chatContextCounterStatus';
 import { Conversation } from '../../../prompt/common/conversation';
 import { ChatTelemetryBuilder } from '../../../prompt/node/chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from '../../../prompt/node/defaultIntentRequestHandler';
@@ -240,8 +241,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IChatContextCounterStatus contextCounterStatus: IChatContextCounterStatus,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, endpointProvider);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, endpointProvider, contextCounterStatus);
 	}
 
 	/**
