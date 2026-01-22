@@ -91,8 +91,9 @@ export function getUserHappinessScore(
 	}
 
 	// Calculate weighted score
-	let weightedScore = 0;
-	let totalWeight = 0;
+	let weightedScore = 0; // Sum of weighted normalized scores
+	let totalWeight = 0; // Sum of weights applied
+	let scoredActionCount = 0; // Count of actions that contributed to score
 
 	for (let i = 0; i < window.length; i++) {
 		const action = window[i];
@@ -101,6 +102,8 @@ export function getUserHappinessScore(
 		if (action.kind === 'ignored' && !config.includeIgnored) {
 			continue;
 		}
+
+		scoredActionCount++;
 
 		// Calculate weight based on position (more recent = higher weight)
 		// Position 0 (oldest) has lowest weight, last position has highest weight
@@ -131,7 +134,7 @@ export function getUserHappinessScore(
 
 	// Adjust score towards neutral (0.5) when we have fewer data points
 	// This prevents extreme scores with limited data
-	const dataConfidence = window.length / MAX_INTERACTIONS_CONSIDERED;
+	const dataConfidence = scoredActionCount / MAX_INTERACTIONS_CONSIDERED;
 	return 0.5 + (rawScore - 0.5) * dataConfidence;
 }
 
