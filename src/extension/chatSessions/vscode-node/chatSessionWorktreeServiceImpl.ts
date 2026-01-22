@@ -19,6 +19,11 @@ import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWor
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
+function isUntitledSessionId(sessionId: string): boolean {
+	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
+}
+
+
 export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
 
@@ -66,6 +71,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	}
 
 	getSelectedRepository(sessionId: string): RepoContext | undefined {
+		// For untitled sessions, if we have just one repo, then return that as the selected repo
+		if (!this._sessionRepositories.get(sessionId) && isUntitledSessionId(sessionId) &&
+			this.gitService.repositories
+				.filter(repository => repository.kind !== 'worktree').length === 1) {
+			return this.gitService.activeRepository.get();
+		}
 		return this._sessionRepositories.get(sessionId);
 	}
 
@@ -93,7 +104,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private async _createWorktree(sessionId: string | undefined, progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
-			const activeRepository = sessionId ? this._sessionRepositories.get(sessionId) : this.activeRepository.get();
+			const activeRepository = sessionId ? this.getSelectedRepository(sessionId) : this.activeRepository.get();
 			if (!activeRepository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
