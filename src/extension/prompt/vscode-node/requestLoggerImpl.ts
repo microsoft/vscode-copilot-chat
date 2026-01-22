@@ -645,7 +645,6 @@ export class RequestLogger extends AbstractRequestLogger {
 				}
 			}
 		}
-		result.push(`~~~`);
 		result.push(`</code></pre>`);
 
 		result.push(`## Request Messages`);
