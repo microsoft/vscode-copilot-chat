@@ -6,10 +6,9 @@
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
 import { ITodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { Tag } from '../../prompts/node/base/tag';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export interface TodoListContextPromptProps extends BasePromptElementProps {
-	sessionId?: string;
+	sessionResource?: string;
 }
 
 /**
@@ -19,20 +18,16 @@ export class TodoListContextPrompt extends PromptElement<TodoListContextPromptPr
 	constructor(
 		props: any,
 		@ITodoListContextProvider private readonly todoListContextProvider: ITodoListContextProvider,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
 
 	async render() {
-		const sessionId = this.props.sessionId;
-		if (!sessionId) {
+		const sessionResource = this.props.sessionResource;
+		if (!sessionResource) {
 			return null;
 		}
-		if (this.configurationService.getNonExtensionConfig<boolean>('chat.todoListTool.writeOnly')) {
-			return null;
-		}
-		const todoContext = await this.todoListContextProvider.getCurrentTodoContext(sessionId);
+		const todoContext = await this.todoListContextProvider.getCurrentTodoContext(sessionResource);
 		if (!todoContext) {
 			return null;
 		}

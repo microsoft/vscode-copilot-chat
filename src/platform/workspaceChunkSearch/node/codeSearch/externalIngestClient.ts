@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
+import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
 import fs from 'fs';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { Range } from '../../../../util/vs/editor/common/core/range';
@@ -19,6 +21,7 @@ import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ApiClient } from './externalIngestApi';
+
 
 export interface ExternalIngestFile {
 	readonly uri: URI;
@@ -36,7 +39,8 @@ export interface IExternalIngestClient {
 		filesetName: string,
 		currentCheckpoint: string | undefined,
 		allFiles: AsyncIterable<ExternalIngestFile>,
-		token: CancellationToken
+		token: CancellationToken,
+		onProgress?: (message: string) => void
 	): Promise<Result<{ checkpoint: string }, Error>>;
 
 	listFilesets(token: CancellationToken): Promise<string[]>;
@@ -93,24 +97,33 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	private getHeaders(authToken: string): Record<string, string> {
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
-			'X-GitHub-Staff-Request': '1',
 		};
-		// if (staffRequest) {
-		// 	headers["X-GitHub-Staff-Request"] = '1';
-		// }
 
 		headers['Authorization'] = `Bearer ${authToken}`;
 
 		return headers;
 	}
 
-	private post(authToken: string, path: string, body: unknown, token: CancellationToken) {
+	private async post(authToken: string, path: string, body: unknown, options: { retries?: number }, token: CancellationToken): Promise<Response> {
+		const retries = options.retries ?? 0;
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
-		return this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
+
+		// Retry on 500 errors as these can be transient
+		if (response.status === 500 && retries > 0) {
+			this.logService.warn(`ExternalIngestClient::post(): Got 500, retrying... (${retries} retries remaining)`);
+			return this.post(authToken, path, body, { retries: retries - 1 }, token);
+		}
+
+		if (!response.ok) {
+			throw new Error(`POST to ${url} failed with status ${response.status}`);
+		}
+
+		return response;
 	}
 
-	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
-		const authToken = await this.getAuthToken();
+	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
+		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
 			return Result.error(new Error('No auth token available'));
@@ -122,11 +135,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
 
+		onProgress?.(l10n.t('Scanning files...'));
 		this.logService.trace(`ExternalIngestClient::updateIndex(). Checking for ingestable files...`);
 		const ingestableCheckStart = performance.now();
 
 		const allDocShas: Uint8Array[] = [];
 		for await (const file of allFiles) {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			const relativePath = file.relativePath;
 			const full = file.uri.fsPath;
 
@@ -156,25 +174,57 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			return Result.ok({ checkpoint: newCheckpoint });
 		}
 
+		onProgress?.(l10n.t('Creating snapshot...'));
+
 		// Create snapshot - this endpoint could return 429 if you already have too many filesets
-		let createIngestResponse: Response;
-		try {
-			createIngestResponse = await this.post(authToken, '/external/code/ingest', {
+		const createIngest = async (): Promise<Response> => {
+			return this.post(authToken, '/external/code/ingest', {
 				fileset_name: filesetName,
 				new_checkpoint: newCheckpoint,
 				geo_filter: Buffer.from(geoFilter.toBytes()).toString('base64'),
 				coded_symbols: codedSymbols,
-			}, token);
+			}, {}, token);
+		};
+
+		let createIngestResponse: Response;
+		try {
+			createIngestResponse = await createIngest();
 		} catch (err) {
 			throw new Error('Exception during create ingest', err);
 		}
 
+		// Handle 429 by cleaning up old filesets and retrying
+		if (createIngestResponse.status === 429) {
+			this.logService.info('ExternalIngestClient::updateIndex(): Got 429, cleaning up old filesets...');
+			onProgress?.(l10n.t("Too many filesets, cleaning up old ones..."));
+
+			await raceCancellationError(this.cleanupOldFilesets(authToken, filesetName, token), token);
+
+			// Retry the create ingest
+			this.logService.info('ExternalIngestClient::updateIndex(): Retrying create ingest after cleanup...');
+			onProgress?.(l10n.t("Retrying snapshot creation..."));
+			try {
+				createIngestResponse = await createIngest();
+			} catch (err) {
+				throw new Error('Exception during create ingest retry', err);
+			}
+
+			// If we still get 429 after cleanup and retry, fail with a clear error
+			if (createIngestResponse.status === 429) {
+				throw new Error('Create ingest failed with 429 Too Many Requests even after cleanup.');
+			}
+		}
+
+		// Fail fast on non-OK responses before attempting to parse JSON
+		if (!createIngestResponse.ok) {
+			throw new Error(`Create ingest failed with status ${createIngestResponse.status}`);
+		}
 		interface CodedSymbolRange {
 			readonly start: number;
 			readonly end: number;
 		}
 
-		const res = await createIngestResponse.json() as { ingest_id: string; coded_symbol_range: CodedSymbolRange };
+		const res = await raceCancellationError(createIngestResponse.json(), token) as { ingest_id: string; coded_symbol_range: CodedSymbolRange };
 		const ingestId = res.ingest_id;
 		let codedSymbolRange: CodedSymbolRange | undefined = res.coded_symbol_range;
 
@@ -188,10 +238,15 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 		this.logService.debug(`Got ingest ID: ${ingestId}`);
 
+		onProgress?.(l10n.t('Reconciling with server...'));
 		this.logService.debug('Starting set reconciliation...');
 
 		// Create snapshot
 		while (codedSymbolRange) {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			this.logService.debug(
 				`Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`,
 			);
@@ -210,9 +265,10 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						coded_symbols: codedSymbols,
 						coded_symbol_range: codedSymbolRange,
 					},
+					{},
 					token
 				);
-				const body = await pushCodedSymbolsResponse.json() as { next_coded_symbol_range?: CodedSymbolRange };
+				const body = await raceCancellationError(pushCodedSymbolsResponse.json(), token) as { next_coded_symbol_range?: CodedSymbolRange };
 				codedSymbolRange = body.next_coded_symbol_range;
 			} catch (e) {
 				this.logService.error(`ExternalIngestClient::updateIndex(): Failed to push coded symbols: ${pushCodedSymbolsResponse?.statusText} - ${await pushCodedSymbolsResponse?.text()}`);
@@ -221,6 +277,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		// Document upload
+		onProgress?.(l10n.t('Uploading documents...'));
 		this.logService.debug('Starting document upload...');
 
 		let pageToken = undefined;
@@ -230,11 +287,16 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Tracking for performance reporting.
 		let uploaded = 0;
+		let totalToUpload = 0;
 		const uploadStart = performance.now();
 
 		do {
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			try {
-				await Promise.all(uploading);
+				await raceCancellationError(Promise.all(uploading), token);
 			} catch (e) {
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
@@ -244,10 +306,10 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
 				page_token: pageToken,
-			}, token);
+			}, {}, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await getBatchResponse.json() as { doc_ids: string[]; next_page_token: string | undefined };
+				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[]; next_page_token: string | undefined };
 
 			// Need to check that there are some docIds to process. It can be the case where you get a page
 			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
@@ -255,9 +317,14 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			if (docIds) {
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
+				totalToUpload += toUpload.size;
 				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
+					if (token.isCancellationRequested) {
+						throw new CancellationError();
+					}
+
 					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
 						const paths = mappings.get(requestedDocSha);
@@ -271,7 +338,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 							ingest_id: ingestId,
 							content,
 							file_path: paths.relative,
-						}, token);
+						}, { retries: 3 }, token);
 						this.logService.debug(`ExternalIngestClient::updateIndex(): Document upload response status: ${res.status}`);
 					})();
 					p.catch(e => {
@@ -282,6 +349,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						uploading.delete(p);
 						uploaded += 1;
 						if (uploaded % 10 === 0) {
+							const remaining = totalToUpload - uploaded;
+							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
 							const elapsed = Math.round(performance.now() - uploadStart);
 							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
 							this.logService.info(
@@ -306,16 +375,17 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			pageToken = nextPageToken;
 		} while (pageToken);
 
-		await Promise.all(uploading);
+		await raceCancellationError(Promise.all(uploading), token);
 
 		// Print the number of uploaded documents - may not match the number in your directory if some
 		// have been uploaded already!
 		this.logService.info(
 			`ExternalIngestClient::updateIndex(): Uploaded ${uploaded} ingestable files in ${Math.round(performance.now() - uploadStart)}ms`,
 		);
+		onProgress?.(l10n.t('Finalizing index...'));
 		const resp = await this.post(authToken, '/external/code/ingest/finalize', {
 			ingest_id: ingestId,
-		}, token);
+		}, {}, token);
 
 		this.logService.info('ExternalIngestClient::updateIndex(): SUCCESS!!');
 		const requestId = resp.headers.get('x-github-request-id');
@@ -332,6 +402,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			return [];
 		}
 
+		const filesets = await this.listFilesetsWithDetails(authToken, token);
+		return filesets.map(x => x.name);
+	}
+
+	private async listFilesetsWithDetails(authToken: string, token: CancellationToken): Promise<Array<{ name: string; checkpoint: string; status: string }>> {
 		const resp = await this.apiClient.makeRequest(
 			`${ExternalIngestClient.baseUrl}/external/code/ingest`,
 			this.getHeaders(authToken),
@@ -341,7 +416,20 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		);
 
 		const body = await resp.json() as { filesets?: Array<{ name: string; checkpoint: string; status: string }>; max_filesets: number };
-		return coalesce((body.filesets ?? []).map(x => x.name));
+		return body.filesets ?? [];
+	}
+
+	/**
+	 * Cleans up old filesets to make room for new ones.
+	 */
+	private async cleanupOldFilesets(authToken: string, currentFilesetName: string, token: CancellationToken): Promise<void> {
+		const filesets = await this.listFilesetsWithDetails(authToken, token);
+
+		const candidates = filesets.filter(f => f.name !== currentFilesetName);
+		const toDelete = candidates.at(-1);
+		if (toDelete) {
+			await this.deleteFilesetByName(authToken, toDelete.name, token);
+		}
 	}
 
 	async deleteFileset(filesetName: string, token: CancellationToken): Promise<void> {
@@ -384,7 +472,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			scoping_query: `fileset:${filesetName}`,
 			embedding_model: embeddingType.id,
 			limit,
-		}, token);
+		}, {}, token);
 
 		const body = await resp.json() as SearchFilesetsResponse;
 		return {

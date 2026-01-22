@@ -9,7 +9,7 @@ import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatR
 import { isLocation } from '../../../../util/common/types';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, Range, Uri } from '../../../../vscodeTypes';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -403,11 +403,15 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
-			case 'assistant.message': {
-				if (typeof event.data.chunkContent === 'string') {
+			case 'assistant.message_delta': {
+				if (typeof event.data.deltaContent === 'string') {
 					processedMessages.add(event.data.messageId);
-					currentAssistantMessage.chunks.push(event.data.chunkContent);
-				} else if (event.data.content && !processedMessages.has(event.data.messageId)) {
+					currentAssistantMessage.chunks.push(event.data.deltaContent);
+				}
+				break;
+			}
+			case 'assistant.message': {
+				if (event.data.content && !processedMessages.has(event.data.messageId)) {
 					processAssistantMessage(event.data.content);
 				}
 				break;
@@ -566,14 +570,16 @@ function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCa
 }
 
 
+
 function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: ViewTool): void {
 	const args = toolCall.arguments;
 
 	if (!args.path) {
 		return;
 	} else if (args.view_range && args.view_range[1] >= args.view_range[0]) {
-		const display = formatUriForFileWidget(Uri.file(args.path));
 		const [start, end] = args.view_range;
+		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
+		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);

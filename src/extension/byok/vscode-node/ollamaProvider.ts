@@ -2,12 +2,14 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities } from '../common/byokProvider';
-import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
+import { BYOKKnownModels, byokKnownModelsToAPIInfo, resolveModelInfo } from '../common/byokProvider';
+import { AbstractOpenAICompatibleLMProvider, LanguageModelChatConfiguration, OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
 interface OllamaModelInfoAPIResponse {
@@ -29,40 +31,73 @@ interface OllamaVersionResponse {
 // Minimum supported Ollama version - versions below this may have compatibility issues
 const MINIMUM_OLLAMA_VERSION = '0.6.4';
 
-export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
+export interface OllamaConfig extends LanguageModelChatConfiguration {
+	url: string;
+}
+
+export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaConfig> {
 	public static readonly providerName = 'Ollama';
 	private _modelCache = new Map<string, IChatModelInformation>();
 
 	constructor(
-		private readonly _ollamaBaseUrl: string,
 		byokStorageService: IBYOKStorageService,
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@ILogService logService: ILogService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IExperimentationService expService: IExperimentationService
 	) {
 		super(
-			BYOKAuthType.None,
+			OllamaLMProvider.providerName.toLowerCase(),
 			OllamaLMProvider.providerName,
-			`${_ollamaBaseUrl}/v1`,
 			undefined,
 			byokStorageService,
-			_fetcherService,
-			_logService,
-			_instantiationService,
+			fetcherService,
+			logService,
+			instantiationService,
+			configurationService,
+			expService
 		);
+
+		this.migrateConfig();
 	}
 
-	protected override async getAllModels(): Promise<BYOKKnownModels> {
+	private async migrateConfig(): Promise<void> {
+		const baseUrl = this.getBaseUrlFromSettings();
+		if (!baseUrl) {
+			return;
+		}
+		await this.configureDefaultGroupIfExists(this._name, { url: baseUrl });
+		await this._configurationService.setConfig(ConfigKey.Deprecated.OllamaEndpoint, undefined);
+	}
+
+	private getBaseUrlFromSettings(): string | undefined {
+		if (this._configurationService.isConfigured(ConfigKey.Deprecated.OllamaEndpoint)) {
+			return this._configurationService.getConfig(ConfigKey.Deprecated.OllamaEndpoint);
+		}
+		return undefined;
+	}
+
+	protected override async getAllModels(silent: boolean, apiKey: string | undefined, config: OllamaConfig | undefined): Promise<OpenAICompatibleLanguageModelChatInformation<OllamaConfig>[]> {
+		if (!config) {
+			return [];
+		}
+
+		const ollamaBaseUrl = config.url;
+
 		try {
 			// Check Ollama server version before proceeding with model operations
-			await this._checkOllamaVersion();
+			await this._checkOllamaVersion(ollamaBaseUrl);
 
-			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/tags`, { method: 'GET' });
+			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
 			const knownModels: BYOKKnownModels = {};
 			for (const model of models) {
-				const modelInfo = await this.getModelInfo(model.model, '', undefined);
-				this._modelCache.set(model.model, modelInfo);
+				let modelInfo = this._modelCache.get(`${ollamaBaseUrl}/${model.model}`);
+				if (!modelInfo) {
+					modelInfo = await this._getOllamaModelInfo(ollamaBaseUrl, model.model);
+					this._modelCache.set(`${ollamaBaseUrl}/${model.model}`, modelInfo);
+				}
 				knownModels[model.model] = {
 					maxInputTokens: modelInfo.capabilities.limits?.max_prompt_tokens ?? 4096,
 					maxOutputTokens: modelInfo.capabilities.limits?.max_output_tokens ?? 4096,
@@ -71,7 +106,12 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 					vision: !!modelInfo.capabilities.supports.vision
 				};
 			}
-			return knownModels;
+
+			return byokKnownModelsToAPIInfo(this._name, models).map(model => ({
+				...model,
+				url: ollamaBaseUrl
+			}));
+
 		} catch (e) {
 			// Check if this is our version check error and preserve it
 			if (e instanceof Error && e.message.includes('Ollama server version')) {
@@ -81,6 +121,24 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 		}
 	}
 
+	protected override getModelsBaseUrl(configuration: OllamaConfig | undefined): string {
+		return configuration?.url ?? 'http://localhost:11434';
+	}
+
+	private async _getOllamaModelInfo(ollamaBaseUrl: string, modelId: string): Promise<IChatModelInformation> {
+		const modelInfo = await this._fetchOllamaModelInformation(ollamaBaseUrl, modelId);
+		const contextWindow = modelInfo?.model_info?.[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 32768;
+		const outputTokens = contextWindow < 4096 ? Math.floor(contextWindow / 2) : 4096;
+		const modelCapabilities = {
+			name: modelInfo?.model_info?.['general.basename'] ?? modelInfo.remote_model ?? modelId,
+			maxOutputTokens: outputTokens,
+			maxInputTokens: contextWindow - outputTokens,
+			vision: modelInfo.capabilities.includes('vision'),
+			toolCalling: modelInfo.capabilities.includes('tools')
+		};
+
+		return resolveModelInfo(modelId, this._name, this._knownModels, modelCapabilities);
+	}
 
 	/**
 	 * Compare version strings to check if current version meets minimum requirements
@@ -107,8 +165,8 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 		return true; // versions are equal
 	}
 
-	private async _getOllamaModelInformation(modelId: string): Promise<OllamaModelInfoAPIResponse> {
-		const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/show`, {
+	private async _fetchOllamaModelInformation(ollamaBaseUrl: string, modelId: string): Promise<OllamaModelInfoAPIResponse> {
+		const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/show`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json'
@@ -117,33 +175,13 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 		});
 		return response.json() as unknown as OllamaModelInfoAPIResponse;
 	}
-
-	override async getModelInfo(modelId: string, apiKey: string, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		if (this._modelCache.has(modelId)) {
-			return this._modelCache.get(modelId)!;
-		}
-		if (!modelCapabilities) {
-			const modelInfo = await this._getOllamaModelInformation(modelId);
-			const contextWindow = modelInfo?.model_info?.[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 32768;
-			const outputTokens = contextWindow < 4096 ? Math.floor(contextWindow / 2) : 4096;
-			modelCapabilities = {
-				name: modelInfo?.model_info?.['general.basename'] ?? modelInfo.remote_model ?? modelId,
-				maxOutputTokens: outputTokens,
-				maxInputTokens: contextWindow - outputTokens,
-				vision: modelInfo.capabilities.includes('vision'),
-				toolCalling: modelInfo.capabilities.includes('tools')
-			};
-		}
-		return super.getModelInfo(modelId, apiKey, modelCapabilities);
-	}
-
 	/**
 	 * Check if the connected Ollama server version meets the minimum requirements
 	 * @throws Error if version is below minimum or version check fails
 	 */
-	private async _checkOllamaVersion(): Promise<void> {
+	private async _checkOllamaVersion(ollamaBaseUrl: string): Promise<void> {
 		try {
-			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
+			const response = await this._fetcherService.fetch(`${ollamaBaseUrl}/api/version`, { method: 'GET' });
 			const versionInfo = await response.json() as OllamaVersionResponse;
 
 			if (!this._isVersionSupported(versionInfo.version)) {

@@ -43,8 +43,6 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 
 	public readonly ID: string = ServerPoweredInlineEditProvider.ID;
 
-	public readonly dependsOnSelection = true;
-
 	constructor(
 		@IChatMLFetcher private readonly fetcher: IChatMLFetcher,
 	) {
@@ -94,7 +92,7 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 			const edits = response.edits.map(e => LineReplacement.deserialize(e));
 			const sortingPermutation = Permutation.createSortPermutation(edits, (a, b) => a.lineRange.startLineNumber - b.lineRange.startLineNumber);
 			const lineEdit = new LineEdit(sortingPermutation.apply(edits));
-			lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit })));
+			lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit, isFromCursorJump: false })));
 			pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
 			return StatelessNextEditResult.streaming(telemetryBuilder);
 		} else {

@@ -149,6 +149,8 @@ export class InlineEditRequestLogContext {
 			lines.push('\n</details>\n');
 		}
 
+		lines.push(...this._renderTraceDiagram());
+
 		return lines.join('\n');
 	}
 
@@ -274,6 +276,10 @@ export class InlineEditRequestLogContext {
 		this._endpointInfo = { url, modelName };
 	}
 
+	public get endpointInfo(): { url: string; modelName: string } | undefined {
+		return this._endpointInfo;
+	}
+
 	public _prompt: string | undefined = undefined;
 
 	get prompt(): string | undefined {
@@ -392,6 +398,144 @@ export class InlineEditRequestLogContext {
 	private _trace: string[] = [];
 	trace(msg: string): void {
 		this._trace.push(msg);
+	}
+
+	private _renderTraceDiagram(): string[] {
+		if (this._trace.length === 0) {
+			return [];
+		}
+
+		const lines: string[] = [];
+		lines.push('## Trace Diagram');
+		lines.push('<details open><summary>Trace Diagram</summary>\n');
+		lines.push('```');
+
+		// Parse trace lines into structured data
+		const parsedTraces = this._trace.map(line => {
+			const timeMatch = line.match(/^\[\s*(\d+)ms\]/);
+			const timestamp = timeMatch ? parseInt(timeMatch[1], 10) : 0;
+
+			// Extract the bracketed path segments and the message
+			const afterTime = line.replace(/^\[\s*\d+ms\]\s*/, '');
+			const segments: string[] = [];
+			let remaining = afterTime;
+			let bracketMatch;
+			while ((bracketMatch = remaining.match(/^\[([^\]]+)\]/))) {
+				segments.push(bracketMatch[1]);
+				remaining = remaining.slice(bracketMatch[0].length);
+			}
+			const message = remaining.trim();
+
+			return { timestamp, segments, message };
+		});
+
+		if (parsedTraces.length === 0) {
+			lines.push('(no trace data)');
+			lines.push('```');
+			lines.push('\n</details>\n');
+			return lines;
+		}
+
+		// Find the maximum timestamp for time width calculation
+		const maxTime = Math.max(...parsedTraces.map(t => t.timestamp));
+		const timeWidth = Math.max(6, String(maxTime).length + 3);
+
+		// Build a map of segment paths to track when they start/end
+		const activeSegments = new Map<string, { startTime: number; depth: number }>();
+		const segmentLifetimes: { path: string; startTime: number; endTime: number; depth: number; name: string }[] = [];
+
+		parsedTraces.forEach((trace, idx) => {
+			const currentPath = trace.segments.join('|');
+
+			// Check for segments that are no longer active
+			for (const [path, info] of activeSegments) {
+				if (!currentPath.startsWith(path) && currentPath !== path) {
+					segmentLifetimes.push({
+						path,
+						startTime: info.startTime,
+						endTime: trace.timestamp,
+						depth: info.depth,
+						name: path.split('|').pop() || ''
+					});
+					activeSegments.delete(path);
+				}
+			}
+
+			// Add new segments
+			let pathSoFar = '';
+			trace.segments.forEach((segment, depth) => {
+				pathSoFar = pathSoFar ? `${pathSoFar}|${segment}` : segment;
+				if (!activeSegments.has(pathSoFar)) {
+					activeSegments.set(pathSoFar, { startTime: trace.timestamp, depth });
+				}
+			});
+		});
+
+		// Close any remaining active segments
+		const lastTimestamp = parsedTraces[parsedTraces.length - 1]?.timestamp || 0;
+		for (const [path, info] of activeSegments) {
+			segmentLifetimes.push({
+				path,
+				startTime: info.startTime,
+				endTime: lastTimestamp,
+				depth: info.depth,
+				name: path.split('|').pop() || ''
+			});
+		}
+
+		// Render timeline header
+		lines.push('');
+		lines.push('Timeline (nested call hierarchy):');
+		lines.push('─'.repeat(60));
+
+		// Track what's currently shown at each depth to avoid redundant output
+		const currentAtDepth: string[] = [];
+
+		for (const trace of parsedTraces) {
+			const timeStr = `[${String(trace.timestamp).padStart(timeWidth - 3)}ms]`;
+			const indentUnit = '│   ';
+			const newBranchUnit = '├── ';
+
+			// Determine which segments are new vs continuing
+			let indent = '';
+			let displaySegment = '';
+			let hasNewSegment = false;
+
+			for (let d = 0; d < trace.segments.length; d++) {
+				const seg = trace.segments[d];
+				if (currentAtDepth[d] !== seg) {
+					// This is a new segment at this depth
+					hasNewSegment = true;
+					currentAtDepth[d] = seg;
+					// Clear deeper levels
+					currentAtDepth.length = d + 1;
+					displaySegment = seg;
+					indent = indentUnit.repeat(d);
+					break;
+				}
+				indent = indentUnit.repeat(d + 1);
+			}
+
+			if (hasNewSegment) {
+				// Show the new segment
+				const prefix = indent + newBranchUnit;
+				lines.push(`${timeStr} ${prefix}[${displaySegment}]`);
+				if (trace.message) {
+					const msgIndent = indentUnit.repeat(trace.segments.length);
+					lines.push(`${' '.repeat(timeWidth + 1)} ${msgIndent}↳ ${trace.message}`);
+				}
+			} else if (trace.message) {
+				// Just a message at the current depth
+				const msgIndent = indentUnit.repeat(trace.segments.length);
+				lines.push(`${timeStr} ${msgIndent}↳ ${trace.message}`);
+			}
+		}
+
+		lines.push('─'.repeat(60));
+		lines.push('```');
+		lines.push('\n</details>\n');
+
+		return lines;
 	}
 
 	private _logs: string[] = [];

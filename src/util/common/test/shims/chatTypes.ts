@@ -202,6 +202,13 @@ export class ChatResponseNotebookEditPart implements vscode.ChatResponseNotebook
 	}
 }
 
+export class ChatResponseWorkspaceEditPart implements vscode.ChatResponseWorkspaceEditPart {
+	edits: vscode.ChatWorkspaceFileEdit[];
+	constructor(edits: vscode.ChatWorkspaceFileEdit[]) {
+		this.edits = edits;
+	}
+}
+
 export class ChatResponseConfirmationPart {
 	title: string;
 	message: string;
@@ -212,16 +219,6 @@ export class ChatResponseConfirmationPart {
 		this.message = message;
 		this.data = data;
 		this.buttons = buttons;
-	}
-}
-
-export class ChatPrepareToolInvocationPart {
-	toolName: string;
-	/**
-	 * @param toolName The name of the tool being prepared for invocation.
-	 */
-	constructor(toolName: string) {
-		this.toolName = toolName;
 	}
 }
 
@@ -530,5 +527,16 @@ export class LanguageModelError extends Error {
 		super(message, { cause });
 		this.name = LanguageModelError.#name;
 		this.code = code ?? '';
+	}
+}
+
+/**
+ * Represents a chat-related resource, such as a custom agent, instructions, prompt file, or skill.
+ */
+export class ChatResource implements vscode.ChatResource {
+	readonly uri: vscode.Uri;
+
+	constructor(uri: vscode.Uri) {
+		this.uri = uri;
 	}
 }
