@@ -5282,7 +5282,13 @@
 				}
 			}
 		],
-		"chatAgents": [],
+		"chatAgents": [
+			{
+				"name": "Implement",
+				"path": "./assets/agents/Implement.agent.md",
+				"description": "Specialized implementation agent"
+			}
+		],
 		"chatPromptFiles": [
 			{
 				"name": "savePrompt",
