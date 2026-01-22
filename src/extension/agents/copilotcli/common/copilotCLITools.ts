@@ -468,7 +468,14 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
 }
 
 /**
- * Converts MCP ContentBlock[] to VS Code McpToolInvocationContentData[] for rendering tool results
+ * Converts MCP {@link MCP.ContentBlock}[] values produced by MCP tool execution into
+ * VS Code {@link McpToolInvocationContentData}[] objects for rendering in the chat UI.
+ *
+ * MCP ContentBlocks represent heterogeneous pieces of tool output such as text, images,
+ * audio, embedded resources, or resource links. This helper normalizes those different
+ * content shapes into a common binary+MIME-type representation that the VS Code chat
+ * tool invocation renderer understands, so that MCP tool results can be displayed
+ * consistently alongside other chat responses.
  */
 function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[]): McpToolInvocationContentData[] {
 	const output: McpToolInvocationContentData[] = [];
