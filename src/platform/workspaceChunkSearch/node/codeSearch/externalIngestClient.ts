@@ -301,7 +301,6 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Tracking for performance reporting.
 		let uploaded = 0;
-		let totalToUpload = 0;
 		const uploadStart = performance.now();
 
 		do {
@@ -333,7 +332,6 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			if (docIds) {
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
-				totalToUpload += toUpload.size;
 				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
@@ -370,7 +368,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 						uploading.delete(p);
 						uploaded += 1;
 						if (uploaded % 10 === 0) {
-							const remaining = totalToUpload - uploaded;
+							const remaining = mappings.size - uploaded;
 							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
 							const elapsed = Math.round(performance.now() - uploadStart);
 							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));

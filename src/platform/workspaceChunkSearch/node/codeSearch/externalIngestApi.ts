@@ -188,6 +188,7 @@ class Throttler {
 		this.sendPeriodWindow.destroy();
 	}
 }
+
 export const githubHeaders = Object.freeze({
 	requestId: 'x-github-request-id',
 	totalQuotaUsed: 'x-github-total-quota-used',
@@ -250,6 +251,7 @@ export class ApiClient implements IDisposable {
 			return res;
 		} catch (e) {
 			this.logService.error(`${method} to ${url} request threw with error: ${e}`);
+			throw e;
 		} finally {
 			this.throttler?.requestFinished();
 		}
