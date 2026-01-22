@@ -182,27 +182,45 @@ export const MODEL_CONFIGURATION_VALIDATOR: IValidator<ModelConfiguration> = vOb
 });
 
 export interface UserHappinessScoreConfiguration {
-	/** Score for accepted actions (0-1, default: 1) */
+	/** Score for accepted actions */
 	acceptedScore: number;
-	/** Score for rejected actions (0-1, default: 0.2) */
+	/** Score for rejected actions */
 	rejectedScore: number;
-	/** Score for ignored/notAccepted actions (0-1, default: 0.5) */
+	/** Score for ignored/notAccepted actions */
 	ignoredScore: number;
-	/** Threshold for high aggressiveness level (default: 0.6) */
+	/** Threshold for high aggressiveness level */
 	highThreshold: number;
-	/** Threshold for medium aggressiveness level (default: 0.4) */
+	/** Threshold for medium aggressiveness level */
 	mediumThreshold: number;
-	/** Whether to include ignored/notAccepted actions in score calculation (default: false) */
+	/** Whether to include ignored/notAccepted actions in score calculation */
 	includeIgnored: boolean;
-	/** Maximum number of ignored/notAccepted actions to consider (default: 5) */
+	/** Maximum number of ignored/notAccepted actions to consider */
 	ignoredLimit: number;
-	/** Whether to limit consecutive ignored actions (default: false) */
+	/** Whether to limit consecutive ignored actions */
 	limitConsecutiveIgnored: boolean;
-	/** Whether to limit total ignored actions (default: true) */
+	/** Whether to limit total ignored actions */
 	limitTotalIgnored: boolean;
 }
 
-export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
+/**
+ * Default configuration for user happiness score calculation. Mimics v1 behavior.
+ */
+export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
+	acceptedScore: 1,
+	rejectedScore: 0,
+	ignoredScore: 0.5,
+	highThreshold: 0.7,
+	mediumThreshold: 0.4,
+	includeIgnored: false,
+	ignoredLimit: 0,
+	limitConsecutiveIgnored: false,
+	limitTotalIgnored: true,
+};
+
+/**
+ * Basic type validation for happiness config.
+ */
+const USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
 	'acceptedScore': vRequired(vNumber()),
 	'rejectedScore': vRequired(vNumber()),
 	'ignoredScore': vRequired(vNumber()),
@@ -214,19 +232,61 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 	'limitTotalIgnored': vRequired(vBoolean()),
 });
 
+function isInRange(value: number, min: number, max: number): boolean {
+	return value >= min && value <= max;
+}
+
 /**
- * Default configuration for user happiness score calculation. Mimics v1 behavior.
+ * Value checking for happiness config.
  */
-export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
-	acceptedScore: 1.0,
-	rejectedScore: 0.2,
-	ignoredScore: 0.5,
-	highThreshold: 0.6,
-	mediumThreshold: 0.4,
-	includeIgnored: true,
-	ignoredLimit: 5,
-	limitConsecutiveIgnored: false,
-	limitTotalIgnored: true,
+export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = {
+	validate(content: unknown) {
+		const baseResult = USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR.validate(content);
+		if (baseResult.error) {
+			return baseResult;
+		}
+
+		const config = baseResult.content;
+
+		// Validate score ranges [0, 1]
+		if (!isInRange(config.acceptedScore, 0, 1)) {
+			return { content: undefined, error: { message: 'acceptedScore must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.rejectedScore, 0, 1)) {
+			return { content: undefined, error: { message: 'rejectedScore must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.ignoredScore, 0, 1)) {
+			return { content: undefined, error: { message: 'ignoredScore must be in range [0, 1]' } };
+		}
+
+		// Validate threshold ranges [0, 1]
+		if (!isInRange(config.highThreshold, 0, 1)) {
+			return { content: undefined, error: { message: 'highThreshold must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.mediumThreshold, 0, 1)) {
+			return { content: undefined, error: { message: 'mediumThreshold must be in range [0, 1]' } };
+		}
+
+		// Validate acceptedScore > rejectedScore to prevent division by zero
+		if (config.acceptedScore <= config.rejectedScore) {
+			return { content: undefined, error: { message: 'acceptedScore must be greater than rejectedScore to prevent division by zero' } };
+		}
+
+		// Validate highThreshold > mediumThreshold for logical consistency
+		if (config.highThreshold <= config.mediumThreshold) {
+			return { content: undefined, error: { message: 'highThreshold must be greater than mediumThreshold' } };
+		}
+
+		// Validate ignoredLimit >= 0
+		if (config.ignoredLimit < 0) {
+			return { content: undefined, error: { message: 'ignoredLimit must be non-negative' } };
+		}
+
+		return { content: config, error: undefined };
+	},
+	toSchema() {
+		return USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR.toSchema();
+	}
 };
 
 export function parseUserHappinessScoreConfigurationString(optionString: string): UserHappinessScoreConfiguration {
