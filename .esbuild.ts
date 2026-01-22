@@ -24,9 +24,8 @@ const baseBuildOptions = {
 	outdir: './dist',
 	// In dev mode, use linked source maps for debugging.
 	// With --sourcemaps flag, generate external source maps (no sourceMappingURL comment in output).
-	// External maps will be moved to dist-sourcemaps after build for upload to error tracking services.
 	sourcemap: isDev ? 'linked' : (generateSourceMaps ? 'external' : false),
-	sourcesContent: generateSourceMaps, // Include source content when generating maps for upload
+	sourcesContent: false,
 	treeShaking: true
 } satisfies esbuild.BuildOptions;
 

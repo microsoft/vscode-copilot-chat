@@ -5574,6 +5574,7 @@
 		"@azure/identity": "4.9.1",
 		"@azure/keyvault-secrets": "^4.10.0",
 		"@azure/msal-node": "^3.6.3",
+		"@azure/storage-blob": "^12.29.1",
 		"@c4312/scip": "^0.1.0",
 		"@fluentui/react-components": "^9.66.6",
 		"@fluentui/react-icons": "^2.0.305",
