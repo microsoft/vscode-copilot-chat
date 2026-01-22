@@ -61,6 +61,7 @@ import {
 	_promptError,
 	getPromptOptions,
 	MIN_PROMPT_CHARS,
+	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
@@ -389,7 +390,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 
 		const eligibleChars = suffixPercent > 0 ? textDocument.getText().length : textDocument.offsetAt(position);
-		if (eligibleChars < MIN_PROMPT_CHARS) {
+		if (eligibleChars < MIN_PROMPT_CHARS && !MIN_PROMPT_EXCLUDED_LANGUAGE_IDS.includes(textDocument.detectedLanguageId)) {
 			// Too short context
 			return _contextTooShort;
 		}

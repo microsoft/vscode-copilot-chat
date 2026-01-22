@@ -90,12 +90,18 @@ export class ChatSessionContextContribution extends Disposable {
 				() => this._summaryCache,
 				(cache) => { this._summaryCache = cache; }
 			);
-			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
+			const nesProvider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'chat-session-context-provider',
 				selector: '*',
 				resolver: resolver
 			};
-			disposables.add(this.languageContextProviderService.registerContextProvider(provider, [ProviderTarget.NES]));
+			const scmProvider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
+				id: 'chat-session-context-provider',
+				selector: { language: 'scminput' },
+				resolver: resolver
+			};
+			disposables.add(this.languageContextProviderService.registerContextProvider(nesProvider, [ProviderTarget.NES]));
+			disposables.add(this.languageContextProviderService.registerContextProvider(scmProvider, [ProviderTarget.Completions]));
 		} catch (error) {
 			this.logService.error('Error registering chat session context provider:', error);
 		}
