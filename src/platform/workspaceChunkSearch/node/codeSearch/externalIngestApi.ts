@@ -248,6 +248,8 @@ export class ApiClient implements IDisposable {
 				this.throttler.recordQuotaUsed(quotaUsed);
 			}
 			return res;
+		} catch (e) {
+			this.logService.error(`${method} to ${url} request threw with error: ${e}`);
 		} finally {
 			this.throttler?.requestFinished();
 		}

@@ -21,7 +21,7 @@ import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { ApiClient } from './externalIngestApi';
+import { ApiClient, githubHeaders } from './externalIngestApi';
 
 
 export interface ExternalIngestFile {
@@ -317,7 +317,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
-			this.logService.debug(`ExternalIngestClient::updateIndex(): calling batch API with pageToken: ${pageToken}`);
+			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
 
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
@@ -325,7 +325,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}, {}, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[]; next_page_token: string | undefined };
+				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
+
+			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
 
 			// Need to check that there are some docIds to process. It can be the case where you get a page
 			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
@@ -334,7 +336,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
 				totalToUpload += toUpload.size;
-				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
 
 				for (const requestedDocSha of toUpload) {
 					if (token.isCancellationRequested) {
@@ -343,24 +345,29 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
-						const paths = mappings.get(requestedDocSha);
-						if (!paths) {
-							throw new Error(`No mapping for docSha: ${requestedDocSha}`);
+						try {
+							const paths = mappings.get(requestedDocSha);
+							if (!paths) {
+								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
+							}
+							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${paths.relative}`);
+							const bytes = await fs.promises.readFile(paths.full);
+							const content = bytes.toString('base64');
+							const res = await this.post(authToken, '/external/code/ingest/document', {
+								ingest_id: ingestId,
+								content,
+								file_path: paths.relative,
+								doc_id: requestedDocSha,
+							}, { retries: 3 }, token);
+							if (!res.ok) {
+								const requestId = res.headers.get(githubHeaders.requestId);
+								const responseBody = await res.text();
+								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${paths.relative} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
+							}
+						} catch (e) {
+							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						}
-						this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${paths.relative}`);
-						const bytes = await fs.promises.readFile(paths.full);
-						const content = bytes.toString('base64');
-						const res = await this.post(authToken, '/external/code/ingest/document', {
-							ingest_id: ingestId,
-							content,
-							file_path: paths.relative,
-						}, { retries: 3 }, token);
-						this.logService.debug(`ExternalIngestClient::updateIndex(): Document upload response status: ${res.status}`);
 					})();
-					p.catch(e => {
-						this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-						// throw e;
-					});
 					p.finally(() => {
 						uploading.delete(p);
 						uploaded += 1;
@@ -384,9 +391,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				}
 			}
 
-			if (pageToken === nextPageToken) {
-				break;
-			}
+			// await raceCancellationError(Promise.all(uploading), token);
 
 			pageToken = nextPageToken;
 		} while (pageToken);

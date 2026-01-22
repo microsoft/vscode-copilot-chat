@@ -191,23 +191,30 @@ export class ExternalIngestIndex extends Disposable {
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
-		const result = await this._client.updateIndex(
-			this.getFilesetName(primaryRoot),
-			currentCheckpoint,
-			this.getFilesToIndexFromDb(),
-			token,
-			onProgress
-		);
-
-		if (result.isOk()) {
-			this.setCurrentIndexCheckpoint(result.val.checkpoint);
-			return Result.ok(true);
-		} else {
+		try {
+			const result = await this._client.updateIndex(
+				this.getFilesetName(primaryRoot),
+				currentCheckpoint,
+				this.getFilesToIndexFromDb(),
+				token,
+				onProgress
+			);
+			if (result.isOk()) {
+				this.setCurrentIndexCheckpoint(result.val.checkpoint);
+				return Result.ok(true);
+			} else {
+				return Result.error({
+					id: 'external-ingest-error',
+					userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+				});
+			}
+		} catch (e) {
 			return Result.error({
 				id: 'external-ingest-error',
-				userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+				userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
 			});
 		}
+
 	}
 
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
@@ -434,6 +441,12 @@ export class ExternalIngestIndex extends Disposable {
 			initialDbFiles.add(uri);
 		}
 
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${initialDbFiles.size} initial file entries in database.`);
+
+		let addedFileCount = 0;
+		let updatedFileCount = 0;
+		let removedFileCount = 0;
+
 		const seen = new ResourceSet();
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 
@@ -443,6 +456,8 @@ export class ExternalIngestIndex extends Disposable {
 				Number.MAX_SAFE_INTEGER,
 				CancellationToken.None
 			);
+
+			this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${paths.length} candidate files in workspace folder ${folder.toString()}.`);
 
 			for (const uri of paths) {
 				// Skip files under code search repos
@@ -458,8 +473,12 @@ export class ExternalIngestIndex extends Disposable {
 				seen.add(uri);
 
 				const existing = this.get(uri);
-				if (!existing || existing.size !== stat.size || existing.mtime !== stat.mtime) {
+				if (!existing) {
 					await this.tryAddOrUpdateFile(uri);
+					addedFileCount++;
+				} else if (existing.size !== stat.size || existing.mtime !== stat.mtime) {
+					await this.tryAddOrUpdateFile(uri);
+					updatedFileCount++;
 				}
 			}
 		}
@@ -468,8 +487,10 @@ export class ExternalIngestIndex extends Disposable {
 		for (const uri of initialDbFiles) {
 			if (!seen.has(uri)) {
 				this.delete(uri);
+				removedFileCount++;
 			}
 		}
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Reconciled database. New: ${addedFileCount}, updated: ${updatedFileCount}, removed: ${removedFileCount}`);
 	}
 
 	private registerWatcher(): void {
