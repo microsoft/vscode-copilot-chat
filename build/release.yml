@@ -117,6 +117,17 @@ extends:
       - script: npm run build
         displayName: npm run build
 
+    postPublishSteps:
+      - task: AzureCLI@2
+        displayName: Upload source maps to CDN
+        inputs:
+          azureSubscription: 'vscode-builds-subscription'
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: npm run upload-sourcemaps
+        env:
+          AZURE_STORAGE_ACCOUNT: $(AzureStorageAccount)
+
     # testPlatforms:
     #     - name: Linux
     #       nodeVersions: [16.x]
