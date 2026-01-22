@@ -16,13 +16,9 @@ import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { isUntitledSessionId } from '../common/utils';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
-
-function isUntitledSessionId(sessionId: string): boolean {
-	return sessionId.startsWith('untitled:') || sessionId.startsWith('untitled-');
-}
-
 
 export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
@@ -74,6 +70,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return this.gitService.activeRepository.get();
 		}
 		return this._sessionRepositories.get(sessionId);
+	}
+
+	async deleteSessionRepository(sessionId: string) {
+		this._sessionRepositories.delete(sessionId);
 	}
 
 	async setSessionRepository(sessionId: string, repositoryPath: string) {

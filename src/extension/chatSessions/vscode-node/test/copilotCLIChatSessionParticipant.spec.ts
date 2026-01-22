@@ -36,6 +36,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import type { IToolsService } from '../../../tools/common/toolsService';
 import { mockLanguageModelChat } from '../../../tools/node/test/searchToolTestUtils';
+import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLISessionIsolationManager } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
@@ -57,6 +58,19 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 		CopilotCLITerminalIntegration
 	};
 });
+
+class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
+	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
+	override trackSessionWorkspaceFolder = vi.fn(async (sessionId: string, workspaceFolderUri: string) => {
+		this._sessionWorkspaceFolders.set(sessionId, vscode.Uri.file(workspaceFolderUri));
+	});
+	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string) => {
+		this._sessionWorkspaceFolders.delete(sessionId);
+	});
+	override getSessionWorkspaceFolder = vi.fn((sessionId: string) => {
+		return this._sessionWorkspaceFolders.get(sessionId);
+	});
+}
 
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
@@ -81,6 +95,9 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 	}
 	override getSessionRepository(sessionId: string): RepoContext | undefined {
 		return this._selectedRepository;
+	}
+	override deleteSessionRepository(sessionId: string): Promise<void> {
+		return Promise.resolve();
 	}
 	override getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined> {
 		return Promise.resolve(undefined);
@@ -139,6 +156,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let summarizer: ChatSummarizerProvider;
 	let isolationManager: CopilotCLISessionIsolationManager;
 	let worktree: FakeChatSessionWorktreeService;
+	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
 	let git: FakeGitService;
 	let models: FakeModels;
 	let sessionService: CopilotCLISessionService;
@@ -175,6 +193,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			override getIsolationPreference = vi.fn(() => false);
 		};
 		worktree = new FakeChatSessionWorktreeService();
+		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
 		telemetry = new NullTelemetryService();
@@ -232,6 +251,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new NullCopilotCLIAgents(),
 			sessionService,
 			worktree,
+			workspaceFolderService,
 			telemetry,
 			tools,
 			instantiationService,

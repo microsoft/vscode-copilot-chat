@@ -23,6 +23,7 @@ import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
+import { isUntitledSessionId } from '../common/utils';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { CopilotCloudGitOperationsManager } from './copilotCloudGitOperationsManager';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
@@ -960,7 +961,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const sessionId = resource ? resource.path.slice(1) : undefined;
 		return {
 			history: [],
-			...(sessionId && sessionId.startsWith('untitled-')
+			...(sessionId && isUntitledSessionId(sessionId)
 				? {
 					options: {
 						[CUSTOM_AGENTS_OPTION_GROUP_ID]:

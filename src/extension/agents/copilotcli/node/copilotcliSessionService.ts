@@ -43,7 +43,7 @@ export interface ICopilotCLISessionService {
 	onDidChangeSessions: Event<void>;
 
 	// Session metadata querying
-	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
@@ -104,16 +104,16 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
-	async getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		if (!this._getAllSessionsProgress) {
-			this._getAllSessionsProgress = this._getAllSessions(token);
+			this._getAllSessionsProgress = this._getAllSessions(filter, token);
 		}
 		return this._getAllSessionsProgress.finally(() => {
 			this._getAllSessionsProgress = undefined;
 		});
 	}
 
-	async _getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async _getAllSessions(filter: (sessionId: string) => boolean, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
@@ -122,7 +122,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
 				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
-					if (!this._sessionTracker.shouldShowSession(metadata.sessionId)) {
+					if (!filter(metadata.sessionId) && !this._sessionTracker.shouldShowSession(metadata.sessionId)) {
 						return;
 					}
 					const id = metadata.sessionId;
