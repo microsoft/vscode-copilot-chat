@@ -20,7 +20,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observable';
-import { isEqual } from '../../../util/vs/base/common/resources';
+import { extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
@@ -1298,8 +1298,26 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
+		// Apply changes
 		const sessionId = SessionIdForCLI.parse(resource);
 		await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
+
+		// Close the multi-file diff editor if it's open
+		const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
+
+		if (worktreePath) {
+			// Select the tabs to close
+			const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
+				.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
+					extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
+					extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
+
+			if (multiDiffTabToClose.length > 0) {
+				// Close the tabs
+				await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+			}
+		}
 
 		// Pick up new git state
 		copilotcliSessionItemProvider.notifySessionsChange();
