@@ -87,10 +87,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			));
 
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider));
+		chatSessionContentProvider.setSessionIdResolver(resource => sessionItemProvider.getSessionId(resource));
 		const slashCommandService = this._register(claudeAgentInstaService.createInstance(ClaudeSlashCommandService));
 		const claudeChatSessionParticipant = new ClaudeChatSessionParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider, chatSessionContentProvider, slashCommandService);
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeChatSessionParticipant.createHandler());
