@@ -772,23 +772,28 @@ describe('ChatEndpoint - Image Count Validation', () => {
 		]
 	});
 
-	it('should throw error when image count exceeds maxPromptImages', () => {
-		const modelMetadata: IChatModelInformation = {
-			...createAnthropicModelMetadata('gemini-3', 50000),
+	const createGeminiModelMetadata = (maxPromptImages: number): IChatModelInformation => {
+		const baseMetadata = createNonAnthropicModelMetadata('gemini-3');
+		return {
+			...baseMetadata,
 			capabilities: {
-				...createAnthropicModelMetadata('gemini-3', 50000).capabilities,
+				...baseMetadata.capabilities,
 				supports: {
-					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.supports,
+					...baseMetadata.capabilities.supports,
 					vision: true
 				},
 				limits: {
-					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.limits,
+					...baseMetadata.capabilities.limits,
 					vision: {
-						max_prompt_images: 2
+						max_prompt_images: maxPromptImages
 					}
 				}
 			}
 		};
+	};
+
+	it('should throw error when image count exceeds maxPromptImages', () => {
+		const modelMetadata = createGeminiModelMetadata(2);
 
 		const endpoint = new ChatEndpoint(
 			modelMetadata,
@@ -812,22 +817,7 @@ describe('ChatEndpoint - Image Count Validation', () => {
 	});
 
 	it('should allow requests within image limit', () => {
-		const modelMetadata: IChatModelInformation = {
-			...createAnthropicModelMetadata('gemini-3', 50000),
-			capabilities: {
-				...createAnthropicModelMetadata('gemini-3', 50000).capabilities,
-				supports: {
-					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.supports,
-					vision: true
-				},
-				limits: {
-					...createAnthropicModelMetadata('gemini-3', 50000).capabilities.limits,
-					vision: {
-						max_prompt_images: 5
-					}
-				}
-			}
-		};
+		const modelMetadata = createGeminiModelMetadata(5);
 
 		const endpoint = new ChatEndpoint(
 			modelMetadata,
