@@ -99,6 +99,7 @@ const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
 const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
 const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
 const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
+const SKILLS_LOCATION_KEY = 'chat.agentSkillsLocations';
 
 const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
@@ -190,7 +191,7 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		this._matchInstructionLocationsFromSkills = observableFromEvent(
 			(handleChange) => {
 				const configurationDisposable = configurationService.onDidChangeConfiguration(e => {
-					if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING)) {
+					if (e.affectsConfiguration(USE_AGENT_SKILLS_SETTING) || e.affectsConfiguration(SKILLS_LOCATION_KEY)) {
 						handleChange(e);
 					}
 				});
@@ -212,6 +213,33 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 					);
 					// List of **/skills folder URIs
 					const topLevelSkillsFolderUris = [...personalSkillFolderUris, ...workspaceSkillFolderUris];
+
+					// Get additional skill locations from config
+					const configSkillLocationUris: URI[] = [];
+					const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(SKILLS_LOCATION_KEY);
+					const userHome = this.envService.userHome;
+					const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+					if (isObject(locations)) {
+						for (const key in locations) {
+							const location = key.trim();
+							const value = locations[key];
+							if (value !== true) {
+								continue;
+							}
+							// Expand ~/ to user home directory
+							if (location.startsWith('~/')) {
+								configSkillLocationUris.push(Uri.joinPath(userHome, location.substring(2)));
+							} else if (isAbsolute(location)) {
+								configSkillLocationUris.push(URI.file(location));
+							} else {
+								// Relative path - join to each workspace folder
+								for (const workspaceFolder of workspaceFolders) {
+									configSkillLocationUris.push(Uri.joinPath(workspaceFolder, location));
+								}
+							}
+						}
+					}
+
 					return ((uri: URI) => {
 						// Check workspace and personal skill folders
 						for (const topLevelSkillFolderUri of topLevelSkillsFolderUris) {
@@ -226,6 +254,23 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 								}
 							}
 						}
+
+						// Check config-based skill locations
+						if (configSkillLocationUris.length > 0) {
+							for (const locationUri of configSkillLocationUris) {
+								if (extUriBiasedIgnorePathCase.isEqualOrParent(uri, locationUri)) {
+									// Get the path segments relative to the skill folder
+									const relativePath = extUriBiasedIgnorePathCase.relativePath(locationUri, uri);
+									if (relativePath) {
+										// The skill directory is the first path segment under the skill folder
+										const skillName = relativePath.split('/')[0];
+										const skillFolderUri = extUriBiasedIgnorePathCase.joinPath(locationUri, skillName);
+										return { skillName, skillFolderUri };
+									}
+								}
+							}
+						}
+
 						// Check extension-contributed skills
 						return this.getExtensionSkillInfo(uri);
 					});

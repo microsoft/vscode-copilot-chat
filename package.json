@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260115",
+		"vscode": "^1.109.0-20260121",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -97,6 +97,7 @@
 		"commentReveal",
 		"contribCommentThreadAdditionalMenu",
 		"contribCommentsViewThreadMenus",
+		"contribChatEditorInlineGutterMenu",
 		"documentFiltersExclusive",
 		"embeddings",
 		"findTextInFiles",
@@ -2673,7 +2674,6 @@
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
 				"enablement": "!chatSessionRequestInProgress",
-				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -3667,7 +3667,10 @@
 						"properties": {
 							"triggerType": {
 								"type": "string",
-								"enum": ["input_tokens", "tool_uses"],
+								"enum": [
+									"input_tokens",
+									"tool_uses"
+								],
 								"description": "Type of trigger for context editing"
 							},
 							"triggerValue": {
@@ -3684,7 +3687,9 @@
 							},
 							"excludeTools": {
 								"type": "array",
-								"items": { "type": "string" },
+								"items": {
+									"type": "string"
+								},
 								"description": "Tool names to exclude from clearing"
 							},
 							"clearInputs": {
@@ -3920,6 +3925,16 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.inlineEdits.diagnosticsContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.inlineEdits.chatSessionContextProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.chatSessionContextProvider.enabled%",
 						"tags": [
 							"advanced",
 							"experimental",
@@ -4236,11 +4251,6 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
-				},
-				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"group": "navigation@1",
-					"when": "resourceScheme == copilotcli-worktree-changes"
 				}
 			],
 			"explorer/context": [
@@ -4277,6 +4287,13 @@
 					"command": "github.copilot.chat.generateTests",
 					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
 					"group": "copilotGenerate@2"
+				}
+			],
+			"chat/editor/inlineGutter": [
+				{
+					"command": "github.copilot.chat.explain",
+					"when": "!github.copilot.interactiveSession.disabled",
+					"group": "2_chat@2"
 				}
 			],
 			"chat/input/editing/sessionToolbar": [
@@ -5270,6 +5287,7 @@
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
+					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
@@ -5476,7 +5494,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.4.3",
+		"tar": "^7.5.4",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
