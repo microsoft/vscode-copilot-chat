@@ -341,6 +341,7 @@ export class AnthropicMessagesProcessor {
 	private cacheReadTokens: number = 0;
 	private contextManagementResponse?: ContextManagementResponse;
 	private toolSearchRequests: number = 0;
+	private stopReason: string | undefined;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -560,8 +561,15 @@ export class AnthropicMessagesProcessor {
 						contextManagement: chunk.context_management
 					});
 				}
+				// Track stop_reason for determining finish reason in message_stop
+				if (chunk.delta?.stop_reason) {
+					this.stopReason = chunk.delta.stop_reason;
+					if (this.stopReason === 'refusal') {
+						this.logService.warn(`[messagesAPI] Message was refused by Claude`);
+					}
+				}
 				return;
-			case 'message_stop':
+			case 'message_stop': {
 				if (this.contextManagementResponse) {
 					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
 						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
@@ -581,6 +589,9 @@ export class AnthropicMessagesProcessor {
 						toolSearchRequests: this.toolSearchRequests.toString(),
 					});
 				}
+				const finishReason = this.stopReason === 'refusal'
+					? FinishedCompletionReason.ClientDone
+					: FinishedCompletionReason.Stop;
 
 				return {
 					blockFinished: true,
@@ -609,7 +620,7 @@ export class AnthropicMessagesProcessor {
 							rejected_prediction_tokens: 0,
 						},
 					},
-					finishReason: FinishedCompletionReason.Stop,
+					finishReason,
 					message: {
 						role: Raw.ChatRole.Assistant,
 						content: this.textAccumulator ? [{
@@ -628,6 +639,7 @@ export class AnthropicMessagesProcessor {
 						} : {})
 					}
 				};
+			}
 			case 'error': {
 				const errorMessage = (chunk as unknown as { error?: { message?: string } }).error?.message || 'Unknown error';
 				return onProgress({
