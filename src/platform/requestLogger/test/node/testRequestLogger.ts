@@ -122,6 +122,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 		if (this.entry.type === LoggedRequestKind.ChatMLSuccess ||
 			this.entry.type === LoggedRequestKind.ChatMLFailure ||
 			this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+
 			const metadata = {
 				model: this.entry.chatParams?.model,
 				location: this.entry.chatParams?.location,
@@ -131,9 +132,35 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 				maxResponseTokens: this.entry.chatParams?.body?.max_tokens ?? this.entry.chatParams?.body?.max_output_tokens,
 			};
 
+			// Build response data matching the real LoggedRequestInfo.toJSON() format
+			let responseData;
+			let errorInfo;
+
+			if (this.entry.type === LoggedRequestKind.ChatMLSuccess) {
+				responseData = {
+					type: 'success',
+					message: this.entry.result.value
+				};
+			} else if (this.entry.type === LoggedRequestKind.ChatMLFailure) {
+				errorInfo = {
+					type: 'failure',
+					reason: this.entry.result.reason
+				};
+			} else if (this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+				errorInfo = {
+					type: 'canceled'
+				};
+			}
+
+			const response = responseData || errorInfo ? {
+				...responseData,
+				...errorInfo
+			} : undefined;
+
 			return {
 				...baseInfo,
 				metadata,
+				response,
 				isConversationRequest: this.entry.isConversationRequest
 			};
 		}
@@ -160,7 +187,7 @@ class TestLoggedToolCall {
 		return {
 			id: this.id,
 			kind: 'toolCall',
-			name: this.name,
+			tool: this.name,
 			args: this.args,
 			time: new Date(this.time).toISOString()
 		};

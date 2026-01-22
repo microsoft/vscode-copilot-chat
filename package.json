@@ -4915,6 +4915,17 @@
 				]
 			}
 		],
+		"notebooks": [
+			{
+				"type": "copilot-chat-replay",
+				"displayName": "Copilot Chat Replay",
+				"selector": [
+					{
+						"filenamePattern": "*.chatreplay.json"
+					}
+				]
+			}
+		],
 		"views": {
 			"copilot-chat": [
 				{
