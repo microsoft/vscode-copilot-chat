@@ -24,30 +24,45 @@ import { TRAJECTORY_SCHEMA_VERSION } from '../common/trajectoryTypes';
 export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 	declare readonly _serviceBrand: undefined;
 
-	private currentTrajectory: TrajectoryBuilder | undefined;
+	private readonly trajectories = new Map<string, TrajectoryBuilder>();
+	private currentSessionId: string | undefined;
 	private subagentTrajectories = new Map<string, IAgentTrajectory>();
 
 	private readonly _onDidUpdateTrajectory = this._register(new Emitter<void>());
 	public readonly onDidUpdateTrajectory = this._onDidUpdateTrajectory.event;
 
 	public startTrajectory(sessionId: string, agentInfo: IAgentInfo): void {
-		this.currentTrajectory = new TrajectoryBuilder(sessionId, agentInfo);
+		let builder = this.trajectories.get(sessionId);
+		if (!builder) {
+			builder = new TrajectoryBuilder(sessionId, agentInfo);
+			this.trajectories.set(sessionId, builder);
+		}
+		this.currentSessionId = sessionId;
 		this._onDidUpdateTrajectory.fire();
 	}
 
+	private getCurrentTrajectoryBuilder(): TrajectoryBuilder | undefined {
+		if (!this.currentSessionId) {
+			return undefined;
+		}
+		return this.trajectories.get(this.currentSessionId);
+	}
+
 	public addSystemStep(message: string, timestamp?: string): void {
-		if (!this.currentTrajectory) {
+		const current = this.getCurrentTrajectoryBuilder();
+		if (!current) {
 			return;
 		}
-		this.currentTrajectory.addSystemStep(message, timestamp);
+		current.addSystemStep(message, timestamp);
 		this._onDidUpdateTrajectory.fire();
 	}
 
 	public addUserStep(message: string, timestamp?: string): void {
-		if (!this.currentTrajectory) {
+		const current = this.getCurrentTrajectoryBuilder();
+		if (!current) {
 			return;
 		}
-		this.currentTrajectory.addUserStep(message, timestamp);
+		current.addUserStep(message, timestamp);
 		this._onDidUpdateTrajectory.fire();
 	}
 
@@ -57,10 +72,11 @@ export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 		reasoningContent?: string,
 		timestamp?: string
 	): IAgentStepContext {
-		if (!this.currentTrajectory) {
+		const current = this.getCurrentTrajectoryBuilder();
+		if (!current) {
 			throw new Error('No active trajectory. Call startTrajectory first.');
 		}
-		const context = this.currentTrajectory.beginAgentStep(message, modelName, reasoningContent, timestamp);
+		const context = current.beginAgentStep(message, modelName, reasoningContent, timestamp);
 		return {
 			addToolCalls: (toolCalls) => context.addToolCalls(toolCalls),
 			addObservation: (results) => context.addObservation(results),
@@ -74,14 +90,14 @@ export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 	}
 
 	public getTrajectory(): IAgentTrajectory | undefined {
-		return this.currentTrajectory?.build();
+		return this.getCurrentTrajectoryBuilder()?.build();
 	}
 
 	public getAllTrajectories(): Map<string, IAgentTrajectory> {
 		const trajectories = new Map<string, IAgentTrajectory>();
-		if (this.currentTrajectory) {
-			const mainTrajectory = this.currentTrajectory.build();
-			trajectories.set(mainTrajectory.session_id, mainTrajectory);
+		for (const builder of this.trajectories.values()) {
+			const trajectory = builder.build();
+			trajectories.set(trajectory.session_id, trajectory);
 		}
 		for (const [sessionId, trajectory] of this.subagentTrajectories) {
 			trajectories.set(sessionId, trajectory);
@@ -90,17 +106,18 @@ export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 	}
 
 	public clearTrajectory(): void {
-		this.currentTrajectory = undefined;
+		this.trajectories.clear();
+		this.currentSessionId = undefined;
 		this.subagentTrajectories.clear();
 		this._onDidUpdateTrajectory.fire();
 	}
 
 	public hasActiveTrajectory(): boolean {
-		return this.currentTrajectory !== undefined;
+		return this.currentSessionId !== undefined;
 	}
 
 	public getCurrentSessionId(): string | undefined {
-		return this.currentTrajectory?.getSessionId();
+		return this.currentSessionId;
 	}
 
 	/**
@@ -249,15 +266,20 @@ class AgentStepContext implements IAgentStepContext {
 	}
 
 	public complete(): void {
-		// Finalize the step
+		// Finalize the step (cast to mutable for assignment)
+		const mutableStep = this.step as {
+			tool_calls?: IToolCall[];
+			observation?: { results: IObservationResult[] };
+			metrics?: IStepMetrics;
+		};
 		if (this.toolCalls.length > 0) {
-			this.step.tool_calls = this.toolCalls;
+			mutableStep.tool_calls = this.toolCalls;
 		}
 		if (this.observationResults.length > 0) {
-			this.step.observation = { results: this.observationResults };
+			mutableStep.observation = { results: this.observationResults };
 		}
 		if (this.metrics) {
-			this.step.metrics = this.metrics;
+			mutableStep.metrics = this.metrics;
 		}
 
 		this.onComplete(this.step);

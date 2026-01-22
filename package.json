@@ -2567,6 +2567,11 @@
 				"icon": "$(export)"
 			},
 			{
+				"command": "github.copilot.chat.debug.exportTrajectories",
+				"title": "Export Agent Trajectories",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.nes.captureExpected.start",
 				"title": "Record Expected Edit (NES)",
 				"category": "Copilot"

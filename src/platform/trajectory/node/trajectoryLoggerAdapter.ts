@@ -3,30 +3,35 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
-import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolCall } from '../common/trajectoryLogger';
-import { ITrajectoryLogger } from '../common/trajectoryLogger';
-import { LanguageModelTextPart, LanguageModelDataPart, LanguageModelPromptTsxPart } from '../../../vscodeTypes';
-import { renderDataPartToString, renderToolResultToStringNoBudget } from '../../../extension/prompt/vscode-node/requestLoggerToolResult';
+import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
 
 /**
  * Adapter that converts request logger entries to trajectory format.
  * This is a bridge between the existing logging system and the new trajectory format.
  */
-export class TrajectoryLoggerAdapter {
+export class TrajectoryLoggerAdapter extends Disposable {
 	private sessionMap = new WeakMap<CapturingToken, string>();
 	private processedEntries = new Set<string>();
+	private processedToolCalls = new Set<string>(); // Track processed tool calls by their ID
+	private lastUserMessageBySession = new Map<string, string>();
+	// Track pending step contexts by both session and request ID to handle parallel tool calls
 	private pendingStepContexts = new Map<string, IAgentStepContext>();
+	private requestToStepContext = new Map<string, { sessionId: string; context: IAgentStepContext; toolCallCount: number; processedToolCalls: number }>();
 
 	constructor(
 		private readonly requestLogger: IRequestLogger,
 		private readonly trajectoryLogger: ITrajectoryLogger
 	) {
+		super();
 		// Subscribe to request logger updates
-		this.requestLogger.onDidChangeRequests(() => {
+		this._register(this.requestLogger.onDidChangeRequests(() => {
 			this.syncTrajectories();
-		});
+		}));
 	}
 
 	/**
@@ -63,10 +68,17 @@ export class TrajectoryLoggerAdapter {
 				sessionId = this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
 				this.trajectoryLogger.startTrajectory(sessionId, {
-					name: entry.token.label,
+					name: this.extractAgentName(entry.token.label),
 					version: '1.0.0'
 				});
 			}
+
+			// Switch active session before processing the entry. This avoids the
+			// "last started wins" behavior where subagent sessions overwrite main.
+			this.trajectoryLogger.startTrajectory(sessionId, {
+				name: this.extractAgentName(entry.token.label),
+				version: '1.0.0'
+			});
 
 			await this.processEntry(entry, sessionId);
 			this.processedEntries.add(entry.id);
@@ -106,12 +118,14 @@ export class TrajectoryLoggerAdapter {
 	}
 
 	private async processSuccessfulRequest(request: LoggedRequest & { type: LoggedRequestKind.ChatMLSuccess }, sessionId: string): Promise<void> {
-		const message = Array.isArray(request.result.value) 
-			? request.result.value.join('\n') 
+		this.maybeAddUserStepFromRequest(request, sessionId);
+
+		const message = Array.isArray(request.result.value)
+			? request.result.value.join('\n')
 			: String(request.result.value);
 
 		const modelName = request.chatEndpoint.model;
-		
+
 		// Extract reasoning content from deltas if available
 		let reasoningContent: string | undefined;
 		if (request.deltas) {
@@ -140,24 +154,129 @@ export class TrajectoryLoggerAdapter {
 			stepContext.setMetrics(metrics);
 		}
 
-		// Store pending context for tool calls to attach to
-		this.pendingStepContexts.set(sessionId, stepContext);
+		// Count expected tool calls from this request
+		let toolCallCount = 0;
+		if (request.deltas) {
+			for (const delta of request.deltas) {
+				if (delta.copilotToolCalls) {
+					toolCallCount += delta.copilotToolCalls.length;
+				}
+			}
+		}
 
 		// If no tool calls expected, complete immediately
-		// Otherwise, tool calls will complete it
-		if (!request.deltas?.some(d => d.copilotToolCalls)) {
+		if (toolCallCount === 0) {
 			stepContext.complete();
-			this.pendingStepContexts.delete(sessionId);
+		} else {
+			// Store context with request ID for tool calls to attach to
+			// Use a unique request ID based on startTime
+			const requestId = `${sessionId}-${request.startTime.getTime()}`;
+			this.requestToStepContext.set(requestId, {
+				sessionId,
+				context: stepContext,
+				toolCallCount,
+				processedToolCalls: 0
+			});
+			// Also store in pendingStepContexts for backwards compatibility
+			this.pendingStepContexts.set(sessionId, stepContext);
 		}
 	}
 
+	private maybeAddUserStepFromRequest(request: LoggedRequest & { startTime: Date }, sessionId: string): void {
+		const messages = this.getChatMessagesFromRequest(request);
+		if (!Array.isArray(messages) || messages.length === 0) {
+			return;
+		}
+
+		const lastUser = this.getLastUserMessageText(messages);
+		if (!lastUser) {
+			return;
+		}
+
+		const lastKey = this.lastUserMessageBySession.get(sessionId);
+		const key = this.simpleHash(lastUser) + ':' + lastUser.length;
+		if (lastKey === key) {
+			return;
+		}
+
+		this.lastUserMessageBySession.set(sessionId, key);
+		const timestamp = request.startTime.toISOString();
+		this.trajectoryLogger.addUserStep(lastUser, timestamp);
+	}
+
+	private getChatMessagesFromRequest(request: LoggedRequest): Raw.ChatMessage[] | undefined {
+		const messages = (request as unknown as { chatParams?: { messages?: unknown } }).chatParams?.messages;
+		if (!Array.isArray(messages)) {
+			return undefined;
+		}
+		return messages as Raw.ChatMessage[];
+	}
+
+	private getLastUserMessageText(messages: Raw.ChatMessage[]): string | undefined {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const m = messages[i];
+			if (m.role !== Raw.ChatRole.User) {
+				continue;
+			}
+
+			const content = (m as unknown as { content?: unknown }).content;
+			if (typeof content === 'string') {
+				return content.trim() || undefined;
+			}
+
+			if (!Array.isArray(content)) {
+				return undefined;
+			}
+
+			const text = content
+				.map(part => {
+					const partType = (part as { type?: unknown }).type;
+					if (partType === Raw.ChatCompletionContentPartKind.Text) {
+						const t = (part as { text?: unknown }).text;
+						return typeof t === 'string' ? t : undefined;
+					}
+					return undefined;
+				})
+				.filter((t): t is string => typeof t === 'string' && t.length > 0)
+				.join('\n')
+				.trim();
+
+			return text || undefined;
+		}
+		return undefined;
+	}
+
 	private async processToolCall(entry: ILoggedToolCall, sessionId: string): Promise<void> {
-		// Get pending step context if exists
-		let stepContext = this.pendingStepContexts.get(sessionId);
-		
-		if (!stepContext) {
-			// Create a new step for this tool call
-			stepContext = this.trajectoryLogger.beginAgentStep('', undefined, 
+		// Skip already processed tool calls (prevents duplicates from multiple event fires)
+		if (this.processedToolCalls.has(entry.id)) {
+			return;
+		}
+		this.processedToolCalls.add(entry.id);
+
+		// Find the step context for this tool call
+		// Try to find by iterating request contexts for this session
+		let stepInfo: { sessionId: string; context: IAgentStepContext; toolCallCount: number; processedToolCalls: number } | undefined;
+		let requestKey: string | undefined;
+
+		for (const [key, info] of this.requestToStepContext) {
+			if (info.sessionId === sessionId) {
+				stepInfo = info;
+				requestKey = key;
+				break;
+			}
+		}
+
+		let stepContext: IAgentStepContext;
+		let shouldComplete = true;
+
+		if (stepInfo) {
+			stepContext = stepInfo.context;
+			stepInfo.processedToolCalls++;
+			// Only complete after all tool calls are processed
+			shouldComplete = stepInfo.processedToolCalls >= stepInfo.toolCallCount;
+		} else {
+			// No pending context - create a new step for this orphan tool call
+			stepContext = this.trajectoryLogger.beginAgentStep('', undefined,
 				entry.thinking?.text ? (Array.isArray(entry.thinking.text) ? entry.thinking.text.join('\n') : entry.thinking.text) : undefined);
 		}
 
@@ -165,7 +284,8 @@ export class TrajectoryLoggerAdapter {
 		const toolCall: IToolCall = {
 			tool_call_id: entry.id,
 			function_name: entry.name,
-			arguments: this.parseArguments(entry.args)
+			arguments: this.parseArguments(entry.args),
+			execution_mode: stepInfo && stepInfo.toolCallCount > 1 ? 'parallel' : undefined
 		};
 
 		stepContext.addToolCalls([toolCall]);
@@ -177,20 +297,25 @@ export class TrajectoryLoggerAdapter {
 			content
 		};
 
-		// Check if this is a subagent tool call
-		const toolMetadata = (entry as any).toolMetadata;
-		if (toolMetadata && entry.name === 'search_subagent') {
+		// Add observation first so subagent references merge into the same result.
+		stepContext.addObservation([observationResult]);
+
+		// Check if this is a subagent tool call (runSubagent)
+		if (entry.name === 'runSubagent') {
 			// This is a subagent invocation - add subagent reference
-			// The subagent's own trajectory should be registered separately
 			stepContext.addSubagentReference(entry.id, {
-				session_id: `subagent-${entry.id}`,
-				extra: toolMetadata
+				session_id: `subagent-${entry.id}`
 			});
 		}
 
-		stepContext.addObservation([observationResult]);
-		stepContext.complete();
-		this.pendingStepContexts.delete(sessionId);
+		// Only complete when all tool calls from this request are processed
+		if (shouldComplete) {
+			stepContext.complete();
+			if (requestKey) {
+				this.requestToStepContext.delete(requestKey);
+			}
+			this.pendingStepContexts.delete(sessionId);
+		}
 	}
 
 	private parseArguments(args: unknown): Record<string, unknown> {
@@ -214,20 +339,83 @@ export class TrajectoryLoggerAdapter {
 			if (content instanceof LanguageModelTextPart) {
 				parts.push(content.value);
 			} else if (content instanceof LanguageModelDataPart) {
-				parts.push(renderDataPartToString(content));
+				parts.push(this.renderDataPartToString(content));
 			} else if (content instanceof LanguageModelPromptTsxPart) {
-				parts.push(await renderToolResultToStringNoBudget(content));
+				parts.push(this.renderPromptTsxPartToStringNoBudget(content));
 			}
 		}
 
 		return parts.join('\n');
 	}
 
+	private renderPromptTsxPartToStringNoBudget(part: LanguageModelPromptTsxPart): string {
+		// Best-effort: keep the structured payload for later inspection without
+		// depending on extension-layer prompt rendering helpers.
+		try {
+			return JSON.stringify(part.value, null, 2);
+		} catch {
+			return String(part.value);
+		}
+	}
+
+	private renderDataPartToString(part: LanguageModelDataPart): string {
+		const mimeType = typeof part.mimeType === 'string' ? part.mimeType : '';
+		const isImage = mimeType.startsWith('image/');
+
+		if (isImage) {
+			const base64 = Buffer.from(part.data).toString('base64');
+			return `data:${mimeType};base64,${base64}`;
+		}
+
+		try {
+			return new TextDecoder().decode(part.data);
+		} catch {
+			return `<decode error: ${part.data.length} bytes>`;
+		}
+	}
+
 	private generateSessionId(label: string): string {
+		// Create a short hash from the label for uniqueness
+		const hash = this.simpleHash(label);
+		// Truncate and sanitize the label to create a readable prefix
 		const sanitized = label.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '');
-		return `${sanitized}-${Date.now()}`;
+			.replace(/^-+|-+$/g, '')
+			.substring(0, 30); // Limit to 30 chars for readability
+		return `${sanitized}-${hash}-${Date.now()}`;
+	}
+
+	private simpleHash(str: string): string {
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			const char = str.charCodeAt(i);
+			hash = ((hash << 5) - hash) + char;
+			hash = hash & hash; // Convert to 32bit integer
+		}
+		return Math.abs(hash).toString(36);
+	}
+
+	/**
+	 * Extract a meaningful agent name from a label or prompt.
+	 * For subagent prompts, extract the description or first meaningful line.
+	 */
+	private extractAgentName(label: string): string {
+		const normalizedLabel = label.trim().replace(/\s+/g, ' ');
+		// If it looks like a subagent prompt (starts with "You are" or similar)
+		if (normalizedLabel.startsWith('You are editing') || normalizedLabel.startsWith('You are ')) {
+			// Try to extract a meaningful name from the first line or task description
+			const firstLine = normalizedLabel.split('\n')[0];
+			if (firstLine.length > 80) {
+				return 'subagent-task';
+			}
+			return firstLine.substring(0, 80);
+		}
+		// If it's a short label, use it directly
+		if (normalizedLabel.length <= 80) {
+			return normalizedLabel;
+		}
+		// Otherwise truncate
+		return normalizedLabel.substring(0, 77) + '...';
 	}
 
 	/**

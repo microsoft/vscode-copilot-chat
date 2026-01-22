@@ -196,3 +196,8 @@ export const TRAJECTORY_SCHEMA_VERSION = 'VSCode-Copilot-Trajectory-v1.0';
  * File extension for trajectory files
  */
 export const TRAJECTORY_FILE_EXTENSION = '.trajectory.json';
+
+/**
+ * File extension for a trajectory bundle file (contains multiple trajectories).
+ */
+export const TRAJECTORY_BUNDLE_FILE_EXTENSION = '.trajectory.bundle.json';

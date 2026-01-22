@@ -6,8 +6,7 @@
 import { LanguageModelTextPart } from '../../../vscodeTypes';
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
-import { IAgentInfo, IObservationResult, IStepMetrics, IToolCall } from '../common/trajectoryLogger';
-import { ITrajectoryLogger } from '../common/trajectoryLogger';
+import { IAgentInfo, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
 
 /**
  * Integrates the trajectory logger with the existing request logger.
@@ -44,7 +43,7 @@ export class TrajectoryLoggerIntegration {
 	 */
 	private processRequestLogs(): void {
 		const requests = this.requestLogger.getRequests();
-		
+
 		// Process in chronological order
 		for (const logEntry of requests) {
 			this.processLogEntry(logEntry);
@@ -86,7 +85,8 @@ export class TrajectoryLoggerIntegration {
 		// Only process successful requests for now
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
 			const modelName = entry.chatEndpoint.model;
-			const message = Array.isArray(entry.result.value) ? entry.result.value.join('\n') : entry.result.value.toString();
+			const resultValue = entry.result.value;
+			const message = Array.isArray(resultValue) ? resultValue.join('\n') : String(resultValue);
 
 			// Create an agent step
 			const stepContext = this.trajectoryLogger.beginAgentStep(message, modelName);

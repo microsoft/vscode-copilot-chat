@@ -3,16 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Event } from '../../../util/vs/base/common/event';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Event } from '../../../util/vs/base/common/event';
 import type {
 	IAgentInfo,
 	IAgentTrajectory,
 	IObservationResult,
 	IStepMetrics,
 	ISubagentTrajectoryRef,
-	IToolCall
+	IToolCall,
+	ITrajectoryStep
 } from './trajectoryTypes';
+
+export type {
+	IAgentInfo,
+	IAgentTrajectory,
+	IObservationResult,
+	IStepMetrics,
+	ISubagentTrajectoryRef,
+	IToolCall,
+	ITrajectoryStep
+};
 
 /**
  * Service for building and managing agent trajectories.
