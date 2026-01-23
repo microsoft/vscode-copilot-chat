@@ -277,7 +277,8 @@ suite('PlanAgentProvider', () => {
 		const toolsMatch = content.match(/tools: \[([^\]]+)\]/);
 		assert.ok(toolsMatch, 'Tools list not found in agent content');
 		const toolsSection = toolsMatch[1];
-		const searchSubagentCount = (toolsSection.match(/'search_subagent'/g) || []).length;
+		// Match both single and double quotes for robustness
+		const searchSubagentCount = (toolsSection.match(/['"']search_subagent['"']/g) || []).length;
 		assert.equal(searchSubagentCount, 1, 'search_subagent tool should appear only once after deduplication');
 
 		// Should contain the other tool
