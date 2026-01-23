@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { FileStat, FileSystemWatcher } from 'vscode';
+import { basename, dirname } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IFileSystemService } from '../../common/fileSystemService';
 import { FileType } from '../../common/fileTypes';
@@ -75,7 +76,8 @@ export class MockFileSystemService implements IFileSystemService {
 			return { type: FileType.File as unknown as FileType, ctime: Date.now() - 1000, mtime, size: contents.length };
 		}
 		if (this.mockDirs.has(uriString)) {
-			return { type: FileType.Directory as unknown as FileType, ctime: Date.now() - 1000, mtime: Date.now(), size: 0 };
+			const mtime = this.mockMtimes.get(uriString) ?? Date.now();
+			return { type: FileType.Directory as unknown as FileType, ctime: Date.now() - 1000, mtime, size: 0 };
 		}
 		throw new Error('ENOENT');
 	}
@@ -86,19 +88,26 @@ export class MockFileSystemService implements IFileSystemService {
 
 	async createDirectory(uri: URI): Promise<void> {
 		const uriString = uri.toString();
+
+		// Recursively ensure parent directories exist first
+		const parentUri = dirname(uri);
+		if (parentUri && parentUri.toString() !== uriString) {
+			if (!this.mockDirs.has(parentUri.toString())) {
+				await this.createDirectory(parentUri);
+			}
+
+			const entries = this.mockDirs.get(parentUri.toString())!;
+			const bname = basename(uri);
+			if (!entries.find(e => e[0] === bname)) {
+				entries.push([bname, FileType.Directory]);
+			}
+		}
+
 		// Mark as directory by adding empty entry list
 		if (!this.mockDirs.has(uriString)) {
 			this.mockDirs.set(uriString, []);
-		}
-
-		// Add this directory to its parent's listing
-		const parentUri = uriString.substring(0, uriString.lastIndexOf('/'));
-		if (parentUri && this.mockDirs.has(parentUri)) {
-			const entries = this.mockDirs.get(parentUri)!;
-			const dirName = uriString.substring(uriString.lastIndexOf('/') + 1);
-			if (!entries.find(e => e[0] === dirName)) {
-				entries.push([dirName, FileType.Directory]);
-			}
+			// Store creation time for stat() calls
+			this.mockMtimes.set(uriString, Date.now());
 		}
 	}
 
@@ -106,6 +115,8 @@ export class MockFileSystemService implements IFileSystemService {
 		const uriString = uri.toString();
 		const text = new TextDecoder().decode(content);
 		this.mockFiles.set(uriString, text);
+		// Store write time for stat() calls
+		this.mockMtimes.set(uriString, Date.now());
 
 		// add the file to the mock directory listing of its parent directory
 		const parentUri = uriString.substring(0, uriString.lastIndexOf('/'));
@@ -126,6 +137,13 @@ export class MockFileSystemService implements IFileSystemService {
 		this.mockDirs.delete(uriString);
 		this.mockErrors.delete(uriString);
 		this.mockMtimes.delete(uriString);
+
+		const parentUri = dirname(uri);
+		if (parentUri && this.mockDirs.has(parentUri.toString())) {
+			const entries = this.mockDirs.get(parentUri.toString())!;
+			const bname = basename(uri);
+			this.mockDirs.set(parentUri.toString(), entries.filter(e => e[0] !== bname));
+		}
 	}
 
 	async rename(oldURI: URI, newURI: URI, options?: { overwrite?: boolean }): Promise<void> {

@@ -3904,6 +3904,24 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.agent.largeToolResultsToDisk.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agent.largeToolResultsToDisk.thresholdBytes": {
+						"type": "number",
+						"default": 8192,
+						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.thresholdBytes%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.instantApply.shortContextModelName": {
 						"type": "string",
 						"default": "gpt-4o-instant-apply-full-ft-v66-short",

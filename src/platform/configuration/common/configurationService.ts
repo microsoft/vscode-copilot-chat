@@ -699,6 +699,16 @@ export namespace ConfigKey {
 		export const ChatSessionContextProvider = defineSetting<boolean>('chat.inlineEdits.chatSessionContextProvider.enabled', ConfigType.ExperimentBased, false);
 		export const Gemini3MultiReplaceString = defineSetting<boolean>('chat.edits.gemini3MultiReplaceString', ConfigType.ExperimentBased, false);
 		export const AgentOmitFileAttachmentContents = defineSetting<boolean>('chat.agent.omitFileAttachmentContents', ConfigType.ExperimentBased, false);
+		/**
+		 * When enabled, large tool results (above the threshold in bytes) are written to disk
+		 * instead of being included directly in the prompt. This helps manage context window usage.
+		 */
+		export const LargeToolResultsToDiskEnabled = defineSetting<boolean>('chat.agent.largeToolResultsToDisk.enabled', ConfigType.ExperimentBased, false);
+		/**
+		 * The size threshold in bytes above which tool results are written to disk.
+		 * Only applies when LargeToolResultsToDiskEnabled is true.
+		 */
+		export const LargeToolResultsToDiskThreshold = defineSetting<number>('chat.agent.largeToolResultsToDisk.thresholdBytes', ConfigType.ExperimentBased, 8 * 1024);
 
 		/** Context editing configuration for Anthropic Messages API */
 		export const AnthropicContextEditingConfig = defineSetting<{

@@ -19,6 +19,7 @@ import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 
 export function checkCancellation(token: CancellationToken): void {
@@ -104,12 +105,17 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
 	const normalizedUri = normalizePath(uri);
 
-	if (!workspaceService.getWorkspaceFolder(normalizedUri) && uri.scheme !== Schemas.untitled && !await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+	// Allow files in workspace, untitled, external instructions, or session resources
+	if (!workspaceService.getWorkspaceFolder(normalizedUri) &&
+		uri.scheme !== Schemas.untitled &&
+		!await customInstructionsService.isExternalInstructionsFile(normalizedUri) &&
+		!diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
 			throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
@@ -130,10 +136,11 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 
 	const normalizedUri = normalizePath(uri);
 
-	// Not external if: in workspace, untitled, instructions file, or open in editor
+	// Not external if: in workspace, untitled, instructions file, session resource, or open in editor
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
@@ -141,6 +148,9 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+		return false;
+	}
+	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
