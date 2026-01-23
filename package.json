@@ -1856,7 +1856,7 @@
 									},
 									"url": {
 										"type": "string",
-										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
 									},
 									"toolCalling": {
 										"type": "boolean",
@@ -1945,7 +1945,7 @@
 									},
 									"url": {
 										"type": "string",
-										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
 									},
 									"toolCalling": {
 										"type": "boolean",
@@ -3415,15 +3415,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.useResponsesApi": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useResponsesApi%",
 						"tags": [
 							"experimental",
 							"onExp"
