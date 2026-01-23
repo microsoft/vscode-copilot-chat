@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { URI } from '../../../../util/vs/base/common/uri';
 
