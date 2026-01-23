@@ -9,20 +9,32 @@ import { ChatReplayExport, ExportedLogEntry, ExportedPrompt, getChatMLSuccessMes
 /** The notebook type identifier for chat replay notebooks */
 export const CHAT_REPLAY_NOTEBOOK_TYPE = 'copilot-chat-replay';
 
-/** Cell metadata for collapsible cells */
+/** Cell metadata for collapsible and read-only cells */
 interface CellMetadata {
 	collapsed?: boolean;
+	editable?: boolean;
 }
 
 /**
  * Creates a notebook cell with optional collapse metadata.
+ * All cells are read-only since this is a replay view.
  */
-function createCell(content: string, collapsed: boolean): NotebookCellData {
-	const cell = new NotebookCellData(NotebookCellKind.Markup, content, 'markdown');
+function createCell(content: string, collapsed: boolean, kind: NotebookCellKind = NotebookCellKind.Markup, language: string = 'markdown'): NotebookCellData {
+	const cell = new NotebookCellData(kind, content, language);
+	const metadata: CellMetadata = { editable: false };
 	if (collapsed) {
-		cell.metadata = { collapsed: true } satisfies CellMetadata;
+		metadata.collapsed = true;
 	}
+	cell.metadata = metadata;
 	return cell;
+}
+
+/** Result from formatting a log entry - can be markdown or code cell */
+interface FormattedCell {
+	content: string;
+	collapsed: boolean;
+	kind?: NotebookCellKind;
+	language?: string;
 }
 
 /**
@@ -30,7 +42,7 @@ function createCell(content: string, collapsed: boolean): NotebookCellData {
  *
  * Converts exported chat logs into a notebook format where:
  * - User queries are displayed as markdown cells with ### User header
- * - Log entries (elements, requests, tool calls) are displayed as markdown cells with #### headers
+ * - Log entries (elements, tool calls) are displayed as markdown cells with #### headers
  *
  * This provides a read-only view of the chat log for review and debugging.
  */
@@ -40,24 +52,33 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 		const text = new TextDecoder().decode(content);
 		const cells: NotebookCellData[] = [];
 
+		// Handle empty file
+		if (!text.trim()) {
+			cells.push(createCell(
+				'### Empty Chat Replay File\n\nThis file is empty. Export a chat session to populate it.',
+				false
+			));
+			return new NotebookData(cells);
+		}
+
 		try {
-			const parsed = JSON.parse(text) as ChatReplayExport;
+			const parsed = JSON.parse(text);
 
-			// Add header cell with export metadata (collapsed)
-			cells.push(createCell(this.formatExportHeader(parsed), true));
+			// Detect format: single prompt export vs full chat replay export
+			// Single prompt has 'prompt' and 'logs' at root, full export has 'prompts' array
+			if (this.isSinglePromptExport(parsed)) {
+				// Single prompt export - no header, just the prompt content
+				this.addPromptCells(cells, parsed as ExportedPrompt);
+			} else {
+				// Full chat replay export
+				const exportData = parsed as ChatReplayExport;
 
-			// Process each prompt and its logs
-			for (const prompt of parsed.prompts) {
-				// Add user query cell (not collapsed - user content)
-				cells.push(createCell(this.formatUserQuery(prompt), false));
+				// Add header cell with export metadata (collapsed)
+				cells.push(createCell(this.formatExportHeader(exportData), true));
 
-				// Add cells for each log entry
-				for (const log of prompt.logs) {
-					const result = this.formatLogEntry(log);
-					if (result) {
-						// Response content is not collapsed, everything else is
-						cells.push(createCell(result.content, result.collapsed));
-					}
+				// Process each prompt and its logs
+				for (const prompt of exportData.prompts) {
+					this.addPromptCells(cells, prompt);
 				}
 			}
 		} catch (error) {
@@ -69,6 +90,38 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 		}
 
 		return new NotebookData(cells);
+	}
+
+	/**
+	 * Detect if the parsed JSON is a single prompt export (has 'prompt' and 'logs' at root)
+	 * vs a full chat replay export (has 'prompts' array).
+	 */
+	private isSinglePromptExport(parsed: unknown): parsed is ExportedPrompt {
+		return (
+			typeof parsed === 'object' &&
+			parsed !== null &&
+			'prompt' in parsed &&
+			'logs' in parsed &&
+			Array.isArray((parsed as ExportedPrompt).logs)
+		);
+	}
+
+	/**
+	 * Add cells for a single prompt and its log entries.
+	 */
+	private addPromptCells(cells: NotebookCellData[], prompt: ExportedPrompt): void {
+		// Add user query cell (not collapsed - user content)
+		cells.push(createCell(this.formatUserQuery(prompt), false));
+
+		// Add cells for each log entry
+		for (const log of prompt.logs) {
+			const results = this.formatLogEntry(log);
+			if (results) {
+				for (const result of results) {
+					cells.push(createCell(result.content, result.collapsed, result.kind, result.language));
+				}
+			}
+		}
 	}
 
 	serializeNotebook(_data: NotebookData, _token: CancellationToken): Uint8Array {
@@ -100,34 +153,81 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 	}
 
 	/**
-	 * Format a log entry and return both content and whether it should be collapsed.
+	 * Format a log entry and return an array of cells (content and collapse state).
+	 * Returns an array to support adding request context cells before response cells.
 	 */
-	private formatLogEntry(log: ExportedLogEntry): { content: string; collapsed: boolean } | undefined {
+	private formatLogEntry(log: ExportedLogEntry): FormattedCell[] | undefined {
 		switch (log.kind) {
 			case 'element':
-				return { content: this.formatElementEntry(log), collapsed: true };
+				return [{ content: this.formatElementEntry(log), collapsed: true }];
 			case 'request': {
 				// Check for content to display directly:
 				// 1. MarkdownContentRequest entries have a 'content' field
 				// 2. ChatMLSuccess entries have response.message
-				if (log.content !== undefined) {
+				if (log.content !== undefined && log.content.trim()) {
 					// This is user-facing response content - not collapsed
-					return { content: log.content, collapsed: false };
+					return [{ content: log.content, collapsed: false }];
 				}
 				// Check for ChatMLSuccess response with message using type guard
 				if (isChatMLSuccessEntry(log) && isChatMLSuccessResponse(log.response)) {
-					// This is user-facing response content - not collapsed
-					return { content: getChatMLSuccessMessage(log.response), collapsed: false };
+					const cells: FormattedCell[] = [];
+					// Add the request metadata in a collapsed markdown cell
+					cells.push({ content: this.formatRequestMetadataCell(log), collapsed: true });
+					// Add the request messages in a collapsed JSON code cell
+					if (log.requestMessages?.messages && log.requestMessages.messages.length > 0) {
+						// Format so first line shows '{ "requestMessages": [' for better collapsed preview
+						// (collapsed cells show only the first line, and default JSON.stringify puts '{' alone)
+						const innerJson = JSON.stringify(log.requestMessages.messages, null, 2);
+						const messagesStr = `{ "requestMessages": ${innerJson.replace(/\n/g, '\n  ')} }`;
+						cells.push({ content: messagesStr, collapsed: true, kind: NotebookCellKind.Code, language: 'json' });
+					}
+					// Add response content only if non-empty
+					const responseMessage = getChatMLSuccessMessage(log.response);
+					if (responseMessage.trim()) {
+						cells.push({ content: responseMessage, collapsed: false });
+					}
+					return cells;
 				}
-				return { content: this.formatRequestEntry(log), collapsed: true };
+				return [{ content: this.formatRequestEntry(log), collapsed: true }];
 			}
 			case 'toolCall':
-				return { content: this.formatToolCallEntry(log), collapsed: true };
+				return [{ content: this.formatToolCallEntry(log), collapsed: true }];
 			case 'error':
-				return { content: this.formatErrorEntry(log), collapsed: true };
+				return [{ content: this.formatErrorEntry(log), collapsed: true }];
 			default:
 				return undefined;
 		}
+	}
+
+	/**
+	 * Format the request metadata for a ChatMLSuccess entry as a collapsed markdown cell.
+	 */
+	private formatRequestMetadataCell(log: ExportedLogEntry): string {
+		const lines: string[] = [
+			`#### Request: ${log.name ?? log.type ?? 'Unknown'}`,
+			'',
+		];
+
+		const metadata = log.metadata;
+		if (metadata) {
+			if (metadata.model) {
+				lines.push(`**Model:** ${metadata.model}`);
+			}
+			if (metadata.duration !== undefined) {
+				lines.push(`**Duration:** ${metadata.duration.toLocaleString()}ms`);
+			}
+			if (metadata.usage) {
+				const usage = metadata.usage;
+				if (usage.prompt_tokens !== undefined) {
+					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString()}`);
+				}
+				if (usage.completion_tokens !== undefined) {
+					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString()}`);
+				}
+			}
+		}
+
+		return lines.join('\n');
 	}
 
 	private formatElementEntry(log: ExportedLogEntry): string {

@@ -77,22 +77,22 @@ describe('ChatReplayNotebookSerializer', () => {
 				expect(cell.languageId).toBe('markdown');
 			}
 
-			// First cell: export header (collapsed)
+			// First cell: export header (collapsed, read-only)
 			expect(notebookData.cells[0].value).toContain('## Chat Replay Export');
 			expect(notebookData.cells[0].value).toContain('**Total Prompts:** 1');
-			expect(notebookData.cells[0].metadata).toEqual({ collapsed: true });
+			expect(notebookData.cells[0].metadata).toEqual({ editable: false, collapsed: true });
 
-			// Second cell: user query (not collapsed - user content)
+			// Second cell: user query (not collapsed, read-only)
 			expect(notebookData.cells[1].value).toBe('### User\n\ncreate a hello world file');
-			expect(notebookData.cells[1].metadata).toBeUndefined();
+			expect(notebookData.cells[1].metadata).toEqual({ editable: false });
 
-			// Third cell: tool call (collapsed)
+			// Third cell: tool call (collapsed, read-only)
 			expect(notebookData.cells[2].value).toContain('#### Tool Call: create_file');
-			expect(notebookData.cells[2].metadata).toEqual({ collapsed: true });
+			expect(notebookData.cells[2].metadata).toEqual({ editable: false, collapsed: true });
 
-			// Fourth cell: assistant response - should be EXACTLY the content shown to user (not collapsed)
+			// Fourth cell: assistant response - should be EXACTLY the content shown to user (not collapsed, read-only)
 			expect(notebookData.cells[3].value).toBe('done!');
-			expect(notebookData.cells[3].metadata).toBeUndefined();
+			expect(notebookData.cells[3].metadata).toEqual({ editable: false });
 		});
 
 		it('displays ChatMLSuccess response.message as plain markdown (not in details tag)', async () => {
@@ -139,17 +139,98 @@ describe('ChatReplayNotebookSerializer', () => {
 				undefined as unknown as CancellationToken
 			);
 
-			// Should have: header cell, user query cell, response cell
-			expect(notebookData.cells.length).toBe(3);
+			// Should have: header cell, user query cell, request metadata cell, response cell
+			expect(notebookData.cells.length).toBe(4);
 
-			// Third cell: model response - should be the message directly, NOT wrapped in details tag (not collapsed)
-			const responseCell = notebookData.cells[2];
+			// Third cell: request metadata cell (collapsed, read-only)
+			const metadataCell = notebookData.cells[2];
+			expect(metadataCell.kind).toBe(NotebookCellKind.Markup);
+			expect(metadataCell.value).toContain('#### Request:');
+			expect(metadataCell.metadata).toEqual({ editable: false, collapsed: true });
+
+			// Fourth cell: model response - should be the message directly, NOT wrapped in details tag (not collapsed, read-only)
+			const responseCell = notebookData.cells[3];
 			expect(responseCell.value).toBe('Here is the model response!');
 			// Ensure it's NOT in a details tag
 			expect(responseCell.value).not.toContain('<details>');
 			expect(responseCell.value).not.toContain('Response');
-			// Not collapsed since it's user-facing response
-			expect(responseCell.metadata).toBeUndefined();
+			// Not collapsed since it's user-facing response, but still read-only
+			expect(responseCell.metadata).toEqual({ editable: false });
+		});
+
+		it('adds collapsed request metadata and JSON code cell before ChatMLSuccess response when requestMessages exist', async () => {
+			// When a ChatMLSuccess entry has requestMessages, we should show:
+			// 1. A collapsed markdown cell with metadata
+			// 2. A collapsed JSON code cell with the request messages
+			// 3. The response cell
+			const exportData = {
+				exportedAt: new Date().toISOString(),
+				totalPrompts: 1,
+				totalLogEntries: 1,
+				prompts: [{
+					prompt: 'test query',
+					logCount: 1,
+					logs: [{
+						id: 'req-1',
+						kind: 'request',
+						name: 'panel/editAgent',
+						type: 'ChatMLSuccess',
+						metadata: {
+							model: 'gpt-4',
+							duration: 1500,
+							usage: {
+								prompt_tokens: 800,
+								completion_tokens: 200
+							}
+						},
+						requestMessages: {
+							messages: [
+								{ role: 'system', content: 'You are a helpful assistant.' },
+								{ role: 'user', content: 'test query' }
+							]
+						},
+						response: {
+							type: 'success',
+							message: 'Here is the model response!'
+						}
+					}]
+				}]
+			};
+
+			const jsonContent = JSON.stringify(exportData, null, 2);
+			const notebookData = serializer.deserializeNotebook(
+				new TextEncoder().encode(jsonContent),
+				undefined as unknown as CancellationToken
+			);
+
+			// Should have: header cell, user query cell, request metadata cell, request messages JSON cell, response cell
+			expect(notebookData.cells.length).toBe(5);
+
+			// Third cell: request metadata cell (collapsed markdown, read-only)
+			const metadataCell = notebookData.cells[2];
+			expect(metadataCell.kind).toBe(NotebookCellKind.Markup);
+			expect(metadataCell.languageId).toBe('markdown');
+			expect(metadataCell.value).toContain('#### Request: panel/editAgent');
+			expect(metadataCell.value).toContain('**Model:** gpt-4');
+			expect(metadataCell.value).toContain('**Duration:** 1,500ms');
+			expect(metadataCell.value).toContain('**Prompt Tokens:** 800');
+			expect(metadataCell.value).toContain('**Completion Tokens:** 200');
+			expect(metadataCell.metadata).toEqual({ editable: false, collapsed: true });
+
+			// Fourth cell: request messages JSON code cell (collapsed, read-only)
+			// Wrapped in { "requestMessages": [...] } so collapsed preview shows "requestMessages" instead of "["
+			const messagesCell = notebookData.cells[3];
+			expect(messagesCell.kind).toBe(NotebookCellKind.Code);
+			expect(messagesCell.languageId).toBe('json');
+			expect(messagesCell.value).toContain('"requestMessages":');
+			expect(messagesCell.value).toContain('You are a helpful assistant.');
+			expect(messagesCell.value).toContain('test query');
+			expect(messagesCell.metadata).toEqual({ editable: false, collapsed: true });
+
+			// Fifth cell: model response - should be the message directly (not collapsed, read-only)
+			const responseCell = notebookData.cells[4];
+			expect(responseCell.value).toBe('Here is the model response!');
+			expect(responseCell.metadata).toEqual({ editable: false });
 		});
 
 		it('creates notebook cells for multiple prompts with mixed entry types', async () => {
@@ -196,13 +277,13 @@ describe('ChatReplayNotebookSerializer', () => {
 			// Expected: header + (user1 + tool1) + (user2 + tool2 + request2) = 6 cells
 			expect(notebookData.cells.length).toBe(6);
 
-			// Verify first prompt user cell (not collapsed)
+			// Verify first prompt user cell (not collapsed, read-only)
 			expect(notebookData.cells[1].value).toBe('### User\n\nwhat files are in this directory?');
-			expect(notebookData.cells[1].metadata).toBeUndefined();
+			expect(notebookData.cells[1].metadata).toEqual({ editable: false });
 
-			// Verify second prompt user cell (not collapsed)
+			// Verify second prompt user cell (not collapsed, read-only)
 			expect(notebookData.cells[3].value).toBe('### User\n\nread the README file');
-			expect(notebookData.cells[3].metadata).toBeUndefined();
+			expect(notebookData.cells[3].metadata).toEqual({ editable: false });
 		});
 
 		it('handles entries without capturing token gracefully', async () => {
@@ -282,6 +363,74 @@ describe('ChatReplayNotebookSerializer', () => {
 
 			expect(notebookData.cells.length).toBe(1);
 			expect(notebookData.cells[0].value).toContain('### Error Parsing Chat Replay');
+		});
+
+		it('handles empty file with informative message', () => {
+			const notebookData = serializer.deserializeNotebook(
+				new TextEncoder().encode(''),
+				undefined as unknown as CancellationToken
+			);
+
+			expect(notebookData.cells.length).toBe(1);
+			expect(notebookData.cells[0].value).toContain('### Empty Chat Replay File');
+			expect(notebookData.cells[0].value).toContain('This file is empty');
+		});
+
+		it('handles whitespace-only file with informative message', () => {
+			const notebookData = serializer.deserializeNotebook(
+				new TextEncoder().encode('   \n\t  \n  '),
+				undefined as unknown as CancellationToken
+			);
+
+			expect(notebookData.cells.length).toBe(1);
+			expect(notebookData.cells[0].value).toContain('### Empty Chat Replay File');
+		});
+
+		it('handles single prompt export format (without prompts array wrapper)', () => {
+			// Single prompt exports have the prompt data directly at root level,
+			// without the ChatReplayExport wrapper (no exportedAt, totalPrompts, prompts array)
+			const singlePromptExport = {
+				prompt: 'can you make the notebook read-only',
+				promptId: '7d76a580-prompt',
+				hasSeen: false,
+				logCount: 2,
+				logs: [
+					{
+						id: 'tool-1',
+						kind: 'toolCall',
+						tool: 'read_file',
+						args: { path: '/test.ts' },
+						response: ['file contents']
+					},
+					{
+						id: 'req-1',
+						kind: 'request',
+						type: 'MarkdownContentRequest',
+						content: 'Done!'
+					}
+				]
+			};
+
+			const jsonContent = JSON.stringify(singlePromptExport, null, 2);
+			const notebookData = serializer.deserializeNotebook(
+				new TextEncoder().encode(jsonContent),
+				undefined as unknown as CancellationToken
+			);
+
+			// Should have: user query cell, tool call cell, response cell (NO header cell)
+			expect(notebookData.cells.length).toBe(3);
+
+			// First cell: user query (no export header for single prompts)
+			expect(notebookData.cells[0].value).toBe('### User\n\ncan you make the notebook read-only');
+			expect(notebookData.cells[0].metadata).toEqual({ editable: false });
+
+			// Second cell: tool call (collapsed, read-only)
+			expect(notebookData.cells[1].value).toContain('#### Tool Call: read_file');
+			expect(notebookData.cells[1].metadata).toEqual({ editable: false, collapsed: true });
+
+			// Third cell: response (not collapsed, read-only)
+			expect(notebookData.cells[2].value).toBe('Done!');
+			expect(notebookData.cells[2].metadata).toEqual({ editable: false });
 		});
 	});
 

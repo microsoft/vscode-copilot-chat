@@ -66,7 +66,7 @@ export class ChatReplayContribution extends Disposable {
 		this._register(workspace.onDidOpenNotebookDocument(notebook => {
 			if (notebook.notebookType === CHAT_REPLAY_NOTEBOOK_TYPE) {
 				// Small delay to ensure the editor is ready to receive commands
-				setTimeout(() => this.collapseCellsIfNeeded(notebook), 100);
+				setTimeout(() => this.collapseCellsIfNeeded(notebook), 1000);
 			}
 		}));
 
