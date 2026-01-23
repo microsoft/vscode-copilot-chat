@@ -1459,6 +1459,10 @@
 				"when": "config.chat.agent.enabled",
 				"commands": [
 					{
+						"name": "compact",
+						"description": "%copilot.agent.compact.description%"
+					},
+					{
 						"name": "error",
 						"description": "Make a model request which will result in an error",
 						"when": "github.copilot.chat.debug"
