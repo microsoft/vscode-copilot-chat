@@ -84,7 +84,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			// Single folder - use its slug directly
 			slugs.push(this._computeFolderSlug(folders[0]));
 		} else {
-			// Multi-root or no folder - include all folder slugs and the no-project slug
+			// Multi-root or no folder - add the no-project slug
 			slugs.push('-');
 		}
 
