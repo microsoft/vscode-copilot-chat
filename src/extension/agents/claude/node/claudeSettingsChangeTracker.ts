@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -70,7 +71,7 @@ export class ClaudeSettingsChangeTracker {
 		try {
 			const entries = await this.fileSystemService.readDirectory(dir);
 			for (const [name, type] of entries) {
-				if (type === 1 /* FileType.File */) {
+				if (type & FileType.File) {
 					if (!extension || name.endsWith(extension)) {
 						files.push(URI.joinPath(dir, name));
 					}
