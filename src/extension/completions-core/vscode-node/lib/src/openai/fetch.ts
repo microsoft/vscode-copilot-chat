@@ -919,7 +919,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				const choice = createAPIChoice(
 					chunkIdx,
 					completion.accumulator.responseSoFar,
-					completion.accumulator.finishReason ?? 'stop', // Matches original SSEProcessor behavior: convertToAPIJsonData defaults to 'stop'
+					completion.accumulator.finishReason ?? 'DONE', // Matches original SSEProcessor behavior: convertToAPIJsonData defaults to 'stop'
 					completion.accumulator,
 					false
 				);
