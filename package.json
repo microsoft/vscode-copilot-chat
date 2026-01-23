@@ -823,10 +823,6 @@
 							"items": {
 								"type": "object",
 								"properties": {
-									"explanation": {
-										"type": "string",
-										"description": "A brief explanation of this specific replacement operation."
-									},
 									"filePath": {
 										"type": "string",
 										"description": "An absolute path to the file to edit."
@@ -841,7 +837,6 @@
 									}
 								},
 								"required": [
-									"explanation",
 									"filePath",
 									"oldString",
 									"newString"
