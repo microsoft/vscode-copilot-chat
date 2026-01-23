@@ -61,6 +61,34 @@ describe('ClaudeAgentManager', () => {
 		// Verify that the service's query method was called only once (proving session reuse)
 		expect(mockService.queryCallCount).toBe(1);
 	});
+
+	it('rewinds files through the manager', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+
+		// Create a session first
+		const stream = new MockChatResponseStream();
+		const req = new TestChatRequest('Hi');
+		const res = await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None);
+
+		expect(res.claudeSessionId).toBe('sess-1');
+
+		// Now call rewindFiles through the manager
+		const result = await manager.rewindFiles(res.claudeSessionId!, 'test-message-id', false);
+
+		expect(mockService.rewindFilesCallCount).toBe(1);
+		expect(mockService.lastRewindMessageId).toBe('test-message-id');
+		expect(result.canRewind).toBe(true);
+	});
+
+	it('returns error when rewinding non-existent session', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+
+		// Try to rewind a session that doesn't exist
+		const result = await manager.rewindFiles('non-existent-session', 'test-message-id', false);
+
+		expect(result.canRewind).toBe(false);
+		expect(result.error).toBe('Session not found');
+	});
 });
 
 describe('ClaudeCodeSession', () => {
@@ -198,5 +226,52 @@ describe('ClaudeCodeSession', () => {
 		const stream2 = new MockChatResponseStream();
 		await session.invoke('Hello again', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-sonnet');
 		expect(mockService.queryCallCount).toBe(1); // Same query reused
+	});
+
+	it('rewinds files when rewindFiles is called', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
+
+		// First invoke to create the query generator
+		const stream = new MockChatResponseStream();
+		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
+
+		// Now call rewindFiles
+		const result = await session.rewindFiles('test-message-id', false);
+
+		expect(mockService.rewindFilesCallCount).toBe(1);
+		expect(mockService.lastRewindMessageId).toBe('test-message-id');
+		expect(mockService.lastRewindDryRun).toBe(false);
+		expect(result.canRewind).toBe(true);
+		expect(result.filesChanged).toEqual(['file1.ts', 'file2.ts']);
+	});
+
+	it('returns error when rewindFiles is called without active session', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
+
+		// Call rewindFiles without invoking first
+		const result = await session.rewindFiles('test-message-id', false);
+
+		expect(result.canRewind).toBe(false);
+		expect(result.error).toBe('No active session');
+	});
+
+	it('supports dry run mode for rewindFiles', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
+
+		// First invoke to create the query generator
+		const stream = new MockChatResponseStream();
+		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
+
+		// Now call rewindFiles with dry run
+		const result = await session.rewindFiles('test-message-id', true);
+
+		expect(mockService.rewindFilesCallCount).toBe(1);
+		expect(mockService.lastRewindDryRun).toBe(true);
+		expect(result.canRewind).toBe(true);
 	});
 });

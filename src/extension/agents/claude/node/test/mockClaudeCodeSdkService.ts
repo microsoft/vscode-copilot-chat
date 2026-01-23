@@ -3,17 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Options, Query, RewindFilesResult, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
 
 /**
- * Mock implementation of IClaudeCodeService for testing
+ * Mock implementation of IClaudeCodeSdkService for testing
  */
 export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	readonly _serviceBrand: undefined;
 	public queryCallCount = 0;
 	public setModelCallCount = 0;
 	public lastSetModel: string | undefined;
+	public rewindFilesCallCount = 0;
+	public lastRewindMessageId: string | undefined;
+	public lastRewindDryRun: boolean | undefined;
 
 	public async query(options: {
 		prompt: AsyncIterable<SDKUserMessage>;
@@ -33,6 +36,17 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 			},
 			setPermissionMode: async (_mode: string) => { /* no-op for mock */ },
 			abort: () => { /* no-op for mock */ },
+			rewindFiles: async (userMessageId: string, options?: { dryRun?: boolean }): Promise<RewindFilesResult> => {
+				this.rewindFilesCallCount++;
+				this.lastRewindMessageId = userMessageId;
+				this.lastRewindDryRun = options?.dryRun;
+				return {
+					canRewind: true,
+					filesChanged: ['file1.ts', 'file2.ts'],
+					insertions: 10,
+					deletions: 5
+				};
+			},
 		} as unknown as Query;
 	}
 

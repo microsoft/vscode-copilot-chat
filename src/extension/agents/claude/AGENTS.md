@@ -100,6 +100,7 @@ All interactions are displayed through VS Code's native chat UI, providing a sea
 - Starts and manages the language model server (`LanguageModelServer`)
 - Creates and caches `ClaudeCodeSession` instances by session ID
 - Resolves prompts by replacing VS Code references (files, locations) with actual paths
+- Provides `rewindFiles` method to revert file changes to a previous message state
 
 **ClaudeCodeSession**
 - Represents a single Claude Code conversation session
@@ -112,6 +113,8 @@ All interactions are displayed through VS Code's native chat UI, providing a sea
 - Handles tool confirmation dialogs via VS Code's chat API
 - Auto-approves safe operations (file edits in workspace)
 - Tracks external edits to show proper diffs
+- Enables file checkpointing for rollback functionality
+- Provides `rewindFiles` method to restore files to their state at a specific user message
 
 ### `node/claudeCodeSdkService.ts`
 
@@ -168,6 +171,27 @@ Claude Code sessions are persisted to `~/.claude/projects/<workspace-slug>/` as 
 - Load all sessions for the current workspace
 - Resume a previous session by ID
 - Cache sessions with mtime-based invalidation
+
+## File Checkpointing and Rollback
+
+The integration enables file checkpointing to support rolling back edits:
+
+**How it works:**
+- File checkpointing is enabled automatically via the `enableFileCheckpointing: true` option when starting a Claude session
+- The Claude SDK creates backups of files before they are modified during the session
+- Each user message in the conversation can serve as a restore point
+
+**API Methods:**
+- `ClaudeCodeSession.rewindFiles(userMessageId, dryRun?)`: Rewinds tracked files to their state at a specific user message
+  - `userMessageId`: UUID of the user message to rewind to
+  - `dryRun` (optional): When `true`, previews changes without modifying files
+  - Returns: `RewindFilesResult` with information about which files were changed and statistics
+- `ClaudeAgentManager.rewindFiles(sessionId, userMessageId, dryRun?)`: Manager-level method to rewind files in a specific session
+
+**Use Cases:**
+- Revert unwanted edits made by Claude
+- Experiment with different approaches by rolling back to earlier states
+- Preview changes before committing to them using dry-run mode
 
 ## Testing
 
