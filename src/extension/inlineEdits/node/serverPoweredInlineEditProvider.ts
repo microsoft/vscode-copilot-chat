@@ -9,7 +9,7 @@ import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/commo
 import { ISerializedNextEditRequest, IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { ITracer } from '../../../util/common/tracing';
+import { ILogger } from '../../../platform/log/common/logService';
 import { assert } from '../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LineEdit, LineReplacement, SerializedLineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -48,7 +48,7 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 	) {
 	}
 
-	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, _tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, _logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 
 		const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
 

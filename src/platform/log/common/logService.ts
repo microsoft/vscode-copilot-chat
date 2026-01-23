@@ -49,6 +49,23 @@ export interface ILogTarget {
 	show?(preserveFocus?: boolean): void;
 }
 
+/**
+ * Utility functions for creating ILogTarget instances.
+ */
+export namespace LogTarget {
+	/**
+	 * Creates an ILogTarget from a simple callback function.
+	 *
+	 * @example
+	 * logger.withExtraTarget(LogTarget.fromCallback((level, msg) => {
+	 *     console.log(`[${LogLevel[level]}] ${msg}`);
+	 * }));
+	 */
+	export function fromCallback(fn: (level: LogLevel, message: string) => void): ILogTarget {
+		return { logIt: fn };
+	}
+}
+
 // Simple implementation of a log targe used for logging to the console.
 export class ConsoleLog implements ILogTarget {
 	constructor(private readonly prefix?: string, private readonly minLogLevel: LogLevel = LogLevel.Warning) { }
@@ -99,9 +116,32 @@ export interface ILogger {
 	 * Sub-loggers can be nested, and the prefixes will accumulate,
 	 * e.g., `[Parent][Child] message`.
 	 *
+	 * Sub-loggers inherit extra targets from their parent.
+	 *
 	 * @param topic The topic name or array of topic names to prefix messages with
 	 */
 	createSubLogger(topic: string | readonly string[]): ILogger;
+
+	/**
+	 * Returns a new logger that also logs to the specified extra target.
+	 * The original logger is unchanged (immutable).
+	 *
+	 * Can be chained to add multiple targets. Sub-loggers created from this
+	 * logger will inherit all extra targets.
+	 *
+	 * Errors thrown by extra targets are silently caught.
+	 *
+	 * @param target An ILogTarget instance
+	 * @returns A new ILogger with the extra target attached
+	 *
+	 * @example
+	 * const logger = logService
+	 *     .createSubLogger('MyFeature')
+	 *     .withExtraTarget(LogTarget.fromCallback((level, msg) => {
+	 *         logContext.trace(msg);
+	 *     }));
+	 */
+	withExtraTarget(target: ILogTarget): ILogger;
 }
 
 export class LogServiceImpl extends Disposable implements ILogService {
@@ -144,6 +184,10 @@ export class LogServiceImpl extends Disposable implements ILogService {
 	createSubLogger(topic: string | readonly string[]): ILogger {
 		return this.logger.createSubLogger(topic);
 	}
+
+	withExtraTarget(target: ILogTarget): ILogger {
+		return this.logger.withExtraTarget(target);
+	}
 }
 
 class LoggerImpl implements ILogger {
@@ -182,6 +226,10 @@ class LoggerImpl implements ILogger {
 
 	createSubLogger(topic: string | readonly string[]): ILogger {
 		return new SubLogger(this, topic);
+	}
+
+	withExtraTarget(target: ILogTarget): ILogger {
+		return new LoggerWithExtraTargets(this, [target]);
 	}
 }
 
@@ -229,6 +277,87 @@ class SubLogger implements ILogger {
 
 	createSubLogger(topic: string | readonly string[]): ILogger {
 		return new SubLogger(this._parent, topic, this._prefix);
+	}
+
+	withExtraTarget(target: ILogTarget): ILogger {
+		return new LoggerWithExtraTargets(this, [target], this._prefix);
+	}
+}
+
+class LoggerWithExtraTargets implements ILogger {
+	constructor(
+		private readonly _parent: ILogger,
+		private readonly _extraTargets: readonly ILogTarget[],
+		private readonly _prefix: string = '',
+	) { }
+
+	private _notifyExtraTargets(level: LogLevel, message: string): void {
+		const prefixedMessage = this._prefix ? `${this._prefix} ${message}` : message;
+		for (const target of this._extraTargets) {
+			try {
+				target.logIt(level, prefixedMessage);
+			} catch {
+				// Silent catch - extra targets must not affect primary logging
+			}
+		}
+	}
+
+	trace(message: string): void {
+		this._notifyExtraTargets(LogLevel.Trace, message);
+		this._parent.trace(message);
+	}
+
+	debug(message: string): void {
+		this._notifyExtraTargets(LogLevel.Debug, message);
+		this._parent.debug(message);
+	}
+
+	info(message: string): void {
+		this._notifyExtraTargets(LogLevel.Info, message);
+		this._parent.info(message);
+	}
+
+	warn(message: string): void {
+		this._notifyExtraTargets(LogLevel.Warning, message);
+		this._parent.warn(message);
+	}
+
+	error(error: string | Error, message?: string): void {
+		// For extra targets, format a simple message
+		const errorStr = typeof error === 'string' ? error : (error.message || 'Error');
+		const fullMessage = message ? `${errorStr}: ${message}` : errorStr;
+		this._notifyExtraTargets(LogLevel.Error, fullMessage);
+		this._parent.error(error, message);
+	}
+
+	show(preserveFocus?: boolean): void {
+		this._parent.show(preserveFocus);
+		for (const target of this._extraTargets) {
+			try {
+				target.show?.(preserveFocus);
+			} catch {
+				// Silent catch
+			}
+		}
+	}
+
+	createSubLogger(topic: string | readonly string[]): ILogger {
+		// Sub-logger inherits extra targets with updated prefix
+		const topics = Array.isArray(topic) ? topic : [topic];
+		const newPrefix = this._prefix + topics.map(t => `[${t}]`).join('');
+		return new LoggerWithExtraTargets(
+			this._parent.createSubLogger(topic),
+			this._extraTargets,
+			newPrefix
+		);
+	}
+
+	withExtraTarget(target: ILogTarget): ILogger {
+		return new LoggerWithExtraTargets(
+			this._parent,
+			[...this._extraTargets, target],
+			this._prefix
+		);
 	}
 }
 
