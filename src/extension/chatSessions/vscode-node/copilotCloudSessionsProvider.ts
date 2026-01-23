@@ -2043,10 +2043,18 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		if (!this.validateRemoteAgentJobResponse(response)) {
 			const statusCode = response?.status;
 			switch (statusCode) {
+				case 401:
+					throw new Error(vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.'));
+				case 403:
+					throw new Error(vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings](https://github.com/settings/copilot/coding_agent) or contact your organization administrator.'));
+				case 404:
+					throw new Error(vscode.l10n.t('The repository `{0}/{1}` was not found or you do not have access to it.', repoOwner, repoName));
 				case 422:
 					// NOTE: Although earlier checks should prevent this, ensure that if we end up
 					//       with a 422 from the API, we give a useful error message
-					throw new Error(vscode.l10n.t('The cloud agent was unable to create a pull request with the specified base branch `{0}`. Please push branch to the remote and try again.', base_ref));
+					throw new Error(vscode.l10n.t('Cloud agent was unable to create a pull request with the specified base branch `{0}`. Please push branch to the remote and verify repository rules allow this operation.', base_ref));
+				case 500:
+					throw new Error(vscode.l10n.t('Cloud agent service encountered an internal error. Please try again later.'));
 				default:
 					throw new Error(vscode.l10n.t('Received invalid response {0} from cloud agent.', statusCode ? statusCode : ''));
 			}
