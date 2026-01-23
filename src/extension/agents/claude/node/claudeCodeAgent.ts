@@ -363,6 +363,9 @@ export class ClaudeCodeSession extends Disposable {
 			// for history files
 			cwd,
 			additionalDirectories,
+			// We allow this because we handle the visibility of
+			// the permission mode ourselves in the options
+			allowDangerouslySkipPermissions: true,
 			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			// TODO: CAPI does not yet support the WebSearch tool
