@@ -4,10 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { CancellationToken } from 'vscode';
+import type { CancellationToken, LanguageModelToolResult2 } from 'vscode';
+import { ChatFetchResponseType, ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
-import { LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
+import { IChatEndpointLogInfo, ILoggedPendingRequest, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { TestRequestLogger } from '../../../../platform/requestLogger/test/node/testRequestLogger';
+import { ExportedLogEntry } from '../../common/chatReplayTypes';
 import { createChatReplayExport, serializeChatReplayExport } from '../../node/chatReplayExport';
 import { ChatReplayNotebookSerializer } from '../chatReplayNotebookSerializer';
 
@@ -16,6 +18,30 @@ const NotebookCellKind = {
 	Markup: 1,
 	Code: 2
 };
+
+/**
+ * Creates a mock LanguageModelToolResult2 for testing.
+ * This is the response structure returned from tool invocations.
+ */
+function createMockToolResult(textValue: string): LanguageModelToolResult2 {
+	return {
+		content: [{ value: textValue }]
+	} as LanguageModelToolResult2;
+}
+
+/**
+ * Creates a mock chat endpoint info for testing.
+ */
+function createMockChatEndpoint(modelMaxPromptTokens: number = 100000): IChatEndpointLogInfo {
+	return { modelMaxPromptTokens };
+}
+
+/**
+ * Creates a mock logged pending request for testing.
+ */
+function createMockChatParams(model: string, location: ChatLocation): Partial<ILoggedPendingRequest> {
+	return { model, location };
+}
 
 describe('ChatReplayNotebookSerializer', () => {
 	let logger: TestRequestLogger;
@@ -34,9 +60,7 @@ describe('ChatReplayNotebookSerializer', () => {
 
 			await logger.captureInvocation(userPromptToken, async () => {
 				// 1. Tool call - creates the file
-				logger.logToolCall('tool-1', 'create_file', { path: '/hello.txt', content: 'Hello World!' }, {
-					content: [{ value: 'File created successfully' }]
-				} as any);
+				logger.logToolCall('tool-1', 'create_file', { path: '/hello.txt', content: 'Hello World!' }, createMockToolResult('File created successfully'));
 
 				// 2. Markdown response - what the user sees in chat
 				logger.addEntry({
@@ -106,16 +130,20 @@ describe('ChatReplayNotebookSerializer', () => {
 				logger.addEntry({
 					type: LoggedRequestKind.ChatMLSuccess,
 					debugName: 'panel/editAgent',
-					chatEndpoint: { modelMaxPromptTokens: 100000 } as any,
-					chatParams: { model: 'gpt-4', location: 'panel' } as any,
+					chatEndpoint: createMockChatEndpoint(),
+					chatParams: createMockChatParams('gpt-4', ChatLocation.Panel) as ILoggedPendingRequest,
 					startTime: new Date(),
 					endTime: new Date(),
 					timeToFirstToken: 100,
 					isConversationRequest: true,
 					result: {
-						type: 0, // ChatFetchResponseType.Success
-						value: 'Here is the model response!'
-					} as any,
+						type: ChatFetchResponseType.Success,
+						value: ['Here is the model response!'],
+						requestId: 'test-request-id',
+						serverRequestId: undefined,
+						usage: undefined,
+						resolvedModel: 'gpt-4'
+					},
 					usage: undefined
 				});
 			});
@@ -124,12 +152,13 @@ describe('ChatReplayNotebookSerializer', () => {
 			const exportData = await createChatReplayExport(entries);
 
 			// Verify the export produces the expected structure
+			// Note: message is an array because FetchSuccess<string[]> returns an array of response chunks
 			expect(exportData.prompts[0].logs[0]).toMatchObject({
 				kind: 'request',
 				type: 'ChatMLSuccess',
 				response: {
 					type: 'success',
-					message: 'Here is the model response!'
+					message: ['Here is the model response!']
 				}
 			});
 
@@ -237,17 +266,13 @@ describe('ChatReplayNotebookSerializer', () => {
 			// First prompt
 			const firstToken = new CapturingToken('what files are in this directory?', 'comment', false);
 			await logger.captureInvocation(firstToken, async () => {
-				logger.logToolCall('tool-1', 'list_dir', { path: '/workspace' }, {
-					content: [{ value: 'file1.ts\nfile2.ts\nREADME.md' }]
-				} as any);
+				logger.logToolCall('tool-1', 'list_dir', { path: '/workspace' }, createMockToolResult('file1.ts\nfile2.ts\nREADME.md'));
 			});
 
 			// Second prompt
 			const secondToken = new CapturingToken('read the README file', 'comment', false);
 			await logger.captureInvocation(secondToken, async () => {
-				logger.logToolCall('tool-2', 'read_file', { path: '/workspace/README.md' }, {
-					content: [{ value: '# My Project\n\nThis is a test project.' }]
-				} as any);
+				logger.logToolCall('tool-2', 'read_file', { path: '/workspace/README.md' }, createMockToolResult('# My Project\n\nThis is a test project.'));
 
 				// Add a request entry too
 				logger.addEntry({
@@ -321,15 +346,13 @@ describe('ChatReplayNotebookSerializer', () => {
 			};
 
 			await logger.captureInvocation(token, async () => {
-				logger.logToolCall('tool-1', 'grep_search', toolArgs, {
-					content: [{ value: 'result1.ts\nresult2.ts' }]
-				} as any);
+				logger.logToolCall('tool-1', 'grep_search', toolArgs, createMockToolResult('result1.ts\nresult2.ts'));
 			});
 
 			const entries = logger.getRequests();
 			const exportData = await createChatReplayExport(entries);
 
-			const toolLog = exportData.prompts[0].logs[0] as any;
+			const toolLog = exportData.prompts[0].logs[0] as ExportedLogEntry;
 			expect(toolLog.kind).toBe('toolCall');
 			expect(toolLog.args).toEqual(toolArgs);
 		});

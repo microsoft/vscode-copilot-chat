@@ -83,6 +83,10 @@ export interface ExportedLogEntry {
 	};
 	/** File edits made by the entry */
 	edits?: unknown[];
+	/** Error message for error entries */
+	error?: string;
+	/** Timestamp for when the entry occurred */
+	timestamp?: string;
 }
 
 /**

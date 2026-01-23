@@ -345,12 +345,22 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 	}
 
 	private formatErrorEntry(log: ExportedLogEntry): string {
-		return [
+		const lines: string[] = [
 			`#### Error`,
 			'',
 			`**ID:** ${log.id}`,
-			'',
-			'An error occurred while processing this log entry.',
-		].join('\n');
+		];
+
+		if (log.timestamp) {
+			lines.push(`**Timestamp:** ${log.timestamp}`);
+		}
+
+		if (log.error) {
+			lines.push('', '**Error:**', '', '```', log.error, '```');
+		} else {
+			lines.push('', 'An error occurred while processing this log entry.');
+		}
+
+		return lines.join('\n');
 	}
 }
