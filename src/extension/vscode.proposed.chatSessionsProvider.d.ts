@@ -529,6 +529,8 @@ declare module 'vscode' {
 		 * @returns Additional items to display in the searchable QuickPick.
 		 */
 		readonly onSearch?: (query: string, token: CancellationToken) => Thenable<ChatSessionProviderOptionItem[]>;
+
+		readonly commands?: Command[];
 	}
 
 	export interface ChatSessionProviderOptions {
