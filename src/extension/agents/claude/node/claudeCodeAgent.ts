@@ -256,6 +256,18 @@ export class ClaudeCodeSession extends Disposable {
 			return paths;
 		});
 
+		// Track agent files in agents directories
+		tracker.registerDirectoryResolver(() => {
+			const dirs: URI[] = [];
+			// User-level agents directory
+			dirs.push(URI.joinPath(this.envService.userHome, '.claude', 'agents'));
+			// Project-level agents directory
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				dirs.push(URI.joinPath(folder, '.claude', 'agents'));
+			}
+			return dirs;
+		}, '.md');
+
 		return tracker;
 	}
 
