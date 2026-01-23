@@ -2,50 +2,74 @@
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-28) field is never used",
 		"requests": [
-			"21d1e3301da8412f72f07db09084ae9adae294e68c1d58c2c201b8447e6bbd9c",
-			"c2c377ef985c6574b1c625d401c6aade5812135f7f449801b354ad649801deb8"
+			"41816f6886c7a4cb80ab022b465ccbe6da3842d701371291e132522dbfea5c03",
+			"5aab7b65d832cf92db8a06986d753350b98d34308e782e7701da7d6b832b878b",
+			"71bf5bc48671802b0498f092f2e4e17d87a85808c2994e773dea6c6529bfebb8",
+			"84d4d119a0d8bc5d09274766e84c683d35528c0919ce1db9913f445fdb01d685",
+			"88b8d89168005d98fc05983191294059d0f847e6a6a359552d8137d0eb6b40d9",
+			"8ecfc8027d8dd55e8f4286abae694acf976d3c1c215b0cd03502d925de600bf8",
+			"969ed522a6cbb919e6ff188b80253246ee4eedf22832412ef10a6c62235f933a",
+			"9acb1cc0b6acfc7c1b3e22f32db90690a28238d03e4b4c0fe3b38f837d557323",
+			"a6efac6cfec55b64b6d04c09fef4f5a8cb8d2ffa4c1e841e187f86589b344625"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-10-57) call is not awaited, execution continues",
 		"requests": [
-			"62c6647a48e7c5df23846233b625249e88d0278a295dca918ef859c9f217ff35"
+			"3e385788fa03409ca08c5352ae605c4a50b60ea7e708ac2da3b95ef532a2e3dc"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - (AML-17-3523) has same name as",
 		"requests": [
-			"c83023903bb29153e42a4bc90e263287390c33ebd849607e49b3428a796bfc76"
+			"2ef84ef4a9c2bb77d00d84a892560153f2d22f6d0e6d52ffc9953a2ed7505ce0"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not contain a definition",
 		"requests": [
-			"6a6a9d4214f75ea00c4df1bd3447dfe6ca47c36f59b58c9de9881c78f7f1fc41"
+			"45f3d34d2d1032a34bb42b26f8271c8b50be2d1eb2b8411254014e6b56bb3d40",
+			"5ba11fdfa49c9ba0038bea4ce23e338281065a05561c5ac7e48caa3916a5d902",
+			"5e9b3115e40ce3471a27b43c75a130cff96e4925b9c1f66489fd9326de3382d7",
+			"93d387daf31d6ab9ec34ed238427aab1c6898fbfb60d1af90d49e9f1b2ff7504",
+			"9a32281c4faec5d12bd3f0c6d29dd0cdb74e8b09b777ee08702b1b0f74300762"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - does not exist",
 		"requests": [
-			"156d077215e1cb8f53e759a85000b04b5137d37ffcd667d267789ac4a6b37d4c"
+			"42938a50c7c1de8ac304871a5583e8bbd2bf4c21cc3b5225f034ca8eb4170b08"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - missing using directive",
 		"requests": [
-			"74fb56010da010df648a9f19d8892ed9aa8a2f9689afb769557d89ca371dcaad"
+			"2c5dc73e76bde62ed4e6761182065f587335f0030886fe5984bd00420be4d93b",
+			"3c70d2b5b81b22e785c4f57b7b677f59287027321482911ad0cb79f766decabb",
+			"51ed64dcc974a380a851f870f04ae7992837ff5f3db95b45237104c13653ac54",
+			"52113b59cc36d3b90bb9e2d419ff0f3d6bf59534d16b697592413b74c9a75c9d",
+			"8b9786b121859b32579a04e9ab9c4b0c051b71bea87d3beebb179f445c9e51f2",
+			"d550215e89d711a0aba75238c1cd3d4719509e64bb3be9d9941ef82a5e029575",
+			"fe88eb9154ec6a3b0572e24e947ae02a04eef9a32da33c5151e67c8634237c0b"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - no argument given",
 		"requests": [
-			"a07020598c374f97602558a5789b13a1c235700be5d747a026e67579d350bde8"
+			"455a868b52425f8a6942d4355875b8d80b2d2db53a66c3b290d04e677ff22106",
+			"4daf9a61628e5cfe064872cd7be55420294184d473b2d9b4fed01d0da1392423",
+			"66445f5b4ef12b2ce0d2f9a28bfa1cd2d19b8f2413a7f876bfb39cf3e6c5cd8a",
+			"7cd219b9f3496eb5c366e2c34b0c4c835eec9e6711c3c1142368bdef82510675",
+			"8650387f039ea8dd7e57a52b4807c67ba10b99be6244d25024c93fcd4f17ab8e",
+			"a94c4f503655ac959e2b26701f0560050046a0275dd981bd75941b1cdcbc86d3",
+			"b68088606c365a8a5d7c52f60dfc6c8606dad5e4307cd6cf58bc3f3e7e6c59dd",
+			"b77814d06357004e74c5efddacbe1cc7ffd06c7af1e86dbf50e60be7b919dac2"
 		]
 	},
 	{
 		"name": "fix-InlineChatIntent (roslyn) [inline] [csharp] - semi-colon expected",
 		"requests": [
-			"a59d6eb49c6a16e511af0b76f948ab0a37527c8ff48254d10cf030400c698cf3"
+			"18d9af66b7776b480dd477c48060ae1cb7c18a93b84c57bcf5f3f6b0a4414451"
 		]
 	}
 ]
