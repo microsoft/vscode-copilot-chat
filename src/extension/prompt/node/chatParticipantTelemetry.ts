@@ -154,6 +154,8 @@ type RequestTelemetryMeasurements = {
 	messageTokenCount: number;
 	numToolCalls: number;
 	availableToolCount: number;
+	isBYOK: number;
+	isAuto: number;
 };
 
 type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
@@ -164,8 +166,6 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	maybeOffTopic: number;
 	userPromptCount: number;
 	summarizationEnabled: number;
-	isBYOK: number;
-	isAuto: number;
 };
 
 // EVENT: inline.request
@@ -872,7 +872,9 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
 				"userSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the user selection" },
-				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" }
+				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
@@ -917,6 +919,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			availableToolCount: this._availableToolCount,
 			userSelectionLength,
 			adjustedSelectionLength,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 
