@@ -651,9 +651,11 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 					);
 
 					const filePath = fileUri.fsPath;
+					const contentFileUri = URI.joinPath(fileUri, contentFile);
+					const schemaFileUri = schema ? URI.joinPath(fileUri, 'schema.json') : undefined;
 					this._logService?.debug(`[ToolResult] Large tool result (${content.length} bytes) written to disk: ${filePath}`);
 
-					return `Large tool result (${Math.round(content.length / 1024)}KB) written to file. Use the ${ToolName.ReadFile} tool to access the content at: ${filePath}/${contentFile}${schema ? `\n\nData schema found at: ${filePath}/schema.json` : ''}`;
+					return `Large tool result (${Math.round(content.length / 1024)}KB) written to file. Use the ${ToolName.ReadFile} tool to access the content at: ${contentFileUri.fsPath}${schemaFileUri ? `\n\nData schema found at: ${schemaFileUri.fsPath}` : ''}`;
 				} catch (err) {
 					this._logService?.warn(`[ToolResult] Failed to write large tool result to disk: ${toErrorMessage(err)}`);
 					// Fall through to normal truncation
