@@ -84,6 +84,28 @@ export type PromptResponse =
 	| PromptCancelled
 	| PromptTimeout;
 
+export namespace PromptResponse {
+	export function toString(response: PromptResponse): string {
+		switch (response.type) {
+			case 'prompt':
+				return [
+					{ header: 'PREFIX', content: response.prompt.prefix },
+					{ header: 'SUFFIX', content: response.prompt.suffix },
+					{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
+					{ header: 'METADATA', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
+					{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
+					{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
+					{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
+				]
+					.map(section => `${section.header}\n---\n${section.content}\n---------------`)
+					.join('\n');
+			default:
+				return JSON.stringify(response, null, '\t');
+		}
+	}
+
+}
+
 /** Record trailing whitespace, and trim it from prompt if the last line is only whitespace */
 export function trimLastLine(source: string): [string, string] {
 	const lines = source.split('\n');

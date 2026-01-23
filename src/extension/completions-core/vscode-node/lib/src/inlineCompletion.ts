@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, Position, Range } from 'vscode-languageserver-protocol';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { GhostTextLogContext } from '../../../common/ghostTextContext';
 import { CompletionState, createCompletionState } from './completionState';
 import { completionsFromGhostTextResults, CopilotCompletion } from './ghostText/copilotCompletion';
 import { getGhostText, GetGhostTextOptions } from './ghostText/ghostText';
@@ -30,19 +31,21 @@ export class GhostText {
 	public async getInlineCompletions(
 		textDocument: ITextDocument,
 		position: Position,
-		token?: CancellationToken,
-		options: Exclude<Partial<GetInlineCompletionsOptions>, 'promptOnly'> = {}
+		token: CancellationToken,
+		options: Exclude<Partial<GetInlineCompletionsOptions>, 'promptOnly'> = {},
+		logContext: GhostTextLogContext,
 	): Promise<CopilotCompletion[] | undefined> {
 		logCompletionLocation(this.logTargetService, textDocument, position);
 
-		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options);
+		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext);
 		return this.instantiationService.invokeFunction(handleGhostTextResultTelemetry, result);
 	}
 
 	private async getInlineCompletionsResult(
 		completionState: CompletionState,
-		token?: CancellationToken,
-		options: GetInlineCompletionsOptions = {}
+		token: CancellationToken,
+		options: GetInlineCompletionsOptions = {},
+		logContext: GhostTextLogContext,
 	): Promise<GhostTextResultWithTelemetry<CopilotCompletion[]>> {
 		let lineLengthIncrease = 0;
 		// The golang.go extension (and quite possibly others) uses snippets for function completions, which collapse down
@@ -53,7 +56,7 @@ export class GhostText {
 			lineLengthIncrease = completionState.position.character - options.selectedCompletionInfo.range.end.character;
 		}
 
-		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options);
+		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext);
 		if (result.type !== 'success') { return result; }
 		const [resultArray, resultType] = result.value;
 
@@ -92,7 +95,7 @@ export class GhostText {
 
 			// Cache speculative request to be triggered when telemetryShown is called
 			const specOpts = { isSpeculative: true, opportunityId: options.opportunityId };
-			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts);
+			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts, logContext);
 			this.speculativeRequestCache.set(completions[0].clientCompletionId, fn);
 		}
 
