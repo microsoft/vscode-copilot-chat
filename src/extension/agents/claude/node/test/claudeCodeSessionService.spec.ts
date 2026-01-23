@@ -359,6 +359,87 @@ describe('ClaudeCodeSessionService', () => {
 		});
 	});
 
+	it('maintains chain through system messages without message field', async () => {
+		// This test verifies that system messages (which don't have a 'message' field)
+		// are correctly used for parent chain linking, even though they're filtered from output
+		const fileName = 'session-with-system-messages.jsonl';
+		const timestamp = new Date().toISOString();
+
+		const fileContents = [
+			// First user message (root)
+			JSON.stringify({
+				parentUuid: null,
+				sessionId: 'test-session',
+				type: 'user',
+				message: { role: 'user', content: 'first message' },
+				uuid: 'uuid-user-1',
+				timestamp
+			}),
+			// First assistant message
+			JSON.stringify({
+				parentUuid: 'uuid-user-1',
+				sessionId: 'test-session',
+				type: 'assistant',
+				message: { role: 'assistant', content: [{ type: 'text', text: 'first response' }] },
+				uuid: 'uuid-assistant-1',
+				timestamp
+			}),
+			// System message WITHOUT 'message' field (this used to break the chain)
+			JSON.stringify({
+				parentUuid: 'uuid-assistant-1',
+				sessionId: 'test-session',
+				type: 'system',
+				subtype: 'stop_hook_summary',
+				hookCount: 1,
+				uuid: 'uuid-system-1',
+				timestamp
+			}),
+			// Second user message (child of system message)
+			JSON.stringify({
+				parentUuid: 'uuid-system-1',
+				sessionId: 'test-session',
+				type: 'user',
+				message: { role: 'user', content: 'second message' },
+				uuid: 'uuid-user-2',
+				timestamp
+			}),
+			// Second assistant message
+			JSON.stringify({
+				parentUuid: 'uuid-user-2',
+				sessionId: 'test-session',
+				type: 'assistant',
+				message: { role: 'assistant', content: [{ type: 'text', text: 'second response' }] },
+				uuid: 'uuid-assistant-2',
+				timestamp
+			})
+		].join('\n');
+
+		mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+		mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+		const sessions = await service.getAllSessions(CancellationToken.None);
+
+		expect(sessions).toHaveLength(1);
+		const session = sessions[0];
+
+		// The session should have 4 messages (system message is filtered out as isMeta)
+		expect(session.messages).toHaveLength(4);
+
+		// Verify the chain is intact: user1 -> assistant1 -> user2 -> assistant2
+		// (system message is used for linking but not included in output)
+		expect(session.messages[0].uuid).toBe('uuid-user-1');
+		expect(session.messages[1].uuid).toBe('uuid-assistant-1');
+		expect(session.messages[2].uuid).toBe('uuid-user-2');
+		expect(session.messages[3].uuid).toBe('uuid-assistant-2');
+
+		// Verify message content is preserved
+		const userMessage1 = session.messages[0] as SDKUserMessage;
+		expect(userMessage1.message.content).toBe('first message');
+
+		const userMessage2 = session.messages[2] as SDKUserMessage;
+		expect(userMessage2.message.content).toBe('second message');
+	});
+
 	describe('no-workspace scenario', () => {
 		let noWorkspaceDirUri: URI;
 		let noWorkspaceService: ClaudeCodeSessionService;

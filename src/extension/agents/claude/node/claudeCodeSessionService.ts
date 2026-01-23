@@ -359,6 +359,24 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 							raw: normalizedRaw,
 							isMeta: Boolean(isMeta)
 						});
+					} else if ('uuid' in entry && entry.uuid && 'parentUuid' in entry) {
+						// Handle entries without 'message' field (e.g., system messages, metadata entries)
+						// These are needed for parent chain linking but should not appear in final output
+						const rawEntry = entry as unknown as RawStoredSDKMessage;
+						const uuid = rawEntry.uuid;
+						if (!uuid) {
+							continue;
+						}
+
+						const normalizedRaw = {
+							...rawEntry,
+							parentUuid: rawEntry.parentUuid ?? null
+						} as RawStoredSDKMessage;
+
+						rawMessages.set(uuid, {
+							raw: normalizedRaw,
+							isMeta: true  // Mark as meta so it's used for linking but filtered from output
+						});
 					} else if ('summary' in entry && entry.summary && !entry.summary.toLowerCase().startsWith('api error: 401') && !entry.summary.toLowerCase().startsWith('invalid api key')) {
 						const summaryEntry = entry as SummaryEntry;
 						const uuid = summaryEntry.leafUuid;
