@@ -2060,6 +2060,11 @@
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
 			},
 			{
+				"command": "copilot.claude.agents",
+				"title": "Manage Agents",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "copilot.claude.hooks",
 				"title": "Configure Hooks",
 				"category": "Claude Agent"
@@ -5185,6 +5190,10 @@
 					{
 						"name": "security-review",
 						"description": "Complete a security review of the pending changes on the current branch"
+					},
+					{
+						"name": "agents",
+						"description": "Create and manage specialized Claude agents"
 					},
 					{
 						"name": "hooks",

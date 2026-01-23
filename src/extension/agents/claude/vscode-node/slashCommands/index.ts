@@ -6,6 +6,7 @@
 // Import all slash command handlers to trigger self-registration
 // Add new command imports here as they are created
 
+import './agentsCommand';
 import './hooksCommand';
 import './memoryCommand';
 
