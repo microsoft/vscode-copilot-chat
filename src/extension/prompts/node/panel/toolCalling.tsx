@@ -227,7 +227,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
 
-					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);

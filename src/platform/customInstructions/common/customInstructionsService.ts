@@ -24,6 +24,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { IPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
+import { COPILOT_INSTRUCTIONS_PATH, INSTRUCTION_FILE_EXTENSION, INSTRUCTIONS_LOCATION_KEY, PERSONAL_SKILL_FOLDERS, PromptsType, SKILLS_LOCATION_KEY, USE_AGENT_SKILLS_SETTING, WORKSPACE_SKILL_FOLDERS } from './promptTypes';
 
 declare const TextDecoder: {
 	decode(input: Uint8Array): string;
@@ -50,7 +51,7 @@ export const ICustomInstructionsService = createServiceIdentifier<ICustomInstruc
 
 export interface IExtensionPromptFile {
 	uri: URI;
-	type: 'instructions' | 'prompt' | 'agent' | 'skill';
+	type: PromptsType;
 }
 
 export interface ICustomInstructionsService {
@@ -92,17 +93,6 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 	}
 	return false;
 }
-
-const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
-const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
-
-const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
-const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
-const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
-const SKILLS_LOCATION_KEY = 'chat.agentSkillsLocations';
-
-const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
-
 
 export class CustomInstructionsService extends Disposable implements ICustomInstructionsService {
 

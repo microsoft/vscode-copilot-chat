@@ -27,9 +27,15 @@ export function register(accessor: ServicesAccessor): IDisposable {
 			title: t`Updating local workspace index...`,
 		}, async () => {
 			const result = await workspaceChunkSearch.triggerLocalIndexing('manual', new TelemetryCorrelationId('BuildLocalIndexCommand'));
+
 			if (result.isError()) {
-				vscode.window.showWarningMessage(t`Could not build local workspace index.` + ' \n\n' + result.err.userMessage);
+				if (result.err.id !== TriggerRemoteIndexingError.alreadyIndexed.id) {
+					vscode.window.showWarningMessage(t`Could not build local workspace index. ` + '\n\n' + result.err.userMessage);
+					return;
+				}
 			}
+
+			vscode.window.showInformationMessage(t`Local workspace index ready to use.`);
 		});
 	})));
 
@@ -44,13 +50,15 @@ export function register(accessor: ServicesAccessor): IDisposable {
 				new TelemetryCorrelationId('BuildRemoteIndexCommand'),
 				token
 			);
+
 			if (triggerResult.isError()) {
-				if (triggerResult.err.id === TriggerRemoteIndexingError.alreadyIndexed.id) {
-					vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
-				} else {
+				if (triggerResult.err.id !== TriggerRemoteIndexingError.alreadyIndexed.id) {
 					vscode.window.showWarningMessage(t`Could not build remote workspace index. ` + '\n\n' + triggerResult.err.userMessage);
+					return;
 				}
 			}
+
+			vscode.window.showInformationMessage(t`Remote workspace index ready to use.`);
 		});
 	})));
 

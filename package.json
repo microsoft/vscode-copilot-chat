@@ -84,7 +84,8 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentProvider"
+		"onCustomAgentProvider",
+		"onInstructionsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -102,6 +103,7 @@
 		"embeddings",
 		"findTextInFiles",
 		"findTextInFiles2",
+		"languageModelToolSupportsModel@1",
 		"findFiles2@2",
 		"textSearchProvider",
 		"terminalDataWriteEvent",
@@ -139,7 +141,8 @@
 		"devDeviceId",
 		"contribEditorContentMenu",
 		"chatPromptFiles",
-		"mcpServerDefinitions"
+		"mcpServerDefinitions",
+		"tabInputMultiDiff"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1144,83 +1147,11 @@
 				}
 			},
 			{
-				"name": "copilot_memory",
-				"toolReferenceName": "memory",
-				"displayName": "%copilot.tools.memory.name%",
-				"userDescription": "%copilot.tools.memory.description%",
-				"modelDescription": "Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).",
-				"icon": "$(database)",
-				"when": "config.github.copilot.chat.tools.memory.enabled",
-				"canBeReferencedInPrompt": true,
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"command": {
-							"type": "string",
-							"enum": [
-								"view",
-								"create",
-								"str_replace",
-								"insert",
-								"delete",
-								"rename"
-							],
-							"description": "The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory"
-						},
-						"path": {
-							"type": "string",
-							"description": "Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)"
-						},
-						"view_range": {
-							"type": "array",
-							"items": {
-								"type": "number"
-							},
-							"minItems": 2,
-							"maxItems": 2,
-							"description": "[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]"
-						},
-						"file_text": {
-							"type": "string",
-							"description": "[create only] Content to write to the file. Required for create command."
-						},
-						"old_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command."
-						},
-						"new_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command."
-						},
-						"insert_line": {
-							"type": "number",
-							"description": "[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command."
-						},
-						"insert_text": {
-							"type": "string",
-							"description": "[insert only] Text to insert at the specified line. Required for insert command."
-						},
-						"old_path": {
-							"type": "string",
-							"description": "[rename only] Current path of the file or directory. Must start with /memories. Required for rename command."
-						},
-						"new_path": {
-							"type": "string",
-							"description": "[rename only] New path for the file or directory. Must start with /memories. Required for rename command."
-						}
-					},
-					"required": [
-						"command"
-					]
-				}
-			},
-			{
 				"name": "copilot_askQuestions",
 				"toolReferenceName": "askQuestions",
 				"displayName": "%copilot.tools.askQuestions.name%",
 				"userDescription": "%copilot.tools.askQuestions.description%",
-				"modelDescription": "Ask the user questions when progress is blocked or a decision carries significant risk. Prefer proposing a sensible default so users can confirm quickly.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm high-impact decisions\n\nQuestion guidelines:\n- Batch related questions into a single call to minimize interruption\n- Provide brief context explaining what is being decided and why it matters\n- Mark one option as `recommended` with a short justification\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive\n\nAfter receiving answers:\n- Restate the chosen decisions briefly and proceed\n- Do not re-ask unless requirements change\n\n- An \"Other\" option is automatically shown to users for custom input—do not add your own \"Something else\" or similar option.",
+				"modelDescription": "Ask the user questions to clarify intent, validate assumptions, or choose between implementation approaches. Prefer proposing a sensible default so users can confirm quickly.\n\nOnly use this tool when the user's answer provides information you cannot determine or reasonably assume yourself. This tool is for gathering information, not for reporting status or problems. If a question has an obvious best answer, take that action instead of asking.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm decisions that meaningfully affect outcome\n\nWhen NOT to use:\n- The answer is determinable from code or context\n- Asking for permission to continue or abort\n- Confirming something you can reasonably decide yourself\n- Reporting a problem (instead, attempt to resolve it)\n\nQuestion guidelines:\n- Batch related questions into a single call (max 4 questions, 2-6 options each; omit options for free text input)\n- Provide brief context explaining what is being decided and why\n- Mark one option as `recommended` with a short justification\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive and phrase the question accordingly\n\nAfter receiving answers:\n- Incorporate decisions and continue without re-asking unless requirements change\n\nAn \"Other\" option is automatically shown to users—do not add your own.",
 				"icon": "$(question)",
 				"canBeReferencedInPrompt": true,
 				"when": "config.github.copilot.chat.askQuestions.enabled",
@@ -1251,9 +1182,9 @@
 									},
 									"options": {
 										"type": "array",
-										"description": "2-4 options for the user to choose from",
-										"minItems": 2,
-										"maxItems": 4,
+										"description": "0-6 options for the user to choose from. If empty or omitted, shows a free text input instead.",
+										"minItems": 0,
+										"maxItems": 6,
 										"items": {
 											"type": "object",
 											"properties": {
@@ -1278,8 +1209,7 @@
 								},
 								"required": [
 									"header",
-									"question",
-									"options"
+									"question"
 								]
 							}
 						}
@@ -1926,7 +1856,7 @@
 									},
 									"url": {
 										"type": "string",
-										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
 									},
 									"toolCalling": {
 										"type": "boolean",
@@ -2015,7 +1945,7 @@
 									},
 									"url": {
 										"type": "string",
-										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
 									},
 									"toolCalling": {
 										"type": "boolean",
@@ -2128,6 +2058,11 @@
 			{
 				"command": "github.copilot.chat.triggerPermissiveSignIn",
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
+			},
+			{
+				"command": "copilot.claude.agents",
+				"title": "Manage Agents",
+				"category": "Claude Agent"
 			},
 			{
 				"command": "copilot.claude.hooks",
@@ -2290,12 +2225,6 @@
 				"title": "%github.copilot.command.openUserPreferences%",
 				"category": "Chat",
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
-			},
-			{
-				"command": "github.copilot.chat.tools.memory.openFolder",
-				"title": "%github.copilot.command.openMemoryFolder%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.tools.memory.enabled"
 			},
 			{
 				"command": "github.copilot.chat.review.markUnhelpful",
@@ -2835,6 +2764,16 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
+					},
+					"github.copilot.chat.organizationCustomAgents.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationCustomAgents.enabled%"
+					},
+					"github.copilot.chat.organizationInstructions.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
@@ -3470,7 +3409,7 @@
 					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
 						"tags": [
 							"experimental",
@@ -3481,15 +3420,6 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.useResponsesApi": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useResponsesApi%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -3604,15 +3534,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.tools.memory.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",
@@ -3643,10 +3564,23 @@
 							"node-fetch"
 						]
 					},
-					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
+					"github.copilot.chat.planAgent.additionalTools": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"default": [],
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.additionalTools%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.planAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.model%",
 						"tags": [
 							"experimental"
 						]
@@ -4190,7 +4124,7 @@
 					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
@@ -5270,6 +5204,10 @@
 						"description": "Complete a security review of the pending changes on the current branch"
 					},
 					{
+						"name": "agents",
+						"description": "Create and manage specialized Claude agents"
+					},
+					{
 						"name": "hooks",
 						"description": "Configure Claude Code hooks for tool execution and events"
 					},
@@ -5358,13 +5296,7 @@
 				}
 			}
 		],
-		"chatAgents": [
-			{
-				"name": "Plan",
-				"path": "./assets/agents/Plan.agent.md",
-				"description": "Researches a task to create multi-step plans"
-			}
-		],
+		"chatAgents": [],
 		"chatPromptFiles": [
 			{
 				"name": "savePrompt",
@@ -5513,18 +5445,19 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"yargs": "^17.7.2"
+		"yargs": "^17.7.2",
+		"zod": "3.25.76"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.384",
+		"@github/copilot": "^0.0.388",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.8",
+		"@vscode/copilot-api": "^0.2.9",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
@@ -5534,7 +5467,7 @@
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
 		"best-effort-json-parser": "^1.2.1",
-		"diff": "^8.0.2",
+		"diff": "^8.0.3",
 		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
@@ -5542,7 +5475,7 @@
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
-		"undici": "^7.11.0",
+		"undici": "^7.18.2",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
 	},

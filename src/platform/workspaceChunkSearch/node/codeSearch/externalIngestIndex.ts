@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
+import * as l10n from '@vscode/l10n';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
@@ -25,6 +26,7 @@ import { ISearchService } from '../../../search/common/searchService';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
+import { TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
 
 const debug = false;
@@ -53,7 +55,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _db: sql.DatabaseSync;
 
-	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(5));
+	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(20));
 	private readonly _watcher = this._register(new MutableDisposable<DisposableStore>());
 
 	private static readonly _checkpointStorageKey = 'externalIngest.checkpoint';
@@ -176,13 +178,12 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<void> {
-
-		await this.initialize();
+	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		await raceCancellationError(this.initialize(), token);
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
-			return;
+			return Result.error(TriggerRemoteIndexingError.noWorkspace);
 		}
 
 		// Use the first workspace folder as the "root" for the fileset
@@ -190,17 +191,30 @@ export class ExternalIngestIndex extends Disposable {
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
-		const result = await this._client.updateIndex(
-			this.getFilesetName(primaryRoot),
-			currentCheckpoint,
-			this.getFilesToIndexFromDb(),
-			token,
-			onProgress
-		);
-
-		if (result.isOk()) {
-			this.setCurrentIndexCheckpoint(result.val.checkpoint);
+		try {
+			const result = await this._client.updateIndex(
+				this.getFilesetName(primaryRoot),
+				currentCheckpoint,
+				this.getFilesToIndexFromDb(token),
+				token,
+				onProgress
+			);
+			if (result.isOk()) {
+				this.setCurrentIndexCheckpoint(result.val.checkpoint);
+				return Result.ok(true);
+			} else {
+				return Result.error({
+					id: 'external-ingest-error',
+					userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+				});
+			}
+		} catch (e) {
+			return Result.error({
+				id: 'external-ingest-error',
+				userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
+			});
 		}
+
 	}
 
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
@@ -303,8 +317,8 @@ export class ExternalIngestIndex extends Disposable {
 		return !await this._ignoreService.isCopilotIgnored(uri, token);
 	}
 
-	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
-		if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }, token: CancellationToken): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
+		if (!await this.shouldTrackFile(uri, token)) {
 			return Result.error(false);
 		}
 
@@ -356,23 +370,34 @@ export class ExternalIngestIndex extends Disposable {
 		return uri.fsPath;
 	}
 
-	private async *getFilesToIndexFromDb(): AsyncIterable<ExternalIngestFile> {
-		// Get files that are either already marked Yes or need to be evaluated (Undetermined)
+	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile {
+		return {
+			uri,
+			relativePath: this.computeRelativePath(uri),
+			docSha,
+			read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
+		};
+	}
+
+	private async *getFilesToIndexFromDb(token: CancellationToken): AsyncIterable<ExternalIngestFile> {
+		// Get files that are either already marked "Yes" or "need to be evaluated" (Undetermined)
 		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest IN (?, ?)').all(ShouldIngestState.Yes, ShouldIngestState.Undetermined) as unknown as Array<DbFileEntry>;
 
-		for (const row of rows) {
+		const limiter = new Limiter<ExternalIngestFile | undefined>(20);
+
+		const processRow = async (row: DbFileEntry): Promise<ExternalIngestFile | undefined> => {
 			const uri = URI.parse(row.path);
 
 			// Skip files that are now under code search repos
-			if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+			if (!await this.shouldTrackFile(uri, token)) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
-			const stat = await this.safeStat(uri);
+			const stat = await raceCancellationError(this.safeStat(uri), token);
 			if (!stat) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
 			const storedSize = row.size;
@@ -381,51 +406,60 @@ export class ExternalIngestIndex extends Disposable {
 
 			// If file state is undetermined, we need to evaluate it
 			if (row.shouldIngest === ShouldIngestState.Undetermined) {
-				const result = await this.shouldIngestFile(uri, stat);
+				const result = await this.shouldIngestFile(uri, stat, token);
 				if (result.isOk()) {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, docSha = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.Yes, result.val.docSha, stat.size, stat.mtime, uri.toString());
 
-					yield {
-						uri,
-						relativePath: this.computeRelativePath(uri),
-						docSha: result.val.docSha,
-						read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-					};
+					return this.createExternalIngestFile(uri, result.val.docSha);
 				} else {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.No, stat.size, stat.mtime, uri.toString());
 				}
-				continue;
+				return undefined;
 			}
 
 			// File is already marked Yes - use cached docSha if file unchanged
 			let docSha: Uint8Array | undefined = fileUnchanged ? row.docSha ?? undefined : undefined;
 
 			if (!docSha) {
-				docSha = await this.computeIngestDocSha(uri);
+				docSha = await raceCancellationError(this.computeIngestDocSha(uri), token);
 				if (!docSha) {
-					continue;
+					return undefined;
 				}
 
 				// Store the computed docSha in the database
 				this._db.prepare('UPDATE Files SET docSha = ? WHERE path = ?').run(docSha, uri.toString());
 			}
 
-			yield {
-				uri,
-				relativePath: this.computeRelativePath(uri),
-				docSha,
-				read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-			};
+			return this.createExternalIngestFile(uri, docSha);
+		};
+
+		// Queue all work upfront to run in parallel, then yield results in order as they complete
+		const pendingResults = rows.map(row => limiter.queue(() => processRow(row)));
+
+		for (const pending of pendingResults) {
+			const result = await raceCancellationError(pending, token);
+			if (result) {
+				yield result;
+			}
 		}
 	}
 
 	private async reconcileDbFiles(): Promise<void> {
+		await this._workspaceService.ensureWorkspaceIsFullyLoaded();
+		await this._ignoreService.init();
+
 		const initialDbFiles = new ResourceSet();
 		for (const uri of this.iterateDbFiles()) {
 			initialDbFiles.add(uri);
 		}
+
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${initialDbFiles.size} initial file entries in database.`);
+
+		let addedFileCount = 0;
+		let updatedFileCount = 0;
+		let removedFileCount = 0;
 
 		const seen = new ResourceSet();
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
@@ -436,6 +470,8 @@ export class ExternalIngestIndex extends Disposable {
 				Number.MAX_SAFE_INTEGER,
 				CancellationToken.None
 			);
+
+			this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${paths.length} candidate files in workspace folder ${folder.toString()}.`);
 
 			for (const uri of paths) {
 				// Skip files under code search repos
@@ -451,8 +487,12 @@ export class ExternalIngestIndex extends Disposable {
 				seen.add(uri);
 
 				const existing = this.get(uri);
-				if (!existing || existing.size !== stat.size || existing.mtime !== stat.mtime) {
+				if (!existing) {
 					await this.tryAddOrUpdateFile(uri);
+					addedFileCount++;
+				} else if (existing.size !== stat.size || existing.mtime !== stat.mtime) {
+					await this.tryAddOrUpdateFile(uri);
+					updatedFileCount++;
 				}
 			}
 		}
@@ -461,8 +501,10 @@ export class ExternalIngestIndex extends Disposable {
 		for (const uri of initialDbFiles) {
 			if (!seen.has(uri)) {
 				this.delete(uri);
+				removedFileCount++;
 			}
 		}
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Reconciled database. Added: ${addedFileCount}, updated: ${updatedFileCount}, removed: ${removedFileCount}`);
 	}
 
 	private registerWatcher(): void {

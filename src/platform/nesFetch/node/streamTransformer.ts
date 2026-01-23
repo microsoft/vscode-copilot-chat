@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { Completion } from '../common/completionsAPI';
 
 /**
@@ -11,60 +10,42 @@ import { Completion } from '../common/completionsAPI';
  *
  * Listener should handle the errors coming from the input stream.
  */
-export function streamToLines(stream: AsyncIterableObject<string>): AsyncIterableObject<string> {
-	return new AsyncIterableObject<string>(async (emitter) => {
-		let buffer = '';
+export async function* streamToLines(stream: AsyncIterable<string>): AsyncGenerator<string> {
+	let buffer = '';
 
-		for await (const str of stream) {
-			buffer += str;
-			do {
-				const newlineIndex = buffer.indexOf('\n');
-				if (newlineIndex === -1) {
-					break;
-				}
-
-				// take the first line
-				const line = buffer.substring(0, newlineIndex);
-				buffer = buffer.substring(newlineIndex + 1);
-
-				emitter.emitOne(line);
-			} while (true);
+	for await (const str of stream) {
+		buffer += str;
+		let newlineIndex: number;
+		while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+			// take the first line
+			const line = buffer.substring(0, newlineIndex);
+			buffer = buffer.substring(newlineIndex + 1);
+			yield line;
 		}
+	}
 
-		if (buffer.length > 0) {
-			// last line which doesn't end with \n
-			emitter.emitOne(buffer);
-		}
-	});
+	if (buffer.length > 0) {
+		// last line which doesn't end with \n
+		yield buffer;
+	}
 }
 
-export function jsonlStreamToCompletions(jsonlStream: AsyncIterableObject<string>): AsyncIterableObject<Completion> {
-
-	return new AsyncIterableObject<Completion>(async (emitter) => {
-
-		for await (const line of jsonlStream) {
-
-			if (line.trim() === 'data: [DONE]') {
-				continue;
-			}
-
-			if (line.startsWith('data: ')) {
-				try {
-					const message: Completion & { error?: { message: string } } = JSON.parse(line.substring('data: '.length));
-
-					if (message.error) {
-						emitter.reject(new Error(message.error.message));
-						return;
-					}
-
-					emitter.emitOne(message);
-				} catch (err) {
-					emitter.reject(err);
-					return;
-				}
-			}
+export async function* jsonlStreamToCompletions(jsonlStream: AsyncIterable<string>): AsyncGenerator<Completion> {
+	for await (const line of jsonlStream) {
+		if (line.trim() === 'data: [DONE]') {
+			continue;
 		}
-	});
+
+		if (line.startsWith('data: ')) {
+			const message: Completion & { error?: { message: string } } = JSON.parse(line.substring('data: '.length));
+
+			if (message.error) {
+				throw new Error(message.error.message);
+			}
+
+			yield message;
+		}
+	}
 }
 
 // function replaceBytes(s: string): string {

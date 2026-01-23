@@ -23,13 +23,13 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
-import { AsyncIterableSource } from '../../../util/vs/base/common/async';
+import { AsyncIterableSource, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -48,7 +48,6 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
-import { ProgressMessageScenario } from '../../prompts/node/inline/progressMessages';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
@@ -217,15 +216,14 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
-		// Determine scenario for progress messages
-		const progressScenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+		// Start generating contextual message immediately
+		const contextualMessagePromise = this._progressMessages.getContextualMessage(request.prompt, documentContext, token);
 
 		// Show progress message after ~1 second delay (unless request completes first)
-		const progressTimeout = setTimeout(() => {
-			if (!token.isCancellationRequested) {
-				stream.progress(this._progressMessages.getNextMessage(progressScenario));
-			}
-		}, 1000);
+		timeout(1000, token).then(async () => {
+			const message = await contextualMessagePromise;
+			stream.progress(message);
+		});
 
 		let result: IInlineChatEditResult;
 		try {
@@ -243,8 +241,6 @@ export class InlineChatIntent implements IIntent {
 						: toErrorMessage(err),
 				}
 			};
-		} finally {
-			clearTimeout(progressTimeout);
 		}
 
 		if (token.isCancellationRequested) {
@@ -452,13 +448,13 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 								}, CopilotToolMode.FullContext);
 							}
 
-							const result = await this._toolsService.invokeTool(toolCall.name, {
+							const result = await this._toolsService.invokeToolWithEndpoint(toolCall.name, {
 								input,
 								toolInvocationToken: request.toolInvocationToken,
 								// Split on `__vscode` so it's the chat stream id
 								// TODO @lramos15 - This is a gross hack
 								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
-							}, token) as vscode.ExtendedLanguageModelToolResult;
+							}, endpoint, token) as vscode.ExtendedLanguageModelToolResult;
 
 							if (result.hasError) {
 								failedEdits.push([toolCall, result]);
@@ -501,7 +497,12 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
 			...request,
-			tools: new Map(Array.from(enabledTools).map(toolName => [toolName, true] as const))
+			tools: new Map(
+				Array.from(enabledTools)
+					.map(t => this._toolsService.getTool(t))
+					.filter(isDefined)
+					.map(tool => [tool, true])
+			),
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);
