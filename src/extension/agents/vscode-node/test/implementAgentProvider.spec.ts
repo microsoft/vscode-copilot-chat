@@ -21,6 +21,7 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { buildImplementAgentMarkdown, ImplementAgentProvider } from '../implementAgentProvider';
 
 suite('ImplementAgentProvider', () => {
+	// Tests for the ImplementAgentProvider class - verifies the provider's integration
 	let disposables: DisposableStore;
 	let mockConfigurationService: InMemoryConfigurationService;
 	let fileSystemService: IFileSystemService;
@@ -156,6 +157,7 @@ suite('ImplementAgentProvider', () => {
 });
 
 suite('buildImplementAgentMarkdown', () => {
+	// Tests for the pure buildImplementAgentMarkdown function in isolation.
 	test('generates expected full content for Implement agent (snapshot test)', () => {
 		const config = {
 			name: 'Implement',
