@@ -2046,7 +2046,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				case 401:
 					throw new Error(vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.'));
 				case 403:
-					throw new Error(vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings](https://github.com/settings/copilot/coding_agent) or contact your organization administrator.'));
+					throw new Error(vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', 'https://github.com/settings/copilot/coding_agent'));
 				case 404:
 					throw new Error(vscode.l10n.t('The repository `{0}/{1}` was not found or you do not have access to it.', repoOwner, repoName));
 				case 422:
