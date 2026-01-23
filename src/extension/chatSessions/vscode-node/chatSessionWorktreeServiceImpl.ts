@@ -251,37 +251,38 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		// Ensure the initial repository discovery is completed and the repository
-		// states are initialized in the vscode.git extension. At this point, the
-		// worktrees may not have been opened yet so we may need to explicitly open
-		// them.
+		// states are initialized in the vscode.git extension. This is needed as these
+		// will be the repositories that we use to compute the worktree changes. We do
+		// not have to open each worktree individually since the changes are committed
+		// so we can get them from the main repository or discovered worktree.
 		await this.gitService.initialize();
 
 		// Check whether the worktree belongs to any of the discovered repositories
-		const worktreePaths = this.gitService.repositories.map(r => r.worktrees.map(w => w.path)).flat();
-		if (!worktreePaths.some(p => isEqual(vscode.Uri.file(p), worktreePath))) {
-			this._sessionWorktreeChanges.set(sessionId, undefined);
-			return undefined;
-		}
+		const repository = this.gitService.repositories
+			.find(r => r.worktrees.some(w => isEqual(vscode.Uri.file(w.path), worktreePath)));
 
-		// Open the worktree repository. This will initialize the repository state
-		// in the vscode.git extension but the source control provider will not be
-		// shown in the Source Control view since it is being hidden.
-		const repository = await this.gitService.getRepository(worktreePath);
 		if (!repository) {
 			this._sessionWorktreeChanges.set(sessionId, undefined);
 			return undefined;
 		}
 
+		// Get worktree properties
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
+
 		if (worktreeProperties === undefined || worktreeProperties.autoCommit === false) {
-			// These changes are staged in the worktree but not yet committed
-			if (!repository.changes) {
+			// These changes are staged in the worktree but not yet committed. Since the
+			// changes are not committed, we need to get them from the worktree repository
+			// state. To do that we need to open the worktree repository. The source control
+			// provider will not be shown in the Source Control view since it is being hidden.
+			const worktreeRepository = await this.gitService.getRepository(worktreePath);
+
+			if (!worktreeRepository?.changes) {
 				this._sessionWorktreeChanges.set(sessionId, []);
 				return [];
 			}
 
 			const changes: vscode.ChatSessionChangedFile[] = [];
-			for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			for (const change of [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree]) {
 				try {
 					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
 					changes.push(new vscode.ChatSessionChangedFile(
@@ -298,9 +299,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return changes;
 		}
 
-		// These changes are committed in the worktree branch
+		// These changes are committed in the worktree branch but since they are
+		// committed we can get the changes from the main repository and we do
+		// not need to open the worktree repository.
 		const diff = await this.gitService.diffBetweenWithStats(
-			vscode.Uri.file(worktreeProperties.worktreePath),
+			repository.rootUri,
 			worktreeProperties.baseCommit,
 			worktreeProperties.branchName);
 
