@@ -8,7 +8,6 @@ import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -207,7 +206,6 @@ export class ClaudeCodeSession extends Disposable {
 		initialModelId: string | undefined,
 		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -345,7 +343,6 @@ export class ClaudeCodeSession extends Disposable {
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
 		// Build options for the Claude Code SDK
-		const isDebugEnabled = this.configService.getConfig(ConfigKey.Advanced.ClaudeCodeDebugEnabled);
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
@@ -384,11 +381,7 @@ export class ClaudeCodeSession extends Disposable {
 				preset: 'claude_code'
 			},
 			settingSources: ['user', 'project', 'local'],
-			...(isDebugEnabled && {
-				stderr: data => {
-					this.logService.trace(`claude-agent-sdk stderr: ${data}`);
-				}
-			})
+			stderr: data => this.logService.error(`claude-agent-sdk stderr: ${data}`)
 		};
 
 		this.logService.trace(`claude-agent-sdk: Starting query`);

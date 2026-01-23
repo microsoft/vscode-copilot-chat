@@ -4020,15 +4020,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.claudeCode.debug": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.claudeCode.debug%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
 						"type": "boolean",
 						"default": false,

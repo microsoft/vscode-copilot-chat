@@ -657,7 +657,6 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationMode = defineAndMigrateSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', 'chat.agentHistorySummarizationMode', undefined);
 		export const UseResponsesApiTruncation = defineAndMigrateSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', 'chat.useResponsesApiTruncation', false);
 		export const OmitBaseAgentInstructions = defineAndMigrateSetting<boolean>('chat.advanced.omitBaseAgentInstructions', 'chat.omitBaseAgentInstructions', false);
-		export const ClaudeCodeDebugEnabled = defineAndMigrateSetting<boolean>('chat.advanced.claudeCode.debug', 'chat.claudeCode.debug', false);
 		export const ClaudeAgentAllowDangerouslySkipPermissions = defineSetting<boolean>('chat.claudeAgent.allowDangerouslySkipPermissions', ConfigType.Simple, false);
 		export const GitHistoryRelatedFilesUsingEmbeddings = defineAndMigrateSetting('chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings', 'chat.suggestRelatedFilesFromGitHistory.useEmbeddings', false);
 		export const CLICustomAgentsEnabled = defineAndMigrateSetting<boolean | undefined>('chat.advanced.cli.customAgents.enabled', 'chat.cli.customAgents.enabled', true);
