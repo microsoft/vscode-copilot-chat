@@ -62,12 +62,10 @@ export class ClaudeSettingsChangeTracker {
 	}
 
 	/**
-	 * Checks if any tracked file has been modified since the last snapshot.
-	 *
-	 * @returns Array of URIs that have changed, empty if no changes
+	 * Async generator that yields changed files one at a time.
+	 * Allows early termination when only checking for existence of changes.
 	 */
-	async getChangedFiles(): Promise<URI[]> {
-		const changed: URI[] = [];
+	private async *_changedFilesGenerator(): AsyncGenerator<URI> {
 		const allPaths = this._pathResolvers.flatMap(resolver => resolver());
 
 		for (const uri of allPaths) {
@@ -78,32 +76,32 @@ export class ClaudeSettingsChangeTracker {
 				const stat = await this.fileSystemService.stat(uri);
 				if (snapshotMtime === undefined) {
 					// New file that wasn't in snapshot - treat as changed
-					changed.push(uri);
 					this.logService.trace(`[ClaudeSettingsChangeTracker] New file detected: ${uri.fsPath}`);
+					yield uri;
 				} else if (stat.mtime > snapshotMtime) {
-					changed.push(uri);
 					this.logService.trace(`[ClaudeSettingsChangeTracker] Changed: ${uri.fsPath} (${snapshotMtime} -> ${stat.mtime})`);
+					yield uri;
 				}
 			} catch {
 				// File doesn't exist now
 				if (snapshotMtime !== undefined && snapshotMtime > 0) {
 					// File was deleted - treat as changed
-					changed.push(uri);
 					this.logService.trace(`[ClaudeSettingsChangeTracker] Deleted: ${uri.fsPath}`);
+					yield uri;
 				}
 			}
 		}
-
-		return changed;
 	}
 
 	/**
-	 * Convenience method to check if any files have changed.
+	 * Checks if any files have changed. Returns early on first change found.
 	 *
 	 * @returns true if any tracked file has been modified since the last snapshot
 	 */
 	async hasChanges(): Promise<boolean> {
-		const changed = await this.getChangedFiles();
-		return changed.length > 0;
+		for await (const _uri of this._changedFilesGenerator()) {
+			return true;
+		}
+		return false;
 	}
 }

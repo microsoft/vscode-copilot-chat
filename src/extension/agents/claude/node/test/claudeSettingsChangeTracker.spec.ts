@@ -120,59 +120,6 @@ describe('ClaudeSettingsChangeTracker', () => {
 		});
 	});
 
-	describe('getChangedFiles', () => {
-		it('should return empty array when no files changed', async () => {
-			mockFs.mockFile(testFile1, '# Instructions', 1000);
-
-			tracker.registerPathResolver(() => [testFile1]);
-			await tracker.takeSnapshot();
-
-			const changed = await tracker.getChangedFiles();
-			expect(changed).toHaveLength(0);
-		});
-
-		it('should return only changed files', async () => {
-			mockFs.mockFile(testFile1, '# Instructions', 1000);
-			mockFs.mockFile(testFile2, '{}', 1000);
-
-			tracker.registerPathResolver(() => [testFile1, testFile2]);
-			await tracker.takeSnapshot();
-
-			// Modify only first file
-			mockFs.mockFile(testFile1, '# Updated', 2000);
-
-			const changed = await tracker.getChangedFiles();
-			expect(changed).toHaveLength(1);
-			expect(changed[0].toString()).toBe(testFile1.toString());
-		});
-
-		it('should return newly created files', async () => {
-			tracker.registerPathResolver(() => [testFile1]);
-			await tracker.takeSnapshot();
-
-			// Create file
-			mockFs.mockFile(testFile1, '# New', 1000);
-
-			const changed = await tracker.getChangedFiles();
-			expect(changed).toHaveLength(1);
-			expect(changed[0].toString()).toBe(testFile1.toString());
-		});
-
-		it('should return deleted files', async () => {
-			mockFs.mockFile(testFile1, '# Instructions', 1000);
-
-			tracker.registerPathResolver(() => [testFile1]);
-			await tracker.takeSnapshot();
-
-			// Delete file
-			mockFs.mockError(testFile1, new Error('ENOENT'));
-
-			const changed = await tracker.getChangedFiles();
-			expect(changed).toHaveLength(1);
-			expect(changed[0].toString()).toBe(testFile1.toString());
-		});
-	});
-
 	describe('multiple path resolvers', () => {
 		it('should track files from all registered resolvers', async () => {
 			mockFs.mockFile(testFile1, '# Instructions', 1000);
@@ -185,9 +132,8 @@ describe('ClaudeSettingsChangeTracker', () => {
 			// Modify second file (from second resolver)
 			mockFs.mockFile(testFile2, '{"updated": true}', 2000);
 
-			const changed = await tracker.getChangedFiles();
-			expect(changed).toHaveLength(1);
-			expect(changed[0].toString()).toBe(testFile2.toString());
+			const hasChanges = await tracker.hasChanges();
+			expect(hasChanges).toBe(true);
 		});
 
 		it('should detect new files added by resolver after snapshot', async () => {
@@ -201,10 +147,9 @@ describe('ClaudeSettingsChangeTracker', () => {
 			dynamicPaths.push(testFile3);
 			mockFs.mockFile(testFile3, '# New file', 1000);
 
-			const changed = await tracker.getChangedFiles();
+			const hasChanges = await tracker.hasChanges();
 			// testFile3 wasn't in the original snapshot, so it's a "new" file
-			expect(changed).toHaveLength(1);
-			expect(changed[0].toString()).toBe(testFile3.toString());
+			expect(hasChanges).toBe(true);
 		});
 	});
 });
