@@ -316,7 +316,8 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 			const renderResult = await renderer.render(undefined, token, { trace: true });
 
-			telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length);
+			const toolTokenCount = availableTools.length > 0 ? await endpoint.acquireTokenizer().countToolTokens(availableTools) : 0;
+			telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, [], availableTools.length, toolTokenCount);
 
 			stream = ChatResponseStreamImpl.spy(stream, part => {
 				if (part instanceof ChatResponseTextEditPart) {
@@ -548,7 +549,7 @@ class InlineChatEditHeuristicStrategy implements IInlineChatEditStrategy {
 		const replyInterpreter = renderResult.metadata.get(ReplyInterpreterMetaData)?.replyInterpreter ?? new NoopReplyInterpreter();
 		const telemetryData = renderResult.metadata.getAll(TelemetryData);
 
-		const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0);
+		const telemetry = chatTelemetry.makeRequest(this._intent, ChatLocation.Editor, conversation, renderResult.messages, renderResult.tokenCount, renderResult.references, endpoint, telemetryData, 0, 0);
 
 		stream = ChatResponseStreamImpl.spy(stream, part => {
 			if (part instanceof ChatResponseTextEditPart) {
