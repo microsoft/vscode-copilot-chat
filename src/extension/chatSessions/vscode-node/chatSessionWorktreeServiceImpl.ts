@@ -26,7 +26,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
-	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile[] | undefined> = new Map();
+	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile2[] | undefined> = new Map();
 	private _sessionRepositories = new Map<string, RepoContext | undefined>();
 
 	constructor(
@@ -239,7 +239,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		this._sessionWorktreeChanges.delete(sessionId);
 	}
 
-	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined> {
+	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile2[] | undefined> {
 		if (this._sessionWorktreeChanges.has(sessionId)) {
 			return this._sessionWorktreeChanges.get(sessionId);
 		}
@@ -281,17 +281,20 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				return [];
 			}
 
-			const changes: vscode.ChatSessionChangedFile[] = [];
+			const changes: vscode.ChatSessionChangedFile2[] = [];
 			for (const change of [...worktreeRepository.changes.indexChanges, ...worktreeRepository.changes.workingTree]) {
 				try {
 					const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
-					changes.push(new vscode.ChatSessionChangedFile(
+					changes.push(new vscode.ChatSessionChangedFile2(
 						change.uri,
-						fileStats?.insertions ?? 0,
-						fileStats?.deletions ?? 0,
 						change.status !== 1 /* INDEX_ADDED */
 							? change.originalUri
-							: undefined));
+							: undefined,
+						change.status !== 2 /* INDEX_DELETED */
+							? change.uri
+							: undefined,
+						fileStats?.insertions ?? 0,
+						fileStats?.deletions ?? 0));
 				} catch (error) { }
 			}
 
@@ -313,13 +316,16 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		const changes = diff.map(change => {
-			return new vscode.ChatSessionChangedFile(
-				toGitUri(change.uri, worktreeProperties.branchName),
-				change.insertions,
-				change.deletions,
+			return new vscode.ChatSessionChangedFile2(
+				change.uri,
 				change.status !== 1 /* INDEX_ADDED */
 					? toGitUri(change.originalUri, worktreeProperties.baseCommit)
-					: undefined);
+					: undefined,
+				change.status !== 6 /* DELETED */
+					? toGitUri(change.uri, worktreeProperties.branchName)
+					: undefined,
+				change.insertions,
+				change.deletions);
 		});
 
 		this._sessionWorktreeChanges.set(sessionId, changes);
