@@ -415,7 +415,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 ToolRegistry.registerModelSpecificTool(
 	{
-		name: 'memory',
+		name: 'copilot_memory',
 		toolReferenceName: 'memory',
 		displayName: 'Memory',
 		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',
