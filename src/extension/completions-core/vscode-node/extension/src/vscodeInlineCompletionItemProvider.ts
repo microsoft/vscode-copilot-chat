@@ -80,7 +80,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
-		const logContext = new GhostTextContext(doc.uri.toString(), doc.version, context);
+		const logContext = new GhostTextLogContext(doc.uri.toString(), doc.version, context);
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, logContext, token);
 		} catch (e) {

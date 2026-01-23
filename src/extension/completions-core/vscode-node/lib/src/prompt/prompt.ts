@@ -92,7 +92,7 @@ export namespace PromptResponse {
 					{ header: 'PREFIX', content: response.prompt.prefix },
 					{ header: 'SUFFIX', content: response.prompt.suffix },
 					{ header: 'CONTEXT', content: (response.prompt.context || []).join('\n---\n') },
-					{ header: 'METADATA', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
+					{ header: 'FIM', content: 'Is Fim enabled: ' + response.prompt.isFimEnabled },
 					{ header: 'TOKENS', content: `Prefix tokens: ${response.prompt.prefixTokens}\nSuffix tokens: ${response.prompt.suffixTokens}` },
 					{ header: 'NEIGHBORS', content: Array.from(response.neighborSource.entries()).map(([key, value]) => `neighboring file type: ${key}\n--\n${value.join(', ')}`).join('\n') },
 					{ header: 'METADATA', content: JSON.stringify(response.metadata, null, '\t') },
