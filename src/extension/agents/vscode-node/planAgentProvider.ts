@@ -31,6 +31,7 @@ interface PlanAgentConfig {
 	argumentHint: string;
 	tools: string[];
 	model?: string;
+	target?: string;
 	handoffs: PlanAgentHandoff[];
 	body: string;
 }
@@ -43,6 +44,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	name: 'Plan',
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
+	target: 'vscode',
 	tools: [
 		'github/issue_read',
 		'agent',
@@ -150,6 +152,9 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	// Model (optional)
 	if (config.model) {
 		lines.push(`model: ${config.model}`);
+	}
+	if (config.target) {
+		lines.push(`target: ${config.target}`);
 	}
 
 	// Tools array - flow style for readability
