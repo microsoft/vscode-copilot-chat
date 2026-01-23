@@ -63,8 +63,8 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		if (!chatSessionResource) {
 			return undefined;
 		}
-		const uriString = chatSessionResource.toString();
-		const pathSegments = uriString.split('/').filter(s => s.length > 0);
+		const path = chatSessionResource.path;
+		const pathSegments = path.split('/').filter(s => s.length > 0);
 		return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : undefined;
 	}
 
