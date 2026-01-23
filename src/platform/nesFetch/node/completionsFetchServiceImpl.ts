@@ -5,8 +5,8 @@
 
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { getRequestId, RequestId } from '../../networking/common/fetch';
 import { FetchOptions, IFetcherService, IHeaders, Response } from '../../networking/common/fetcherService';
@@ -18,7 +18,7 @@ export type FetchResponse = {
 	status: number;
 	statusText: string;
 	headers: IHeaders;
-	body: AsyncIterableObject<string>;
+	body: AsyncIterable<string>;
 	requestId: RequestId;
 	response: Response;
 };
@@ -80,7 +80,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				fetchResponse.val.status,
 				fetchResponse.val.statusText,
 				fetchResponse.val.headers,
-				() => fetchResponse.val.body.toPromise().then(arr => arr.join('')).catch(() => ''),
+				() => collectAsyncIterableToString(fetchResponse.val.body).catch(() => ''),
 			);
 
 			return Result.error(error);
@@ -125,18 +125,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 			const body = response.body.pipeThrough(new TextDecoderStream());
 
-			const responseStream = new AsyncIterableObject<string>(async (emitter) => {
-				try {
-					for await (const str of body) {
-						emitter.emitOne(str);
-					}
-				} catch (err: unknown) {
-					const error = errors.fromUnknown(err);
-					emitter.reject(error);
-				} finally {
-					onCancellationDisposable.dispose();
-				}
-			});
+			const responseStream = streamWithCleanup(body, onCancellationDisposable);
 
 			return Result.ok({
 				status: response.status,
@@ -176,4 +165,34 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		return headers;
 	}
+}
+
+/**
+ * Wraps an async iterable stream and disposes the cleanup disposable when the stream completes or errors.
+ */
+async function* streamWithCleanup(
+	stream: AsyncIterable<string>,
+	cleanupDisposable: IDisposable
+): AsyncGenerator<string> {
+	try {
+		for await (const str of stream) {
+			yield str;
+		}
+	} catch (err: unknown) {
+		const error = errors.fromUnknown(err);
+		throw error;
+	} finally {
+		cleanupDisposable.dispose();
+	}
+}
+
+/**
+ * Collects all strings from an async iterable and joins them into a single string.
+ */
+async function collectAsyncIterableToString(iterable: AsyncIterable<string>): Promise<string> {
+	const parts: string[] = [];
+	for await (const part of iterable) {
+		parts.push(part);
+	}
+	return parts.join('');
 }

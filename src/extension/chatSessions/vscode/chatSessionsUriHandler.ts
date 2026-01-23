@@ -263,15 +263,16 @@ export class ChatSessionsUriHandler extends Disposable implements CustomUriHandl
 
 	private _getAlreadyOpenWorkspace(gitApi: API, cloneUri: string): Repository | undefined {
 		const normalizedCloneUri = this._normalizeGitUri(cloneUri);
-
 		for (const repo of gitApi.repositories) {
 			// Check all remotes for this repository
-			const remotes = repo.state.remotes;
-			for (const remote of remotes) {
-				for (const url of remote.fetchUrl ? [remote.fetchUrl] : []) {
-					const normalizedRemoteUri = this._normalizeGitUri(url);
-					if (normalizedRemoteUri === normalizedCloneUri) {
-						return repo;
+			if (repo.kind === 'repository') {
+				const remotes = repo.state.remotes;
+				for (const remote of remotes) {
+					for (const url of remote.fetchUrl ? [remote.fetchUrl] : []) {
+						const normalizedRemoteUri = this._normalizeGitUri(url);
+						if (normalizedRemoteUri === normalizedCloneUri) {
+							return repo;
+						}
 					}
 				}
 			}

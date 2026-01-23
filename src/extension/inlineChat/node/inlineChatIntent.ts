@@ -29,7 +29,7 @@ import { Event } from '../../../util/vs/base/common/event';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -48,10 +48,12 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
+import { ProgressMessageScenario } from '../../prompts/node/inline/progressMessages';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { InlineChatProgressMessages } from './progressMessages';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from './promptCraftingTypes';
 
 
@@ -84,6 +86,8 @@ export class InlineChatIntent implements IIntent {
 
 	readonly description: string = '';
 
+	private readonly _progressMessages: InlineChatProgressMessages;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -96,7 +100,9 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-	) { }
+	) {
+		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
+	}
 
 	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
@@ -211,6 +217,16 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
+		// Determine scenario for progress messages
+		const progressScenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+
+		// Show progress message after ~1 second delay (unless request completes first)
+		const progressTimeout = setTimeout(() => {
+			if (!token.isCancellationRequested) {
+				stream.progress(this._progressMessages.getNextMessage(progressScenario));
+			}
+		}, 1000);
+
 		let result: IInlineChatEditResult;
 		try {
 			const strategy: IInlineChatEditStrategy = useToolsForEdit
@@ -227,6 +243,8 @@ export class InlineChatIntent implements IIntent {
 						: toErrorMessage(err),
 				}
 			};
+		} finally {
+			clearTimeout(progressTimeout);
 		}
 
 		if (token.isCancellationRequested) {
@@ -418,8 +436,6 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 					toolExecutions.push((async () => {
 						try {
-							stream.progress(l10n.t('Applying edits...'));
-
 							let input = isValidatedToolInput(validationResult)
 								? validationResult.inputObj
 								: JSON.parse(toolCall.arguments);
@@ -436,13 +452,13 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 								}, CopilotToolMode.FullContext);
 							}
 
-							const result = await this._toolsService.invokeTool(toolCall.name, {
+							const result = await this._toolsService.invokeToolWithEndpoint(toolCall.name, {
 								input,
 								toolInvocationToken: request.toolInvocationToken,
 								// Split on `__vscode` so it's the chat stream id
 								// TODO @lramos15 - This is a gross hack
 								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
-							}, token) as vscode.ExtendedLanguageModelToolResult;
+							}, endpoint, token) as vscode.ExtendedLanguageModelToolResult;
 
 							if (result.hasError) {
 								failedEdits.push([toolCall, result]);
@@ -485,7 +501,12 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
 			...request,
-			tools: new Map(Array.from(enabledTools).map(toolName => [toolName, true] as const))
+			tools: new Map(
+				Array.from(enabledTools)
+					.map(t => this._toolsService.getTool(t))
+					.filter(isDefined)
+					.map(tool => [tool, true])
+			),
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);

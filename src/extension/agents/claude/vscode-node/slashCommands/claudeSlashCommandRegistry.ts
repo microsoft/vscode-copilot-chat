@@ -63,6 +63,15 @@ const handlerRegistry: IClaudeSlashCommandHandlerCtor[] = [];
  * Register a slash command handler.
  * Call this at module load time to register your handler.
  *
+ * ## Adding a new slash command
+ *
+ * 1. Create a handler class implementing `IClaudeSlashCommandHandler`
+ * 2. Call `registerClaudeSlashCommand(YourHandler)` at module load time
+ * 3. Import it in `slashCommands/index.ts`
+ * 4. Add entries to `package.json`:
+ *    - Under `contributes.commands`: Add the VS Code command (e.g., `copilot.claude.mycommand`)
+ *    - Under `contributes.chatSessions[type="claude-code"].commands`: Add the slash command name and description
+ *
  * @param ctor - The handler constructor class
  *
  * @example
@@ -70,6 +79,7 @@ const handlerRegistry: IClaudeSlashCommandHandlerCtor[] = [];
  * export class MyCommand implements IClaudeSlashCommandHandler {
  *     readonly commandName = 'mycommand';
  *     readonly description = 'Does something useful';
+ *     readonly commandId = 'copilot.claude.mycommand'; // For Command Palette
  *
  *     async handle(args: string, stream: vscode.ChatResponseStream, token: CancellationToken) {
  *         stream.markdown('Hello!');

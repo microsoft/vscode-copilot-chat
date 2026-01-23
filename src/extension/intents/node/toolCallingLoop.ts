@@ -19,6 +19,7 @@ import { IMakeChatRequestOptions } from '../../../platform/networking/common/net
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { computePromptTokenDetails } from '../../../platform/tokenizer/node/promptTokenDetails';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -360,7 +361,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
-		const promptTokenLength = await (await this._endpointProvider.getChatEndpoint(this.options.request)).acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
+		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		const tokenizer = endpoint.acquireTokenizer();
+		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
 		this._logService.trace('Built prompt');
@@ -439,7 +442,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
-		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
@@ -479,8 +481,24 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			disableThinking,
 		}, token);
 
+		const promptTokenDetails = await computePromptTokenDetails({
+			messages: buildPromptResult.messages,
+			tokenizer,
+			tools: availableTools,
+		});
 		fetchStreamSource?.resolve();
-		const chatResult = await processResponsePromise ?? undefined;
+		let chatResult = await processResponsePromise ?? undefined;
+
+		// hydrate the token usage into the chat result as this renders the context window widget
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+			chatResult = {
+				...chatResult, usage: {
+					completionTokens: fetchResult.usage.completion_tokens,
+					promptTokens: fetchResult.usage.prompt_tokens,
+					promptTokenDetails,
+				}
+			};
+		}
 
 		// Validate authentication session upgrade and handle accordingly
 		if (

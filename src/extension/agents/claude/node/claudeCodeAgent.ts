@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { IEnvService } from '../../../../platform/env/common/envService';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
@@ -28,6 +28,7 @@ import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '..
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
 import { buildHooksFromRegistry } from './hooks/index';
 
 // Manages Claude Code agent interactions and language model server lifecycle
@@ -172,6 +173,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
 	private _editTracker = new ExternalEditTracker();
+	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
 	private _currentModelId: string | undefined;
 	private _currentPermissionMode: PermissionMode;
 
@@ -207,7 +209,7 @@ export class ClaudeCodeSession extends Disposable {
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IEnvService private readonly envService: IEnvService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
@@ -216,6 +218,57 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		this._settingsChangeTracker = this._createSettingsChangeTracker();
+	}
+
+	/**
+	 * Creates and configures the settings change tracker with path resolvers.
+	 * Add additional path resolvers here for new file types to track.
+	 */
+	private _createSettingsChangeTracker(): ClaudeSettingsChangeTracker {
+		const tracker = this.instantiationService.createInstance(ClaudeSettingsChangeTracker);
+
+		// Track CLAUDE.md files
+		tracker.registerPathResolver(() => {
+			const paths: URI[] = [];
+			// User-level CLAUDE.md
+			paths.push(URI.joinPath(this.envService.userHome, '.claude', 'CLAUDE.md'));
+			// Project-level CLAUDE.md files
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				paths.push(URI.joinPath(folder, '.claude', 'CLAUDE.md'));
+				paths.push(URI.joinPath(folder, '.claude', 'CLAUDE.local.md'));
+				paths.push(URI.joinPath(folder, 'CLAUDE.md'));
+				paths.push(URI.joinPath(folder, 'CLAUDE.local.md'));
+			}
+			return paths;
+		});
+
+		// Track settings/hooks files
+		tracker.registerPathResolver(() => {
+			const paths: URI[] = [];
+			// User-level settings
+			paths.push(URI.joinPath(this.envService.userHome, '.claude', 'settings.json'));
+			// Project-level settings files
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				paths.push(URI.joinPath(folder, '.claude', 'settings.json'));
+				paths.push(URI.joinPath(folder, '.claude', 'settings.local.json'));
+			}
+			return paths;
+		});
+
+		// Track agent files in agents directories
+		tracker.registerDirectoryResolver(() => {
+			const dirs: URI[] = [];
+			// User-level agents directory
+			dirs.push(URI.joinPath(this.envService.userHome, '.claude', 'agents'));
+			// Project-level agents directory
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				dirs.push(URI.joinPath(folder, '.claude', 'agents'));
+			}
+			return dirs;
+		}, '.md');
+
+		return tracker;
 	}
 
 	public override dispose(): void {
@@ -247,6 +300,12 @@ export class ClaudeCodeSession extends Disposable {
 			throw new Error('Session disposed');
 		}
 
+		// Check if settings files have changed since session started
+		if (this._queryGenerator && await this._settingsChangeTracker.hasChanges()) {
+			this.logService.trace('[ClaudeCodeSession] Settings files changed, restarting session with resume');
+			this._restartSession();
+		}
+
 		if (!this._queryGenerator) {
 			await this._startSession(token);
 		}
@@ -270,15 +329,6 @@ export class ClaudeCodeSession extends Disposable {
 		};
 
 		this._promptQueue.push(request);
-
-		// Handle cancellation
-		token.onCancellationRequested(() => {
-			const index = this._promptQueue.indexOf(request);
-			if (index !== -1) {
-				this._promptQueue.splice(index, 1);
-				deferred.error(new Error('Request was cancelled'));
-			}
-		});
 
 		// If there's a pending prompt request, fulfill it immediately
 		if (this._pendingPrompt) {
@@ -346,6 +396,9 @@ export class ClaudeCodeSession extends Disposable {
 			prompt: this._createPromptIterable(),
 			options
 		});
+
+		// Take a snapshot of settings files so we can detect changes
+		await this._settingsChangeTracker.takeSnapshot();
 
 		// Start the message processing loop
 		this._processMessages();
@@ -498,6 +551,19 @@ export class ClaudeCodeSession extends Disposable {
 			this._pendingPrompt.error(error);
 		}
 		this._pendingPrompt = undefined;
+	}
+
+	/**
+	 * Restarts the session to pick up settings changes.
+	 * Clears the query generator but preserves the session ID for resume.
+	 */
+	private _restartSession(): void {
+		// Clear the generator so _startSession will be called with resume
+		this._queryGenerator = undefined;
+		this._abortController.abort();
+		this._abortController = new AbortController();
+		// Note: We don't clear the prompt queue or pending prompts here
+		// because we're not erroring out, just restarting for settings reload
 	}
 
 	/**

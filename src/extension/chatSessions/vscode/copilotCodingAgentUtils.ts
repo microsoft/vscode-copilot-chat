@@ -71,14 +71,8 @@ export function formatBodyPlaceholder(title: string | undefined): string {
 }
 
 export async function getRepoId(gitService: IGitService): Promise<GithubRepoId[] | undefined> {
-	let timeout = 5000;
-	while (!gitService.isInitialized) {
-		await new Promise(resolve => setTimeout(resolve, 100));
-		timeout -= 100;
-		if (timeout <= 0) {
-			break;
-		}
-	}
+	// Ensure git service is initialized
+	await gitService.initialize();
 
 	// support multi-root
 	if (gitService.repositories.length > 1) {

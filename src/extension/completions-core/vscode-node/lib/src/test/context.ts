@@ -6,6 +6,8 @@
 import { DocumentSelector } from 'vscode-languageserver-protocol/lib/common/protocol';
 import { ILanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../../../../../platform/languageContextProvider/common/nullLanguageContextProviderService';
+import { ILanguageDiagnosticsService } from '../../../../../../platform/languages/common/languageDiagnosticsService';
+import { TestLanguageDiagnosticsService } from '../../../../../../platform/languages/common/testLanguageDiagnosticsService';
 import { TestingServiceCollection } from '../../../../../../platform/test/node/services';
 import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { createExtensionTestingServices } from '../../../../../test/vscode-node/services';
@@ -100,6 +102,7 @@ export function _createBaselineContext(serviceCollection: TestingServiceCollecti
 	serviceCollection.define(ICompletionsAsyncManagerService, new SyncDescriptor(AsyncCompletionManager));
 	serviceCollection.define(ICompletionsContextProviderBridgeService, new SyncDescriptor(ContextProviderBridge));
 	serviceCollection.define(ICompletionsPromiseQueueService, new TestPromiseQueue());
+	serviceCollection.define(ILanguageDiagnosticsService, new TestLanguageDiagnosticsService());
 
 	//ctx.set(FileSearch, new TestingFileSearch());
 	serviceCollection.define(ICompletionsPromptFactoryService, new SyncDescriptor(CompletionsPromptFactory));

@@ -349,6 +349,18 @@ namespace tss {
 		}
 	}
 
+	interface InternalLanguageServiceHost extends tt.LanguageServiceHost {
+		runWithTemporaryFileUpdate?(rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void;
+	}
+
+	export namespace LanguageServiceHost {
+		export function runWithTemporaryFileUpdate(host: tt.LanguageServiceHost, rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void {
+			const internalHost = host as InternalLanguageServiceHost;
+			if (typeof internalHost.runWithTemporaryFileUpdate === 'function') {
+				internalHost.runWithTemporaryFileUpdate(rootFile, updatedText, cb);
+			}
+		}
+	}
 
 	interface InternalSymbol extends tt.Symbol {
 		parent?: tt.Symbol;

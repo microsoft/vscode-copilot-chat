@@ -11,8 +11,9 @@ import { LRUCache } from '../../../util/common/cache';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IObservable, ObservableMap } from '../../../util/vs/base/common/observable';
 import { ToolName } from './toolNames';
-import { ICopilotTool } from './toolsRegistry';
+import { ICopilotModelSpecificTool, ICopilotTool } from './toolsRegistry';
 
 export const IToolsService = createServiceIdentifier<IToolsService>('IToolsService');
 
@@ -58,9 +59,28 @@ export interface IToolsService {
 	 * Tool implementations from tools in this extension
 	 */
 	copilotTools: ReadonlyMap<ToolName, ICopilotTool<unknown>>;
+
+	/**
+	 * Model-specific tool instances. These are NOT included in the
+	 * {@link copilotTools} map, and may update at runtime.
+	 */
+	modelSpecificTools: IObservable<{ definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]>;
+
 	getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 
+	/**
+	 * Invokes a tool by name with the given options.
+	 * Note that `invokeToolWithEndpoint` should be preferred for most usages.
+	 */
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	/**
+	 * Invokes a tool by name with the given options. Uses any endpoint-specific tool
+	 * overrides as appropriate.
+	 */
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
 
@@ -165,8 +185,18 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	private didWarnAboutValidationError?: Set<string>;
 	private readonly schemaCache = new LRUCache<ValidateFunction>(16);
 
+	protected readonly _modelSpecificTools = new ObservableMap</* tool name */string, { definition: vscode.LanguageModelToolDefinition; tool: ICopilotModelSpecificTool<unknown> }>();
+	public get modelSpecificTools() {
+		return this._modelSpecificTools.observable.map(v => [...v.values()]);
+	}
+
 	abstract getCopilotTool(name: string): ICopilotTool<unknown> | undefined;
 	abstract invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
+
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<Object>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		return this.invokeTool(name, options, token);
+	}
+
 	abstract getTool(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined;
 	abstract getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];

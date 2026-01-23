@@ -3,8 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import path from 'path';
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
+import { platform, PlatformToString } from '../../../util/vs/base/common/platform';
 import { isObject } from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
@@ -148,6 +150,51 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 	}
 }
 
+class PlatformAndReleaseDateFilterProvider implements IExperimentationFilterProvider {
+	private readonly _releaseDate: string | undefined;
+
+	constructor(
+		private _logService: ILogService
+	) {
+		this._releaseDate = this._initReleaseDate();
+	}
+
+	private _initReleaseDate(): string | undefined {
+		try {
+			const product = require(path.join(vscode.env.appRoot, 'product.json'));
+			return this._formatReleaseDate(product.date ?? '');
+		} catch (error) {
+			this._logService.warn(`[PlatformAndReleaseDateFilterProvider]::_initReleaseDate Failed to read product.json for release date: ${error}`);
+			return undefined;
+		}
+	}
+
+	private _formatReleaseDate(iso: string): string {
+		if (!iso) {
+			return '';
+		}
+		const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})/.exec(iso);
+		if (!match) {
+			return '';
+		}
+		return match.slice(1, 5).join('');
+	}
+
+	getFilters(): Map<string, string> {
+		const filters = new Map<string, string>();
+
+		const platformString = PlatformToString(platform);
+		filters.set('X-VSCode-Platform', platformString);
+
+		if (this._releaseDate) {
+			filters.set('X-VSCode-ReleaseDate', this._releaseDate);
+		}
+
+		this._logService.trace(`[PlatformAndReleaseDateFilterProvider]::getFilters Filters: ${JSON.stringify(Array.from(filters.entries()))}`);
+		return filters;
+	}
+}
+
 export class MicrosoftExperimentationService extends BaseExperimentationService {
 	constructor(
 		@ITelemetryService telemetryService: ITelemetryService,
@@ -177,6 +224,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
+				new PlatformAndReleaseDateFilterProvider(logService),
 			);
 		};
 

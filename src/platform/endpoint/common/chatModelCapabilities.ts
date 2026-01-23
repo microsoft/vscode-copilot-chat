@@ -83,6 +83,11 @@ export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
 	return HIDDEN_MODEL_F_HASHES.includes(h);
 }
 
+export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
+	const family_hash = getCachedSha256Hash(model.family);
+	return family_hash === '0f20a0190d87a4c4659060f79fec24fb0bef76808950c6b8fd4b52daf7fc23d5';
+}
+
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
 
 	const ID_hash = getCachedSha256Hash(getModelId(model));
@@ -209,7 +214,11 @@ export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageMod
 }
 
 export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelG(model);
+}
+
+export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().startsWith('gemini');
 }
 
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
