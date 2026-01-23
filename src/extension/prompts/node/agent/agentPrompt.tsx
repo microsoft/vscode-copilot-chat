@@ -146,12 +146,14 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getSystemPrompt(customizations: AgentPromptCustomizations) {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
+		const isNewChat = this.props.promptContext.history?.length === 1;
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 			return <AlternateGPTPrompt
 				availableTools={this.props.promptContext.tools?.availableTools}
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
+				isNewChat={isNewChat}
 			/>;
 		}
 
@@ -160,6 +162,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			availableTools={this.props.promptContext.tools?.availableTools}
 			modelFamily={modelFamily}
 			codesearchMode={this.props.codesearchMode}
+			isNewChat={isNewChat}
 		/>;
 	}
 
