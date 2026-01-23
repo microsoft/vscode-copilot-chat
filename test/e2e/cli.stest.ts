@@ -40,6 +40,7 @@ import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, ChatSessionStatus, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
+import { IMcpService, NullMcpService } from '../../src/platform/mcp/common/mcpService';
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
 const originalValues: Record<string, string | undefined> = {};
@@ -207,6 +208,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
