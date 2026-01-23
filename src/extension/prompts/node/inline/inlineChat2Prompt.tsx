@@ -56,7 +56,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<Tag name='instructions'>
 						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You can ONLY edit that file and must use a tool to make these edits.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on coding, no wordy explanations, and do not ask back for clarifications.<br />
-						Make all changes in a single invocation of the {this.props.exitToolName} tool (there is no tool calling loop).<br />
+						Make all changes in a single invocation of the edit-tool (there is no tool calling loop).<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
@@ -79,7 +79,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 							: <>Focus on the selection, and try to make changes to the selected code and its context.<br /></>
 						}
 						Do not make code changes that are not directly and logically related to the user's prompt.<br />
-						ONLY change the `{filepath}` file, make all changes in a single invocation of the {this.props.exitToolName} tool, and change NO other file.
+						ONLY change the `{filepath}` file, make all changes in a single invocation of the edit-tool, and change NO other file.
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
@@ -161,7 +161,7 @@ export class FileSelectionElement extends PromptElement<FileSelectionElementProp
 		}));
 
 		return <>
-			<Tag name='selection'>
+			<Tag name='file-selection'>
 				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={selectedLines} />
 			</Tag>
 		</>;
