@@ -227,6 +227,7 @@ export interface Repository {
 	readonly state: RepositoryState;
 	readonly kind: RepositoryKind;
 	readonly ui: RepositoryUIState;
+	readonly kind: RepositoryKind;
 
 	readonly onDidCommit: Event<void>;
 

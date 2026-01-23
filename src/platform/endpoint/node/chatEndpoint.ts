@@ -175,12 +175,13 @@ export class ChatEndpoint implements IChatEndpoint {
 	public getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
-		if (modelProviderPreference) {
-			headers['X-Model-Provider-Preference'] = modelProviderPreference;
-		}
-
 		if (this.useMessagesApi) {
+
+			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
+			if (modelProviderPreference) {
+				headers['X-Model-Provider-Preference'] = modelProviderPreference;
+			}
+
 			const betaFeatures: string[] = [];
 
 			// Add thinking beta if enabled
@@ -385,7 +386,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

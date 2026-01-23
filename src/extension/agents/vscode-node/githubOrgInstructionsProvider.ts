@@ -63,7 +63,11 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 
 			// Write the instructions to cache
 			const fileName = `${INSTRUCTIONS_BASE_FILE_NAME}${INSTRUCTION_FILE_EXTENSION}`;
-			const contentChanged = await this.githubOrgChatResourcesService.writeCacheFile(PromptsType.instructions, orgId, fileName, instructions);
+			const content = `---
+applyTo: '**'
+---
+${instructions}`;
+			const contentChanged = await this.githubOrgChatResourcesService.writeCacheFile(PromptsType.instructions, orgId, fileName, content, { checkForChanges: true });
 
 			// If no changes, we can return
 			if (!contentChanged) {
@@ -74,7 +78,7 @@ export class GitHubOrgInstructionsProvider extends Disposable implements vscode.
 			// Otherwise, fire event to notify consumers that instructions have changed
 			this._onDidChangeInstructions.fire();
 		} catch (error) {
-			this.logService.error(`[GitHubOrgCustomAgentProvider] Error polling for agents: ${error}`);
+			this.logService.error(`[GitHubOrgInstructionsProvider] Error polling for instructions: ${error}`);
 		}
 	}
 }
