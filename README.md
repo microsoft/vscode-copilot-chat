@@ -1,8 +1,8 @@
-# GitHub Copilot - Your AI peer programmer
+# GitHub Copilot - Your AI pair programmer
 
 **[GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)** is an AI peer programming tool that helps you write code faster and smarter.
 
-GitHub Copilot adapts to your unique needs allowing you to select the best model for your project, customize chat responses with custom instructions, and utilize agent mode for AI-powered, seamlessly integrated peer programming sessions.
+GitHub Copilot adapts to your unique needs, allowing you to select the best model for your project, customize chat responses with custom instructions, and utilize agent mode for AI-powered, seamlessly integrated peer programming sessions.
 
 **Sign up for [GitHub Copilot Free](https://github.com/settings/copilot?utm_source=vscode-chat-readme&utm_medium=first&utm_campaign=2025mar-em-MSFT-signup)!**
 
@@ -20,7 +20,7 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 ## AI-powered coding sessions
 
-**Start an AI-powered coding session tailored to your workflow**. Copilot Edits allows you to quickly iterate on code changes directly in the editor, across multiple files using natural language. For a more autonomous peer programmer experience,
+**Start an AI-powered coding session tailored to your workflow**. Copilot Edits allows you to quickly iterate on code changes directly in the editor, across multiple files, using natural language. For a more autonomous peer programmer experience,
 [agent mode](https://aka.ms/vscode-copilot-agent) performs multi-step coding tasks at your command. It automatically handles compile and lint errors, monitors terminal and test output, and iterates until the task is complete. [Edit mode](https://aka.ms/vscode-copilot-edit) offers a conversational, step-by-step coding experience. Engage in multi-turn chat conversations while Copilot applies edits directly to your codebase, allowing you to review changes in context and maintain full control.
 
 ![Agent mode in Copilot Chat creating a new Vue application](https://github.com/microsoft/vscode-copilot-release/blob/main/images/agent-mode-readme.gif?raw=true)
