@@ -10,7 +10,7 @@ import { IObservable } from '../../../../util/vs/base/common/observableInternal'
 import { observableValue } from '../../../../util/vs/base/common/observableInternal/observables/observableValue';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IGitService, RepoContext } from '../../../git/common/gitService';
-import { Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery } from '../../../git/vscode/git';
+import { Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryAccessDetails } from '../../../git/vscode/git';
 
 /**
  * A configurable mock implementation of IGitService for testing.
@@ -36,6 +36,10 @@ export class MockGitService implements IGitService {
 	 */
 	setRepositoryFetchUrls(value: Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined): void {
 		this._repositoryFetchUrls = value;
+	}
+
+	getRecentRepositories(): Iterable<RepositoryAccessDetails> {
+		return [];
 	}
 
 	getRepositoryFetchUrls = vi.fn().mockImplementation((): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> => {

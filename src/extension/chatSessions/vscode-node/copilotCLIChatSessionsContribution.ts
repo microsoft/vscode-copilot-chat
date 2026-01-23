@@ -15,6 +15,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { isUri } from '../../../util/common/types';
 import { disposableTimeout, raceCancellation } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -307,12 +308,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				};
 			} else if (isUntitledSessionId(copilotcliSessionId)) {
 				// For new untitled sessions in untitled workspaces, auto-select the first last-used repo if available
-				// const lastUsedRepos = await this.gitService.getLastUsedRepositories();
-				// if (lastUsedRepos.length > 0) {
-				// 	const firstRepo = lastUsedRepos[0].repo;
-				// 	options[REPOSITORY_OPTION_ID] = firstRepo.rootUri.fsPath;
-				// 	await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo.rootUri.fsPath);
-				// }
+				const lastUsedRepos = await this.getRepositoryOptionItemsForUntitledWorkspace();
+				if (lastUsedRepos.length > 0) {
+					const firstRepo = lastUsedRepos[0];
+					options[REPOSITORY_OPTION_ID] = firstRepo.id;
+					await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo.id);
+				}
 			}
 		} else {
 			const repositories = this.getRepositoryOptionItems();
@@ -429,7 +430,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 * Check if the current workspace is untitled (has no workspace folders).
 	 */
 	private isUntitledWorkspace(): boolean {
-		return this.workspaceService.getWorkspaceFolders().length === 0 && false;
+		return this.workspaceService.getWorkspaceFolders().length === 0;
 	}
 
 	/**
@@ -496,9 +497,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 * Get repository option items for untitled workspaces using last used repositories.
 	 */
 	private async getRepositoryOptionItemsForUntitledWorkspace(): Promise<ChatSessionProviderOptionItem[]> {
-		// const lastUsedRepos = await this.gitService.getLastUsedRepositories();
-		// return lastUsedRepos.map(({ repo }) => toRepositoryOptionItem(repo));
-		return [];
+		const last10Repos = [];
+		for (const repo of this.gitService.getRecentRepositories()) {
+			last10Repos.push(repo);
+			if (last10Repos.length >= 10) {
+				break;
+			}
+		}
+		return last10Repos.map((repoAccess, index) => toRepositoryOptionItem(repoAccess.rootUri));
 	}
 
 	// Handle option changes for a session (store current state in a map)
@@ -583,17 +589,19 @@ async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): P
 	}
 }
 
-function toRepositoryOptionItem(repository: RepoContext): ChatSessionProviderOptionItem {
-	const repositoryName = repository.rootUri.path.split('/').pop() ?? repository.rootUri.toString();
+function toRepositoryOptionItem(repository: RepoContext | Uri, isDefault: boolean = false): ChatSessionProviderOptionItem {
+	const repositoryUri = isUri(repository) ? repository : repository.rootUri;
+	const repositoryIcon = isUri(repository) ? 'repo' : repository.kind === 'repository' ? 'repo' : 'archive';
+	const repositoryName = repositoryUri.path.split('/').pop() ?? repositoryUri.toString();
 
 	return {
-		id: repository.rootUri.fsPath,
+		id: repositoryUri.fsPath,
 		name: repositoryName,
-		icon: repository.kind === 'repository'
-			? new vscode.ThemeIcon('repo')
-			: new vscode.ThemeIcon('archive'),
+		icon: new vscode.ThemeIcon(repositoryIcon),
+		default: isDefault
 	} satisfies vscode.ChatSessionProviderOptionItem;
 }
+
 
 function toWorkspaceFolderOptionItem(workspaceFolderUri: URI, name: string): ChatSessionProviderOptionItem {
 	return {
@@ -1333,7 +1341,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		const selectedFolderUri = folderUris[0];
 
 		// Check if the selected folder contains a git repository
-		const repository = await gitService.getRepository(selectedFolderUri);
+		const repository = await gitService.getRepository(selectedFolderUri, true);
 		if (!repository) {
 			await vscode.window.showErrorMessage(
 				l10n.t('Selected folder does not contain a git repository. Please select a folder with a git repository.'),
