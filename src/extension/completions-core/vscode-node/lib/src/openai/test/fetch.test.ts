@@ -250,7 +250,7 @@ suite('Telemetry sent on fetch', function () {
 		const request = {
 			prompt: 'prompt prefix',
 			suffix: 'prompt suffix',
-			stream: true,
+			stream: true as const,
 			count: 1,
 			extra: {
 				language: 'python',
@@ -272,7 +272,7 @@ suite('Telemetry sent on fetch', function () {
 		const request = {
 			prompt: 'prefix without context',
 			suffix: 'prompt suffix',
-			stream: true,
+			stream: true as const,
 			count: 1,
 			extra: {
 				language: 'python',

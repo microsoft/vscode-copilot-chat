@@ -196,7 +196,8 @@ describe('Notebook Prompt Rendering', function () {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; }
 		};
 		testingServiceCollection.define(IAlternativeNotebookContentService, new SimulationAlternativeNotebookContentService('json'));
 		testingServiceCollection.define(IAlternativeNotebookContentEditGenerator, new AlternativeNotebookContentEditGenerator(new SimulationAlternativeNotebookContentService('json'), new DiffServiceImpl(), new class implements ILogService {
@@ -210,6 +211,9 @@ describe('Notebook Prompt Rendering', function () {
 			error = mockLogger.error;
 			show(preserveFocus?: boolean): void {
 				//
+			}
+			createSubLogger(): ILogger {
+				return this;
 			}
 		}(), new NullTelemetryService()));
 		accessor = testingServiceCollection.createTestingAccessor();

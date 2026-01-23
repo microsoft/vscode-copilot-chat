@@ -342,6 +342,30 @@ export interface IOctoKitService {
 	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
 
 	/**
+	 * Gets the custom instructions prompt for an organization.
+	 * @param orgLogin The organization login
+	 * @returns The prompt string or undefined if not available
+	 */
+	getOrgCustomInstructions(orgLogin: string, authOptions: AuthOptions): Promise<string | undefined>;
+
+	/**
+	 * Gets the list of repositories the authenticated user has access to.
+	 * This includes repositories the user owns, collaborates on, and has access to through organization membership.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @param query - Optional search query to filter repositories by name.
+	 * @returns An array of repositories with owner/name format
+	 */
+	getUserRepositories(authOptions: AuthOptions, query?: string): Promise<{ owner: string; name: string }[]>;
+
+	/**
+	 * Gets the list of repositories the authenticated user has recently committed to.
+	 * Uses the GitHub Events API to find repositories from recent PushEvent activity.
+	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @returns An array of repositories with owner/name format, ordered by most recent commit
+	 */
+	getRecentlyCommittedRepositories(authOptions: AuthOptions): Promise<{ owner: string; name: string }[]>;
+
+	/**
 	 * Gets the list of available models for the Copilot coding agent.
 	 * Returns an empty array if the user doesn't have access to the model picker
 	 * (e.g., Copilot Business or Enterprise users before rollout).
@@ -448,6 +472,89 @@ export class BaseOctoKitService {
 			return [];
 		}
 		return result.map((repo: { name: string }) => repo.name);
+	}
+
+	protected async getUserRepositoriesWithToken(token: string, query?: string): Promise<{ owner: string; name: string }[]> {
+		// If query provided, use GitHub search API
+		if (query && query.trim()) {
+			return this.searchUserRepositoriesWithToken(token, query.trim());
+		}
+
+		// Fetch the most recently updated repos with push access
+		const result = await this._makeGHAPIRequest(
+			'user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member',
+			'GET',
+			token
+		);
+
+		if (!result || !Array.isArray(result)) {
+			return [];
+		}
+
+		// Filter to repos with push access
+		const items = result
+			.filter((repo: { permissions?: { push?: boolean } }) => repo.permissions?.push)
+			.map((repo: { name: string; owner: { login: string } }) => ({
+				owner: repo.owner.login,
+				name: repo.name
+			}));
+		return items || [];
+	}
+
+	private async searchUserRepositoriesWithToken(token: string, query: string): Promise<{ owner: string; name: string }[]> {
+		// Use GitHub search API to find repos matching the query
+		// Search in repos the user has push access to
+		const searchQuery = encodeURIComponent(`${query} in:name fork:true`);
+		const result = await this._makeGHAPIRequest(
+			`search/repositories?q=${searchQuery}&sort=updated&per_page=100`,
+			'GET',
+			token
+		);
+
+		if (!result || !result.items || !Array.isArray(result.items)) {
+			return [];
+		}
+
+		// Filter to only repos with push access
+		const items = result.items
+			.filter((repo: { permissions?: { push?: boolean } }) => repo.permissions?.push)
+			.map((repo: { name: string; owner: { login: string } }) => ({
+				owner: repo.owner.login,
+				name: repo.name
+			}));
+		return items || [];
+	}
+
+	protected async getRecentlyCommittedReposWithToken(token: string): Promise<{ owner: string; name: string }[]> {
+		// First, get the authenticated user's login
+		const user = await this._makeGHAPIRequest('user', 'GET', token);
+		if (!user || !user.login) {
+			return [];
+		}
+
+		// Fetch recent events for the user (includes push events)
+		const events = await this._makeGHAPIRequest(
+			`users/${user.login}/events?per_page=100`,
+			'GET',
+			token
+		);
+
+		if (!events || !Array.isArray(events)) {
+			return [];
+		}
+
+		// Extract unique repos from PushEvent entries, preserving order (most recent first)
+		const repoSet = new Map<string, { owner: string; name: string }>();
+		for (const event of events) {
+			if (event.type === 'PushEvent' && event.repo?.name) {
+				const [owner, name] = event.repo.name.split('/');
+				if (owner && name && !repoSet.has(event.repo.name)) {
+					repoSet.set(event.repo.name, { owner, name });
+				}
+			}
+		}
+		const items = Array.from(repoSet.values());
+		return items || [];
 	}
 
 	private async getBlobContentWithToken(owner: string, repo: string, sha: string, token: string): Promise<string | undefined> {

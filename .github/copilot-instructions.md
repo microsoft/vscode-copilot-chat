@@ -275,7 +275,7 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **GitHub**: Authentication and API access
 - **Azure**: Cloud services and experimentation
 - **OpenAI**: Language model API
-- **Anthropic**: Claude model integration
+- **Anthropic**: Claude model integration - See **[src/extension/agents/claude/AGENTS.md](../src/extension/agents/claude/AGENTS.md)** for complete Claude Agent SDK integration documentation including architecture, components, and registries
 - **Telemetry**: Usage analytics and performance monitoring
 
 ## Development Workflow

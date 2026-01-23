@@ -67,7 +67,9 @@ export enum ToolName {
 	EditFilesPlaceholder = 'edit_files',
 	CoreRunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation',
-	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation'
+	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
+	SearchSubagent = 'search_subagent',
+	AskQuestions = 'ask_questions'
 }
 
 export enum ContributedToolName {
@@ -111,6 +113,7 @@ export enum ContributedToolName {
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
+	AskQuestions = 'copilot_askQuestions',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -173,6 +176,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
 	[ToolName.CoreRunSubagent]: ToolCategory.Core,
+	[ToolName.SearchSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
@@ -222,6 +226,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
 } as const;
 
 

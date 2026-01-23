@@ -3,12 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Type } from '@sinclair/typebox';
-import { TypeCheck, TypeCompiler } from '@sinclair/typebox/compiler';
+import { Diagnostic } from 'vscode';
+import { URI } from '../../../../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import {
 	CodeSnippet,
+	ContextItemOrigin,
+	DiagnosticBag,
 	SupportedContextItem,
 	SupportedContextItemType,
 	Trait,
@@ -16,40 +18,94 @@ import {
 import { ICompletionsLogTargetService, logger } from '../../logger';
 import { ResolvedContextItem } from '../contextProviderRegistry';
 
-/**
- * Redefine all the types from contextProviderV1 as typebox schema and verify equality.
- * None of these types should be exported, they are only used for type checking.
- */
-const _ContextItemSchema = Type.Object({
-	importance: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
-	id: Type.Optional(Type.String()),
-	origin: Type.Optional(Type.Union([Type.Literal('request'), Type.Literal('update')])),
-});
-const _TraitSchema = Type.Intersect([
-	Type.Object({
-		name: Type.String(),
-		value: Type.String(),
-	}),
-	_ContextItemSchema,
-]);
-const _CodeSnippetSchema = Type.Intersect([
-	Type.Object({
-		uri: Type.String(),
-		value: Type.String(),
-		additionalUris: Type.Optional(Type.Array(Type.String())),
-	}),
-	_ContextItemSchema,
-]);
-const _SupportedContextItemSchema = [_TraitSchema, _CodeSnippetSchema];
-const _SupportedContextItemSchemaUnion = Type.Union(_SupportedContextItemSchema);
-type _SupportedContextItemSchemas =
-	| (typeof _SupportedContextItemSchema)[number]
-	| typeof _SupportedContextItemSchemaUnion;
+namespace ContextItemSchema {
+	export function is(item: SupportedContextItem): boolean {
+		if (item.importance !== undefined) {
+			if (typeof item.importance !== 'number' || !Number.isInteger(item.importance) || item.importance < 0 || item.importance > 100) {
+				return false;
+			}
+		}
+		if (item.id !== undefined) {
+			if (typeof item.id !== 'string') {
+				return false;
+			}
+		}
+		if (item.origin !== undefined) {
+			if (!ContextItemOrigin.is(item.origin)) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
 
-const supportedContextItemValidators = new Map<SupportedContextItemType, TypeCheck<_SupportedContextItemSchemas>>([
-	['Trait', TypeCompiler.Compile(_TraitSchema)],
-	['CodeSnippet', TypeCompiler.Compile(_CodeSnippetSchema)],
-]);
+namespace TraitSchema {
+	export function is(item: SupportedContextItem): item is Trait {
+		if (!ContextItemSchema.is(item)) {
+			return false;
+		}
+		const candidate = item as Trait;
+		return typeof candidate.name === 'string' && typeof candidate.value === 'string';
+	}
+}
+
+namespace CodeSnippetSchema {
+	export function is(item: SupportedContextItem): item is CodeSnippet {
+		if (!ContextItemSchema.is(item)) {
+			return false;
+		}
+		const candidate = item as CodeSnippet;
+		if (typeof candidate.uri !== 'string' || typeof candidate.value !== 'string') {
+			return false;
+		}
+		if (candidate.additionalUris === undefined) {
+			return true;
+		}
+		if (!Array.isArray(candidate.additionalUris)) {
+			return false;
+		}
+		for (const uri of candidate.additionalUris) {
+			if (typeof uri !== 'string') {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+namespace DiagnosticBagSchema {
+	export function is(item: SupportedContextItem): item is DiagnosticBag {
+		if (!ContextItemSchema.is(item)) {
+			return false;
+		}
+		const candidate = item as DiagnosticBag;
+		if (!(URI.isUri(candidate.uri))) {
+			return false;
+		}
+		if (!Array.isArray(candidate.values)) {
+			return false;
+		}
+		for (const diagnostic of candidate.values) {
+			if (!(diagnostic instanceof Diagnostic)) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+namespace SupportedContextItemSchema {
+	export function is(item: SupportedContextItem): SupportedContextItemType | undefined {
+		if (TraitSchema.is(item)) {
+			return 'Trait';
+		} else if (CodeSnippetSchema.is(item)) {
+			return 'CodeSnippet';
+		} else if (DiagnosticBagSchema.is(item)) {
+			return 'DiagnosticBag';
+		}
+		return undefined;
+	}
+}
 
 /**
  *
@@ -62,7 +118,8 @@ const supportedContextItemValidators = new Map<SupportedContextItemType, TypeChe
 
 export type TraitWithId = Trait & { id: string; type: 'Trait' };
 export type CodeSnippetWithId = CodeSnippet & { id: string; type: 'CodeSnippet' };
-export type SupportedContextItemWithId = TraitWithId | CodeSnippetWithId;
+export type DiagnosticBagWithId = DiagnosticBag & { id: string; type: 'DiagnosticBag' };
+export type SupportedContextItemWithId = TraitWithId | CodeSnippetWithId | DiagnosticBagWithId;
 
 export function filterContextItemsByType<S extends SupportedContextItemType>(
 	resolvedContextItems: ResolvedContextItem[],
@@ -89,19 +146,13 @@ export function filterSupportedContextItems(
 	let invalidItemsCounter = 0;
 
 	contextItems.forEach(item => {
-		let matched = false;
-		for (const [type, validator] of supportedContextItemValidators.entries()) {
-			if (validator.Check(item)) {
-				filteredItems.push({
-					...item,
-					type,
-				});
-				matched = true;
-				break;
-			}
-		}
-
-		if (!matched) {
+		const type = SupportedContextItemSchema.is(item);
+		if (type !== undefined) {
+			filteredItems.push({
+				...item,
+				type,
+			});
+		} else {
 			invalidItemsCounter++;
 		}
 	});

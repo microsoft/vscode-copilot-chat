@@ -10,19 +10,19 @@ import { IAuthenticationService } from '../../src/platform/authentication/common
 import * as fetcher from '../../src/platform/nesFetch/common/completionsFetchService';
 import { ResponseStream } from '../../src/platform/nesFetch/common/responseStream';
 import { CompletionsFetchService, FetchResponse, IFetchRequestParams } from '../../src/platform/nesFetch/node/completionsFetchServiceImpl';
+import { getRequestId } from '../../src/platform/networking/common/fetch';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
+import { LockMap } from '../../src/util/common/lock';
 import { Result } from '../../src/util/common/result';
 import { AsyncIterableObject, DeferredPromise, IThrottledWorkerOptions, ThrottledWorker } from '../../src/util/vs/base/common/async';
 import { CachedFunction } from '../../src/util/vs/base/common/cache';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { IJSONOutputPrinter } from '../jsonOutputPrinter';
-import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
-
-import { LockMap } from '../../src/util/common/lock';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { OPENAI_FETCHER_CACHE_SALT } from '../cacheSalt';
+import { IJSONOutputPrinter } from '../jsonOutputPrinter';
+import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
 import { CachedResponseMetadata, CachedTestInfo } from './cachingChatMLFetcher';
-import { ICacheableCompletionsResponse, ICompletionsCache } from './completionsCache';
+import { emptyFetcherResponse, ICacheableCompletionsResponse, ICompletionsCache } from './completionsCache';
 import { computeSHA256 } from './hash';
 import { CacheMode } from './simulationContext';
 import { FetchRequestCollector } from './spyingChatMLFetcher';
@@ -196,10 +196,12 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 		const fetchResult: Result<FetchResponse, fetcher.Completions.CompletionsFetchFailure> =
 			this.isNoFetchModeEnabled
 				? Result.ok({
+					requestId: getRequestId(new Headers()),
 					status: 200,
 					statusText: '',
-					headers: {},
+					headers: new Headers(),
 					body: AsyncIterableObject.fromArray(['']),
+					response: emptyFetcherResponse(new Headers()),
 				} satisfies FetchResponse)
 				: await new Promise((resolve, reject) => {
 					throttler.work([

@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import type * as vscode from 'vscode';
 
-
 export namespace Copilot {
 
 	export type DocumentUri = string;
@@ -199,6 +198,10 @@ export namespace Copilot {
 		additionalUris?: string[];
 	}
 
-	export type SupportedContextItem = Trait | CodeSnippet;
+	export interface DiagnosticBag extends ContextItem {
+		uri: vscode.Uri;
+		values: vscode.Diagnostic[];
+	}
 
+	export type SupportedContextItem = Trait | CodeSnippet | DiagnosticBag;
 }

@@ -3,12 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
+import { MarkdownString } from '../../../vscodeTypes';
 import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
+import { formatUriForFileWidget } from '../common/toolUtils';
 import { AbstractReplaceStringTool, IAbstractReplaceStringInput } from './abstractReplaceStringTool';
 import { IReplaceStringToolParams } from './replaceStringTool';
 
@@ -26,6 +30,55 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 			oldString: r.oldString,
 			newString: r.newString,
 		}));
+	}
+
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<IMultiReplaceStringToolParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		const partialInput = options.rawInput as Partial<IMultiReplaceStringToolParams> | undefined;
+
+		let invocationMessage: MarkdownString;
+		if (partialInput && typeof partialInput === 'object' && Array.isArray(partialInput.replacements)) {
+			// Filter to valid replacements that have at least oldString
+			const validReplacements = partialInput.replacements.filter(
+				r => r && typeof r === 'object' && r.oldString !== undefined
+			);
+
+			if (validReplacements.length > 0) {
+				let totalOldLines = 0;
+				let totalNewLines = 0;
+				let hasNewString = false;
+				const fileNames = new ResourceSet();
+
+				for (const r of validReplacements) {
+					totalOldLines += count(r.oldString, '\n') + 1;
+					if (r.newString !== undefined) {
+						hasNewString = true;
+						totalNewLines += count(r.newString, '\n') + 1;
+					}
+					const uri = r.filePath && this.promptPathRepresentationService.resolveFilePath(r.filePath);
+					if (uri) {
+						fileNames.add(uri);
+					}
+				}
+
+				const fileList = fileNames.size > 0 ? Array.from(fileNames, n => formatUriForFileWidget(n)).join(', ') : undefined;
+
+				if (hasNewString && fileList) {
+					invocationMessage = new MarkdownString(l10n.t`Replacing ${totalOldLines} lines with ${totalNewLines} lines in ${fileList}`);
+				} else if (hasNewString) {
+					invocationMessage = new MarkdownString(l10n.t`Replacing ${totalOldLines} lines with ${totalNewLines} lines`);
+				} else if (fileList) {
+					invocationMessage = new MarkdownString(l10n.t`Replacing ${totalOldLines} lines in ${fileList}`);
+				} else {
+					invocationMessage = new MarkdownString(l10n.t`Replacing ${totalOldLines} lines`);
+				}
+			} else {
+				invocationMessage = new MarkdownString(l10n.t`Editing files`);
+			}
+		} else {
+			invocationMessage = new MarkdownString(l10n.t`Editing files`);
+		}
+
+		return { invocationMessage };
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams>, token: vscode.CancellationToken) {

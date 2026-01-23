@@ -18,6 +18,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { getLanguageForResource } from '../../../util/common/languages';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { extname } from '../../../util/vs/base/common/resources';
+import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
@@ -164,6 +165,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		const confirmation = await this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			[uri],
+			this._promptContext?.allowedEditUris,
 			async () => this.instantiationService.invokeFunction(
 				formatDiffAsUnified,
 				uri,
@@ -177,6 +179,35 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			presentation: undefined,
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
+		};
+	}
+
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<ICreateFileParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		let invocationMessage: MarkdownString;
+
+		// rawInput is now a partial object (parsed via tryParsePartialToolInput)
+		const partialInput = options.rawInput as Partial<ICreateFileParams> | undefined;
+
+		if (partialInput && typeof partialInput === 'object') {
+			const filePath = partialInput.filePath;
+			const content = partialInput.content;
+
+			if (filePath && content !== undefined) {
+				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
+				const lineCount = count(content, '\n') + 1;
+				invocationMessage = new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)} (${lineCount} lines)`);
+			} else if (content !== undefined) {
+				const lineCount = count(content, '\n') + 1;
+				invocationMessage = new MarkdownString(l10n.t`Creating file (${lineCount} lines)`);
+			} else {
+				invocationMessage = new MarkdownString(l10n.t`Creating file`);
+			}
+		} else {
+			invocationMessage = new MarkdownString(l10n.t`Creating file`);
+		}
+
+		return {
+			invocationMessage,
 		};
 	}
 

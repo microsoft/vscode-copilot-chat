@@ -5,6 +5,8 @@
 
 import type * as vscode from 'vscode';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ObservableMap } from '../../../util/vs/base/common/observable';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from './toolNames';
@@ -60,6 +62,7 @@ export interface ICopilotToolExtension<T> {
 	 *                 If provided, allows customizing the tool definition per endpoint.
 	 *
 	 * @return An overridden tool definition.
+	 * @deprecated use `ToolRegistry.registerModelSpecificTool` instead
 	 */
 	alternativeDefinition?(tool: vscode.LanguageModelToolInformation, endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation;
 }
@@ -67,6 +70,18 @@ export interface ICopilotToolExtension<T> {
 export interface ICopilotTool<T> extends ICopilotToolExtension<T> {
 	invoke?: vscode.LanguageModelTool<T>['invoke'];
 	prepareInvocation?: vscode.LanguageModelTool<T>['prepareInvocation'];
+}
+
+export interface ICopilotModelSpecificTool<T> extends ICopilotTool<T> {
+	/**
+	 * If present, this tool should be used instead of the base tool for the given tool name.
+	 * Note that this will require the base tool be registered and enabled in the request,
+	 * effectively 'overlaying' it.
+	 *
+	 * Defining `overridesTool` makes the model-specific tool behave substantially different from
+	 * normal model specific tools, since it is not individually selectable in the UI.
+	 */
+	overridesTool?: ToolName;
 }
 
 export function isVscodeLanguageModelTool(tool: ICopilotTool<unknown>): tool is vscode.LanguageModelTool<unknown> {
@@ -78,7 +93,11 @@ export interface ICopilotToolCtor {
 	new(...args: never[]): ICopilotTool<unknown>;
 }
 
-export interface ICopilotToolExtensionCtor {
+export interface IModelSpecificToolCtor {
+	new(...args: never[]): ICopilotModelSpecificTool<unknown>;
+}
+
+export interface ICopilotToolExtensionCtor extends IModelSpecificToolCtor {
 	readonly toolName: ToolName;
 	new(...args: never[]): ICopilotToolExtension<unknown>;
 }
@@ -86,6 +105,11 @@ export interface ICopilotToolExtensionCtor {
 export const ToolRegistry = new class {
 	private _tools: Array<ICopilotToolCtor> = [];
 	private _toolExtensions: Array<ICopilotToolExtensionCtor> = [];
+	private _modelSpecificTools = new ObservableMap<string, { definition: vscode.LanguageModelToolDefinition; tool: IModelSpecificToolCtor }>();
+
+	public get modelSpecificTools() {
+		return this._modelSpecificTools.observable.map(v => [...v.values()]);
+	}
 
 	public registerTool(tool: ICopilotToolCtor) {
 		this._tools.push(tool);
@@ -99,7 +123,43 @@ export const ToolRegistry = new class {
 		this._toolExtensions.push(tool);
 	}
 
+	public registerModelSpecificTool(definition: vscode.LanguageModelToolDefinition, tool: IModelSpecificToolCtor): IDisposable {
+		if (this._modelSpecificTools.has(definition.name)) {
+			throw new Error(`Model specific tool for ${definition.name} is already registered`);
+		}
+
+		this._modelSpecificTools.set(definition.name, { definition, tool });
+
+		return {
+			dispose: () => {
+				this._modelSpecificTools.delete(definition.name);
+			}
+		};
+	}
+
 	public getToolExtensions(): readonly ICopilotToolExtensionCtor[] {
 		return this._toolExtensions;
 	}
 }();
+
+export function modelSpecificToolApplies(tool: vscode.LanguageModelToolDefinition, endpoint: IChatEndpoint) {
+	if (!tool.models) {
+		return true;
+	}
+
+	return tool.models.some(m => {
+		if (m.id !== undefined && m.id === endpoint.model) {
+			return true;
+		}
+		if (m.version !== undefined && m.version === endpoint.version) {
+			return true;
+		}
+		if (m.family !== undefined && m.family === endpoint.family) {
+			return true;
+		}
+
+		if (m.vendor !== undefined && m.vendor === endpoint.version) {
+			return true;
+		}
+	});
+}

@@ -269,7 +269,19 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 		}
 
-		return sessions;
+		// De-duplicate sessions by sessionId, keeping the one with the most messages.
+		// This handles orphaned branches from parallel tool calls where multiple leaf
+		// nodes can exist for the same session (e.g., tool_result messages that didn't
+		// continue because another parallel branch became the main conversation).
+		const sessionById = new Map<string, IClaudeCodeSession>();
+		for (const session of sessions) {
+			const existing = sessionById.get(session.id);
+			if (!existing || session.messages.length > existing.messages.length) {
+				sessionById.set(session.id, session);
+			}
+		}
+
+		return Array.from(sessionById.values());
 	}
 
 	private _reviveStoredSDKMessage(raw: RawStoredSDKMessage): StoredSDKMessage {

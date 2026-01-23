@@ -35,6 +35,7 @@ import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/co
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency } from '../common/editRebase';
+import { NesChangeHint } from '../common/nesTriggerHint';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
@@ -44,6 +45,7 @@ import { INextEditResult, NextEditResult } from './nextEditResult';
 
 export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
 	enforceCacheDelay: boolean;
+	changeHint?: NesChangeHint;
 }
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
@@ -174,6 +176,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	): Promise<NextEditResult> {
 
 		const tracer = parentTracer.sub('_getNextEdit');
+		tracer.trace(`invoked with trigger id = ${context.changeHint?.data}`);
 
 		const doc = this._workspace.getDocument(docId);
 		if (!doc) {
@@ -195,7 +198,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return nextEditResult;
 		}
 
-		let edit: StringReplacement | undefined;
+		let edit: { actualEdit: StringReplacement; isFromCursorJump: boolean } | undefined;
 		let currentDocument: StringText | undefined;
 		let error: NoNextEditReason | undefined;
 		let req: NextEditFetchRequest;
@@ -206,7 +209,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		if (cachedEdit) {
 			tracer.trace('using cached edit');
-			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
+			const actualEdit = cachedEdit.rebasedEdit || cachedEdit.edit;
+			if (actualEdit) {
+				edit = { actualEdit, isFromCursorJump: cachedEdit.isFromCursorJump };
+			}
 			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
 			isSubsequentCachedEdit = cachedEdit.subsequentN !== undefined && cachedEdit.subsequentN > 0;
 			req = cachedEdit.source;
@@ -256,7 +262,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					} else {
 						tracer.trace('fetch succeeded');
 						logContext.setResponseResults([suggestedNextEdit]); // TODO: other streamed edits?
-						edit = suggestedNextEdit;
+						edit = { actualEdit: suggestedNextEdit, isFromCursorJump: result.val.isFromCursorJump };
 					}
 				}
 			}
@@ -270,7 +276,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				logContext.markAsNoSuggestions();
 			} else {
 				telemetryBuilder.setStatus('emptyEditsButHasNextCursorPosition');
-				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime });
+				return new NextEditResult(logContext.requestId, req, { jumpToPosition: error.nextCursorPosition, documentBeforeEdits: documentAtInvocationTime, isFromCursorJump: false });
 			}
 		}
 
@@ -288,14 +294,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
-		if (this._rejectionCollector.isRejected(targetDocumentId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit, nesConfigs)) {
 			tracer.returns('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
 			return emptyResult;
 		}
 
-		logContext.setResult(RootedLineEdit.fromEdit(new RootedEdit(documentAtInvocationTime, new StringEdit([edit]))));
+		logContext.setResult(RootedLineEdit.fromEdit(new RootedEdit(documentAtInvocationTime, new StringEdit([edit.actualEdit]))));
 
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
 
@@ -303,7 +309,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
 
-		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
+		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit: edit.actualEdit, isFromCursorJump: edit.isFromCursorJump, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 
 		telemetryBuilder.setHasNextEdit(true);
 
@@ -455,7 +461,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		parentTracer: ITracer,
 		telemetryBuilder: LlmNESTelemetryBuilder,
 		cancellationToken: CancellationToken
-	) {
+	): Promise<{
+		nextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit>;
+		nextEditResult: StatelessNextEditResult;
+	}> {
 		const curDocId = doc.id;
 		const tracer = parentTracer.sub('_executeNewNextEditRequest');
 
@@ -626,7 +635,17 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					// populate the cache
 					const nextEdit = rebasedEdit.replacements[0];
 					targetDocState.nextEdits.push(nextEdit);
-					cachedEdit = this._nextEditCache.setKthNextEdit(targetDocState.docId, targetDocState.docContents, ithEdit === 0 ? result.val.window : undefined, nextEdit, ithEdit, ithEdit === 0 ? targetDocState.nextEdits : undefined, ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined, req);
+					cachedEdit = this._nextEditCache.setKthNextEdit(
+						targetDocState.docId,
+						targetDocState.docContents,
+						ithEdit === 0 ? result.val.window : undefined,
+						nextEdit,
+						ithEdit,
+						ithEdit === 0 ? targetDocState.nextEdits : undefined,
+						ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
+						req,
+						{ isFromCursorJump: result.val.isFromCursorJump }
+					);
 					myTracer.trace(`populated cache for ${ithEdit}`);
 				}
 

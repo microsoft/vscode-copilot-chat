@@ -70,20 +70,27 @@ export function formatBodyPlaceholder(title: string | undefined): string {
 	return vscode.l10n.t('Cloud agent has begun work on **{0}** and will update this pull request as work progresses.', title || vscode.l10n.t('your request'));
 }
 
-export async function getRepoId(gitService: IGitService): Promise<GithubRepoId | undefined> {
-	let timeout = 5000;
-	while (!gitService.isInitialized) {
-		await new Promise(resolve => setTimeout(resolve, 100));
-		timeout -= 100;
-		if (timeout <= 0) {
-			break;
-		}
+export async function getRepoId(gitService: IGitService): Promise<GithubRepoId[] | undefined> {
+	// Ensure git service is initialized
+	await gitService.initialize();
+
+	// support multi-root
+	if (gitService.repositories.length > 1) {
+		return gitService.repositories.map(repo => {
+			if (repo.remoteFetchUrls && repo.remoteFetchUrls[0]) {
+				return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+			}
+		}).filter((id): id is GithubRepoId => !!id);
 	}
 
 	const repo = gitService.activeRepository.get();
 	if (repo && repo.remoteFetchUrls?.[0]) {
-		return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+		const id = getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+		if (id) {
+			return [id];
+		}
 	}
+	return [];
 }
 
 export namespace SessionIdForPr {

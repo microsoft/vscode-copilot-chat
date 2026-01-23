@@ -10,11 +10,12 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
+import { isAnthropicContextEditingEnabled } from '../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -28,7 +29,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { RenderedUserMessageMetadata } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
@@ -87,13 +88,15 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 
 	allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
 	allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
+	allowTools[ToolName.SearchSubagent] = (isGptFamily(model) || isAnthropicFamily(model)) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, experimentationService);
 
 	if (model.family.includes('grok-code')) {
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
 
 	allowTools[ToolName.EditFilesPlaceholder] = false;
-	if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+	// todo@connor4312: string check here is for back-compat for 1.109 Insiders
+	if (Iterable.some(request.tools, ([t, enabled]) => (typeof t === 'string' ? t : t.name) === ContributedToolName.EditFilesPlaceholder && enabled === false)) {
 		allowTools[ToolName.ApplyPatch] = false;
 		allowTools[ToolName.EditFile] = false;
 		allowTools[ToolName.ReplaceString] = false;
@@ -180,6 +183,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
+		@IExperimentationService private readonly expService: IExperimentationService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -218,11 +222,47 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			this.endpoint.modelMaxPromptTokens
 		);
 		const useTruncation = this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
-		const safeBudget = useTruncation ?
-			Number.MAX_SAFE_INTEGER :
-			Math.floor((baseBudget - toolTokens) * 0.85);
-		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
+
+		// For Anthropic models with context editing, check previous turn's token usage to determine budget
+		// 1. No token usage info (no prev turn) -> use normal safeBudget and let prompt rendering handle BudgetExceededError
+		// 2. Token usage + current turn > threshold -> throw BudgetExceededError to trigger summarization
+		// 3. Token usage + current turn < threshold -> use MAX_SAFE_INTEGER (no summarization needed)
+		let safeBudget: number = -1;
+		let shouldTriggerSummarize = false;
+		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
+
+		const anthropicContextEditingEnabled = isAnthropicFamily(this.endpoint) && isAnthropicContextEditingEnabled(this.endpoint, this.configurationService, this.expService);
+		if (summarizationEnabled && anthropicContextEditingEnabled) {
+			// First check current turn for token usage (from tool calling loop), then fall back to previous turn's result metadata
+			const currentTurn = promptContext.conversation?.getLatestTurn();
+			const currentTurnTokenUsage = currentTurn?.getMetadata(AnthropicTokenUsageMetadata);
+			const previousTurn = promptContext.history?.at(-1);
+
+			const promptTokens = currentTurnTokenUsage?.promptTokens ?? previousTurn?.resultMetadata?.promptTokens;
+			const outputTokens = currentTurnTokenUsage?.outputTokens ?? previousTurn?.resultMetadata?.outputTokens;
+
+			if (promptTokens !== undefined && outputTokens !== undefined) {
+				// Estimate total tokens from the last completed turn (prompt + output) and add a 15% buffer to anticipate growth in the upcoming turn/tool call
+				const totalEstimatedTokens = (promptTokens + outputTokens) * 1.15;
+
+				if (totalEstimatedTokens > this.endpoint.modelMaxPromptTokens) {
+					// Will exceed budget - trigger summarization
+					shouldTriggerSummarize = true;
+					safeBudget = budgetThreshold; // Use normal budget for the summarization render
+					this.logService.debug(`AgentIntent: token usage exceeds threshold, will trigger summarization (promptTokens=${promptTokens}, outputTokens=${outputTokens}, total=${totalEstimatedTokens}, threshold=${budgetThreshold})`);
+				} else {
+					// Under budget - no summarization needed, use unlimited budget
+					safeBudget = Number.MAX_SAFE_INTEGER;
+					this.logService.debug(`AgentIntent: token usage under threshold, skipping summarization (promptTokens=${promptTokens}, outputTokens=${outputTokens}, total=${totalEstimatedTokens}, threshold=${budgetThreshold})`);
+				}
+			}
+		}
+		if (safeBudget < 0) {
+			safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : budgetThreshold;
+		}
+		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
+
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
@@ -239,59 +279,70 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			...this.extraPromptProps,
 			customizations: this._resolvedCustomizations
 		};
-		try {
-			const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
-			result = await renderer.render(progress, token);
-		} catch (e) {
-			if (e instanceof BudgetExceededError && summarizationEnabled) {
-				this.logService.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
-				if (!promptContext.toolCallResults) {
-					promptContext = {
-						...promptContext,
-						toolCallResults: {}
-					};
-				}
-				e.metadata.getAll(ToolResultMetadata).forEach((metadata) => {
-					promptContext.toolCallResults![metadata.toolCallId] = metadata.result;
+
+		// Helper function for summarization flow with fallbacks
+		const renderWithSummarization = async (reason: string, renderProps: AgentPromptProps = props): Promise<RenderPromptResult> => {
+			this.logService.debug(`[Agent] ${reason}, triggering summarization`);
+			try {
+				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
+					...renderProps,
+					triggerSummarize: true,
+				});
+				return await renderer.render(progress, token);
+			} catch (e) {
+				this.logService.error(e, `[Agent] summarization failed`);
+				const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
+				/* __GDPR__
+					"triggerSummarizeFailed" : {
+						"owner": "roblourens",
+						"comment": "Tracks when triggering summarization failed - for example, a summary was created but not applied successfully.",
+						"errorKind": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state or failure reason of the summarization." },
+						"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID used for the summarization." }
+					}
+				*/
+				this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeFailed', { errorKind, model: renderProps.endpoint.model });
+
+				// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
+				const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
+					...renderProps,
+					endpoint: this.endpoint,
+					enableCacheBreakpoints: false
 				});
 				try {
-					const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, {
-						...props,
-						triggerSummarize: true,
-					});
-					result = await renderer.render(progress, token);
+					return await renderer.render(progress, token);
 				} catch (e) {
-					this.logService.error(e, `[Agent] summarization failed`);
-					const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
-					/* __GDPR__
-						"triggerSummarizeFailed" : {
-							"owner": "roblourens",
-							"comment": "Tracks when triggering summarization failed - for example, a summary was created but not applied successfully.",
-							"errorKind": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The success state or failure reason of the summarization." },
-							"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID used for the summarization." }
-						}
-					*/
-					this.telemetryService.sendMSFTTelemetryEvent('triggerSummarizeFailed', { errorKind, model: props.endpoint.model });
-
-					// Something else went wrong, eg summarization failed, so render the prompt with no cache breakpoints, summarization, endpoint not reduced in size for tools or safety buffer
-					const renderer = PromptRenderer.create(this.instantiationService, this.endpoint, this.prompt, {
-						...props,
-						endpoint: this.endpoint,
-						enableCacheBreakpoints: false
-					});
-					try {
-						result = await renderer.render(progress, token);
-					} catch (e) {
-						if (e instanceof BudgetExceededError) {
-							this.logService.error(e, `[Agent] final render fallback failed due to budget exceeded`);
-							const maxTokens = this.endpoint.modelMaxPromptTokens;
-							throw new Error(`Unable to build prompt, modelMaxPromptTokens=${maxTokens} (${e.message})`);
-						}
-						throw e;
+					if (e instanceof BudgetExceededError) {
+						this.logService.error(e, `[Agent] final render fallback failed due to budget exceeded`);
+						const maxTokens = this.endpoint.modelMaxPromptTokens;
+						throw new Error(`Unable to build prompt, modelMaxPromptTokens = ${maxTokens} (${e.message})`);
 					}
+					throw e;
 				}
-			} else {
-				throw e;
+			}
+		};
+
+		if (shouldTriggerSummarize) {
+			// Token usage from previous turn indicates we'll exceed budget - go directly to summarization flow
+			result = await renderWithSummarization('token usage from previous turn exceeds budget threshold');
+		} else {
+			try {
+				const renderer = PromptRenderer.create(this.instantiationService, endpoint, this.prompt, props);
+				result = await renderer.render(progress, token);
+			} catch (e) {
+				if (e instanceof BudgetExceededError && summarizationEnabled) {
+					if (!promptContext.toolCallResults) {
+						promptContext = {
+							...promptContext,
+							toolCallResults: {}
+						};
+					}
+					e.metadata.getAll(ToolResultMetadata).forEach((metadata) => {
+						promptContext.toolCallResults![metadata.toolCallId] = metadata.result;
+					});
+					result = await renderWithSummarization(`budget exceeded(${e.message})`);
+				} else {
+					throw e;
+				}
 			}
 		}
 

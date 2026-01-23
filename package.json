@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0",
+		"vscode": "^1.109.0-20260121",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -84,7 +84,8 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentsProvider"
+		"onCustomAgentProvider",
+		"onInstructionsProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -97,10 +98,12 @@
 		"commentReveal",
 		"contribCommentThreadAdditionalMenu",
 		"contribCommentsViewThreadMenus",
+		"contribChatEditorInlineGutterMenu",
 		"documentFiltersExclusive",
 		"embeddings",
 		"findTextInFiles",
 		"findTextInFiles2",
+		"languageModelToolSupportsModel@1",
 		"findFiles2@2",
 		"textSearchProvider",
 		"terminalDataWriteEvent",
@@ -136,7 +139,10 @@
 		"languageModelThinkingPart",
 		"chatSessionsProvider@3",
 		"devDeviceId",
-		"contribEditorContentMenu"
+		"contribEditorContentMenu",
+		"chatPromptFiles",
+		"mcpServerDefinitions",
+		"tabInputMultiDiff"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -161,6 +167,39 @@
 					},
 					"required": [
 						"query"
+					]
+				}
+			},
+			{
+				"name": "search_subagent",
+				"toolReferenceName": "searchSubagent",
+				"displayName": "%copilot.tools.searchSubagent.name%",
+				"icon": "$(search)",
+				"userDescription": "%copilot.tools.searchSubagent.description%",
+				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
+				"tags": [
+					"vscode_codesearch"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Natural language description of what to search for."
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the task."
+						},
+						"details": {
+							"type": "string",
+							"description": "A more detailed description of the objective for the search subagent. This helps the sub-agent remain on task and understand its purpose."
+						}
+					},
+					"required": [
+						"query",
+						"description",
+						"details"
 					]
 				}
 			},
@@ -1108,74 +1147,75 @@
 				}
 			},
 			{
-				"name": "copilot_memory",
-				"toolReferenceName": "memory",
-				"displayName": "%copilot.tools.memory.name%",
-				"userDescription": "%copilot.tools.memory.description%",
-				"modelDescription": "Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).",
-				"icon": "$(database)",
-				"when": "config.github.copilot.chat.tools.memory.enabled",
+				"name": "copilot_askQuestions",
+				"toolReferenceName": "askQuestions",
+				"displayName": "%copilot.tools.askQuestions.name%",
+				"userDescription": "%copilot.tools.askQuestions.description%",
+				"modelDescription": "Ask the user questions to clarify intent, validate assumptions, or choose between implementation approaches. Prefer proposing a sensible default so users can confirm quickly.\n\nOnly use this tool when the user's answer provides information you cannot determine or reasonably assume yourself. This tool is for gathering information, not for reporting status or problems. If a question has an obvious best answer, take that action instead of asking.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm decisions that meaningfully affect outcome\n\nWhen NOT to use:\n- The answer is determinable from code or context\n- Asking for permission to continue or abort\n- Confirming something you can reasonably decide yourself\n- Reporting a problem (instead, attempt to resolve it)\n\nQuestion guidelines:\n- Batch related questions into a single call (max 4 questions, 2-6 options each; omit options for free text input)\n- Provide brief context explaining what is being decided and why\n- Mark one option as `recommended` with a short justification\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive and phrase the question accordingly\n\nAfter receiving answers:\n- Incorporate decisions and continue without re-asking unless requirements change\n\nAn \"Other\" option is automatically shown to users—do not add your own.",
+				"icon": "$(question)",
 				"canBeReferencedInPrompt": true,
-				"tags": [],
+				"when": "config.github.copilot.chat.askQuestions.enabled",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
-						"command": {
-							"type": "string",
-							"enum": [
-								"view",
-								"create",
-								"str_replace",
-								"insert",
-								"delete",
-								"rename"
-							],
-							"description": "The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory"
-						},
-						"path": {
-							"type": "string",
-							"description": "Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)"
-						},
-						"view_range": {
+						"questions": {
 							"type": "array",
+							"description": "Array of 1-4 questions to ask the user",
+							"minItems": 1,
+							"maxItems": 4,
 							"items": {
-								"type": "number"
-							},
-							"minItems": 2,
-							"maxItems": 2,
-							"description": "[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]"
-						},
-						"file_text": {
-							"type": "string",
-							"description": "[create only] Content to write to the file. Required for create command."
-						},
-						"old_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command."
-						},
-						"new_str": {
-							"type": "string",
-							"description": "[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command."
-						},
-						"insert_line": {
-							"type": "number",
-							"description": "[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command."
-						},
-						"insert_text": {
-							"type": "string",
-							"description": "[insert only] Text to insert at the specified line. Required for insert command."
-						},
-						"old_path": {
-							"type": "string",
-							"description": "[rename only] Current path of the file or directory. Must start with /memories. Required for rename command."
-						},
-						"new_path": {
-							"type": "string",
-							"description": "[rename only] New path for the file or directory. Must start with /memories. Required for rename command."
+								"type": "object",
+								"properties": {
+									"header": {
+										"type": "string",
+										"description": "A short label (max 12 chars) displayed as a quick pick header, also used as the unique identifier for the question",
+										"maxLength": 12
+									},
+									"question": {
+										"type": "string",
+										"description": "The complete question text to display"
+									},
+									"multiSelect": {
+										"type": "boolean",
+										"description": "Allow multiple selections",
+										"default": false
+									},
+									"options": {
+										"type": "array",
+										"description": "0-6 options for the user to choose from. If empty or omitted, shows a free text input instead.",
+										"minItems": 0,
+										"maxItems": 6,
+										"items": {
+											"type": "object",
+											"properties": {
+												"label": {
+													"type": "string",
+													"description": "Option label text"
+												},
+												"description": {
+													"type": "string",
+													"description": "Optional description for the option"
+												},
+												"recommended": {
+													"type": "boolean",
+													"description": "Mark this option as recommended"
+												}
+											},
+											"required": [
+												"label"
+											]
+										}
+									}
+								},
+								"required": [
+									"header",
+									"question"
+								]
+							}
 						}
 					},
 					"required": [
-						"command"
+						"questions"
 					]
 				}
 			},
@@ -1234,7 +1274,8 @@
 					"listDirectory",
 					"searchResults",
 					"textSearch",
-					"usages"
+					"usages",
+					"searchSubagent"
 				]
 			},
 			{
@@ -1685,49 +1726,273 @@
 				"displayName": "Copilot"
 			},
 			{
-				"vendor": "azure",
-				"displayName": "Azure",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for Anthropic",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "xai",
 				"displayName": "xAI",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "ollama",
-				"displayName": "Ollama"
-			},
-			{
-				"vendor": "openai",
-				"displayName": "OpenAI",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for xAI",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "gemini",
 				"displayName": "Google",
-				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "groq",
-				"displayName": "Groq",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for Google Gemini",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
 			},
 			{
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for OpenRouter",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
+			},
+			{
+				"vendor": "openai",
+				"displayName": "OpenAI",
+				"configuration": {
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for OpenAI",
+							"title": "API Key"
+						}
+					},
+					"required": [
+						"apiKey"
+					]
+				}
+			},
+			{
+				"vendor": "ollama",
+				"displayName": "Ollama",
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"url": {
+							"type": "string",
+							"description": "The endpoint URL for the Ollama server",
+							"default": "http://localhost:11434",
+							"title": "URL"
+						}
+					},
+					"required": [
+						"url"
+					]
+				}
 			},
 			{
 				"vendor": "customoai",
 				"when": "productQualityType != 'stable'",
 				"displayName": "OpenAI Compatible",
-				"managementCommand": "github.copilot.chat.manageBYOK"
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for the models",
+							"title": "API Key"
+						},
+						"models": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
+									"name": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"url": {
+										"type": "string",
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
+									},
+									"toolCalling": {
+										"type": "boolean",
+										"description": "Whether the model supports tool calling"
+									},
+									"vision": {
+										"type": "boolean",
+										"description": "Whether the model supports vision capabilities"
+									},
+									"maxInputTokens": {
+										"type": "number",
+										"description": "Maximum number of input tokens supported by the model"
+									},
+									"maxOutputTokens": {
+										"type": "number",
+										"description": "Maximum number of output tokens supported by the model"
+									},
+									"editTools": {
+										"type": "array",
+										"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
+										"items": {
+											"type": "string",
+											"enum": [
+												"find-replace",
+												"multi-find-replace",
+												"apply-patch",
+												"code-rewrite"
+											]
+										}
+									},
+									"thinking": {
+										"type": "boolean",
+										"default": false,
+										"description": "Whether the model supports thinking capabilities"
+									},
+									"zeroDataRetentionEnabled": {
+										"type": "boolean",
+										"default": false,
+										"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+									},
+									"requestHeaders": {
+										"type": "object",
+										"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+										"additionalProperties": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"name",
+									"url",
+									"toolCalling",
+									"vision",
+									"maxInputTokens",
+									"maxOutputTokens"
+								]
+							}
+						}
+					}
+				}
+			},
+			{
+				"vendor": "azure",
+				"displayName": "Azure",
+				"configuration": {
+					"type": "object",
+					"properties": {
+						"apiKey": {
+							"type": "string",
+							"secret": true,
+							"description": "API key for the models. If not set then Entra ID (Azure AD) authentication with your Microsoft account credentials will be used.",
+							"title": "API Key"
+						},
+						"models": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the model"
+									},
+									"name": {
+										"type": "string",
+										"description": "Display name of the custom OpenAI model"
+									},
+									"url": {
+										"type": "string",
+										"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected."
+									},
+									"toolCalling": {
+										"type": "boolean",
+										"description": "Whether the model supports tool calling"
+									},
+									"vision": {
+										"type": "boolean",
+										"description": "Whether the model supports vision capabilities"
+									},
+									"maxInputTokens": {
+										"type": "number",
+										"description": "Maximum number of input tokens supported by the model"
+									},
+									"maxOutputTokens": {
+										"type": "number",
+										"description": "Maximum number of output tokens supported by the model"
+									},
+									"thinking": {
+										"type": "boolean",
+										"default": false,
+										"description": "Whether the model supports thinking capabilities"
+									},
+									"zeroDataRetentionEnabled": {
+										"type": "boolean",
+										"default": false,
+										"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
+									},
+									"requestHeaders": {
+										"type": "object",
+										"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+										"additionalProperties": {
+											"type": "string"
+										}
+									}
+								},
+								"required": [
+									"name",
+									"url",
+									"toolCalling",
+									"vision",
+									"maxInputTokens",
+									"maxOutputTokens"
+								]
+							}
+						}
+					}
+				}
 			}
 		],
 		"interactiveSession": [
@@ -1793,6 +2058,21 @@
 			{
 				"command": "github.copilot.chat.triggerPermissiveSignIn",
 				"title": "%github.copilot.command.triggerPermissiveSignIn%"
+			},
+			{
+				"command": "copilot.claude.agents",
+				"title": "Manage Agents",
+				"category": "Claude Agent"
+			},
+			{
+				"command": "copilot.claude.hooks",
+				"title": "Configure Hooks",
+				"category": "Claude Agent"
+			},
+			{
+				"command": "copilot.claude.memory",
+				"title": "Open Memory Files",
+				"category": "Claude Agent"
 			},
 			{
 				"command": "github.copilot.cli.sessions.delete",
@@ -1945,12 +2225,6 @@
 				"title": "%github.copilot.command.openUserPreferences%",
 				"category": "Chat",
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
-			},
-			{
-				"command": "github.copilot.chat.tools.memory.openFolder",
-				"title": "%github.copilot.command.openMemoryFolder%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.tools.memory.enabled"
 			},
 			{
 				"command": "github.copilot.chat.review.markUnhelpful",
@@ -2214,6 +2488,26 @@
 				"icon": "$(export)"
 			},
 			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"title": "Record Expected Edit (NES)",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"title": "Confirm and Save Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"title": "Cancel Expected Edit Capture",
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.submit",
+				"title": "Submit NES Captures",
+				"category": "Copilot"
+			},
+			{
 				"command": "github.copilot.chat.showAsChatSession",
 				"title": "Show as chat session",
 				"icon": "$(chat-sparkle)"
@@ -2250,16 +2544,6 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
-			},
-			{
-				"command": "github.copilot.chat.manageBYOK",
-				"title": "Manage Bring Your Own Key Vendor",
-				"enablement": "false"
-			},
-			{
-				"command": "github.copilot.chat.manageBYOKAPIKey",
-				"title": "Manage Bring Your Own Key API Key",
-				"enablement": "false"
 			},
 			{
 				"command": "github.copilot.cloud.resetWorkspaceConfirmations",
@@ -2318,14 +2602,21 @@
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
-				"icon": "$(git-stash-pop)",
+				"enablement": "!chatSessionRequestInProgress",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
+				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.checkoutPullRequestReroute",
+				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
+				"icon": "$(git-pull-request)",
+				"category": "GitHub Pull Request"
 			}
 		],
 		"configuration": [
@@ -2474,6 +2765,16 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
+					"github.copilot.chat.organizationCustomAgents.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationCustomAgents.enabled%"
+					},
+					"github.copilot.chat.organizationInstructions.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.organizationInstructions.enabled%"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2605,14 +2906,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.byok.ollamaEndpoint": {
-						"type": "string",
-						"default": "http://localhost:11434",
-						"tags": [
-							"preview"
-						],
-						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
 					}
 				}
 			},
@@ -2654,6 +2947,15 @@
 						"markdownDescription": "%github.copilot.config.githubMcpServer.lockdown%",
 						"tags": [
 							"experimental"
+						]
+					},
+					"github.copilot.chat.askQuestions.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.imageUpload.enabled": {
@@ -3079,167 +3381,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
-					"github.copilot.chat.azureAuthType": {
-						"type": "string",
-						"enum": [
-							"entraId",
-							"apiKey"
-						],
-						"enumDescriptions": [
-							"%github.copilot.config.azureAuthType.entraId%",
-							"%github.copilot.config.azureAuthType.apiKey%"
-						],
-						"default": "entraId",
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.azureAuthType%"
-					},
-					"github.copilot.chat.azureModels": {
-						"type": "object",
-						"default": {},
-						"tags": [
-							"experimental"
-						],
-						"additionalProperties": {
-							"type": "object",
-							"properties": {
-								"name": {
-									"type": "string",
-									"description": "Display name of the Azure model"
-								},
-								"url": {
-									"type": "string",
-									"markdownDescription": "URL endpoint for the Azure model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
-								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
-								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
-								},
-								"maxInputTokens": {
-									"type": "number",
-									"description": "Maximum number of input tokens supported by the model"
-								},
-								"maxOutputTokens": {
-									"type": "number",
-									"description": "Maximum number of output tokens supported by the model"
-								},
-								"thinking": {
-									"type": "boolean",
-									"default": false,
-									"description": "Whether the model supports thinking capabilities"
-								},
-								"zeroDataRetentionEnabled": {
-									"type": "boolean",
-									"default": false,
-									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
-								},
-								"requestHeaders": {
-									"type": "object",
-									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
-									"additionalProperties": {
-										"type": "string"
-									}
-								}
-							},
-							"required": [
-								"name",
-								"url",
-								"toolCalling",
-								"vision",
-								"maxInputTokens",
-								"maxOutputTokens"
-							],
-							"additionalProperties": false
-						},
-						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
-					},
-					"github.copilot.chat.customOAIModels": {
-						"type": "object",
-						"default": {},
-						"tags": [
-							"experimental"
-						],
-						"additionalProperties": {
-							"type": "object",
-							"properties": {
-								"name": {
-									"type": "string",
-									"description": "Display name of the custom OpenAI model"
-								},
-								"url": {
-									"type": "string",
-									"markdownDescription": "URL endpoint for the custom OpenAI-compatible model.\n\n**Important:** Base URLs default to Chat Completions API. Explicit API paths including `/responses` or `/chat/completions` are respected. Both behaviors are independent of the `#github.copilot.chat.useResponsesApi#` setting."
-								},
-								"toolCalling": {
-									"type": "boolean",
-									"description": "Whether the model supports tool calling"
-								},
-								"vision": {
-									"type": "boolean",
-									"description": "Whether the model supports vision capabilities"
-								},
-								"maxInputTokens": {
-									"type": "number",
-									"description": "Maximum number of input tokens supported by the model"
-								},
-								"maxOutputTokens": {
-									"type": "number",
-									"description": "Maximum number of output tokens supported by the model"
-								},
-								"requiresAPIKey": {
-									"type": "boolean",
-									"description": "Whether the model requires an API key for authentication",
-									"default": true
-								},
-								"editTools": {
-									"type": "array",
-									"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
-									"items": {
-										"type": "string",
-										"enum": [
-											"find-replace",
-											"multi-find-replace",
-											"apply-patch",
-											"code-rewrite"
-										]
-									}
-								},
-								"thinking": {
-									"type": "boolean",
-									"default": false,
-									"description": "Whether the model supports thinking capabilities"
-								},
-								"zeroDataRetentionEnabled": {
-									"type": "boolean",
-									"default": false,
-									"markdownDescription": "Whether Zero Data Retention (ZDR) is enabled for this endpoint. When `true`, `previous_response_id` will not be sent in requests via Responses API."
-								},
-								"requestHeaders": {
-									"type": "object",
-									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
-									"additionalProperties": {
-										"type": "string"
-									}
-								}
-							},
-							"required": [
-								"name",
-								"url",
-								"toolCalling",
-								"vision",
-								"maxInputTokens",
-								"maxOutputTokens",
-								"requiresAPIKey"
-							],
-							"additionalProperties": false
-						},
-						"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
-					},
 					"github.copilot.chat.alternateGptPrompt.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3266,10 +3407,19 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.useResponsesApi": {
+					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useResponsesApi%",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"experimental",
 							"onExp"
@@ -3384,15 +3534,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.tools.memory.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",
@@ -3423,10 +3564,23 @@
 							"node-fetch"
 						]
 					},
-					"github.copilot.chat.customAgents.showOrganizationAndEnterpriseAgents": {
-						"type": "boolean",
-						"default": false,
-						"description": "%github.copilot.config.customAgents.showOrganizationAndEnterpriseAgents%",
+					"github.copilot.chat.planAgent.additionalTools": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"default": [],
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.additionalTools%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.planAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.model%",
 						"tags": [
 							"experimental"
 						]
@@ -3436,6 +3590,52 @@
 			{
 				"id": "advanced",
 				"properties": {
+					"github.copilot.chat.anthropic.contextEditing.config": {
+						"type": "object",
+						"default": null,
+						"markdownDescription": "%github.copilot.config.anthropic.contextEditing.config%",
+						"tags": [
+							"advanced",
+							"experimental"
+						],
+						"properties": {
+							"triggerType": {
+								"type": "string",
+								"enum": [
+									"input_tokens",
+									"tool_uses"
+								],
+								"description": "Type of trigger for context editing"
+							},
+							"triggerValue": {
+								"type": "number",
+								"description": "Threshold value for the trigger (default: 80000 tokens)"
+							},
+							"keepCount": {
+								"type": "number",
+								"description": "Number of recent tool uses to keep (default: 3)"
+							},
+							"clearAtLeastTokens": {
+								"type": "number",
+								"description": "Minimum tokens to clear per edit (default: 10000)"
+							},
+							"excludeTools": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Tool names to exclude from clearing"
+							},
+							"clearInputs": {
+								"type": "boolean",
+								"description": "Whether to clear tool inputs (default: true)"
+							},
+							"thinkingKeepTurns": {
+								"type": "number",
+								"description": "Number of thinking turns to keep (default: 1)"
+							}
+						}
+					},
 					"github.copilot.chat.debug.overrideChatEngine": {
 						"type": [
 							"string",
@@ -3665,6 +3865,16 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.inlineEdits.chatSessionContextProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.inlineEdits.chatSessionContextProvider.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.codesearch.agent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3680,6 +3890,15 @@
 							"null"
 						],
 						"markdownDescription": "%github.copilot.config.agent.temperature%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
+					"github.copilot.chat.agent.omitFileAttachmentContents": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agent.omitFileAttachmentContents%",
 						"tags": [
 							"advanced",
 							"experimental"
@@ -3815,6 +4034,14 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.gpt5AlternativePatch": {
 						"type": "boolean",
 						"default": false,
@@ -3888,7 +4115,7 @@
 					},
 					"github.copilot.chat.cli.customAgents.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.customAgents.enabled%",
 						"tags": [
 							"advanced",
@@ -3897,29 +4124,21 @@
 					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
 						]
 					},
-					"github.copilot.chat.cli.autoCommit.enabled": {
+					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.autoCommit.enabled%",
+						"markdownDescription": "%github.copilot.config.searchSubagent.enabled%",
 						"tags": [
 							"advanced",
-							"experimental"
-						]
-					},
-					"github.copilot.chat.CCAPartnerAgents.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Enable partner agents for Copilot Coding Agent (CCA) sessions. Reload VS Code to apply.",
-						"tags": [
-							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					}
 				}
@@ -3974,11 +4193,6 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
-				},
-				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"group": "navigation@1",
-					"when": "resourceScheme == copilotcli-worktree-changes"
 				}
 			],
 			"explorer/context": [
@@ -4017,10 +4231,22 @@
 					"group": "copilotGenerate@2"
 				}
 			],
+			"chat/editor/inlineGutter": [
+				{
+					"command": "github.copilot.chat.explain",
+					"when": "!github.copilot.interactiveSession.disabled",
+					"group": "2_chat@2"
+				}
+			],
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 					"when": "chatSessionType == copilotcli",
+					"group": "navigation@0"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
 					"group": "navigation@0"
 				}
 			],
@@ -4262,6 +4488,18 @@
 				{
 					"command": "github.copilot.chat.showAsChatSession",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.start",
+					"when": "github.copilot.inlineEditsEnabled"
+				},
+				{
+					"command": "github.copilot.nes.captureExpected.submit",
+					"when": "github.copilot.inlineEditsEnabled"
 				}
 			],
 			"view/title": [
@@ -4737,6 +4975,23 @@
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.start",
+				"key": "ctrl+k ctrl+r",
+				"mac": "cmd+k cmd+r",
+				"when": "editorTextFocus && github.copilot.inlineEditsEnabled"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.confirm",
+				"key": "ctrl+enter",
+				"mac": "cmd+enter",
+				"when": "copilotNesCaptureMode && editorTextFocus"
+			},
+			{
+				"command": "github.copilot.nes.captureExpected.abort",
+				"key": "escape",
+				"when": "copilotNesCaptureMode && editorTextFocus"
 			}
 		],
 		"walkthroughs": [
@@ -4915,13 +5170,13 @@
 			{
 				"type": "claude-code",
 				"name": "claude",
-				"displayName": "Claude Code CLI Agent",
+				"displayName": "Claude Agent",
 				"icon": "$(sparkle)",
-				"welcomeTitle": "Claude Code Agent",
-				"welcomeMessage": "Run local background tasks",
-				"inputPlaceholder": "Run local tasks with Claude Code, type `#` for adding context",
+				"welcomeTitle": "Claude Agent",
+				"welcomeMessage": "Powered by the same agent as Claude Code",
+				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
-				"description": "The Claude Code Agent works on your local machine",
+				"description": "The Claude Agent works on your local machine",
 				"when": "config.github.copilot.chat.claudeCode.enabled",
 				"canDelegate": true,
 				"capabilities": {
@@ -4947,6 +5202,18 @@
 					{
 						"name": "security-review",
 						"description": "Complete a security review of the pending changes on the current branch"
+					},
+					{
+						"name": "agents",
+						"description": "Create and manage specialized Claude agents"
+					},
+					{
+						"name": "hooks",
+						"description": "Configure Claude Code hooks for tool execution and events"
+					},
+					{
+						"name": "memory",
+						"description": "Open memory files (CLAUDE.md) for editing"
 					}
 				]
 			},
@@ -4954,7 +5221,7 @@
 				"type": "copilotcli",
 				"name": "cli",
 				"displayName": "Background Agent",
-				"icon": "$(collection)",
+				"icon": "$(worktree)",
 				"welcomeTitle": "Background Agent",
 				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
@@ -4966,6 +5233,7 @@
 					"supportsFileAttachments": true,
 					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false,
+					"supportsImageAttachments": true,
 					"supportsSymbolAttachments": true,
 					"supportsSearchResultAttachments": true,
 					"supportsSourceControlAttachments": true
@@ -4976,7 +5244,8 @@
 						"description": "Delegate chat session to cloud agent and create associated PR",
 						"when": "config.github.copilot.chat.cloudAgent.enabled"
 					}
-				]
+				],
+				"customAgentTarget": "github-copilot"
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -5027,13 +5296,7 @@
 				}
 			}
 		],
-		"chatAgents": [
-			{
-				"name": "Plan",
-				"path": "./assets/agents/Plan.agent.md",
-				"description": "Researches a task to create multi-step plans"
-			}
-		],
+		"chatAgents": [],
 		"chatPromptFiles": [
 			{
 				"name": "savePrompt",
@@ -5042,9 +5305,6 @@
 			}
 		]
 	},
-	"extensionPack": [
-		"GitHub.copilot"
-	],
 	"prettier": {
 		"useTabs": true,
 		"tabWidth": 4,
@@ -5118,7 +5378,7 @@
 		"@types/source-map-support": "^0.5.10",
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
-		"@types/vscode": "^1.102.0",
+		"@types/vscode": "^1.108.1",
 		"@types/vscode-webview": "^1.57.4",
 		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
@@ -5172,7 +5432,7 @@
 		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
-		"tar": "^7.4.3",
+		"tar": "^7.5.4",
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
@@ -5185,18 +5445,19 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"yargs": "^17.7.2"
+		"yargs": "^17.7.2",
+		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.1.55",
-		"@anthropic-ai/sdk": "^0.68.0",
+		"@anthropic-ai/claude-agent-sdk": "0.2.5",
+		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.366",
+		"@github/copilot": "^0.0.388",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.8",
+		"@vscode/copilot-api": "^0.2.9",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
@@ -5205,7 +5466,8 @@
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
-		"diff": "^8.0.2",
+		"best-effort-json-parser": "^1.2.1",
+		"diff": "^8.0.3",
 		"dompurify": "^3.3.0",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
@@ -5213,13 +5475,14 @@
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
-		"undici": "^7.11.0",
+		"undici": "^7.18.2",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
 		"string_decoder": "npm:string_decoder@1.2.0",
-		"node-gyp": "npm:node-gyp@10.3.1"
+		"node-gyp": "npm:node-gyp@10.3.1",
+		"zod": "3.25.76"
 	}
 }

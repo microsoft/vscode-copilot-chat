@@ -16,6 +16,7 @@ import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../..
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -126,7 +127,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail with NotFound
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -151,7 +152,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// First call - triggers disabling
-			await predictor.predictNextCursorPosition(promptPieces, tracer);
+			await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			// Verify disabled
 			expect(predictor.determineEnablement()).toBeUndefined();
@@ -187,7 +188,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail but not disable
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -213,7 +214,7 @@ describe('XtabNextCursorPredictor', () => {
 				resolvedModel: 'test-model'
 			});
 
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {

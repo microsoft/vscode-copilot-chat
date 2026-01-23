@@ -6,10 +6,16 @@
 
 type LogFn = (message: string) => void;
 
+/**
+ * @deprecated Use `ILogger.createSubLogger` from `logService.ts` instead.
+ */
 export interface SubTracingOptions {
 	readonly extraLog?: LogFn;
 }
 
+/**
+ * @deprecated Use `ILogger` from `logService.ts` instead, with `createSubLogger` for topic prefixes.
+ */
 export interface ITracer {
 	trace(message: string, ...payload: unknown[]): void;
 	/**
@@ -28,6 +34,9 @@ export interface ITracer {
 	returns(message?: string, ...payload: unknown[]): void;
 }
 
+/**
+ * @deprecated Use `ILogger.createSubLogger` from `logService.ts` instead.
+ */
 export class Tracer implements ITracer {
 	constructor(
 		private readonly section: string | string[],
@@ -123,6 +132,10 @@ export class Tracer implements ITracer {
 	}
 }
 
+/**
+ * @deprecated Use `ILogger.createSubLogger` from `logService.ts` instead.
+ * Example: `logService.createSubLogger(['NES', 'Provider'])`
+ */
 export function createTracer(section: string | string[], logFn: (message: string) => void): ITracer {
 	return new Tracer(section, logFn);
 }

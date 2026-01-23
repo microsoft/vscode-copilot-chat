@@ -43,7 +43,8 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 			label: session.label,
 			tooltip: `Claude Code session: ${session.label}`,
 			timing: {
-				startTime: session.timestamp.getTime()
+				created: session.timestamp.getTime(),
+				startTime: session.timestamp.getTime(),
 			},
 			iconPath: new vscode.ThemeIcon('star-add')
 		} satisfies vscode.ChatSessionItem));

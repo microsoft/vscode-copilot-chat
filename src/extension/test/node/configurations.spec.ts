@@ -73,7 +73,7 @@ describe('Configurations', () => {
 		const internalKeys = Object.values(ConfigKey.TeamInternal).map(setting => setting.fullyQualifiedId);
 		const sharedKeys = Object.values(ConfigKey.Shared).map(setting => setting.fullyQualifiedId);
 		const advancedPublicKeys = Object.values(ConfigKey.Advanced).map(setting => setting.fullyQualifiedId);
-		const otherPublicKeys = (Object.values(ConfigKey).filter(key => key !== ConfigKey.TeamInternal && key !== ConfigKey.Shared && key !== ConfigKey.Advanced) as Config<any>[]).map(setting => setting.fullyQualifiedId);
+		const otherPublicKeys = (Object.values(ConfigKey).filter(key => key !== ConfigKey.TeamInternal && key !== ConfigKey.Shared && key !== ConfigKey.Advanced && key !== ConfigKey.Deprecated) as Config<any>[]).map(setting => setting.fullyQualifiedId);
 		const registered = [...otherPublicKeys, ...advancedPublicKeys];
 		const unregistered = [...internalKeys, ...sharedKeys];
 

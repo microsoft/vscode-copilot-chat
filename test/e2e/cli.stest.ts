@@ -6,6 +6,7 @@
 import { SessionOptions } from '@github/copilot/sdk';
 import assert from 'assert';
 import * as fs from 'fs/promises';
+import * as http from 'http';
 import { platform, tmpdir } from 'os';
 import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
@@ -39,6 +40,7 @@ import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, ChatSessionStatus, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
+import { IMcpService, NullMcpService } from '../../src/platform/mcp/common/mcpService';
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
 const originalValues: Record<string, string | undefined> = {};
@@ -49,6 +51,21 @@ for (const key of keys) {
 function restoreEnvVariables() {
 	for (const key of keys) {
 		process.env[key] = originalValues[key];
+	}
+}
+
+let testCounter = 0;
+function trackEnvVariablesBeforeTests() {
+	testCounter++;
+}
+
+/**
+ * Tests run in parallel, so only restore env variables after all tests have completed.
+ */
+function restoreEnvVariablesAfterTests() {
+	testCounter--;
+	if (testCounter === 0) {
+		restoreEnvVariables();
 	}
 }
 
@@ -102,7 +119,6 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			mutableOptions.copilotUrl = this.testOptions.copilotUrl ?? options.copilotUrl;
 			mutableOptions.enableStreaming = true;
 			mutableOptions.skipCustomInstructions = true;
-			mutableOptions.disableHttpLogging = true;
 			return options;
 		}
 	}
@@ -130,6 +146,41 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 			this.adapterFactories.set('/chat/completions', oaiAdapterFactory);
 			requestHooks.forEach(requestHook => oaiAdapterFactory.addHooks(requestHook));
 			responseHooks.forEach(responseHook => oaiAdapterFactory.addHooks(undefined, responseHook));
+			this.requestHandlers.set('/graphql', { method: 'POST', handler: this.graphqlHandler.bind(this) });
+			this.requestHandlers.set('/models', { method: 'GET', handler: this.modelsHandler.bind(this) });
+		}
+
+		private async graphqlHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			const data = {
+				viewer: {
+					login: '',
+					copilotEndpoints: {
+						api: `http://localhost:${this.config.port}`
+					}
+				}
+			};
+			res.end(JSON.stringify({ data }));
+		}
+		private async modelsHandler(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+			res.writeHead(200, { 'Content-Type': 'application/json', 'x-github-request-id': 'TESTREQUESTID1234' });
+			const endpoints = await this.endpointProvider.getAllChatEndpoints();
+			const data = endpoints.map(e => {
+				return {
+					id: e.model,
+					name: e.model,
+					capabilities: {
+						supports: {
+							vision: e.supportsVision,
+						},
+						limits: {
+							max_prompt_tokens: e.modelMaxPromptTokens,
+							max_context_window_tokens: e.maxOutputTokens,
+						}
+					}
+				};
+			});
+			res.end(JSON.stringify({ data }));
 		}
 	}
 
@@ -157,6 +208,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLISDK, new SyncDescriptor(TestCopilotCLISDK));
 	testingServiceCollection.define(ICopilotCLIAgents, new SyncDescriptor(CopilotCLIAgents));
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
+	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
@@ -279,6 +331,7 @@ const sourcePath = path.join(__dirname, '..', 'test', 'scenarios', 'test-cli');
 let tmpDirCounter = 0;
 function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; promptResolver: CopilotCLIPromptResolver; init: (workingDirectory: URI) => Promise<void> }, scenariosPath: string, stream: MockChatResponseStream, disposables: DisposableStore) => Promise<void>) {
 	return async (testingServiceCollection: TestingServiceCollection) => {
+		trackEnvVariablesBeforeTests();
 		const disposables = new DisposableStore();
 		// Temp folder can be `/var/folders/....` in our code we use `realpath` to resolve any symlinks.
 		// That results in these temp folders being resolved as `/private/var/folders/...` on macOS.
@@ -293,7 +346,7 @@ function testRunner(cb: (services: { sessionService: ICopilotCLISessionService; 
 			await cb(services, await fs.realpath(scenariosPath), stream, disposables);
 		} finally {
 			await fs.rm(scenariosPath, { recursive: true }).catch(() => { /* Ignore */ });
-			restoreEnvVariables();
+			restoreEnvVariablesAfterTests();
 			disposables.dispose();
 		}
 	};

@@ -167,6 +167,32 @@ const jsonSchemaRules: ((family: string, node: JsonSchema, didFix: (message: str
 			}
 		});
 	},
+	(family, schema, onFix) => {
+		// Gemini models require nullable types to use OpenAPI 3.0 nullable keyword instead of JSON Schema union types
+		if (!isGeminiFamily(family)) {
+			return;
+		}
+		forEachSchemaNode(schema, n => {
+			if (n && typeof n === 'object' && 'type' in n && Array.isArray(n.type)) {
+				const types = n.type as string[];
+				const hasNull = types.includes('null');
+				const nonNullTypes = types.filter(t => t !== 'null');
+
+				if (hasNull && nonNullTypes.length === 1) {
+					// Convert ["string", "null"] to { type: "string", nullable: true }
+					(n as any).type = nonNullTypes[0];
+					(n as any).nullable = true;
+					onFix(`converted nullable type array to OpenAPI nullable keyword for Gemini compatibility`);
+				} else if (hasNull && nonNullTypes.length > 1) {
+					// For multiple non-null types with null, we can't easily convert, so we remove null.
+					// This changes the schema semantics: the field is no longer nullable and values of `null`
+					// will fail validation. This is a limitation, but better than a blank 400 error from the model.
+					(n as any).type = nonNullTypes;
+					onFix(`removed null from multi-type union for Gemini compatibility; this makes the field non-nullable and may cause validation errors for callers that pass null`);
+				}
+			}
+		});
+	},
 ];
 
 
@@ -211,6 +237,8 @@ function forEachSchemaNode<T>(input: JsonSchema, fn: (node: JsonSchema) => undef
 const isGpt4ish = (family: string) => family.startsWith('gpt-4');
 // Whether the model is a model known to follow JSON Schema Draft 2020-12, (versus Draft 7).
 const isDraft2020_12Schema = (family: string) => family.startsWith('gpt-4') || family.startsWith('claude-') || family.startsWith('o4');
+// Whether the model is a Gemini family model.
+const isGeminiFamily = (family: string) => family.toLowerCase().includes('gemini');
 
 const gpt4oMaxStringLength = 1024;
 

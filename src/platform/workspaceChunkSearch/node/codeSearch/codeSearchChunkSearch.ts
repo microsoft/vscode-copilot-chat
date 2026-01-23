@@ -721,8 +721,8 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		};
 	}
 
-	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		const triggerResult = await this.doTriggerRemoteIndexing(triggerReason, telemetryInfo);
+	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		const triggerResult = await this.doTriggerRemoteIndexing(triggerReason, onProgress, telemetryInfo, token);
 		if (triggerResult.isOk()) {
 			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
 		} else {
@@ -823,7 +823,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._codeSearchRepos.delete(repo.rootUri);
 	}
 
-	private async doTriggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
+	private async doTriggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, onProgress: (message: string) => void, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).started`);
 
 		await this.initialize();
@@ -831,7 +831,10 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		// Update external ingest index if enabled
 		const externalIndexEnabled = this.isExternalIngestEnabled();
 		if (externalIndexEnabled) {
-			await this._externalIngestIndex.value.doIngest(CancellationToken.None);
+			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(onProgress, token), token);
+			if (result.isError()) {
+				return Result.error(result.err);
+			}
 
 			// If we are forcing external ingest only, we don't want to update the code search repos
 			if (externalIndexEnabled === 'force') {

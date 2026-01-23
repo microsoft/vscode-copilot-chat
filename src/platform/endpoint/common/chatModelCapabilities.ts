@@ -17,18 +17,13 @@ const HIDDEN_MODEL_C_HASHES = [
 	'854910cb8a637565e3933f64549ac7e83dd55f6721e98f8324eb2065a84e09f8'
 ];
 
-const VSC_MODEL_HASHES_A = [
-	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
-	'878722e35e24b005604c37aa5371ae100e82465fbfbdf6fe3c1fdaf7c92edc96',
-	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
-	'b576d46942ee2c45ecd979cbbcb62688ae3171a07ac83f53b783787f345e3dd7',
-	'b46570bfd230db11a82d5463c160b9830195def7086519ca319c41037b991820',
-	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
-	'e30111497b2a7e8f1aa7beed60b69952537d99bcdc18987abc2f6add63a89960',
-	'df610ed210bb9266ff8ab812908d5837538cdb1d7436de907fb7e970dab5d289',
-	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
-];
+const VSC_MODEL_HASHES_A: string[] = [];
+
 const VSC_MODEL_HASHES_B = [
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
 	'3104045f9b69dbb7a3d76cc8a0aa89eb05e10677c4dd914655ea87f4be000f4e',
 ];
@@ -41,6 +36,8 @@ const HIDDEN_MODEL_B_HASHES = [
 
 // subset to allow replace string instead of apply patch.
 const VSC_MODEL_HASHES_SUBSET_C = [
+	'6db59e9bfe6e2ce608c0ee0ade075c64e4d054f05305e3034481234703381bb5',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95',
 	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
 	'1d28f8e6e5af58c60e9a52385314a3c7bc61f7226e1444e31fe60c58c30e8235',
 	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
@@ -84,6 +81,11 @@ export function isHiddenModelE(model: LanguageModelChat | IChatEndpoint) {
 export function isHiddenModelF(model: LanguageModelChat | IChatEndpoint) {
 	const h = getCachedSha256Hash(model.family);
 	return HIDDEN_MODEL_F_HASHES.includes(h);
+}
+
+export function isHiddenModelG(model: LanguageModelChat | IChatEndpoint) {
+	const family_hash = getCachedSha256Hash(model.family);
+	return family_hash === '0f20a0190d87a4c4659060f79fec24fb0bef76808950c6b8fd4b52daf7fc23d5';
 }
 
 export function isVSCModelA(model: LanguageModelChat | IChatEndpoint) {
@@ -212,7 +214,11 @@ export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageMod
 }
 
 export function isAnthropicFamily(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || isHiddenModelG(model);
+}
+
+export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().startsWith('gemini');
 }
 
 export function isGpt5PlusFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {

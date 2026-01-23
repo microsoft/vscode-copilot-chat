@@ -123,7 +123,7 @@ export class BaseMsftTelemetrySender implements IMSFTTelemetrySender {
 			this._internalLargeEventTelemetryReporter ??= this._createTelemetryReporter(true, true);
 		}
 
-		if (!token || !this._isInternal || !token.isChatEnabled()) {
+		if (!token || !this._isInternal) {
 			this._internalTelemetryReporter?.dispose();
 			this._internalTelemetryReporter = undefined;
 			this._internalLargeEventTelemetryReporter?.dispose();

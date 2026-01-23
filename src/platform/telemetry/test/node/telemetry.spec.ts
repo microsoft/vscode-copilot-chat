@@ -42,7 +42,6 @@ suite('Microsoft Telemetry Sender', function () {
 			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			// Make the token part of the GH org so it works for internal people
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'],
 			isVscodeTeamMember: true,
@@ -146,7 +145,6 @@ suite('GitHub Telemetry Sender', function () {
 			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			// Make the token part of the GH org so it works for internal people
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'],
 			isVscodeTeamMember: true,

@@ -149,5 +149,5 @@
 		"eslint": "warning"
 	},
 	"githubPullRequests.codingAgent.enabled": true,
-	"githubPullRequests.codingAgent.uiIntegration": true
+	"githubPullRequests.codingAgent.uiIntegration": true,
 }

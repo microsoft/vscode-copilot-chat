@@ -17,8 +17,8 @@ import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpoin
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
 import { AnthropicMessagesTool, ContextManagement } from './anthropic';
+import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
 import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
 import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
@@ -73,7 +73,7 @@ export interface IEndpointBody {
 	messages?: any[];
 	n?: number;
 	reasoning?: { effort?: string; summary?: string };
-	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
+	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string } | string;
 	top_logprobs?: number;
 	intent?: boolean;
 	intent_threshold?: number;
@@ -174,6 +174,8 @@ export interface IMakeChatRequestOptions {
 	useFetcher?: FetcherId;
 	/** Disable extended thinking for this request. Used when resuming from tool call errors where the original thinking blocks are not available. */
 	disableThinking?: boolean;
+	/** Enable retrying once on simple network errors like ECONNRESET. */
+	canRetryOnceWithoutRollback?: boolean;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -214,6 +216,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly customModel?: CustomModel;
 	readonly isExtensionContributed?: boolean;
 	readonly policy: 'enabled' | { terms: string };
+	readonly maxPromptImages?: number;
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
 	 * @param telemetryService The telemetry service
@@ -307,6 +310,7 @@ function networkRequest(
 	additionalHeaders?: Record<string, string>,
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
+	canRetryOnce: boolean = true,
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
@@ -358,7 +362,7 @@ function networkRequest(
 	}
 	if (typeof endpoint.urlOrRequestMetadata === 'string') {
 		const requestPromise = fetcher.fetch(endpoint.urlOrRequestMetadata, request).catch(reason => {
-			if (canRetryOnceNetworkError(reason)) {
+			if (canRetryOnce && canRetryOnceNetworkError(reason)) {
 				// disconnect and retry the request once if the connection was reset
 				telemetryService.sendGHTelemetryEvent('networking.disconnectAll');
 				return fetcher.disconnectAll().then(() => {
@@ -401,6 +405,7 @@ export function postRequest(
 	additionalHeaders?: Record<string, string>,
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
+	canRetryOnce: boolean = true,
 ): Promise<Response> {
 	return networkRequest(fetcherService,
 		telemetryService,
@@ -414,6 +419,7 @@ export function postRequest(
 		additionalHeaders,
 		cancelToken,
 		useFetcher,
+		canRetryOnce,
 	);
 }
 

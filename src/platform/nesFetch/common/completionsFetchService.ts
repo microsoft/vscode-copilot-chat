@@ -6,6 +6,7 @@
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IHeaders } from '../../networking/common/fetcherService';
 import { ResponseStream } from './responseStream';
 
 export namespace Completions {
@@ -36,25 +37,23 @@ export namespace Completions {
 	export class RequestCancelled {
 		readonly kind = 'cancelled' as const;
 	}
-	export class QuotaExceeded {
-		readonly kind = 'quota-exceeded' as const;
-	}
 	export class UnsuccessfulResponse {
 		readonly kind = 'not-200-status' as const;
 		constructor(
 			public readonly status: number,
-			public readonly statusText: string
+			public readonly statusText: string,
+			public readonly headers: IHeaders,
+			public readonly text: () => Promise<string>
 		) { }
 	}
 	export class Unexpected {
 		readonly kind = 'unexpected' as const;
 		constructor(
-			public readonly message: Error
+			public readonly error: Error
 		) { }
 	}
 	export type CompletionsFetchFailure =
 		| Completions.RequestCancelled
-		| Completions.QuotaExceeded
 		| Completions.UnsuccessfulResponse
 		| Completions.Unexpected;
 
@@ -95,4 +94,6 @@ export interface ICompletionsFetchService {
 		ct: CancellationToken,
 		headerOverrides?: Record<string, string>
 	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>>;
+
+	disconnectAll(): Promise<unknown>;
 }

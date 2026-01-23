@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
@@ -20,15 +19,17 @@ import { Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { getWasmLanguage } from '../../../platform/parser/node/treeSitterLanguages';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
-import { AsyncIterableSource } from '../../../util/vs/base/common/async';
+import { AsyncIterableSource, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData, ChatResponseTextEditPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -51,6 +52,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { InlineChatProgressMessages } from './progressMessages';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from './promptCraftingTypes';
 
 
@@ -83,6 +85,8 @@ export class InlineChatIntent implements IIntent {
 
 	readonly description: string = '';
 
+	private readonly _progressMessages: InlineChatProgressMessages;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -95,7 +99,9 @@ export class InlineChatIntent implements IIntent {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IParserService private readonly _parserService: IParserService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-	) { }
+	) {
+		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
+	}
 
 	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 
@@ -209,6 +215,15 @@ export class InlineChatIntent implements IIntent {
 				useToolsForEdit = false;
 			}
 		}
+
+		// Start generating contextual message immediately
+		const contextualMessagePromise = this._progressMessages.getContextualMessage(request.prompt, documentContext, token);
+
+		// Show progress message after ~1 second delay (unless request completes first)
+		timeout(1000, token).then(async () => {
+			const message = await contextualMessagePromise;
+			stream.progress(message);
+		});
 
 		let result: IInlineChatEditResult;
 		try {
@@ -417,8 +432,6 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 
 					toolExecutions.push((async () => {
 						try {
-							stream.progress(l10n.t('Applying edits...'));
-
 							let input = isValidatedToolInput(validationResult)
 								? validationResult.inputObj
 								: JSON.parse(toolCall.arguments);
@@ -431,13 +444,17 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 									query: request.prompt,
 									chatVariables: new ChatVariablesCollection([...request.references]),
 									history: [],
+									allowedEditUris: request.location2 instanceof ChatRequestEditorData ? new ResourceSet([request.location2.document.uri]) : undefined,
 								}, CopilotToolMode.FullContext);
 							}
 
-							const result = await this._toolsService.invokeTool(toolCall.name, {
+							const result = await this._toolsService.invokeToolWithEndpoint(toolCall.name, {
 								input,
 								toolInvocationToken: request.toolInvocationToken,
-							}, token) as vscode.ExtendedLanguageModelToolResult;
+								// Split on `__vscode` so it's the chat stream id
+								// TODO @lramos15 - This is a gross hack
+								chatStreamToolCallId: toolCall.id.split('__vscode')[0],
+							}, endpoint, token) as vscode.ExtendedLanguageModelToolResult;
 
 							if (result.hasError) {
 								failedEdits.push([toolCall, result]);
@@ -480,7 +497,12 @@ class InlineChatEditToolsStrategy implements IInlineChatEditStrategy {
 		// ALWAYS enable editing tools (only) and ignore what the client did send
 		const fakeRequest: vscode.ChatRequest = {
 			...request,
-			tools: new Map(Array.from(enabledTools).map(toolName => [toolName, true] as const))
+			tools: new Map(
+				Array.from(enabledTools)
+					.map(t => this._toolsService.getTool(t))
+					.filter(isDefined)
+					.map(tool => [tool, true])
+			),
 		};
 
 		const agentTools = await this._instantiationService.invokeFunction(getAgentTools, fakeRequest);

@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, CancellationTokenSource, DocumentSelector } from 'vscode-languageserver-protocol';
+import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../../../../platform/languageContextProvider/common/languageContextProviderService';
+import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
 import { createServiceIdentifier } from '../../../../../../util/common/services';
 import { isCancellationError } from '../../../../../../util/vs/base/common/errors';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -35,6 +37,7 @@ import {
 	SupportedContextItemWithId,
 } from './contextProviders/contextItemSchemas';
 import { ICompletionsContextProviderService } from './contextProviderStatistics';
+
 
 export interface ResolvedContextItem<T extends SupportedContextItemWithId = SupportedContextItemWithId> {
 	providerId: string;
@@ -536,4 +539,55 @@ function getContextProviderTimeBudget(accessor: ServicesAccessor, languageId: st
 	}
 
 	return accessor.get(ICompletionsFeaturesService).contextProviderTimeBudget(languageId, telemetryData);
+}
+
+export type DefaultDiagnosticSettings = {
+	warnings: 'no' | 'yes' | 'yesIfNoErrors';
+	maxLineDistance: number; // how far away (in lines) to look for lints
+	maxDiagnostics: number;
+};
+export namespace DefaultDiagnosticSettings {
+	export function from(value: string | undefined | null): DefaultDiagnosticSettings | undefined {
+		if (!value) {
+			return undefined;
+		}
+		try {
+			const parsed = JSON.parse(value) as Partial<DefaultDiagnosticSettings>;
+			if (parsed.warnings === undefined && parsed.maxDiagnostics === undefined && parsed.maxLineDistance === undefined) {
+				return undefined;
+			}
+			const warnings = getWarnings(parsed);
+			const maxLineDistance = typeof parsed.maxLineDistance === 'number' && parsed.maxLineDistance >= 0
+				? parsed.maxLineDistance
+				: 10;
+			const maxDiagnostics = typeof parsed.maxDiagnostics === 'number' && parsed.maxDiagnostics > 0
+				? parsed.maxDiagnostics
+				: 5;
+			return {
+				warnings,
+				maxLineDistance,
+				maxDiagnostics
+			};
+		} catch {
+			return undefined;
+		}
+	}
+
+	function getWarnings(value: Partial<DefaultDiagnosticSettings>): 'no' | 'yes' | 'yesIfNoErrors' {
+		const warnings = value?.warnings;
+		if (warnings === 'yes' || warnings === 'no' || warnings === 'yesIfNoErrors') {
+			return warnings;
+		}
+		return 'no';
+	}
+}
+
+export function getDefaultDiagnosticSettings(accessor: ServicesAccessor): DefaultDiagnosticSettings | undefined {
+	const configurationService = accessor.get(IConfigurationService);
+	const experimentationService = accessor.get(IExperimentationService);
+	const value = configurationService.getExperimentBasedConfig(ChatConfigKey.TeamInternal.InlineCompletionsDefaultDiagnosticsOptions, experimentationService);
+	if (typeof value !== 'string') {
+		return undefined;
+	}
+	return DefaultDiagnosticSettings.from(value);
 }

@@ -5,7 +5,7 @@
 
 import assert from 'assert';
 import * as fs from 'fs';
-import type { ChatErrorDetails, MappedEditsResponseStream, TextDocument } from 'vscode';
+import type { ChatErrorDetails, LanguageModelToolInformation, MappedEditsResponseStream, TextDocument } from 'vscode';
 import { CodeBlocksMetadata } from '../../src/extension/codeBlocks/node/codeBlockProcessor';
 import { agentsToCommands, Intent } from '../../src/extension/common/constants';
 import '../../src/extension/intents/node/allIntents';
@@ -77,7 +77,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1' };
 				if (testCase.tools) {
 					for (const [toolName, shouldUse] of Object.entries(testCase.tools)) {
-						request.tools.set(getContributedToolName(toolName), shouldUse);
+						request.tools.set({ name: getContributedToolName(toolName) } as LanguageModelToolInformation, shouldUse);
 					}
 				}
 				const interactiveSession = accessor.get(IInstantiationService).createInstance(

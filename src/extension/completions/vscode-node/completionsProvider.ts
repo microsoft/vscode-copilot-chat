@@ -10,11 +10,10 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ILogService } from '../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { Completion } from '../../../platform/nesFetch/common/completionsAPI';
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { createTracer, ITracer } from '../../../util/common/tracing';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -28,7 +27,7 @@ import { contextIndentation } from '../common/parseBlock';
 
 export class CompletionsProvider extends Disposable {
 
-	private tracer: ITracer;
+	private logger: ILogger;
 
 	constructor(
 		private workspace: ObservableWorkspace,
@@ -40,7 +39,7 @@ export class CompletionsProvider extends Disposable {
 		@ILogService private logService: ILogService,
 	) {
 		super();
-		this.tracer = createTracer(['NES', 'Completions'], (msg) => this.logService.trace(msg));
+		this.logger = this.logService.createSubLogger(['NES', 'Completions']);
 	}
 
 	public async getCompletions(
@@ -69,7 +68,7 @@ export class CompletionsProvider extends Disposable {
 
 		const isMidword = this.isAtMidword(docContents, selection.start);
 		if (isMidword) {
-			this.tracer.returns('Midword completion not supported');
+			this.logger.trace('Return: Midword completion not supported');
 			return;
 		}
 
@@ -84,7 +83,7 @@ export class CompletionsProvider extends Disposable {
 		const url = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsCompletionsUrl, this.expService);
 
 		if (!url) {
-			this.tracer.throws('No completions URL configured');
+			this.logger.trace('Throw: No completions URL configured');
 			throw new Error('No completions URL configured');
 		}
 
@@ -139,6 +138,7 @@ export class CompletionsProvider extends Disposable {
 			edit: new StringReplacement(new OffsetRange(selection.start, selection.endExclusive), choice.text),
 			documentBeforeEdits: docContents,
 			showRangePreference: ShowNextEditPreference.Always,
+			isFromCursorJump: false,
 		});
 	}
 

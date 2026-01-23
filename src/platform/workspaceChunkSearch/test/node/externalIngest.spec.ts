@@ -18,13 +18,11 @@ import { FileType } from '../../../filesystem/common/fileTypes';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
 import { ISearchService } from '../../../search/common/searchService';
 import { createPlatformServices, TestingServiceCollection } from '../../../test/node/services';
-import {
-	IWorkspaceService,
-	NullWorkspaceService
-} from '../../../workspace/common/workspaceService';
+import { IWorkspaceService, NullWorkspaceService } from '../../../workspace/common/workspaceService';
 import { ExternalIngestClient, ExternalIngestFile, IExternalIngestClient } from '../../node/codeSearch/externalIngestClient';
 import { ExternalIngestIndex } from '../../node/codeSearch/externalIngestIndex';
 
+const emptyProgressCb: (message: string) => void = () => { };
 
 function createMockExternalIngestClient(options?: {
 	canIngestPathAndSize?: (filePath: string, size: number) => boolean;
@@ -41,7 +39,7 @@ function createMockExternalIngestClient(options?: {
 			return Array.from(ingestedFiles.values());
 		},
 		searchCalls,
-		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken): Promise<Result<{ checkpoint: string }, Error>> {
+		async updateIndex(_filesetName: string, _currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, _token: CancellationToken, _onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
 			for await (const file of allFiles) {
 				ingestedFiles.set(file.uri, file);
 			}
@@ -327,7 +325,7 @@ suite('ExternalIngestIndex', () => {
 		const { mockClient, index } = setupTestContext(workspaceRoot, files);
 
 		await index.initialize();
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Verify that both files were passed to the client for ingestion
 		assert.strictEqual(mockClient.ingestedFiles.length, 2, 'Both files should be ingested');
@@ -354,7 +352,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the small file should be ingested (large file fails canIngestPathAndSize)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only small file should be ingested');
@@ -382,7 +380,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the text file should be ingested (binary file fails canIngestDocument)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only text file should be ingested');
@@ -408,7 +406,7 @@ suite('ExternalIngestIndex', () => {
 		});
 
 		await index.initialize();
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// Only the source file should be ingested (vendor file filtered by path pattern)
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'Only source file should be ingested');
@@ -431,11 +429,11 @@ suite('ExternalIngestIndex', () => {
 		await index.initialize();
 
 		// First ingest - file should be read
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 		assert.ok(mockFs.countReadFileCalls(file1) >= 1, 'File should be read during first ingest');
 
 		// Second ingest - file should NOT be re-read since mtime unchanged
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// The file should still be yielded from the ingestion
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'File should still be yielded on second ingest');
@@ -454,7 +452,7 @@ suite('ExternalIngestIndex', () => {
 		const { mockFs, mockClient, index } = setupTestContext(workspaceRoot, files);
 
 		await index.initialize();
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 1, 'File should be yielded on first ingest');
 		assert.strictEqual(mockFs.countReadFileCalls(file1), 1, 'File should be read once during first ingest');
@@ -463,7 +461,7 @@ suite('ExternalIngestIndex', () => {
 		files.set(file1, createFileFromString('const x = 2;', 2000));
 
 		// Second ingest after file change - file SHOULD be re-read
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockFs.countReadFileCalls(file1), 2, 'File SHOULD be re-read when mtime changes');
 	});
@@ -485,12 +483,12 @@ suite('ExternalIngestIndex', () => {
 		await index.initialize();
 
 		// First ingest - all files should be read
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should be ingested');
 
 		// Second ingest, should not trigger any new reads
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		// All files should be yielded but none should be re-read for docSha computation
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should still be yielded');
@@ -500,7 +498,7 @@ suite('ExternalIngestIndex', () => {
 		files.set(file2, createFileFromString('const y = 999;', 2000));
 
 		// Third ingest - only file2 should be re-read
-		await index.doIngest(CancellationToken.None);
+		assert.ok((await index.doIngest(emptyProgressCb, CancellationToken.None)).isOk(), 'Ingest should complete successfully');
 
 		assert.strictEqual(mockClient.ingestedFiles.length, 3, 'All files should still be yielded');
 		assert.strictEqual(mockFs.countReadFileCalls(file2), 2, 'Changed file should be re-read');

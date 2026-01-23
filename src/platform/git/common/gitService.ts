@@ -9,11 +9,12 @@ import { Event } from '../../../util/vs/base/common/event';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
 import { equalsIgnoreCase } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Worktree } from '../vscode/git';
+import { Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, RepositoryKind, Worktree } from '../vscode/git';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
 export interface RepoContext {
 	readonly rootUri: URI;
+	readonly kind: RepositoryKind;
 	readonly headBranchName: string | undefined;
 	readonly headCommitHash: string | undefined;
 	readonly upstreamBranchName: string | undefined;

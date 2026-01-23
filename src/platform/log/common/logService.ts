@@ -91,6 +91,17 @@ export interface ILogger {
 	*/
 	error(error: string | Error, message?: string): void;
 	show(preserveFocus?: boolean): void;
+
+	/**
+	 * Creates a sub-logger with a topic prefix. All messages logged through
+	 * the sub-logger will be prefixed with the topic, e.g., `[Topic] message`.
+	 *
+	 * Sub-loggers can be nested, and the prefixes will accumulate,
+	 * e.g., `[Parent][Child] message`.
+	 *
+	 * @param topic The topic name or array of topic names to prefix messages with
+	 */
+	createSubLogger(topic: string | readonly string[]): ILogger;
 }
 
 export class LogServiceImpl extends Disposable implements ILogService {
@@ -129,6 +140,10 @@ export class LogServiceImpl extends Disposable implements ILogService {
 	show(preserveFocus?: boolean): void {
 		this.logger.show(preserveFocus);
 	}
+
+	createSubLogger(topic: string | readonly string[]): ILogger {
+		return this.logger.createSubLogger(topic);
+	}
 }
 
 class LoggerImpl implements ILogger {
@@ -163,6 +178,57 @@ class LoggerImpl implements ILogger {
 
 	show(preserveFocus?: boolean): void {
 		this._logTargets.forEach(t => t.show?.(preserveFocus));
+	}
+
+	createSubLogger(topic: string | readonly string[]): ILogger {
+		return new SubLogger(this, topic);
+	}
+}
+
+class SubLogger implements ILogger {
+	private readonly _prefix: string;
+
+	constructor(
+		private readonly _parent: ILogger,
+		topic: string | readonly string[],
+		existingPrefix?: string,
+	) {
+		const topics = Array.isArray(topic) ? topic : [topic];
+		const newPrefix = topics.map(t => `[${t}]`).join('');
+		this._prefix = existingPrefix ? existingPrefix + newPrefix : newPrefix;
+	}
+
+	private _prefixMessage(message: string): string {
+		return `${this._prefix} ${message}`;
+	}
+
+	trace(message: string): void {
+		this._parent.trace(this._prefixMessage(message));
+	}
+
+	debug(message: string): void {
+		this._parent.debug(this._prefixMessage(message));
+	}
+
+	info(message: string): void {
+		this._parent.info(this._prefixMessage(message));
+	}
+
+	warn(message: string): void {
+		this._parent.warn(this._prefixMessage(message));
+	}
+
+	error(error: string | Error, message?: string): void {
+		const prefixedMessage = message ? this._prefixMessage(message) : this._prefix;
+		this._parent.error(error, prefixedMessage);
+	}
+
+	show(preserveFocus?: boolean): void {
+		this._parent.show(preserveFocus);
+	}
+
+	createSubLogger(topic: string | readonly string[]): ILogger {
+		return new SubLogger(this._parent, topic, this._prefix);
 	}
 }
 

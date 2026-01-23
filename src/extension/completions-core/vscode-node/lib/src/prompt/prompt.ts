@@ -23,6 +23,7 @@ import { NeighboringFileType, considerNeighborFile } from './similarFiles/neighb
 
 // The minimum number of prompt-eligible characters before we offer a completion
 export const MIN_PROMPT_CHARS = 10;
+export const MIN_PROMPT_EXCLUDED_LANGUAGE_IDS = ['scminput'];
 
 export interface Prompt {
 	prefix: string;

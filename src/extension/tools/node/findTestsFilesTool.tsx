@@ -146,7 +146,7 @@ class FindTestFilesTool extends Disposable implements ICopilotTool<IFindTestFile
 	}
 
 	private formatURIs(uris: URI[]): string {
-		return uris.map(formatUriForFileWidget).join(', ');
+		return uris.map(uri => formatUriForFileWidget(uri)).join(', ');
 	}
 
 	async provideInput(promptContext: IBuildPromptContext): Promise<IFindTestFilesToolsParams | undefined> {

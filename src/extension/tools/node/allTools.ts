@@ -31,6 +31,7 @@ import './readProjectStructureTool';
 import './replaceStringTool';
 import './runNotebookCellTool';
 import './scmChangesTool';
+import './searchSubagentTool';
 import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
 import './testFailureTool';

@@ -213,17 +213,21 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
 					}
 
+					const subAgentInvocationId = props.promptContext.request?.subAgentInvocationId;
+					const subAgentName = props.promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
-						chatRequestId: props.requestId
+						chatRequestId: props.requestId,
+						subAgentInvocationId,
+						subAgentName,
+						// Split on `__vscode` so it's the chat stream id
+						// TODO @lramos15 - This is a gross hack
+						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
-					if (props.promptContext.tools?.inSubAgent || props.promptContext.request?.isSubagent) {
-						invocationOptions.fromSubAgent = true;
-					}
 
-					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
@@ -245,7 +249,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	}
 
 	let call: IToolResultElementActualProps['call'];
-	if (tool?.source instanceof LanguageModelToolMCPSource) {
+	if (tool?.source instanceof LanguageModelToolMCPSource || tool?.name === 'runSubagent') {
 		const promise = getToolResult({ tokenBudget: 1, countTokens: () => 1, endpoint: { modelMaxPromptTokens: 1 } });
 		call = () => promise;
 	} else {

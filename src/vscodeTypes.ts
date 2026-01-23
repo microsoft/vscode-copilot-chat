@@ -43,8 +43,8 @@ export import ChatResponseMarkdownWithVulnerabilitiesPart = vscode.ChatResponseM
 export import ChatResponseCodeblockUriPart = vscode.ChatResponseCodeblockUriPart;
 export import ChatResponseTextEditPart = vscode.ChatResponseTextEditPart;
 export import ChatResponseNotebookEditPart = vscode.ChatResponseNotebookEditPart;
+export import ChatResponseWorkspaceEditPart = vscode.ChatResponseWorkspaceEditPart;
 export import ChatResponseConfirmationPart = vscode.ChatResponseConfirmationPart;
-export import ChatPrepareToolInvocationPart = vscode.ChatPrepareToolInvocationPart;
 export import ChatRequest = vscode.ChatRequest;
 export import ChatRequestTurn = vscode.ChatRequestTurn;
 export import ChatResponseTurn = vscode.ChatResponseTurn;
@@ -91,6 +91,8 @@ export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
+export import ChatMcpToolInvocationData = vscode.ChatMcpToolInvocationData;
+export import McpToolInvocationContentData = vscode.McpToolInvocationContentData;
 export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
 export import ChatRequestTurn2 = vscode.ChatRequestTurn2;
 export import LanguageModelError = vscode.LanguageModelError;
@@ -99,6 +101,8 @@ export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
 export import ChatSessionStatus = vscode.ChatSessionStatus;
+export import McpHttpServerDefinition = vscode.McpHttpServerDefinition;
+export import McpStdioServerDefinition = vscode.McpStdioServerDefinition;
 
 export const l10n = {
 	/**

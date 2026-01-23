@@ -5,6 +5,7 @@
 
 import * as http from 'http';
 import * as https from 'https';
+import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
 import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
@@ -101,9 +102,7 @@ export class NodeFetcher implements IFetcher {
 					res.statusCode || 0,
 					res.statusMessage || '',
 					nodeFetcherResponse.headers,
-					async () => nodeFetcherResponse.text(),
-					async () => nodeFetcherResponse.json(),
-					async () => nodeFetcherResponse.body(),
+					nodeFetcherResponse.body(),
 					NodeFetcher.ID
 				));
 			});
@@ -194,12 +193,12 @@ class NodeFetcherResponse {
 		return JSON.parse(text);
 	}
 
-	public async body(): Promise<NodeJS.ReadableStream | null> {
+	public body(): ReadableStream<Uint8Array> {
 		this.signal.addEventListener('abort', () => {
 			this.res.emit('error', makeAbortError(this.signal));
 			this.res.destroy();
 			this.req.destroy();
 		});
-		return this.res;
+		return Readable.toWeb(this.res);
 	}
 }

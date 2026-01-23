@@ -34,7 +34,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				"token" : {
 					"owner": "digitarald",
 					"comment": "Copilot token received from the service.",
-					"chatEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Indicates if the token enabled chat." },
 					"snippyEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the block setting for public suggestions is enabled." },
 					"telemetryEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the subscription has telemetry enabled." },
 					"mcpEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has MCP features enabled." },
@@ -43,7 +42,6 @@ export class BaseTelemetryService implements ITelemetryService {
 				}
 			*/
 			this.sendMSFTTelemetryEvent('token', undefined, {
-				chatEnabled: token.isChatEnabled() ? 1 : 0,
 				snippyEnabled: token.isPublicSuggestionsEnabled() ? 1 : 0,
 				telemetryEnabled: token.isTelemetryEnabled() ? 1 : 0,
 				mcpEnabled: token.isMcpEnabled() ? 1 : 0,

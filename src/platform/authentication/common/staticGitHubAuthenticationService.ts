@@ -66,7 +66,7 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 
 	setCopilotToken(token: CopilotToken): void {
 		this._tokenStore.copilotToken = token;
-		this._onDidAuthenticationChange.fire();
+		this.fireAuthenticationChange('setCopilotToken');
 	}
 
 

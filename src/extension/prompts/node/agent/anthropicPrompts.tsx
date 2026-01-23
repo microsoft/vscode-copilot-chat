@@ -3,9 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isAnthropicContextEditingEnabled } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { RepoMemoryContextPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
@@ -23,6 +27,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
+				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -107,8 +112,20 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 }
 
 class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
+	constructor(
+		props: PromptElementProps<DefaultAgentPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+		const contextCompactionEnabled = endpoint
+			? isAnthropicContextEditingEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicContextEditingEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
@@ -142,6 +159,12 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 						Skip task tracking for simple, single-step operations that can be completed directly without additional planning.<br />
 					</Tag>
 				</>}
+				{contextCompactionEnabled && <>
+					<br />
+					<Tag name='contextManagement'>
+						Your context window is automatically managed through compaction, enabling you to work on tasks of any length without interruption. Work as persistently and autonomously as needed to complete tasks fully. Do not preemptively stop work, summarize progress unnecessarily, or mention context management to the user.<br />
+					</Tag>
+				</>}
 			</Tag>
 			<Tag name='toolUseInstructions'>
 				If the user is requesting a code sample, you can answer it directly without using any tools.<br />
@@ -149,6 +172,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				No need to ask permission before using a tool.<br />
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
+				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
@@ -162,6 +186,35 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
 			</Tag>
+			{tools[ToolName.Memory] && <Tag name='repoMemory'>
+				If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the memory tool to store it at /memories/repo/. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
+				- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
+				- Important information about the structure or logic of the codebase<br />
+				- Commands for linting, building, or running tests that have been verified through a successful run<br />
+				<br />
+				<Tag name='examples'>
+					- "Use ErrKind wrapper for every public API error"<br />
+					- "Prefer ExpectNoLog helper over silent nil checks in tests"<br />
+					- "Always use Python typing"<br />
+					- "Follow the Google JavaScript Style Guide"<br />
+					- "Use html_escape as a sanitizer to avoid cross site scripting vulnerabilities"<br />
+					- "The code can be built with `npm run build` and tested with `npm run test`"<br />
+				</Tag>
+				<br />
+				Only store facts that meet the following criteria:<br />
+				<Tag name='factsCriteria'>
+					- Are likely to have actionable implications for a future task<br />
+					- Are independent of changes you are making as part of your current task, and will remain relevant if your current code isn't merged<br />
+					- Are unlikely to change over time<br />
+					- Cannot always be inferred from a limited code sample<br />
+					- Contain no secrets or sensitive data<br />
+				</Tag>
+				<br />
+				Store one fact per file at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
+				Use the memory tool's create command if the file doesn't exist, or insert command to append a new line. Always include the reason and citations fields.<br />
+				Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
+			</Tag>}
+			{tools[ToolName.Memory] && this.props.isNewChat && <RepoMemoryContextPrompt />}
 			<Tag name='communicationStyle'>
 				Maintain clarity and directness in all responses, delivering complete information while matching response depth to the task's complexity.<br />
 				For straightforward queries, keep answers brief - typically a few lines excluding code or tool invocations. Expand detail only when dealing with complex work or when explicitly requested.<br />
@@ -206,7 +259,8 @@ class AnthropicPromptResolver implements IAgentPrompt {
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		const normalizedModel = endpoint.model?.replace(/\./g, '-');
 		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
-			normalizedModel?.startsWith('claude-haiku-4-5')) {
+			normalizedModel?.startsWith('claude-haiku-4-5') ||
+			normalizedModel?.startsWith('claude-opus-4-5')) {
 			return Claude45DefaultPrompt;
 		}
 		return DefaultAnthropicAgentPrompt;

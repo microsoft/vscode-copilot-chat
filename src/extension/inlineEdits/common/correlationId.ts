@@ -5,6 +5,6 @@
 
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 
-export function createCorrelationId(engine: string): string {
-	return JSON.stringify({ id: generateUuid(), engine });
+export function createCorrelationId(engine: string, flags: Partial<{ isFromCursorJump: boolean }> | undefined): string {
+	return JSON.stringify({ id: generateUuid(), engine, ...flags });
 }

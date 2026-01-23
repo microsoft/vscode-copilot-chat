@@ -5,4 +5,5 @@
 
 // All tools that need to be in vscode-node
 
+import './askQuestionsTool';
 import './fetchWebPageTool';

@@ -2,10 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { FinishedCallback, RequestDelta, SolutionDecision } from '../openai/fetch';
 import { APIChoice, convertToAPIChoice } from '../openai/openai';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 import { TerseBlockTrimmer } from './blockTrimmer';
 
 class StreamingCompletion {
@@ -182,9 +182,9 @@ export class StreamedCompletionSplitter {
 		}
 		const apiChoice = this.instantiationService.invokeFunction(convertToAPIChoice,
 			trimmed.effectiveText.trimEnd(),
-			delta.getAPIJsonData!(),
+			delta.getAPIJsonData!(), // FIXME@ulugbekna
 			trimmed.index,
-			delta.requestId!,
+			delta.requestId!, // FIXME@ulugbekna
 			offset !== undefined,
 			delta.telemetryData!
 		);

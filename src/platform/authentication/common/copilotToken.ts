@@ -48,6 +48,22 @@ function containsMicrosoftOrg(orgList: string[]): boolean {
 	return false;
 }
 
+/**
+ * A function used to determine if the org list contains a VS Code organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a VS Code org
+ */
+function containsVSCodeOrg(orgList: string[]): boolean {
+	const VSCODE_ORGANIZATIONS = ['551cca60ce19654d894e786220822482'];
+	// Check if the user is part of a VS Code organization.
+	for (const org of orgList) {
+		if (VSCODE_ORGANIZATIONS.includes(org)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export class CopilotToken {
 	private readonly tokenMap: Map<string, string>;
 	constructor(private readonly _info: ExtendedTokenInfo) {
@@ -127,7 +143,7 @@ export class CopilotToken {
 	}
 
 	get isVscodeTeamMember(): boolean {
-		return this._info.isVscodeTeamMember;
+		return this._info.isVscodeTeamMember || containsVSCodeOrg(this.organizationList);
 	}
 
 	get codexAgentEnabled(): boolean {
@@ -173,10 +189,6 @@ export class CopilotToken {
 			this._isPublicSuggestionsEnabled = this._info.public_suggestions === 'enabled';
 		}
 		return this._isPublicSuggestionsEnabled;
-	}
-
-	isChatEnabled(): boolean {
-		return this._info.chat_enabled ?? false;
 	}
 
 	isCopilotIgnoreEnabled(): boolean {
@@ -285,8 +297,6 @@ export interface TokenEnvelope {
 	// Feature flags
 	/** Whether client-side indexing for Blackbird is enabled. */
 	blackbird_clientside_indexing: boolean;
-	/** Whether chat features are enabled. */
-	chat_enabled: boolean;
 	/** Whether code quote/citation is enabled. */
 	code_quote_enabled: boolean;
 	/** Whether Copilot code review is enabled. */
@@ -365,7 +375,6 @@ const tokenEnvelopeValidator = vObj({
 	sku: vString(),
 	individual: vBoolean(),
 	blackbird_clientside_indexing: vBoolean(),
-	chat_enabled: vBoolean(),
 	code_quote_enabled: vBoolean(),
 	code_review_enabled: vBoolean(),
 	codesearch: vBoolean(),
@@ -479,7 +488,6 @@ export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 	analytics_tracking_id: string;
 	assigned_date: string;
 	can_signup_for_limited: boolean;
-	chat_enabled: boolean;
 	copilot_plan: string;
 	organization_login_list: string[];
 	organization_list: Array<{
@@ -513,7 +521,6 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		individual: true,
 		// Feature flags
 		blackbird_clientside_indexing: false,
-		chat_enabled: true,
 		code_quote_enabled: false,
 		code_review_enabled: false,
 		codesearch: false,

@@ -297,6 +297,10 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		}
 
 		await waitForState(this._isInitialized, state => state, undefined, cancelOnDispose(this._store));
+
+		if (this.repositories.length > 0) {
+			await waitForState(this.activeRepository, state => state !== undefined, undefined, cancelOnDispose(this._store));
+		}
 	}
 
 	private async doOpenRepository(repository: Repository): Promise<void> {
@@ -379,6 +383,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 
 export class RepoContextImpl implements RepoContext {
 	public readonly rootUri = this._repo.rootUri;
+	public readonly kind = this._repo.kind;
 	public readonly headBranchName = this._repo.state.HEAD?.name;
 	public readonly headCommitHash = this._repo.state.HEAD?.commit;
 	public readonly upstreamBranchName = this._repo.state.HEAD?.upstream?.name;

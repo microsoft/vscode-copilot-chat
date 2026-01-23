@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IEnvService } from '../../../../../platform/env/common/envService';
+import { RequestId } from '../../../../../platform/networking/common/fetch';
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -16,7 +17,7 @@ import { ExpConfig } from './experiments/expConfig';
 import { ICompletionsFeaturesService } from './experiments/featuresService';
 import { FilterSettings } from './experiments/filters';
 import { ExpServiceTelemetryNames } from './experiments/telemetryNames';
-import { APIJsonData, RequestId } from './openai/openai';
+import { APIJsonData } from './openai/openai';
 import { Prompt } from './prompt/prompt';
 import { ICompletionsTelemetryUserConfigService } from './telemetry/userConfig';
 import { ICompletionsPromiseQueueService } from './util/promiseQueue';

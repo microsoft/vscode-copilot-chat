@@ -9,7 +9,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isLocation } from '../../../../util/common/types';
+import { isLocation, toLocation } from '../../../../util/common/types';
 import { raceCancellation } from '../../../../util/vs/base/common/async';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
@@ -64,21 +64,21 @@ export class CopilotCLIPromptResolver {
 			}
 			const variableRef = await this.translateWorkspaceRefToWorkingDirectoryRef(variable.reference, isIsolationEnabled, workingDirectory, token);
 			// Images will be attached using regular attachments via Copilot CLI SDK.
-			if (variable.value instanceof ChatReferenceBinaryData) {
+			if (variableRef.value instanceof ChatReferenceBinaryData) {
 				validReferences.push(variableRef);
 				fileFolderReferences.push(variableRef);
 				return;
 			}
-			if (isLocation(variable.value)) {
+			if (isLocation(variableRef.value)) {
 				validReferences.push(variableRef);
 				return;
 			}
 			// Notebooks are not supported yet.
-			if (URI.isUri(variable.value)) {
-				if (await this.ignoreService.isCopilotIgnored(variable.value)) {
+			if (URI.isUri(variableRef.value)) {
+				if (await this.ignoreService.isCopilotIgnored(variableRef.value)) {
 					return;
 				}
-				if (variable.value.scheme === Schemas.vscodeNotebookCellOutput || variable.value.scheme === Schemas.vscodeNotebookCellOutput) {
+				if (variableRef.value.scheme === Schemas.vscodeNotebookCellOutput || variableRef.value.scheme === Schemas.vscodeNotebookCellOutput) {
 					return;
 				}
 
@@ -149,35 +149,39 @@ export class CopilotCLIPromptResolver {
 	}
 
 	private async translateWorkspaceRefToWorkingDirectoryRef(ref: vscode.ChatPromptReference, isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<vscode.ChatPromptReference> {
-		if (!isIsolationEnabled || !workingDirectory || ref.value instanceof ChatReferenceBinaryData) {
+		try {
+			if (!isIsolationEnabled || !workingDirectory || ref.value instanceof ChatReferenceBinaryData) {
+				return ref;
+			}
+
+			if (isLocation(ref.value)) {
+				const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value.uri, workingDirectory, token);
+				const loc = new Location(uri, toLocation(ref.value)!.range);
+				return {
+					...ref,
+					value: loc
+				};
+			} else if (URI.isUri(ref.value)) {
+				const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value, workingDirectory, token);
+				return {
+					...ref,
+					value: uri
+				};
+			} else if (ref.value instanceof ChatReferenceDiagnostic) {
+				const diagnostics = await Promise.all(ref.value.diagnostics.map(async ([uri, diags]) => {
+					const translatedUri = await this.translateWorkspaceUriToWorkingDirectoryUri(uri, workingDirectory, token);
+					return [translatedUri, diags] as [vscode.Uri, vscode.Diagnostic[]];
+				}));
+				return {
+					...ref,
+					value: new ChatReferenceDiagnostic(diagnostics)
+				};
+			}
+			return ref;
+		} catch (error) {
+			this.logService.error(error, `[CopilotCLISession] Failed to translate workspace reference`);
 			return ref;
 		}
-
-		if (isLocation(ref.value)) {
-			const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value.uri, workingDirectory, token);
-			const loc = new Location(uri, ref.value.range);
-			return {
-				...ref,
-				value: loc
-			};
-		} else if (URI.isUri(ref.value)) {
-			const uri = await this.translateWorkspaceUriToWorkingDirectoryUri(ref.value, workingDirectory, token);
-			return {
-				...ref,
-				value: uri
-			};
-		} else if (ref.value instanceof ChatReferenceDiagnostic) {
-			const diagnostics = await Promise.all(ref.value.diagnostics.map(async ([uri, diags]) => {
-				const translatedUri = await this.translateWorkspaceUriToWorkingDirectoryUri(uri, workingDirectory, token);
-				return [translatedUri, diags] as [vscode.Uri, vscode.Diagnostic[]];
-			}));
-			return {
-				...ref,
-				value: new ChatReferenceDiagnostic(diagnostics)
-			};
-		}
-
-		return ref;
 	}
 
 	private async translateWorkspaceUriToWorkingDirectoryUri(uri: vscode.Uri, workingDirectory: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.Uri> {

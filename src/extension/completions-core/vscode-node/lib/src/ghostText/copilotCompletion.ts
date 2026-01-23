@@ -2,12 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { CopilotNamedAnnotationList } from '../../../../../../platform/completions-core/common/openai/copilotAnnotations';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
-import { CopilotNamedAnnotationList } from '../openai/stream';
 import { TelemetryWithExp } from '../telemetry';
 import { IPosition, IRange, LocationFactory, TextDocumentContents } from '../textDocument';
-import { CompletionResult, ResultType } from './ghostText';
+import { CompletionResult } from './ghostText';
 import { ITextEditorOptions, normalizeIndentCharacter } from './normalizeIndent';
+import { ResultType } from './resultType';
 
 export interface CopilotCompletion {
 	uuid: string;

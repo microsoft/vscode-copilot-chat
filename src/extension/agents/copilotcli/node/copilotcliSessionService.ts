@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { internal, Session, SessionEvent, SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
-import type { CancellationToken, ChatRequest, Uri } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatSessionItem, Uri } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -18,13 +18,13 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
 import { stripReminders } from '../common/copilotCLITools';
 import { CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLISDK } from './copilotCli';
 import { CopilotCLISession, ICopilotCLISession } from './copilotcliSession';
-import { getCopilotLogger } from './logger';
 import { ICopilotCLIMCPHandler } from './mcpHandler';
 
 const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSessionFile';
@@ -32,7 +32,7 @@ const COPILOT_CLI_WORKSPACE_JSON_FILE_KEY = 'github.copilot.cli.workspaceSession
 export interface ICopilotCLISessionItem {
 	readonly id: string;
 	readonly label: string;
-	readonly timing: { startTime: number; endTime?: number };
+	readonly timing: ChatSessionItem['timing'];
 	readonly status?: ChatSessionStatus;
 }
 
@@ -44,7 +44,7 @@ export interface ICopilotCLISessionService {
 	onDidChangeSessions: Event<void>;
 
 	// Session metadata querying
-	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
+	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
 	// SDK session management
 	deleteSession(sessionId: string): Promise<void>;
@@ -81,14 +81,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ICopilotCLIMCPHandler private readonly mcpHandler: ICopilotCLIMCPHandler,
 		@ICopilotCLIAgents private readonly agents: ICopilotCLIAgents,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.monitorSessionFiles();
 		this._sessionManager = new Lazy<Promise<internal.LocalSessionManager>>(async () => {
 			const { internal } = await this.copilotCLISDK.getPackage();
-			return new internal.LocalSessionManager({
-				logger: getCopilotLogger(this.logService)
-			});
+			return new internal.LocalSessionManager({});
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
@@ -96,7 +95,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	protected monitorSessionFiles() {
 		try {
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
-			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '*.jsonl')));
+			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '**/*.jsonl')));
 			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
 		} catch (error) {
 			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
@@ -107,25 +106,54 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	private _getAllSessionsProgress: Promise<readonly ICopilotCLISessionItem[]> | undefined;
-	async getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		if (!this._getAllSessionsProgress) {
-			this._getAllSessionsProgress = this._getAllSessions(token);
+			this._getAllSessionsProgress = this._getAllSessions(filter, token);
 		}
 		return this._getAllSessionsProgress.finally(() => {
 			this._getAllSessionsProgress = undefined;
 		});
 	}
 
-	async _getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
+	async _getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 			const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 
-			await this._sessionTracker.initialize(sessionMetadataList.map(s => s.sessionId));
+			await this._sessionTracker.initialize();
 			// Convert SessionMetadata to ICopilotCLISession
 			const diskSessions: ICopilotCLISessionItem[] = coalesce(await Promise.all(
-				sessionMetadataList.map(async (metadata) => {
-					if (!this._sessionTracker.shouldShowSession(metadata.sessionId)) {
+				sessionMetadataList.map(async (metadata): Promise<ICopilotCLISessionItem | undefined> => {
+					let showSession: boolean = false;
+					if (this.workspaceService.getWorkspaceFolders().length === 0) {
+						// If we're in empty workspace then show all sessions.
+						showSession = true;
+					} else {
+						const sessionFilterResult = filter(metadata.sessionId);
+						const sessionTrackerVisibility = this._sessionTracker.shouldShowSession(metadata.sessionId);
+						// This session was started from a specified workspace (e.g. multiroot, untitled or other), hence continue showing it.
+						if (sessionTrackerVisibility.isWorkspaceSession) {
+							showSession = true;
+						}
+						if (!showSession && sessionFilterResult === true) {
+							showSession = true;
+						}
+						// If this is an old global session, then show it as well.
+						if (!showSession && sessionTrackerVisibility.isOldGlobalSession) {
+							// But if not required to be displayed, do not show it.
+							if (typeof sessionFilterResult === 'undefined') {
+								showSession = true;
+							}
+						}
+						// Possible we have the workspace info in cli metadata.
+						if (!showSession && metadata.context && (
+							(metadata.context.cwd && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.cwd))) ||
+							(metadata.context.gitRoot && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.gitRoot)))
+						)) {
+							showSession = true;
+						}
+					}
+					if (!showSession) {
 						return;
 					}
 					const id = metadata.sessionId;
@@ -139,8 +167,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						return {
 							id,
 							label,
-							timing: { startTime, endTime },
-						} satisfies ICopilotCLISessionItem;
+							timing: { created: startTime, startTime, endTime },
+						};
 					}
 					try {
 						// Get the full session to access chat messages
@@ -150,14 +178,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 						const label = labelFromPrompt(firstUserMessage ?? '');
 						if (!label) {
-							this.logService.warn(`Copilot CLI session ${metadata.sessionId} has no user messages.`);
 							return;
 						}
 						return {
 							id,
 							label,
-							timing: { startTime, endTime },
-						} satisfies ICopilotCLISessionItem;
+							timing: { created: startTime, startTime, endTime },
+						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
 					}
@@ -170,27 +197,28 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const newSessions = coalesce(Array.from(this._sessionWrappers.values())
 				.filter(session => !diskSessionIds.has(session.object.sessionId))
 				.filter(session => session.object.status === ChatSessionStatus.InProgress)
-				.map(session => {
+				.map((session): ICopilotCLISessionItem | undefined => {
 					const label = labelFromPrompt(session.object.pendingPrompt ?? '');
 					if (!label) {
 						return;
 					}
 
+					const createTime = Date.now();
 					return {
 						id: session.object.sessionId,
 						label,
 						status: session.object.status,
-						timing: { startTime: Date.now() },
-					} satisfies ICopilotCLISessionItem;
+						timing: { created: createTime, startTime: createTime },
+					};
 				}));
 
 			// Merge with cached sessions (new sessions not yet persisted by SDK)
 			const allSessions = diskSessions
-				.map(session => {
+				.map((session): ICopilotCLISessionItem => {
 					return {
 						...session,
 						status: this._sessionWrappers.get(session.id)?.object?.status
-					} satisfies ICopilotCLISessionItem;
+					};
 				}).concat(newSessions);
 
 			return allSessions;
@@ -201,7 +229,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	}
 
 	public async createSession({ model, workingDirectory, isolationEnabled, agent }: { model?: string; workingDirectory?: Uri; isolationEnabled?: boolean; agent?: SweCustomAgent }, token: CancellationToken): Promise<RefCountedSession> {
-		const mcpServers = await this.mcpHandler.loadMcpConfig(workingDirectory);
+		const mcpServers = await this.mcpHandler.loadMcpConfig();
 		const options = await this.createSessionsOptions({ model, workingDirectory, isolationEnabled, mcpServers, agent });
 		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
 		const sdkSession = await sessionManager.createSession(options.toSessionOptions());
@@ -232,13 +260,20 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 				if (session) {
 					this.logService.trace(`[CopilotCLISession] Reusing CopilotCLI session ${sessionId}.`);
 					session.acquire();
+					if (!readonly) {
+						if (agent) {
+							await session.object.sdkSession.selectCustomAgent(agent.name);
+						} else {
+							session.object.sdkSession.clearCustomAgent();
+						}
+					}
 					return session;
 				}
 			}
 
 			const [sessionManager, mcpServers] = await Promise.all([
 				raceCancellationError(this.getSessionManager(), token),
-				this.mcpHandler.loadMcpConfig(workingDirectory),
+				this.mcpHandler.loadMcpConfig(),
 			]);
 			const options = await this.createSessionsOptions({ model, workingDirectory, agent, isolationEnabled, mcpServers });
 
@@ -359,14 +394,8 @@ export class CopilotCLISessionWorkspaceTracker {
 		void this._initializeSessionStorageFiles.value;
 	}
 
-	public async initialize(oldSessions: string[]): Promise<void> {
-		const { global } = await this._initializeSessionStorageFiles.value;
-		if (this._oldGlobalSessions) {
-			return;
-		}
-		this._oldGlobalSessions = new Set<string>(oldSessions);
-		// No need to block caller anymore, we've tracked in memory for now.
-		void this.fileSystem.writeFile(global, Buffer.from(oldSessions.join(',')));
+	public async initialize(): Promise<void> {
+		await this._initializeSessionStorageFiles.value;
 	}
 
 	public async trackSession(sessionId: string, operation: 'add' | 'delete'): Promise<void> {
@@ -389,19 +418,17 @@ export class CopilotCLISessionWorkspaceTracker {
 	/**
 	 * InitializeOldSessions should have been called before this.
 	 */
-	public shouldShowSession(sessionId: string): boolean {
-		if (this._oldGlobalSessions?.has(sessionId) || this.workspaceService.getWorkspaceFolders().length === 0) {
-			return true;
-		}
-		return this._workspaceSessions.has(sessionId);
+	public shouldShowSession(sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
+		return {
+			isOldGlobalSession: this._oldGlobalSessions?.has(sessionId),
+			isWorkspaceSession: this._workspaceSessions.has(sessionId),
+		};
 	}
 }
 
 function labelFromPrompt(prompt: string): string {
-	// Strip system reminders and return first line or first 50 characters, whichever is shorter
-	const cleanContent = stripReminders(prompt);
-	const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
-	return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
+	// Strip system reminders from the prompt
+	return stripReminders(prompt);
 }
 
 export class Mutex {
@@ -433,7 +460,8 @@ export class Mutex {
 
 	private _release(): void {
 		if (!this._locked) {
-			throw new Error('Mutex: release called while not locked');
+			// already unlocked
+			return;
 		}
 		this._locked = false;
 		const next = this._acquireQueue.shift();

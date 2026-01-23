@@ -6,13 +6,21 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
+import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
+
+// Import the tool permission handlers
+import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
 
 export class ClaudeChatSessionParticipant {
 	constructor(
 		private readonly sessionType: string,
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		private readonly sessionItemProvider: ClaudeChatSessionItemProvider,
+		private readonly contentProvider: ClaudeChatSessionContentProvider,
+		private readonly slashCommandService: IClaudeSlashCommandService,
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -20,8 +28,14 @@ export class ClaudeChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
-		const create = async () => {
-			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token);
+		// Try to handle as a slash command first
+		const slashResult = await this.slashCommandService.tryHandleCommand(request.prompt, stream, token);
+		if (slashResult.handled) {
+			return slashResult.result ?? {};
+		}
+
+		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
+			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
 			if (!claudeSessionId) {
 				stream.warning(vscode.l10n.t("Failed to create a new Claude Code session."));
 				return undefined;
@@ -30,9 +44,13 @@ export class ClaudeChatSessionParticipant {
 		};
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
+			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const modelId = await this.contentProvider.getModelIdForSession(sessionId);
+			const permissionMode = this.contentProvider.getPermissionModeForSession(sessionId);
+
 			if (chatSessionContext.isUntitled) {
 				/* New, empty session */
-				const claudeSessionId = await create();
+				const claudeSessionId = await create(modelId, permissionMode);
 				if (claudeSessionId) {
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
@@ -44,8 +62,7 @@ export class ClaudeChatSessionParticipant {
 			}
 
 			/* Existing session */
-			const id = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
-			await this.claudeAgentManager.handleRequest(id, request, context, stream, token);
+			await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId, permissionMode);
 			return {};
 		}
 		/* Via @claude */

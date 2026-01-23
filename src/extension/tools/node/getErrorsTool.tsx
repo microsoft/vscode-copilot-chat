@@ -236,7 +236,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 	}
 
 	private formatURIs(uris: URI[]): string {
-		return uris.map(formatUriForFileWidget).join(', ');
+		return uris.map(uri => formatUriForFileWidget(uri)).join(', ');
 	}
 
 	private getNotebookCellDiagnostics(uri: URI) {

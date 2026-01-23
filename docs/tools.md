@@ -20,8 +20,7 @@ First, add an entry in vscode-copilot's package.json under `contributes.language
   - The existing `copilot_` tools will be renamed later.
 - Give it a reasonable `toolReferenceName` and a localized `userDescription`.
   - `toolReferenceName` is the name used in the tool picker, and to reference the tool with `#`, and to add the tool to a mode or toolset.
-  - Consider whether the tool should be available on its own or part of a toolset. Add it to a toolset in `contributes.languageModelToolSets` if needed.
-  - Otherwise, set `"canBeReferencedInPrompt": true` and add an `icon`.
+  - Add it to a toolset in `contributes.languageModelToolSets`- new tools should be part of a toolset.
 - Now write your `modelDescription`. This is what the LLM uses to decide whether to use your tool. This should _not_ be localized. Be very detailed:
   - What exactly does the tool do?
   - What kind of information does it return?
@@ -70,6 +69,83 @@ If the tool has a potentially dangerous side-effect (e.g. the terminal tool), it
 ### Testing
 
 Consider writing a unit test for your tool. One example to copy is [`readFile.spec.tsx`](https://github.com/microsoft/vscode-copilot/blob/a2b8af8b8e7286d4da77ff4108b6bcdeb1441d79/src/extension/tools/node/test/readFile.spec.tsx#L40-L59). This test invokes the tool with some hardcoded arguments and checks the result against a snapshot.
+
+## Model-Specific Tools
+
+Model-specific tools allow you to provide tool implementations that are only available for certain language models (e.g., Gemini, Claude, GPT-5). This is useful when:
+- A model has unique capabilities that require a specialized tool
+- You want to adjust tool descriptions/schemas to work better with a specific model
+- You need to override an existing tool's behavior for certain models
+
+### When to use model-specific tools
+
+Use model-specific tools when:
+- The tool leverages model-specific capabilities (e.g., native model features)
+- You need different tool descriptions or schemas that work better with certain models
+- You want to override behavior of an existing tool for specific models
+
+### Registering a model-specific tool
+
+Register model-specific tools using `ToolRegistry.registerModelSpecificTool`:
+
+```typescript
+class MyGeminiTool implements ICopilotModelSpecificTool<IMyToolInput> {
+	async invoke(
+		options: vscode.LanguageModelToolInvocationOptions<IMyToolInput>,
+		token: vscode.CancellationToken
+	): Promise<vscode.LanguageModelToolResult> {
+		// Gemini-specific implementation
+		return { content: [{ type: 'text', value: 'Result' }] };
+	}
+}
+
+// Register with a model selector
+const disposable = ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'my_gemini_tool',
+		displayName: 'My Gemini Tool',
+		description: 'A tool optimized for Gemini models',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				query: { type: 'string', description: 'The query to process' }
+			},
+			required: ['query']
+		},
+		// Only available for Gemini 3:
+		models: [{ family: 'gemini-3-pro' }]
+	},
+	MyGeminiTool
+);
+```
+
+### Overriding existing tools
+
+If your model-specific tool should **replace** an existing tool for certain models, use the `overridesTool` property:
+
+```typescript
+class MyGeminiSearchTool extends GenericGrepSearchTool {
+	public readonly overridesTool = ToolName.GrepSearch;
+		// Gemini-optimized search implementation
+	}
+}
+
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'gemini_grep_search',
+		displayName: 'Search (Gemini)',
+		description: 'Optimized grep search for Gemini',
+		models: [{ family: 'gemini' }],
+		inputSchema: { /* ... */ }
+	},
+	MyGeminiSearchTool
+);
+```
+
+When `overridesTool` is set:
+- The model-specific tool is **not** individually selectable in the UI
+- It automatically replaces the base tool when enabled and the model matches
+- The base tool must be registered and enabled for the override to work
 
 ### Read the prompt
 

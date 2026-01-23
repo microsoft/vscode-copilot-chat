@@ -39,7 +39,7 @@ class TestAuthenticationService extends BaseAuthenticationService {
 
 	setPermissiveGitHubSession(session: AuthenticationSession | undefined): void {
 		this._permissiveGitHubSession = session;
-		this._onDidAuthenticationChange.fire();
+		this.fireAuthenticationChange('setPermissiveGitHubSession');
 	}
 
 	override getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;

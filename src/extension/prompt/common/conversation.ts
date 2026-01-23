@@ -363,6 +363,10 @@ export interface IResultMetadata {
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
+	/** Prompt tokens from the language model (e.g., Anthropic Messages API) */
+	promptTokens?: number;
+	/** Output tokens from the language model (e.g., Anthropic Messages API) */
+	outputTokens?: number;
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */
@@ -388,19 +392,17 @@ export class GlobalContextMessageMetadata {
 }
 
 /**
- * Metadata capturing context editing information from Anthropic Messages API.
- * When context editing clears tokens on a turn, this metadata is stored so that
- * subsequent turns can use the cleared token count to adjust their budget calculation.
+ * Metadata capturing token usage information from Anthropic Messages API.
+ * Stores prompt tokens and output tokens for each turn.
+ * This metadata is used to trigger summarization when token usage exceeds thresholds.
  */
-export class ContextEditingMetadata extends PromptMetadata {
+export class AnthropicTokenUsageMetadata {
 	constructor(
-		/** Total number of tokens cleared by context editing */
-		readonly clearedTokens: number,
-		/** Number of context edits applied */
-		readonly editCount: number,
-	) {
-		super();
-	}
+		/** Total number of prompt input tokens */
+		readonly promptTokens: number,
+		/** Number of output/completion tokens */
+		readonly outputTokens: number,
+	) { }
 }
 
 export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {

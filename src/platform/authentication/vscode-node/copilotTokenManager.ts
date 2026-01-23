@@ -25,7 +25,6 @@ export class NotSignedUpError extends Error { }
 export class SubscriptionExpiredError extends Error { }
 export class ContactSupportError extends Error { }
 export class EnterpriseManagedError extends Error { }
-export class ChatDisabledError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
@@ -129,10 +128,6 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 
 		if (tokenResult.kind === 'failure') {
 			throw Error('Failed to get copilot token. reason: ' + tokenResult.reason);
-		}
-
-		if (tokenResult.kind === 'success' && tokenResult.chat_enabled === false) {
-			throw new ChatDisabledError('Copilot Chat is disabled');
 		}
 
 		return tokenResult;

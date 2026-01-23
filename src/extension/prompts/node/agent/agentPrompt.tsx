@@ -146,12 +146,14 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getSystemPrompt(customizations: AgentPromptCustomizations) {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
+		const isNewChat = this.props.promptContext.history?.length === 1;
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 			return <AlternateGPTPrompt
 				availableTools={this.props.promptContext.tools?.availableTools}
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
+				isNewChat={isNewChat}
 			/>;
 		}
 
@@ -160,6 +162,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			availableTools={this.props.promptContext.tools?.availableTools}
 			modelFamily={modelFamily}
 			codesearchMode={this.props.codesearchMode}
+			isNewChat={isNewChat}
 		/>;
 	}
 
@@ -269,6 +272,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
+	readonly sessionResource?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -298,6 +302,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
+		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
 		...customizations,
 	};
 }
@@ -364,7 +369,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
-						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
+						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>

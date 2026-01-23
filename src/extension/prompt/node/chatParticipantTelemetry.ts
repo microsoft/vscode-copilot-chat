@@ -6,7 +6,7 @@
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { roleToString } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -154,6 +154,8 @@ type RequestTelemetryMeasurements = {
 	messageTokenCount: number;
 	numToolCalls: number;
 	availableToolCount: number;
+	isBYOK: number;
+	isAuto: number;
 };
 
 type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
@@ -164,8 +166,6 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	maybeOffTopic: number;
 	userPromptCount: number;
 	summarizationEnabled: number;
-	isBYOK: number;
-	isAuto: number;
 };
 
 // EVENT: inline.request
@@ -654,7 +654,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
 			command: this._intent.id,
 			contextTypes: 'none', // TODO this is defunct
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content?.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: turn.id,
 			responseId: turn.id, // SAME as fetchResult.requestId ,
@@ -872,13 +872,15 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
 				"userSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the user selection" },
-				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" }
+				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
 			command: this._intent.id,
 			contextTypes: 'none',// TODO@jrieken intentResult.contexts.map(part => part.kind).join(',') ?? 'none',
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: this.telemetryMessageId,
 			languageId: this._documentContext.document.languageId,
@@ -917,6 +919,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			availableToolCount: this._availableToolCount,
 			userSelectionLength,
 			adjustedSelectionLength,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 

@@ -28,8 +28,10 @@ import { ITextDocument, LocationFactory } from '../../textDocument';
 import { Deferred } from '../../util/async';
 import { ICompletionsAsyncManagerService } from '../asyncCompletions';
 import { ICompletionsCacheService } from '../completionsCache';
+import { GetNetworkCompletionsType } from '../completionsFromNetwork';
 import { ICompletionsCurrentGhostText } from '../current';
-import { getGhostText, GetNetworkCompletionsType, GhostCompletion, ResultType } from '../ghostText';
+import { getGhostText, GhostCompletion } from '../ghostText';
+import { ResultType } from '../resultType';
 import { mkBasicResultTelemetry } from '../telemetry';
 
 // Unit tests for ghostText that do not require network connectivity. For other
@@ -62,7 +64,7 @@ suite('Isolated GhostText tests', function () {
 
 		// Setup closures with the state as default
 		function requestGhostText(completionState = state) {
-			return getGhostText(accessor, completionState, token);
+			return getGhostText(accessor, completionState, token, {});
 		}
 		async function requestPrompt(completionState = state) {
 			const telemExp = TelemetryWithExp.createEmptyConfigForTesting();
