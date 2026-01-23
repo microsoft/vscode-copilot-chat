@@ -939,6 +939,9 @@ export namespace ConfigKey {
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);
 	/** Model override for Plan agent (empty = use default) */
 	export const PlanAgentModel = defineSetting<string>('chat.planAgent.model', ConfigType.Simple, '');
+
+	/** Model override for Implement agent (empty = use default) */
+	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
 }
 
 export function getAllConfigKeys(): string[] {

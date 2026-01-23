@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260121",
+		"vscode": "^1.109.0-20260123",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -3579,6 +3579,15 @@
 						"tags": [
 							"experimental"
 						]
+					},
+					"github.copilot.chat.implementAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.implementAgent.model%",
+						"tags": [
+							"experimental"
+						]
 					}
 				}
 			},
@@ -5282,13 +5291,7 @@
 				}
 			}
 		],
-		"chatAgents": [
-			{
-				"name": "Implement",
-				"path": "./assets/agents/Implement.agent.md",
-				"description": "Specialized implementation agent"
-			}
-		],
+		"chatAgents": [],
 		"chatPromptFiles": [
 			{
 				"name": "savePrompt",
