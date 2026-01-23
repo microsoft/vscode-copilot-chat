@@ -146,10 +146,10 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							}
 						}
 						// Possible we have the workspace info in cli metadata.
-						if (!showSession && metadata.context?.cwd && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.cwd))) {
-							showSession = true;
-						}
-						if (!showSession && metadata.context?.gitRoot && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.gitRoot))) {
+						if (!showSession && metadata.context && (
+							(metadata.context.cwd && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.cwd))) ||
+							(metadata.context.gitRoot && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.gitRoot)))
+						)) {
 							showSession = true;
 						}
 					}
