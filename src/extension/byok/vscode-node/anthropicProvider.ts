@@ -134,8 +134,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		// Add tool search tool if enabled (must be first in the array)
 		if (toolSearchEnabled) {
 			tools.push({
-				name: 'tool_search_tool_bm25',
-				type: 'tool_search_tool_bm25_20251119',
+				name: 'tool_search_tool_regex',
+				type: 'tool_search_tool_regex_20251119',
 				defer_loading: false
 			} as Anthropic.Beta.BetaToolUnion);
 		}
