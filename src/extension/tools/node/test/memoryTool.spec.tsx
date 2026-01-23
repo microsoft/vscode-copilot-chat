@@ -486,7 +486,8 @@ suite('MemoryTool session and workspace paths', () => {
 			file_text: '# User Preferences\n\n- Prefers TypeScript\n- Uses tabs for indentation'
 		};
 
-		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never, chatSessionId: testSessionId }, CancellationToken.None);
+		const toolInvocationToken = { sessionResource: URI.parse(`vscode-chat-session:/${testSessionId}`) } as never;
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('created successfully');
@@ -512,7 +513,8 @@ suite('MemoryTool session and workspace paths', () => {
 			path: '/memories/session'
 		};
 
-		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never, chatSessionId: testSessionId }, CancellationToken.None);
+		const toolInvocationToken = { sessionResource: URI.parse(`vscode-chat-session:/${testSessionId}`) } as never;
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken }, CancellationToken.None);
 		const resultStr = await toolResultToString(accessor, result);
 
 		expect(resultStr).toContain('task-history.md');

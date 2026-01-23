@@ -106,7 +106,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	async invokeTool(contributedName: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: CancellationToken): Promise<LanguageModelToolResult2> {
 		const name = getToolName(contributedName);
-		const tool = this._copilotTools.get(name as ToolName)?.value || this.getModelSpecificTools().get(contributedName)?.tool;
+		const tool = this._copilotTools.get(name as ToolName)?.value || this.getModelSpecificTools().get(name)?.tool;
 		const invoke = tool?.invoke;
 		if (invoke) {
 			this._onWillInvokeTool.fire({ toolName: name });
