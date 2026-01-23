@@ -4,10 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -41,8 +39,6 @@ export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 	}
 
 	constructor(
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
@@ -56,8 +52,7 @@ export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 	}
 
 	public async collectContext(): Promise<void> {
-		const expandedLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsExpanded, this._experimentationService);
-		this.strategy = expandedLabels ? PromptWorkspaceLabelsStrategy.Expanded : PromptWorkspaceLabelsStrategy.Basic;
+		this.strategy = PromptWorkspaceLabelsStrategy.Basic;
 		await this.workspaceLabels.collectContext();
 
 		const uniqueLabels = [...new Set(this.labels)].sort();

@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { KnownSources } from '../../../../platform/languageServer/common/languageContextService';
 import { IParserService } from '../../../../platform/parser/node/parserService';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { isNotebookCellOrNotebookChatInput } from '../../../../util/common/notebooks';
 import { illegalArgument } from '../../../../util/vs/base/common/errors';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -46,8 +44,6 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 		props: InlineChatEditCodePromptProps,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IParserService private readonly _parserService: IParserService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
@@ -70,8 +66,6 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 			return <ignoredFiles value={[document.uri]} />;
 		}
 		const { query, history, chatVariables, } = this.props.promptContext;
-
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsInline, this._experimentationService);
 
 		const data = await SummarizedDocumentData.create(this._parserService, document, context.fileIndentInfo, context.wholeRange, SelectionSplitKind.Adjusted);
 
@@ -98,7 +92,7 @@ export class InlineChatEditCodePrompt extends PromptElement<InlineChatEditCodePr
 						{data.hasCodeWithoutSelection && <>The user includes existing code and marks with {data.placeholderText} where the selected code should go.<br /></>}
 					</InstructionMessage>
 				</HistoryWithInstructions>
-				{useProjectLabels && <ProjectLabels priority={600} embeddedInsideUserMessage={false} />}
+				<ProjectLabels priority={600} embeddedInsideUserMessage={false} />
 				<UserMessage>
 					{!this.props.ignoreCustomInstructions && <CustomInstructions priority={725} chatVariables={chatVariables} languageId={languageId} />}
 					<LanguageServerContextPrompt priority={700} document={document} position={context.selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.chat} />

@@ -666,12 +666,6 @@ export namespace ConfigKey {
 		export const RequestLoggerMaxEntries = defineAndMigrateSetting<number>('chat.advanced.debug.requestLogger.maxEntries', 'chat.debug.requestLogger.maxEntries', 100);
 
 		// Experiment-based settings
-		/** Uses new expanded project labels */
-		export const ProjectLabelsExpanded = defineAndMigrateExpSetting<boolean>('chat.advanced.projectLabels.expanded', 'chat.projectLabels.expanded', false);
-		/** Add project labels in default agent */
-		export const ProjectLabelsChat = defineAndMigrateExpSetting<boolean>('chat.advanced.projectLabels.chat', 'chat.projectLabels.chat', false);
-		/** Add project labels in default agent */
-		export const ProjectLabelsInline = defineAndMigrateExpSetting<boolean>('chat.advanced.projectLabels.inline', 'chat.projectLabels.inline', false);
 		export const WorkspaceMaxLocalIndexSize = defineAndMigrateExpSetting<number>('chat.advanced.workspace.maxLocalIndexSize', 'chat.workspace.maxLocalIndexSize', 100_000);
 		export const WorkspaceEnableFullWorkspace = defineAndMigrateExpSetting<boolean>('chat.advanced.workspace.enableFullWorkspace', 'chat.workspace.enableFullWorkspace', true);
 		export const WorkspaceEnableCodeSearch = defineAndMigrateExpSetting<boolean>('chat.advanced.workspace.enableCodeSearch', 'chat.workspace.enableCodeSearch', true);
