@@ -537,13 +537,13 @@ suite('MemoryTool session and workspace paths', () => {
 		expect(resultStr).toContain('Session ID');
 	});
 
-	test('create workspace memory file', async () => {
+	test('create repo memory file', async () => {
 		const toolsService = accessor.get(IToolsService);
 		const fileSystem = accessor.get(IFileSystemService);
 
 		const input: IMemoryToolParams = {
 			command: 'create',
-			path: '/memories/workspace/build-command.jsonl',
+			path: '/memories/repo/build-command.jsonl',
 			file_text: '{"subject":"build","fact":"npm run build","citations":"package.json:10","reason":"Build command","category":"bootstrap_and_build"}'
 		};
 
@@ -552,25 +552,25 @@ suite('MemoryTool session and workspace paths', () => {
 
 		expect(resultStr).toContain('created successfully');
 
-		// Verify the file was created at the workspace path
-		const expectedPath = URI.joinPath(storageUri, 'memory-tool/memories/workspace/build-command.jsonl');
+		// Verify the file was created at the repo path
+		const expectedPath = URI.joinPath(storageUri, 'memory-tool/memories/repo/build-command.jsonl');
 		const content = await fileSystem.readFile(expectedPath);
 		expect(new TextDecoder().decode(content)).toContain('npm run build');
 	});
 
-	test('view workspace directory', async () => {
+	test('view repo directory', async () => {
 		const toolsService = accessor.get(IToolsService);
 		const fileSystem = accessor.get(IFileSystemService);
 
-		// Create a test file in the workspace path
-		const workspaceDir = URI.joinPath(storageUri, 'memory-tool/memories/workspace');
-		await fileSystem.createDirectory(workspaceDir);
-		const testFile = URI.joinPath(workspaceDir, 'test-convention.jsonl');
+		// Create a test file in the repo path
+		const repoDir = URI.joinPath(storageUri, 'memory-tool/memories/repo');
+		await fileSystem.createDirectory(repoDir);
+		const testFile = URI.joinPath(repoDir, 'test-convention.jsonl');
 		await fileSystem.writeFile(testFile, new TextEncoder().encode('{"subject":"test"}'));
 
 		const input: IMemoryToolParams = {
 			command: 'view',
-			path: '/memories/workspace'
+			path: '/memories/repo'
 		};
 
 		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
