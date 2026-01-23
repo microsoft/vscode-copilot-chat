@@ -42,7 +42,7 @@ export function normalizeToolSchema(family: string, tools: OpenAiFunctionTool[] 
 
 			output.push(cloned);
 		} catch (e) {
-			const e2 = new Error(l10n.t`Failed to validate tool ${tool.function.name}: ${e}. Please open a Github issue for the MCP server or extension which provides this tool`);
+			const e2 = new Error(l10n.t`Failed to validate tool ${tool.function.name}: ${e}. Please open an issue for the MCP server or extension which provides this tool`);
 			e2.stack = e.stack;
 			throw e2;
 		}
