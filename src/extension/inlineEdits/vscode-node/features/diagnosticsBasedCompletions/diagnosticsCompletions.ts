@@ -9,9 +9,9 @@ import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { RootedLineEdit } from '../../../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { min } from '../../../../../util/common/arrays';
 import * as errors from '../../../../../util/common/errors';
-import { ITracer } from '../../../../../util/common/tracing';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -214,20 +214,20 @@ export class Diagnostic {
 	}
 }
 
-export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	if (logContext) {
 		const lines = message.split('\n');
 		lines.forEach(line => logContext.addLog(line));
 	}
 
-	if (tracer) {
-		tracer.trace(message);
+	if (logger) {
+		logger.trace(message);
 	}
 }
 
-export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	const content = `${title}${list.map(item => `\n- ${typeof item === 'string' ? item : item.toString()}`).join('')}`;
-	log(content, logContext, tracer);
+	log(content, logContext, logger);
 }
 
 // TODO: there must be a utility for this somewhere? Otherwise make them available

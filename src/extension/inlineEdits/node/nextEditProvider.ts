@@ -68,7 +68,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public readonly ID = this._statelessNextEditProvider.ID;
 
-	private readonly _rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._logService.trace(s)));
+	private readonly _rejectionCollector = this._register(new RejectionCollector(this._workspace, this._logService));
 	private readonly _nextEditCache: NextEditCache;
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;

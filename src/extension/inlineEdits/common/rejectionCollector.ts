@@ -6,7 +6,7 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
-import { createTracer, ITracer } from '../../../util/common/tracing';
+import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { Disposable, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached } from '../../../util/vs/base/common/observable';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -15,18 +15,18 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 export class RejectionCollector extends Disposable {
 	private readonly _garbageCollector = this._register(new LRUGarbageCollector(20));
 	private readonly _documentCaches = new Map<DocumentId, DocumentRejectionTracker>();
-	private readonly _tracer: ITracer;
+	private readonly _logger: ILogger;
 
 	constructor(
 		public readonly workspace: ObservableWorkspace,
-		trace: (s: string) => void,
+		logService: ILogService,
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'RejectionCollector'], trace);
+		this._logger = logService.createSubLogger(['NES', 'RejectionCollector']);
 
 		mapObservableArrayCached(this, workspace.openDocuments, (doc, store) => {
-			const state = new DocumentRejectionTracker(doc, this._garbageCollector, this._tracer);
+			const state = new DocumentRejectionTracker(doc, this._garbageCollector, this._logger);
 			this._documentCaches.set(state.doc.id, state);
 
 			store.add(autorunWithChanges(this, {
@@ -48,23 +48,23 @@ export class RejectionCollector extends Disposable {
 	public reject(docId: DocumentId, edit: StringReplacement): void {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
-			this._tracer.trace(`Rejecting, no document cache: ${edit}`);
+			this._logger.trace(`Rejecting, no document cache: ${edit}`);
 			return;
 		}
 		const e = edit.removeCommonSuffixAndPrefix(docCache.doc.value.get().value);
-		this._tracer.trace(`Rejecting: ${e}`);
+		this._logger.trace(`Rejecting: ${e}`);
 		docCache.reject(e);
 	}
 
 	public isRejected(docId: DocumentId, edit: StringReplacement): boolean {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
-			this._tracer.trace(`Checking rejection, no document cache: ${edit}`);
+			this._logger.trace(`Checking rejection, no document cache: ${edit}`);
 			return false;
 		}
 		const e = edit.removeCommonSuffixAndPrefix(docCache.doc.value.get().value);
 		const isRejected = docCache.isRejected(e);
-		this._tracer.trace(`Checking rejection, ${isRejected ? 'rejected' : 'not rejected'}: ${e}`);
+		this._logger.trace(`Checking rejection, ${isRejected ? 'rejected' : 'not rejected'}: ${e}`);
 		return isRejected;
 	}
 
@@ -79,7 +79,7 @@ class DocumentRejectionTracker {
 	constructor(
 		public readonly doc: IObservableDocument,
 		private readonly _garbageCollector: LRUGarbageCollector,
-		private readonly _tracer: ITracer,
+		private readonly _logger: ILogger,
 	) {
 	}
 
@@ -95,7 +95,7 @@ class DocumentRejectionTracker {
 			return;
 		}
 		const r = new RejectedEdit(edit.toEdit(), () => {
-			this._tracer.trace(`Evicting: ${edit}`);
+			this._logger.trace(`Evicting: ${edit}`);
 			this._rejectedEdits.delete(r);
 		});
 		this._rejectedEdits.add(r);

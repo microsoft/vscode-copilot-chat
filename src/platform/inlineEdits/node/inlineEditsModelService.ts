@@ -6,7 +6,6 @@
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
-import { createTracer } from '../../../util/common/tracing';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Event } from '../../../util/vs/base/common/event';
@@ -16,7 +15,7 @@ import { CopilotToken } from '../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ConfigKey, ExperimentBasedConfig, IConfigurationService } from '../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
-import { ILogService } from '../../log/common/logService';
+import { ILogger, ILogService } from '../../log/common/logService';
 import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -89,7 +88,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public readonly onModelListUpdated: Event<void>;
 
-	private _tracer = createTracer(['NES', 'ModelsService'], (msg) => this._logService.trace(msg));
+	private _logger: ILogger;
 
 	constructor(
 		@ICopilotTokenStore private readonly _tokenStore: ICopilotTokenStore,
@@ -102,10 +101,12 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	) {
 		super();
 
-		const tracer = this._tracer.sub('constructor');
+		this._logger = _logService.createSubLogger(['NES', 'ModelsService']);
+
+		const logger = this._logger.createSubLogger('constructor');
 
 		this._modelsObs = derived((reader) => {
-			tracer.trace('computing models');
+			logger.trace('computing models');
 			return this.aggregateModels({
 				copilotToken: this._copilotTokenObs.read(reader),
 				fetchedNesModels: this._fetchedModelsObs.read(reader),
@@ -116,7 +117,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this._currentModelObs = derived<Model, void>((reader) => {
-			tracer.trace('computing current model');
+			logger.trace('computing current model');
 			return this._pickModel({
 				preferredModelName: this._preferredModelNameObs.read(reader),
 				models: this._modelsObs.read(reader),
@@ -124,7 +125,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		}).recomputeInitiallyAndOnChange(this._store);
 
 		this._modelInfoObs = derived((reader) => {
-			tracer.trace('computing model info');
+			logger.trace('computing model info');
 			return {
 				models: this._modelsObs.read(reader),
 				currentModelId: this._currentModelObs.read(reader).modelName,
@@ -184,10 +185,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
 			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
 		) {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
+			this._logger.trace(`New preferred model id ${newPreferredModelId} is the same as the default model, resetting user setting.`);
 			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, 'none');
 		} else {
-			this._tracer.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
+			this._logger.trace(`New preferred model id ${newPreferredModelId} is different from the default model, updating user setting to ${newPreferredModelId}.`);
 			await this._configService.setConfig(ConfigKey.Advanced.InlineEditsPreferredModel, newPreferredModelId);
 		}
 	}
@@ -207,7 +208,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			defaultModelConfigString: string | undefined;
 		},
 	): Model[] {
-		const tracer = this._tracer.sub('aggregateModels');
+		const logger = this._logger.createSubLogger('aggregateModels');
 
 		const models: Model[] = [];
 
@@ -218,33 +219,33 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		if (localModelConfig) {
 			if (models.some(m => m.modelName === localModelConfig.modelName)) {
-				tracer.trace('Local model configuration already exists in the model list, skipping.');
+				logger.trace('Local model configuration already exists in the model list, skipping.');
 			} else {
-				tracer.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
+				logger.trace(`Adding local model configuration: ${localModelConfig.modelName}`);
 				models.push({ ...localModelConfig, source: ModelSource.LocalConfig });
 			}
 		}
 
 		if (modelConfigString) {
-			tracer.trace('Parsing modelConfigurationString...');
+			logger.trace('Parsing modelConfigurationString...');
 			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
 			if (parsedConfig && !models.some(m => m.modelName === parsedConfig.modelName)) {
-				tracer.trace(`Adding model from modelConfigurationString: ${parsedConfig.modelName}`);
+				logger.trace(`Adding model from modelConfigurationString: ${parsedConfig.modelName}`);
 				models.push({ ...parsedConfig, source: ModelSource.ExpConfig });
 			} else {
-				tracer.trace('No valid model found in modelConfigurationString.');
+				logger.trace('No valid model found in modelConfigurationString.');
 			}
 		}
 
 		const useSlashModels = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
 		if (useSlashModels && fetchedNesModels && fetchedNesModels.length > 0) {
-			tracer.trace(`Processing ${fetchedNesModels.length} fetched models...`);
+			logger.trace(`Processing ${fetchedNesModels.length} fetched models...`);
 			const filteredFetchedModels = filterMap(fetchedNesModels, (m) => {
 				if (!isPromptingStrategy(m.capabilities.promptStrategy)) {
 					return undefined;
 				}
 				if (models.some(knownModel => knownModel.modelName === m.name)) {
-					tracer.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
+					logger.trace(`Fetched model ${m.name} already exists in the model list, skipping.`);
 					return undefined;
 				}
 				return {
@@ -255,18 +256,18 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 					lintOptions: undefined,
 				} satisfies Model;
 			});
-			tracer.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
+			logger.trace(`Adding ${filteredFetchedModels.length} fetched models after filtering.`);
 			pushMany(models, filteredFetchedModels);
 		} else {
 			// push default model if /models doesn't give us any models
-			tracer.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels}`);
+			logger.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels}`);
 
 			const defaultModel = this.determineDefaultModel(copilotToken, defaultModelConfigString);
 			if (defaultModel) {
 				if (models.some(m => m.modelName === defaultModel.modelName)) {
-					tracer.trace('Default model configuration already exists in the model list, skipping.');
+					logger.trace('Default model configuration already exists in the model list, skipping.');
 				} else {
-					tracer.trace(`Adding default model configuration: ${defaultModel.modelName}`);
+					logger.trace(`Adding default model configuration: ${defaultModel.modelName}`);
 					models.push(defaultModel);
 				}
 			}
@@ -276,10 +277,10 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
-		const tracer = this._tracer.sub('selectedModelConfiguration');
+		const logger = this._logger.createSubLogger('selectedModelConfiguration');
 		const model = this._currentModelObs.get();
 		if (model) {
-			tracer.trace(`Selected model found: ${model.modelName}`);
+			logger.trace(`Selected model found: ${model.modelName}`);
 			return {
 				modelName: model.modelName,
 				promptingStrategy: model.promptingStrategy,
@@ -287,7 +288,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				lintOptions: model.lintOptions,
 			};
 		}
-		tracer.trace('No selected model found, using default model.');
+		logger.trace('No selected model found, using default model.');
 		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
@@ -351,7 +352,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		if (expConfiguredModel) {
 			const isUndesiredModelId = this._undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
 			if (isUndesiredModelId) {
-				this._tracer.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
+				this._logger.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
 			} else {
 				return expConfiguredModel;
 			}
