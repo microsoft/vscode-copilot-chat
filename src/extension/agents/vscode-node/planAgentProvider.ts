@@ -10,6 +10,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ToolName } from '../../tools/common/toolNames';
 
 /**
  * Handoff configuration for agent transitions
@@ -209,7 +210,9 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// Listen for settings changes to refresh agents
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.Advanced.SearchSubagentToolEnabled.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId)) {
 				this.logService.trace('[PlanAgentProvider] Settings changed, refreshing agent');
 				this._onDidChangeCustomAgents.fire();
 			}
@@ -261,10 +264,27 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
 		};
 
+		// Collect tools to add
+		const toolsToAdd: string[] = [...additionalTools];
+
+		// Add searchSubagent tool if enabled
+		const searchSubagentEnabled = this.configurationService.getConfig(ConfigKey.Advanced.SearchSubagentToolEnabled);
+		if (searchSubagentEnabled) {
+			toolsToAdd.push(ToolName.SearchSubagent);
+			this.logService.trace(`[PlanAgentProvider] Adding searchSubagent tool (enabled)`);
+		}
+
+		// Add askQuestions tool if enabled
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+		if (askQuestionsEnabled) {
+			toolsToAdd.push(ToolName.AskQuestions);
+			this.logService.trace(`[PlanAgentProvider] Adding askQuestions tool (enabled)`);
+		}
+
 		// Merge additional tools (deduplicated)
-		if (additionalTools.length > 0) {
-			config.tools = [...new Set([...config.tools, ...additionalTools])];
-			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${additionalTools.join(', ')}`);
+		if (toolsToAdd.length > 0) {
+			config.tools = [...new Set([...config.tools, ...toolsToAdd])];
+			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${toolsToAdd.join(', ')}`);
 		}
 
 		// Apply model override
