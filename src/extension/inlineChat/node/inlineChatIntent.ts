@@ -23,7 +23,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
-import { AsyncIterableSource } from '../../../util/vs/base/common/async';
+import { AsyncIterableSource, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { ResourceSet } from '../../../util/vs/base/common/map';
@@ -48,7 +48,6 @@ import { ResponseProcessorContext } from '../../prompt/node/responseProcessorCon
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
 import { InlineChatEditCodePrompt } from '../../prompts/node/inline/inlineChatEditCodePrompt';
-import { ProgressMessageScenario } from '../../prompts/node/inline/progressMessages';
 import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
@@ -217,15 +216,14 @@ export class InlineChatIntent implements IIntent {
 			}
 		}
 
-		// Determine scenario for progress messages
-		const progressScenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+		// Start generating contextual message immediately
+		const contextualMessagePromise = this._progressMessages.getContextualMessage(request.prompt, documentContext, token);
 
 		// Show progress message after ~1 second delay (unless request completes first)
-		const progressTimeout = setTimeout(() => {
-			if (!token.isCancellationRequested) {
-				stream.progress(this._progressMessages.getNextMessage(progressScenario));
-			}
-		}, 1000);
+		timeout(1000, token).then(async () => {
+			const message = await contextualMessagePromise;
+			stream.progress(message);
+		});
 
 		let result: IInlineChatEditResult;
 		try {
@@ -243,8 +241,6 @@ export class InlineChatIntent implements IIntent {
 						: toErrorMessage(err),
 				}
 			};
-		} finally {
-			clearTimeout(progressTimeout);
 		}
 
 		if (token.isCancellationRequested) {
