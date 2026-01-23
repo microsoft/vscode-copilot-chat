@@ -168,6 +168,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			// If we have a repository path, then its easy to tell whether this should be displayed or hidden.
 			return !!this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath));
 		}
+		// Unless we are in an empty window, exclude sessions without workspace folder or git repo association.
+		if (this.workspaceService.getWorkspaceFolders().length) {
+			return false;
+		}
 		return undefined;
 	}
 
