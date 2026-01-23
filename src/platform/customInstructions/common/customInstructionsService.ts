@@ -13,7 +13,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
-import { isObject } from '../../../util/vs/base/common/types';
+import { isObject, isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
 import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
@@ -404,6 +404,29 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		return undefined;
 	}
 
+
+	private indexFileCache: InstructionIndexFile | undefined;
+
+	private getInstructionIndexFile(promptContext: IBuildPromptContext): InstructionIndexFile {
+		if (!this.indexFileCache || this.indexFileCache.promptContext.requestId !== promptContext.requestId) {
+			this.indexFileCache = new InstructionIndexFile(promptContext, this.promptPathRepresentationService);
+		}
+		return this.indexFileCache;
+	}
+
+	public isInstructionFileFromRequest(uri: URI, promptContext: IBuildPromptContext): boolean {
+		return this.getInstructionIndexFile(promptContext).instructions.has(uri);
+	}
+
+	public isSkillFileFromRequest(uri: URI, promptContext: IBuildPromptContext): boolean {
+		return this.getInstructionIndexFile(promptContext).skills.has(uri);
+	}
+
+	public isAgentFromRequest(name: string, promptContext: IBuildPromptContext): boolean {
+		return this.getInstructionIndexFile(promptContext).agents.has(name);
+	}
+
+
 	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
@@ -454,4 +477,80 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
 		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
+}
+
+class InstructionIndexFile {
+
+	private instructionUris: ResourceSet | undefined;
+	private skillUris: ResourceSet | undefined;
+	private agentNames: Set<string> | undefined;
+
+	constructor(
+		public readonly promptContext: IBuildPromptContext,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService) {
+	}
+
+	/**
+	 * Finds an file paths or names in the index file. The index file has XML format: <listElementName><elementName><propertyName>value</propertyName></elementName></listElementName>
+	 */
+	private getValuesInIndexFile(listElementName: string, elementName: string, propertyName: string): string[] {
+		const indexFile = this.promptContext.chatVariables.find(isPromptInstructionText);
+		if (!indexFile || !isString(indexFile.value)) {
+			return [];
+		}
+		const result: string[] = [];
+		const lists = xmlContents(indexFile.value, listElementName);
+		for (const list of lists) {
+			const instructions = xmlContents(list, elementName);
+			for (const instruction of instructions) {
+				const filePath = xmlContents(instruction, propertyName);
+				if (filePath.length > 0) {
+					result.push(filePath[0]);
+				}
+			}
+		}
+		return result;
+	}
+
+	private getURIsFromFilePaths(filePaths: string[]): ResourceSet {
+		const result = new ResourceSet();
+		for (const filePath of filePaths) {
+			const uri = this.promptPathRepresentationService.resolveFilePath(filePath);
+			if (uri) {
+				result.add(uri);
+			}
+		}
+		return result;
+	}
+
+	get instructions(): ResourceSet {
+		if (this.instructionUris === undefined) {
+			this.instructionUris = this.getURIsFromFilePaths(this.getValuesInIndexFile('instructions', 'instruction', 'file'));
+		}
+		return this.instructionUris;
+	}
+
+	get skills(): ResourceSet {
+		if (this.skillUris === undefined) {
+			this.skillUris = this.getURIsFromFilePaths(this.getValuesInIndexFile('skills', 'skill', 'file'));
+		}
+		return this.skillUris;
+	}
+
+	get agents(): Set<string> {
+		if (this.agentNames === undefined) {
+			this.agentNames = new Set(this.getValuesInIndexFile('agents', 'agent', 'file'));
+		}
+		return this.agentNames;
+	}
+}
+
+function xmlContents(text: string, tag: string): string[] {
+	const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'g');
+	const matches = [];
+	let match;
+	while ((match = regex.exec(text)) !== null) {
+		matches.push(match[1].trim());
+	}
+	return matches;
 }
