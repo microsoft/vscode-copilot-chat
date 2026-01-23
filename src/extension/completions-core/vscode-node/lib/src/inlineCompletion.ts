@@ -60,7 +60,7 @@ export class GhostText {
 		if (result.type !== 'success') { return result; }
 		const [resultArray, resultType] = result.value;
 
-		if (token?.isCancellationRequested) {
+		if (token.isCancellationRequested) {
 			return {
 				type: 'canceled',
 				reason: 'after getGhostText',
