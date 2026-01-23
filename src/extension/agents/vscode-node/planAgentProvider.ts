@@ -267,8 +267,11 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
-		// Add searchSubagent tool if enabled
-		const searchSubagentEnabled = this.configurationService.getConfig(ConfigKey.Advanced.SearchSubagentToolEnabled);
+		// Add searchSubagent tool if enabled (experiment-based config)
+		const searchSubagentEnabled = this.configurationService.getExperimentBasedConfig(
+			ConfigKey.Advanced.SearchSubagentToolEnabled,
+			this.experimentationService
+		);
 		if (searchSubagentEnabled) {
 			toolsToAdd.push(ToolName.SearchSubagent);
 			this.logService.trace(`[PlanAgentProvider] Adding searchSubagent tool (enabled)`);
