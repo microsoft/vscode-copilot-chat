@@ -54,8 +54,9 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<CopilotIdentityRules />
 					<SafetyRules />
 					<Tag name='instructions'>
-						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You ONLY edit that file and use a tool to make these edits.<br />
-						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
+						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. You can ONLY edit that file and must use a tool to make these edits.<br />
+						The user is interested in code changes grounded in the user's prompt. So, focus on coding, no wordy explanations, and do not ask back for clarifications.<br />
+						Make all changes in a single invocation of the {this.props.exitToolName} tool (there is no tool calling loop).<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
@@ -73,10 +74,12 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					}
 					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
-						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
-						If there is no user selection, make changes or write new code anywhere in the file.<br />
+						{selection.isEmpty
+							? <>Make changes or write new code anywhere in the file.<br /></>
+							: <>Focus on the selection, and try to make changes to the selected code and its context.<br /></>
+						}
 						Do not make code changes that are not directly and logically related to the user's prompt.<br />
-						ONLY change the `{filepath}` file and NO other file.
+						ONLY change the `{filepath}` file, make all changes in a single invocation of the {this.props.exitToolName} tool, and change NO other file.
 					</Tag>
 					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
@@ -148,7 +151,6 @@ export class FileSelectionElement extends PromptElement<FileSelectionElementProp
 
 	override render(state: void, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken) {
 
-
 		// the full lines of the selection
 		// TODO@jrieken
 		// * use the true selected text (now we extend to full lines)
@@ -159,7 +161,7 @@ export class FileSelectionElement extends PromptElement<FileSelectionElementProp
 		}));
 
 		return <>
-			<Tag name='file-selection'>
+			<Tag name='selection'>
 				<CodeBlock includeFilepath={false} languageId={this.props.snapshot.languageId} uri={this.props.snapshot.uri} references={[new PromptReference(this.props.snapshot.uri, undefined, undefined)]} code={selectedLines} />
 			</Tag>
 		</>;
