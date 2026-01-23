@@ -425,6 +425,9 @@ export class AgentsSlashCommand implements IClaudeSlashCommandHandler {
 
 		// Save and open
 		const filePath = URI.joinPath(location.agentsDir, `${config.name}.md`);
+		if (!await this._confirmOverwriteIfExists(filePath, config.name)) {
+			return;
+		}
 		await this._saveAgent(filePath, config);
 		await this._openAgentFile(filePath);
 	}
@@ -501,6 +504,9 @@ export class AgentsSlashCommand implements IClaudeSlashCommandHandler {
 
 		// Save and open
 		const filePath = URI.joinPath(location.agentsDir, `${config.name}.md`);
+		if (!await this._confirmOverwriteIfExists(filePath, config.name)) {
+			return;
+		}
 		await this._saveAgent(filePath, config);
 		await this._openAgentFile(filePath);
 	}
@@ -563,10 +569,28 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 
 			// Parse JSON response
 			const parsed = JSON.parse(jsonText);
+
+			// Validate required fields exist and are non-empty strings
+			if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
+				throw new Error('Generated agent is missing a valid name');
+			}
+			if (typeof parsed.description !== 'string' || !parsed.description.trim()) {
+				throw new Error('Generated agent is missing a valid description');
+			}
+			if (typeof parsed.systemPrompt !== 'string' || !parsed.systemPrompt.trim()) {
+				throw new Error('Generated agent is missing a valid system prompt');
+			}
+
+			// Validate name format matches manual flow requirements
+			const name = parsed.name.trim();
+			if (!/^[a-z0-9-]+$/.test(name)) {
+				throw new Error('Generated agent name must use lowercase letters, numbers, and hyphens only');
+			}
+
 			return {
-				name: parsed.name,
-				description: parsed.description,
-				systemPrompt: parsed.systemPrompt,
+				name,
+				description: parsed.description.trim(),
+				systemPrompt: parsed.systemPrompt.trim(),
 			};
 		} catch (error) {
 			this.logService.error('[AgentsSlashCommand] Failed to generate agent:', error);
@@ -797,7 +821,7 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 				if (tools) {
 					const updatedConfig = {
 						...agent.config,
-						allowedTools: tools.includes('*') ? undefined : tools,
+						allowedTools: tools.length > 0 && !tools.includes('*') ? tools : undefined,
 					};
 					await this._saveAgent(agent.filePath, updatedConfig);
 					await this._openAgentFile(agent.filePath);
@@ -952,6 +976,40 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 	}
 
 	/**
+	 * Check if an agent file already exists and prompt user to confirm overwrite.
+	 * Returns true if we should proceed with saving, false if user cancelled.
+	 */
+	private async _confirmOverwriteIfExists(filePath: URI, agentName: string): Promise<boolean> {
+		try {
+			await this.fileSystemService.stat(filePath);
+			// File exists, prompt user
+			const overwrite = vscode.l10n.t('Overwrite');
+			const cancel = vscode.l10n.t('Cancel');
+			const result = await vscode.window.showWarningMessage(
+				vscode.l10n.t('An agent named "{0}" already exists. Do you want to overwrite it?', agentName),
+				{ modal: true },
+				overwrite,
+				cancel
+			);
+			return result === overwrite;
+		} catch {
+			// File doesn't exist, proceed
+			return true;
+		}
+	}
+
+	/**
+	 * Escape a string for inclusion inside a YAML double-quoted value.
+	 * Handles backslashes, double quotes, and newlines.
+	 */
+	private _escapeYamlDoubleQuoted(value: string): string {
+		return value
+			.replace(/\\/g, '\\\\')
+			.replace(/"/g, '\\"')
+			.replace(/\r?\n/g, '\\n');
+	}
+
+	/**
 	 * Save an agent to a markdown file.
 	 */
 	private async _saveAgent(filePath: URI, config: AgentConfig): Promise<void> {
@@ -960,7 +1018,8 @@ Respond ONLY with the JSON object, no markdown code blocks or other text.`;
 		await createDirectoryIfNotExists(this.fileSystemService, dir);
 
 		// Build the file content
-		let content = `---\nname: ${config.name}\ndescription: "${config.description.replace(/"/g, '\\"')}"\nmodel: ${config.model}\n`;
+		const escapedDescription = this._escapeYamlDoubleQuoted(config.description);
+		let content = `---\nname: ${config.name}\ndescription: "${escapedDescription}"\nmodel: ${config.model}\n`;
 
 		if (config.allowedTools && config.allowedTools.length > 0) {
 			content += 'allowedTools:\n';

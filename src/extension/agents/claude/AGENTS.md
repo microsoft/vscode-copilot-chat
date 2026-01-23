@@ -244,6 +244,7 @@ The `show*` APIs are sufficient for most slash command use cases and result in c
 **Current Slash Commands:**
 - `/hooks` - Display information about registered hooks (from `hooksCommand.ts`)
 - `/memory` - Memory management commands (from `memoryCommand.ts`)
+- `/agents` - Agent management commands (from `agentsCommand.ts`)
 
 ### Tool Permission Handlers
 
@@ -260,7 +261,7 @@ Tool permission handlers control what actions Claude can take without user confi
 - **Common handlers** (`common/toolPermissionHandlers/`):
   - `bashToolHandler.ts` - Controls bash/shell command execution
   - `exitPlanModeHandler.ts` - Manages plan mode transitions
-  
+
 - **Node handlers** (`node/toolPermissionHandlers/`):
   - `editToolHandler.ts` - Handles file edit operations (Edit, Write, MultiEdit)
 
