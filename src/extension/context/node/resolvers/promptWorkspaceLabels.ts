@@ -22,20 +22,13 @@ export interface IPromptWorkspaceLabels {
 	collectContext(): Promise<void>;
 }
 
-const enum PromptWorkspaceLabelsStrategy {
-	Basic,
-	Expanded
-}
-
 export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 	declare _serviceBrand: undefined;
 
 	private readonly basicWorkspaceLabels: IPromptWorkspaceLabelsStrategy;
-	private readonly expandedWorkspaceLabels: IPromptWorkspaceLabelsStrategy;
-	private strategy = PromptWorkspaceLabelsStrategy.Basic;
 
 	private get workspaceLabels(): IPromptWorkspaceLabelsStrategy {
-		return this.strategy === PromptWorkspaceLabelsStrategy.Basic ? this.basicWorkspaceLabels : this.expandedWorkspaceLabels;
+		return this.basicWorkspaceLabels;
 	}
 
 	constructor(
@@ -43,7 +36,6 @@ export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		this.basicWorkspaceLabels = this._instantiationService.createInstance(BasicPromptWorkspaceLabels);
-		this.expandedWorkspaceLabels = this._instantiationService.createInstance(ExpandedPromptWorkspaceLabels);
 	}
 
 	public get labels(): string[] {
@@ -52,7 +44,6 @@ export class PromptWorkspaceLabels implements IPromptWorkspaceLabels {
 	}
 
 	public async collectContext(): Promise<void> {
-		this.strategy = PromptWorkspaceLabelsStrategy.Basic;
 		await this.workspaceLabels.collectContext();
 
 		const uniqueLabels = [...new Set(this.labels)].sort();
@@ -237,272 +228,6 @@ class BasicPromptWorkspaceLabels implements IPromptWorkspaceLabelsStrategy {
 				tags.push('vscode extension');
 			}
 		}
-		return tags;
-	}
-}
-
-class ExpandedPromptWorkspaceLabels extends BasicPromptWorkspaceLabels {
-
-	constructor(
-		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IFileSystemService fileSystemService: IFileSystemService,
-		@IIgnoreService ignoreService: IIgnoreService,
-	) {
-		super(workspaceService, fileSystemService, ignoreService);
-		this.addContentIndicator('package.json', this.collectPackageJsonIndicatorsExpanded);
-		this.addContentIndicator('requirements.txt', this.collectPythonRequirementsIndicators);
-		this.addContentIndicator('pyproject.toml', this.collectPythonTomlIndicators);
-	}
-
-	protected collectPackageJsonIndicatorsExpanded(contents: string): string[] {
-		const tags: string[] = [];
-
-		const extractMajorMinorVersion = (version: string): string => {
-			const [major, minor] = version.split('.');
-			return `${major.replace(/[^0-9]/g, '')}.${minor.replace(/[^0-9]/g, '')}`;
-		};
-
-		const checkDependencies = (dependencies: Record<string, string> | undefined, list: { dependency: string; prefix?: string }[]) => {
-			if (!dependencies) { return; }
-			list.forEach(({ dependency, prefix }) => {
-				if (dependencies[dependency]) {
-					const version = extractMajorMinorVersion(dependencies[dependency]);
-					tags.push(`${prefix || dependency}@${version}`);
-				}
-			});
-		};
-
-		let json: any;
-		try {
-			json = JSON.parse(contents);
-		} catch {
-			return tags;
-		}
-
-		const allDependenciesFields = [
-			json.dependencies,
-			json.devDependencies,
-			json.peerDependencies,
-			json.optionalDependencies
-		];
-
-		const dependenciesList = [
-			// Frontend Frameworks
-			{ dependency: 'react' },
-			{ dependency: 'vue' },
-			{ dependency: '@angular/core' },
-			{ dependency: 'svelte' },
-			{ dependency: 'solid-js' },
-			{ dependency: 'alpinejs' },
-
-			// State Management Libraries
-			{ dependency: 'redux' },
-			{ dependency: 'mobx' },
-			{ dependency: 'vuex' },
-			{ dependency: 'ngrx' },
-
-			// UI Libraries
-			{ dependency: 'antd' },
-			{ dependency: 'bootstrap' },
-			{ dependency: 'bulma' },
-			{ dependency: '@mui/material' },
-			{ dependency: 'semantic-ui-react' },
-
-			// Rendering Frameworks
-			{ dependency: 'next' },
-			{ dependency: 'gatsby' },
-			{ dependency: 'remix' },
-			{ dependency: 'astro' },
-			{ dependency: 'sveltekit' },
-			{ dependency: 'nuxt' },
-
-			// Testing Tools
-			{ dependency: 'jest' },
-			{ dependency: 'mocha' },
-			{ dependency: 'cypress' },
-			{ dependency: '@testing-library/react' },
-			{ dependency: '@playwright/test' },
-			{ dependency: 'vitest' },
-			{ dependency: '@storybook/react' },
-
-			// CSS Tools
-			{ dependency: 'tailwindcss' },
-			{ dependency: 'sass' },
-			{ dependency: 'styled-components' },
-			{ dependency: 'css-modules' },
-			{ dependency: 'postcss' },
-			{ dependency: '@emotion/react' },
-
-			// Build Tools
-			{ dependency: 'vite' },
-			{ dependency: 'webpack' },
-			{ dependency: 'parcel' },
-			{ dependency: 'rollup' },
-			{ dependency: 'snowpack' },
-			{ dependency: 'esbuild' },
-			{ dependency: '@swc/core' },
-
-			// Real-time Communication
-			{ dependency: 'socket.io' },
-
-			// API and Data Handling
-			{ dependency: 'd3' },
-			{ dependency: 'graphql' },
-
-			// Utility Libraries
-			{ dependency: 'lodash' },
-			{ dependency: 'moment' },
-			{ dependency: 'rxjs' },
-			{ dependency: 'underscore' },
-
-			// Task Runners
-			{ dependency: 'gulp' },
-
-			// Older Libraries
-			{ dependency: 'backbone' },
-			{ dependency: 'ember-source' },
-			{ dependency: 'handlebars' },
-			{ dependency: 'jquery' },
-			{ dependency: 'knockout' },
-
-			// Cloud SDKs
-			{ dependency: 'aws-sdk' },
-			{ dependency: 'cloudinary' },
-			{ dependency: 'firebase' },
-			{ dependency: '@azure/storage-blob' },
-			{ dependency: '@google-cloud/storage' },
-
-			// Cloud Functions
-			{ dependency: '@aws-lambda' },
-			{ dependency: '@azure/functions' },
-			{ dependency: '@google-cloud/functions' },
-			{ dependency: 'firebase-functions' },
-
-			// Cloud Databases
-			{ dependency: '@azure/cosmos' },
-			{ dependency: '@google-cloud/firestore' },
-			{ dependency: 'mongoose' },
-
-			// Containerization and Orchestration
-			{ dependency: 'dockerode' },
-			{ dependency: 'kubernetes-client' },
-
-			// Monitoring and Logging
-			{ dependency: '@elastic/elasticsearch' },
-			{ dependency: '@sentry/node' },
-			{ dependency: 'log4js' },
-			{ dependency: 'winston' },
-
-			// Security
-			{ dependency: 'bcrypt' },
-			{ dependency: 'helmet' },
-			{ dependency: 'jsonwebtoken' },
-			{ dependency: 'passport' },
-
-			// Azure Libraries
-			{ dependency: '@azure/identity' },
-			{ dependency: '@azure/keyvault-certificates' },
-			{ dependency: '@azure/keyvault-keys' },
-			{ dependency: '@azure/keyvault-secrets' },
-			{ dependency: '@azure/service-bus' },
-			{ dependency: '@azure/event-hubs' },
-			{ dependency: '@azure/data-tables' },
-			{ dependency: '@azure/monitor-query' },
-			{ dependency: '@azure/app-configuration' },
-
-			// Development Tools
-			{ dependency: 'babel' },
-			{ dependency: 'eslint' },
-			{ dependency: 'parcel' },
-			{ dependency: 'prettier' },
-			{ dependency: 'rollup' },
-			{ dependency: 'typescript' },
-			{ dependency: 'webpack' },
-			{ dependency: 'vite' },
-		];
-
-		const enginesList = [
-			// Engines
-			{ dependency: 'node' },
-			{ dependency: 'vscode', prefix: 'vscode extension' }
-		];
-
-		allDependenciesFields.forEach((deps) => checkDependencies(deps, dependenciesList));
-		checkDependencies(json.engines, enginesList);
-
-		return tags;
-	}
-
-
-	private popularPackages: string[] = [
-		// Data Science and Machine Learning
-		'numpy', 'pandas', 'scipy', 'scikit-learn', 'matplotlib', 'tensorflow', 'keras',
-		'torch', 'seaborn', 'plotly', 'dash', 'jupyter', 'notebook', 'ipython', 'openai', 'pyspark',
-		'airflow', 'nltk', 'sympy', 'spacy', 'langchain',
-
-		// Web Development
-		'Flask', 'Django', 'fastapi', 'pydantic', 'requests', 'beautifulsoup4',
-		'gunicorn', 'uvicorn', 'httpx', 'Jinja2', 'aiohttp',
-
-		// Testing
-		'pytest', 'tox', 'nox', 'selenium', 'playwright', 'coverage', 'hypothesis',
-
-		// Documentation
-		'Sphinx',
-
-		// Task Queue
-		'celery', 'asyncio',
-
-		// Cloud and DevOps
-		'boto3', 'google-cloud-storage', 'azure-storage-blob', 'docker', 'kubernetes', 'azure', 'google', 'ansible',
-
-		// Security
-		'cryptography', 'paramiko', 'PyJWT',
-
-		// Enterprise, Legacy & data storage
-		'xlrd', 'xlrd-2024', 'openpyxl', 'pywin32', 'pywin', 'psycopg2', 'mysqlclient', 'SQLite4', 'Werkzeug', 'pymongo', 'redis', 'PyMySQL',
-
-		// Utilities
-		'Pillow', 'SQLAlchemy', 'lxml', 'html5lib', 'Markdown', 'pytz', 'Click',
-		'attrs', 'PyYAML', 'configparser', 'loguru', 'structlog', 'pygame', 'discord'
-	];
-
-
-	private collectPythonRequirementsIndicators(contents: string): string[] {
-		const tags: string[] = [];
-
-		const lines = contents.split('\n');
-		lines.forEach(line => {
-			const [pkg, version] = line.split('==');
-			if (this.popularPackages.includes(pkg)) {
-				tags.push(`${pkg}-${version || 'latest'}`);
-			}
-		});
-
-		return tags;
-	}
-
-	private collectPythonTomlIndicators(contents: string): string[] {
-		const tags: string[] = [];
-
-		const lines = contents.split('\n');
-		let inDependenciesSection = false;
-
-		// TODO@digitarald: Should use npm `toml` package, but this is avoiding a dependency for now
-		lines.forEach(line => {
-			line = line.trim();
-			if (line === '[tool.poetry.dependencies]') {
-				inDependenciesSection = true;
-			} else if (line.startsWith('[') && line.endsWith(']')) {
-				inDependenciesSection = false;
-			} else if (inDependenciesSection && line) {
-				const [pkg, version] = line.split('=').map(s => s.trim().replace(/"|'/g, ''));
-				if (this.popularPackages.includes(pkg)) {
-					tags.push(`${pkg}-${version || 'latest'}`);
-				}
-			}
-		});
-
 		return tags;
 	}
 }
