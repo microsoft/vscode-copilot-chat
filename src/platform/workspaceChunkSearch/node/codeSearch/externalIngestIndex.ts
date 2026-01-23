@@ -370,23 +370,34 @@ export class ExternalIngestIndex extends Disposable {
 		return uri.fsPath;
 	}
 
+	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile {
+		return {
+			uri,
+			relativePath: this.computeRelativePath(uri),
+			docSha,
+			read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
+		};
+	}
+
 	private async *getFilesToIndexFromDb(token: CancellationToken): AsyncIterable<ExternalIngestFile> {
-		// Get files that are either already marked Yes or need to be evaluated (Undetermined)
+		// Get files that are either already marked "Yes" or "need to be evaluated" (Undetermined)
 		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest IN (?, ?)').all(ShouldIngestState.Yes, ShouldIngestState.Undetermined) as unknown as Array<DbFileEntry>;
 
-		for (const row of rows) {
+		const limiter = new Limiter<ExternalIngestFile | undefined>(20);
+
+		const processRow = async (row: DbFileEntry): Promise<ExternalIngestFile | undefined> => {
 			const uri = URI.parse(row.path);
 
 			// Skip files that are now under code search repos
 			if (!await this.shouldTrackFile(uri, token)) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
 			const stat = await raceCancellationError(this.safeStat(uri), token);
 			if (!stat) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
 			const storedSize = row.size;
@@ -400,17 +411,12 @@ export class ExternalIngestIndex extends Disposable {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, docSha = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.Yes, result.val.docSha, stat.size, stat.mtime, uri.toString());
 
-					yield {
-						uri,
-						relativePath: this.computeRelativePath(uri),
-						docSha: result.val.docSha,
-						read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-					};
+					return this.createExternalIngestFile(uri, result.val.docSha);
 				} else {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.No, stat.size, stat.mtime, uri.toString());
 				}
-				continue;
+				return undefined;
 			}
 
 			// File is already marked Yes - use cached docSha if file unchanged
@@ -419,19 +425,24 @@ export class ExternalIngestIndex extends Disposable {
 			if (!docSha) {
 				docSha = await raceCancellationError(this.computeIngestDocSha(uri), token);
 				if (!docSha) {
-					continue;
+					return undefined;
 				}
 
 				// Store the computed docSha in the database
 				this._db.prepare('UPDATE Files SET docSha = ? WHERE path = ?').run(docSha, uri.toString());
 			}
 
-			yield {
-				uri,
-				relativePath: this.computeRelativePath(uri),
-				docSha,
-				read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-			};
+			return this.createExternalIngestFile(uri, docSha);
+		};
+
+		// Queue all work upfront to run in parallel, then yield results in order as they complete
+		const pendingResults = rows.map(row => limiter.queue(() => processRow(row)));
+
+		for (const pending of pendingResults) {
+			const result = await raceCancellationError(pending, token);
+			if (result) {
+				yield result;
+			}
 		}
 	}
 
@@ -493,7 +504,7 @@ export class ExternalIngestIndex extends Disposable {
 				removedFileCount++;
 			}
 		}
-		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Reconciled database. New: ${addedFileCount}, updated: ${updatedFileCount}, removed: ${removedFileCount}`);
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Reconciled database. Added: ${addedFileCount}, updated: ${updatedFileCount}, removed: ${removedFileCount}`);
 	}
 
 	private registerWatcher(): void {
