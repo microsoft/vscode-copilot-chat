@@ -572,6 +572,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		} else {
 			invocation[0].isConfirmed = true;
 		}
+		const toolCall = invocation[1];
 
 		// Convert MCP content to VS Code ChatMcpToolInvocationData format
 		if ('mcpContent' in event.data) {
@@ -587,6 +588,28 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 					output
 				} as ChatMcpToolInvocationData;
 			}
+		}
+
+		if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
+			const result = event.data.result?.content || '';
+			// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
+			const exitCodeStr = result ? /<exited with exit code (\d+)>$/.exec(result)?.[1] : undefined;
+			const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
+			// Lets remove the last line containing the exit code from the output.
+			const text = (exitCode !== undefined ? result.replace(/<exited with exit code \d+>$/, '').trimEnd() : result).replace(/\n/g, '\r\n');
+			const toolSpecificData: ChatTerminalToolInvocationData = {
+				commandLine: {
+					original: toolCall.arguments.command,
+				},
+				language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
+				state: {
+					exitCode
+				},
+				output: {
+					text
+				}
+			};
+			invocation[0].toolSpecificData = toolSpecificData;
 		}
 	}
 
@@ -655,7 +678,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
-	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
+	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation],
 	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
 	'web_search': [l10n.t('Web Search'), emptyInvocation],
 	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
@@ -792,10 +815,10 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	}
 }
 
