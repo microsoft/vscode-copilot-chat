@@ -358,4 +358,134 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessionIds).toEqual(['session1', 'session2']);
 		});
 	});
+
+	describe('no-workspace scenario', () => {
+		let noWorkspaceDirUri: URI;
+		let noWorkspaceService: ClaudeCodeSessionService;
+		let noWorkspaceMockFs: MockFileSystemService;
+
+		beforeEach(() => {
+			noWorkspaceMockFs = new MockFileSystemService();
+			const noWorkspaceTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
+			noWorkspaceTestingServiceCollection.set(IFileSystemService, noWorkspaceMockFs);
+
+			// Create mock workspace service with no workspace folders (empty)
+			const emptyWorkspaceService = store.add(new TestWorkspaceService([]));
+			noWorkspaceTestingServiceCollection.set(IWorkspaceService, emptyWorkspaceService);
+
+			const accessor = noWorkspaceTestingServiceCollection.createTestingAccessor();
+			noWorkspaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
+			const instaService = accessor.get(IInstantiationService);
+			const nativeEnvService = accessor.get(INativeEnvService);
+			// When there's no workspace, sessions are stored in the '-' directory
+			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', '-');
+			noWorkspaceService = instaService.createInstance(ClaudeCodeSessionService);
+		});
+
+		it('loads sessions from no-project directory when there are no workspace folders', async () => {
+			const fileName = 'no-workspace-session.jsonl';
+			const fileContents = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'no-workspace-session',
+				type: 'user',
+				message: { role: 'user', content: 'session without workspace' },
+				uuid: 'uuid-no-ws',
+				timestamp: new Date().toISOString()
+			});
+
+			noWorkspaceMockFs.mockDirectory(noWorkspaceDirUri, [[fileName, FileType.File]]);
+			noWorkspaceMockFs.mockFile(URI.joinPath(noWorkspaceDirUri, fileName), fileContents, 1000);
+
+			const sessions = await noWorkspaceService.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe('no-workspace-session');
+			expect(sessions[0].label).toBe('session without workspace');
+		});
+
+		it('returns empty array when no-project directory does not exist', async () => {
+			// Don't mock any directory - simulate non-existent directory
+
+			const sessions = await noWorkspaceService.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+	});
+
+	describe('multi-root workspace scenario', () => {
+		let multiRootDirUri: URI;
+		let multiRootService: ClaudeCodeSessionService;
+		let multiRootMockFs: MockFileSystemService;
+
+		beforeEach(() => {
+			multiRootMockFs = new MockFileSystemService();
+			const multiRootTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
+			multiRootTestingServiceCollection.set(IFileSystemService, multiRootMockFs);
+
+			// Create mock workspace service with multiple workspace folders
+			const folder1 = URI.file('/project1');
+			const folder2 = URI.file('/project2');
+			const multiRootWorkspaceService = store.add(new TestWorkspaceService([folder1, folder2]));
+			multiRootTestingServiceCollection.set(IWorkspaceService, multiRootWorkspaceService);
+
+			const accessor = multiRootTestingServiceCollection.createTestingAccessor();
+			multiRootMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
+			const instaService = accessor.get(IInstantiationService);
+			const nativeEnvService = accessor.get(INativeEnvService);
+			// Multi-root workspaces use the '-' directory (same as no-workspace)
+			multiRootDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', '-');
+			multiRootService = instaService.createInstance(ClaudeCodeSessionService);
+		});
+
+		it('loads sessions from no-project directory for multi-root workspaces', async () => {
+			const fileName = 'multi-root-session.jsonl';
+			const fileContents = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'multi-root-session',
+				type: 'user',
+				message: { role: 'user', content: 'session in multi-root workspace' },
+				uuid: 'uuid-multi-root',
+				timestamp: new Date().toISOString()
+			});
+
+			multiRootMockFs.mockDirectory(multiRootDirUri, [[fileName, FileType.File]]);
+			multiRootMockFs.mockFile(URI.joinPath(multiRootDirUri, fileName), fileContents, 1000);
+
+			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe('multi-root-session');
+			expect(sessions[0].label).toBe('session in multi-root workspace');
+		});
+
+		it('returns empty array when no-project directory does not exist for multi-root', async () => {
+			// Don't mock any directory - simulate non-existent directory
+
+			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('uses dash directory not individual folder slugs for multi-root', async () => {
+			// Mock the '-' directory with a session
+			const fileName = 'shared-session.jsonl';
+			const fileContents = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'shared-session',
+				type: 'user',
+				message: { role: 'user', content: 'shared session' },
+				uuid: 'uuid-shared',
+				timestamp: new Date().toISOString()
+			});
+
+			multiRootMockFs.mockDirectory(multiRootDirUri, [[fileName, FileType.File]]);
+			multiRootMockFs.mockFile(URI.joinPath(multiRootDirUri, fileName), fileContents, 1000);
+
+			// The session should only come from the '-' directory, not individual folder slugs
+			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(1);
+			expect(sessions[0].id).toBe('shared-session');
+		});
+	});
 });

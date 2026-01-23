@@ -342,11 +342,27 @@ export class ClaudeCodeSession extends Disposable {
 	 * Starts a new Claude Code session with the configured options
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
+		const directories = this.workspaceService.getWorkspaceFolders().map(folder => folder.fsPath);
+		let additionalDirectories: string[] | undefined = directories;
+		let cwd: string | undefined;
+		// For single-root workspaces, set cwd to the root and no additional directories
+		// For empty or multi-root workspaces, don't set cwd
+		if (directories.length === 1) {
+			cwd = directories[0];
+			additionalDirectories = [];
+		}
+
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			// cwd being undefined means the SDK will use process.cwd()
+			// we do this for multi-root workspaces or no workspace
+			// ideally there would be a better value for multi-root workspaces
+			// but the SDK currently only supports a single cwd which is used
+			// for history files
+			cwd,
+			additionalDirectories,
 			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			// TODO: CAPI does not yet support the WebSearch tool
