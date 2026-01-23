@@ -62,7 +62,6 @@ Your tone should reflect: **"I am implementing the plan."**
 
 /**
  * Builds .agent.md content from a configuration object using string formatting.
- * No YAML library required - generates valid YAML frontmatter via string templates.
  */
 export function buildImplementAgentMarkdown(config: ImplementAgentConfig): string {
 	const lines: string[] = ['---'];
@@ -87,7 +86,6 @@ export function buildImplementAgentMarkdown(config: ImplementAgentConfig): strin
  *
  * This provider uses an embedded configuration and generates .agent.md content
  * with settings-based customization (model override).
- * No external file loading or YAML parsing dependencies required.
  */
 export class ImplementAgentProvider extends Disposable implements vscode.ChatCustomAgentProvider {
 	readonly label = vscode.l10n.t('Implement Agent');
