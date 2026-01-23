@@ -11,6 +11,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
+import { PlanAgentProvider } from './planAgentProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -28,6 +29,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 				const githubOrgAgentProvider: vscode.ChatCustomAgentProvider = instantiationService.createInstance(new SyncDescriptor(GitHubOrgCustomAgentProvider));
 				this._register(vscode.chat.registerCustomAgentProvider(githubOrgAgentProvider));
 			}
+
+			// Register Plan agent provider for dynamic settings-based customization
+			const planProvider = instantiationService.createInstance(PlanAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
 		}
 
 		// Register instructions provider

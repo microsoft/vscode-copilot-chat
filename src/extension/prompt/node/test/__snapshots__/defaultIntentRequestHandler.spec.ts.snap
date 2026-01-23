@@ -253,6 +253,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   },
   "usage": {
     "completionTokens": 0,
+    "promptTokenDetails": [
+      {
+        "category": "User Context",
+        "label": "Messages",
+        "percentageOfPrompt": 70,
+      },
+    ],
     "promptTokens": 0,
   },
 }
@@ -358,6 +365,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
   },
   "usage": {
     "completionTokens": 0,
+    "promptTokenDetails": [
+      {
+        "category": "User Context",
+        "label": "Messages",
+        "percentageOfPrompt": 70,
+      },
+    ],
     "promptTokens": 0,
   },
 }
@@ -607,6 +621,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -842,6 +857,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -1077,6 +1093,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -1312,6 +1329,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -1597,6 +1615,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -1832,6 +1851,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -2067,6 +2087,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -2302,6 +2323,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -2445,6 +2467,13 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
   },
   "usage": {
     "completionTokens": 0,
+    "promptTokenDetails": [
+      {
+        "category": "User Context",
+        "label": "Messages",
+        "percentageOfPrompt": 70,
+      },
+    ],
     "promptTokens": 0,
   },
 }
@@ -2619,6 +2648,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -2785,6 +2815,13 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
   },
   "usage": {
     "completionTokens": 0,
+    "promptTokenDetails": [
+      {
+        "category": "User Context",
+        "label": "Messages",
+        "percentageOfPrompt": 70,
+      },
+    ],
     "promptTokens": 0,
   },
 }
@@ -2959,6 +2996,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },
@@ -3194,6 +3232,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "timeToComplete": "<duration>",
         "timeToFirstToken": "<duration>",
         "timeToRequest": "<duration>",
+        "toolTokenCount": 0,
         "turn": 1,
         "userPromptCount": 1,
       },

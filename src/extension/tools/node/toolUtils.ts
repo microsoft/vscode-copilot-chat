@@ -125,3 +125,44 @@ export async function assertFileNotContentExcluded(accessor: ServicesAccessor, u
 		throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is configured to be ignored by Copilot`);
 	}
 }
+
+export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+	const workspaceService = accessor.get(IWorkspaceService);
+	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
+	const customInstructionsService = accessor.get(ICustomInstructionsService);
+
+	const normalizedUri = normalizePath(uri);
+
+	// Not external if: in workspace, untitled, instructions file, or open in editor
+	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
+		return false;
+	}
+	if (uri.scheme === Schemas.untitled) {
+		return false;
+	}
+	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+		return false;
+	}
+	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
+		return false;
+	}
+
+	return true;
+}
+
+export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI): boolean {
+	const workspaceService = accessor.get(IWorkspaceService);
+	const customInstructionsService = accessor.get(ICustomInstructionsService);
+
+	const normalizedUri = normalizePath(uri);
+
+	// Not external if: in workspace or external instructions folder
+	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
+		return false;
+	}
+	if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
+		return false;
+	}
+
+	return true;
+}

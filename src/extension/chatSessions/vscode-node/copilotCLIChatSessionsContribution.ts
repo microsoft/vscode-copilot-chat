@@ -153,21 +153,26 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return diskSessions;
 	}
 
-	private shouldShowSession(sessionId: string): boolean {
+	private shouldShowSession(sessionId: string): boolean | undefined {
 		if (isUntitledSessionId(sessionId)) {
 			return true;
 		}
 		// If we have a workspace folder for this and the workspace folder belongs to one of the open workspace folders, show it.
 		const workspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-		if (workspaceFolder && this.workspaceService.getWorkspaceFolder(workspaceFolder)) {
-			return true;
+		if (workspaceFolder && this.workspaceService.getWorkspaceFolders().length) {
+			return !!this.workspaceService.getWorkspaceFolder(workspaceFolder);
 		}
 		// If we have a git worktree and the worktree's repo belongs to one of the workspace folders, show it.
 		const worktree = this.worktreeManager.getWorktreeProperties(sessionId);
-		if (worktree && this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath))) {
-			return true;
+		if (worktree && this.workspaceService.getWorkspaceFolders().length) {
+			// If we have a repository path, then its easy to tell whether this should be displayed or hidden.
+			return !!this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath));
 		}
-		return false;
+		// Unless we are in an empty window, exclude sessions without workspace folder or git repo association.
+		if (this.workspaceService.getWorkspaceFolders().length) {
+			return false;
+		}
+		return undefined;
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {

@@ -6,10 +6,13 @@
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
+import { ILogger } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
+import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, Range, Uri } from '../../../../vscodeTypes';
+import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
+import type { MCP } from '../../../common/modelContextProtocol';
 import { formatUriForFileWidget } from '../../../tools/common/toolUtils';
 import { extractChatPromptReferences, getFolderAttachmentPath } from './copilotCLIPrompt';
 import { IChatDelegationSummaryService } from './delegationSummaryService';
@@ -306,7 +309,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -424,7 +427,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'tool.execution_complete': {
-				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations) ?? [undefined, undefined];
+				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger) ?? [undefined, undefined];
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
@@ -465,6 +468,88 @@ function getRangeInPrompt(prompt: string, referencedName: string): [number, numb
 	return undefined;
 }
 
+/**
+ * Converts MCP {@link MCP.ContentBlock}[] values produced by MCP tool execution into
+ * VS Code {@link McpToolInvocationContentData}[] objects for rendering in the chat UI.
+ *
+ * MCP ContentBlocks represent heterogeneous pieces of tool output such as text, images,
+ * audio, embedded resources, or resource links. This helper normalizes those different
+ * content shapes into a common binary+MIME-type representation that the VS Code chat
+ * tool invocation renderer understands, so that MCP tool results can be displayed
+ * consistently alongside other chat responses.
+ */
+function convertMcpContentToToolInvocationData(blocks: MCP.ContentBlock[], logger: ILogger): McpToolInvocationContentData[] {
+	const output: McpToolInvocationContentData[] = [];
+	const encoder = new TextEncoder();
+
+	for (const block of blocks) {
+		try {
+			switch (block.type) {
+				case 'text':
+					// Convert text to UTF-8 bytes with text/plain mime type
+					output.push(new McpToolInvocationContentData(
+						encoder.encode(block.text),
+						'text/plain'
+					));
+					break;
+
+				case 'image':
+					// Decode base64 image data and preserve mime type
+					output.push(new McpToolInvocationContentData(
+						decodeBase64(block.data).buffer,
+						block.mimeType
+					));
+					break;
+
+				case 'audio':
+					// Decode base64 audio data and preserve mime type
+					output.push(new McpToolInvocationContentData(
+						decodeBase64(block.data).buffer,
+						block.mimeType
+					));
+					break;
+
+				case 'resource': {
+					// Handle embedded resource (text or blob)
+					const resource = block.resource;
+					if ('text' in resource) {
+						// TextResourceContents
+						const mimeType = resource.mimeType || 'text/plain';
+						output.push(new McpToolInvocationContentData(
+							encoder.encode(resource.text),
+							mimeType
+						));
+					} else if ('blob' in resource) {
+						// BlobResourceContents
+						const mimeType = resource.mimeType || 'application/octet-stream';
+						output.push(new McpToolInvocationContentData(
+							decodeBase64(resource.blob).buffer,
+							mimeType
+						));
+					}
+					break;
+				}
+
+				case 'resource_link': {
+					// Format resource link as readable text with name and URI
+					const displayName = block.title || block.name;
+					const linkText = displayName ? `Resource: ${displayName}\nURI: ${block.uri}` : block.uri;
+					output.push(new McpToolInvocationContentData(
+						encoder.encode(linkText),
+						'text/plain'
+					));
+					break;
+				}
+			}
+		} catch (error) {
+			// Log conversion errors but continue processing other blocks
+			logger.error(error, `Failed to convert MCP content block of type ${block.type}:`);
+		}
+	}
+
+	return output;
+}
+
 export function processToolExecutionStart(event: ToolExecutionStartEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(event.data as ToolCall);
 	if (toolInvocation) {
@@ -474,7 +559,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -486,6 +571,45 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			invocation[0].isConfirmed = false;
 		} else {
 			invocation[0].isConfirmed = true;
+		}
+		const toolCall = invocation[1];
+
+		// Convert MCP content to VS Code ChatMcpToolInvocationData format
+		if ('mcpContent' in event.data) {
+			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
+			if (mcpContent && mcpContent.length > 0) {
+				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
+				const toolCall = invocation[1];
+				// Use tool arguments as input, formatted as JSON
+				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
+
+				invocation[0].toolSpecificData = {
+					input,
+					output
+				} as ChatMcpToolInvocationData;
+			}
+		}
+
+		if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
+			const result = event.data.result?.content || '';
+			// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
+			const exitCodeStr = result ? /<exited with exit code (\d+)>$/.exec(result)?.[1] : undefined;
+			const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
+			// Lets remove the last line containing the exit code from the output.
+			const text = (exitCode !== undefined ? result.replace(/<exited with exit code \d+>$/, '').trimEnd() : result).replace(/\n/g, '\r\n');
+			const toolSpecificData: ChatTerminalToolInvocationData = {
+				commandLine: {
+					original: toolCall.arguments.command,
+				},
+				language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
+				state: {
+					exitCode
+				},
+				output: {
+					text
+				}
+			};
+			invocation[0].toolSpecificData = toolSpecificData;
 		}
 	}
 
@@ -554,7 +678,7 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invo
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation],
-	'report_progress': [l10n.t('Report Progress'), formatProgressToolInvocation],
+	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation],
 	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
 	'web_search': [l10n.t('Web Search'), emptyInvocation],
 	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
@@ -691,10 +815,10 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	} else if (toolCall.toolName === 'grep') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Pattern: \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
 	}
 }
 

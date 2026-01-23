@@ -448,7 +448,7 @@ export abstract class RefreshableCopilotTokenManager extends BaseCopilotTokenMan
 	protected abstract authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed>;
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
+		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() + (60 * 5 /* 5min */) || force) {
 			const tokenResult = await this.authenticateAndGetToken();
 			if (tokenResult.kind === 'failure') {
 				throw Error(

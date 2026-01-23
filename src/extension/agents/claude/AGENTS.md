@@ -229,6 +229,18 @@ interface IClaudeSlashCommandHandler {
 }
 ```
 
+**UI Patterns for Slash Commands:**
+
+Slash commands often need to present choices or gather input from users. When doing so, prefer the simpler one-shot APIs over the more complex builder APIs:
+
+- **Prefer:** `vscode.window.showQuickPick()` - Simple function call that returns the selected item(s)
+- **Avoid:** `vscode.window.createQuickPick()` - More complex, requires manual lifecycle management
+
+- **Prefer:** `vscode.window.showInputBox()` - Simple function call that returns the entered text
+- **Avoid:** `vscode.window.createInputBox()` - More complex, requires manual lifecycle management
+
+The `show*` APIs are sufficient for most slash command use cases and result in cleaner, more maintainable code. Only use `create*` APIs when you need advanced features like dynamic item updates, multi-step wizards, or custom event handling.
+
 **Current Slash Commands:**
 - `/hooks` - Display information about registered hooks (from `hooksCommand.ts`)
 - `/memory` - Memory management commands (from `memoryCommand.ts`)

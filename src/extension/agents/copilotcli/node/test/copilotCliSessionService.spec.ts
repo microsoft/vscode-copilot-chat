@@ -123,12 +123,12 @@ describe('CopilotCLISessionService', () => {
 			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
 				if (ctor === CopilotCLISessionWorkspaceTracker) {
 					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
-						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async initialize(): Promise<void> { return; }
 						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
 							return;
 						}
-						override shouldShowSession(_sessionId: string): boolean {
-							return true;
+						override shouldShowSession(_sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
+							return { isOldGlobalSession: false, isWorkspaceSession: true };
 						}
 					}();
 				}
@@ -137,7 +137,7 @@ describe('CopilotCLISessionService', () => {
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
 		const nullMcpServer = disposables.add(new NullMcpService());
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents));
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
