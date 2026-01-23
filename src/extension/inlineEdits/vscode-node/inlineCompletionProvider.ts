@@ -672,9 +672,9 @@ export class InlineCompletionProviderImpl extends Disposable implements InlineCo
 		const info = item.info;
 		const supersededBySuggestion = supersededBy ? supersededBy.info.suggestion : undefined;
 		if (isLlmCompletionInfo(info)) {
-			this.model.nextEditProvider.handleIgnored(info.documentId, info.suggestion, item.wasShown, supersededBySuggestion);
+			this.model.nextEditProvider.handleIgnored(info.documentId, info.suggestion, supersededBySuggestion);
 		} else {
-			this.model.diagnosticsBasedProvider?.handleIgnored(info.documentId, info.suggestion, item.wasShown, supersededBySuggestion);
+			this.model.diagnosticsBasedProvider?.handleIgnored(info.documentId, info.suggestion, supersededBySuggestion);
 		}
 	}
 }

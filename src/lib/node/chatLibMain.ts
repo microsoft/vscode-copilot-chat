@@ -196,7 +196,7 @@ export interface INESProvider<T extends INESResult = INESResult> {
 	handleShown(suggestion: T): void;
 	handleAcceptance(suggestion: T): void;
 	handleRejection(suggestion: T): void;
-	handleIgnored(suggestion: T, wasShown: boolean, supersededByRequestUuid: T | undefined): void;
+	handleIgnored(suggestion: T, supersededByRequestUuid: T | undefined): void;
 	updateTreatmentVariables(variables: Record<string, boolean | number | string>): void;
 	dispose(): void;
 }
@@ -260,11 +260,11 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		this.handleEndOfLifetime(result);
 	}
 
-	handleIgnored(result: NESResult, wasShown: boolean, supersededByRequestUuid: NESResult | undefined): void {
+	handleIgnored(result: NESResult, supersededByRequestUuid: NESResult | undefined): void {
 		if (supersededByRequestUuid) {
 			result.telemetryBuilder.setSupersededBy(supersededByRequestUuid.requestUuid);
 		}
-		this._nextEditProvider.handleIgnored(result.docId, result.internalResult, wasShown, supersededByRequestUuid?.internalResult);
+		this._nextEditProvider.handleIgnored(result.docId, result.internalResult, supersededByRequestUuid?.internalResult);
 		this.handleEndOfLifetime(result);
 	}
 

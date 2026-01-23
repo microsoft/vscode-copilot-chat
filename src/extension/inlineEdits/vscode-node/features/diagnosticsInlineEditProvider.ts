@@ -183,7 +183,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		this._diagnosticsCompletionHandler.handleEndOfLifetime(completionResult.item, { kind: vscode.InlineCompletionEndOfLifeReasonKind.Rejected });
 	}
 
-	handleIgnored(docId: DocumentId, suggestion: DiagnosticsNextEditResult, wasShown: boolean, supersededBy: INextEditResult | undefined): void {
+	handleIgnored(docId: DocumentId, suggestion: DiagnosticsNextEditResult, supersededBy: INextEditResult | undefined): void {
 		const completionResult = suggestion.result;
 		if (!completionResult) {
 			throw new BugIndicatingError('Completion result is undefined when accepted');
