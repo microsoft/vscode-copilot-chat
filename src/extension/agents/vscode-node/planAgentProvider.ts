@@ -9,6 +9,7 @@ import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/commo
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ToolName } from '../../tools/common/toolNames';
 
@@ -201,6 +202,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
@@ -270,7 +272,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// Add searchSubagent tool if enabled (experiment-based config)
 		const searchSubagentEnabled = this.configurationService.getExperimentBasedConfig(
 			ConfigKey.Advanced.SearchSubagentToolEnabled,
-			this.experimentationService
+			this._experimentationService
 		);
 		if (searchSubagentEnabled) {
 			toolsToAdd.push(ToolName.SearchSubagent);
