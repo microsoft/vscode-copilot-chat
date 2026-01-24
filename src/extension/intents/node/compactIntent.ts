@@ -43,7 +43,9 @@ export class CompactIntent implements IIntent {
 	) { }
 
 	async invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(invocationContext.request);
+		// Note: When handleRequest is defined, invoke is not called.
+		// This is a fallback that returns a NullIntentInvocation.
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		return new NullIntentInvocation(this, invocationContext.location, endpoint);
 	}
 
