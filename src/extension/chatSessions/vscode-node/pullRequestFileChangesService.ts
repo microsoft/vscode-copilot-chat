@@ -58,9 +58,8 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 				// Local files may be on different branches or have different changes
 				this.logService.trace(`Creating remote URIs for ${file.filename}`);
 
-				const originalUri = toPRContentUri(
-					file.previous_filename || file.filename,
-					{
+				const originalUri = file.status !== 'added'
+					? toPRContentUri(file.previous_filename || file.filename, {
 						owner: repoOwner,
 						repo: repoName,
 						prNumber: pullRequest.number,
@@ -68,22 +67,21 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 						isBase: true,
 						previousFileName: file.previous_filename,
 						status: file.status
-					}
-				);
+					})
+					: undefined;
 
-				const modifiedUri = toPRContentUri(
-					file.filename,
-					{
+				const modifiedUri = file.status !== 'removed'
+					? toPRContentUri(file.filename, {
 						owner: repoOwner,
 						repo: repoName,
 						prNumber: pullRequest.number,
 						commitSha: pullRequest.headRefOid,
 						isBase: false,
 						status: file.status
-					}
-				);
+					})
+					: undefined;
 
-				this.logService.trace(`DiffEntry -> original='${originalUri.toString()}' modified='${modifiedUri.toString()}' (+${file.additions} -${file.deletions})`);
+				this.logService.trace(`DiffEntry -> original='${originalUri?.toString()}' modified='${modifiedUri?.toString()}' (+${file.additions} -${file.deletions})`);
 				diffEntries.push({
 					originalUri,
 					modifiedUri,

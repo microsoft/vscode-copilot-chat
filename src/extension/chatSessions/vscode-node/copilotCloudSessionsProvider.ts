@@ -704,8 +704,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pr);
 				const changes = multiDiffPart
-					? multiDiffPart.value.map(change =>
-						new vscode.ChatSessionChangedFile(change.modifiedUri!, change.added!, change.removed!, change.originalUri))
+					? multiDiffPart.value
+						.map(change => new vscode.ChatSessionChangedFile2(
+							change.goToFileUri!,
+							change.originalUri,
+							change.modifiedUri,
+							change.added ?? 0,
+							change.removed ?? 0))
 					: {
 						files: pr.files.totalCount,
 						insertions: pr.additions,
