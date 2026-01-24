@@ -311,7 +311,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			// Load initial repositories
 			try {
 				const repos = await this.fetchAllRepositoriesFromGitHub();
-				quickPick.items = repos.map(repo => ({ label: repo.name, iconPath: new vscode.ThemeIcon('repo') }));
+				quickPick.items = repos.map(repo => ({ label: repo.name }));
 			} catch (error) {
 				this.logService.error(`Error fetching initial repositories: ${error}`);
 			} finally {
@@ -328,7 +328,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					quickPick.busy = true;
 					try {
 						const searchResults = await this.fetchAllRepositoriesFromGitHub(value);
-						quickPick.items = searchResults.map(repo => ({ label: repo.name, iconPath: new vscode.ThemeIcon('repo') }));
+						quickPick.items = searchResults.map(repo => ({ label: repo.name }));
 					} finally {
 						quickPick.busy = false;
 					}
