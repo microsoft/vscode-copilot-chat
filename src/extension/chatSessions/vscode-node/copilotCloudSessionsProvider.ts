@@ -901,39 +901,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		await vscode.env.openExternal(vscode.Uri.parse(pr.url));
 	}
 
-	async openChanges(chatSessionItemResource: vscode.Uri): Promise<void> {
-		const session = SessionIdForPr.parse(chatSessionItemResource);
-		let prNumber = session?.prNumber;
-		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
-			prNumber = SessionIdForPr.parsePullRequestNumber(chatSessionItemResource);
-			if (isNaN(prNumber)) {
-				vscode.window.showErrorMessage(vscode.l10n.t('Could not parse PR number from session resource'));
-				this.logService.error(`Could not parse PR number from session resource: ${chatSessionItemResource}`);
-				return;
-			}
-		}
-
-		const pr = await this.findPR(prNumber);
-		if (!pr) {
-			vscode.window.showErrorMessage(vscode.l10n.t('Could not find pull request #{0}', prNumber));
-			this.logService.error(`Could not find pull request #${prNumber}`);
-			return;
-		}
-
-		const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pr);
-		if (!multiDiffPart) {
-			vscode.window.showWarningMessage(vscode.l10n.t('No file changes found for pull request #{0}', prNumber));
-			this.logService.warn(`No file changes found for PR #${prNumber}`);
-			return;
-		}
-
-		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', {
-			multiDiffSourceUri: vscode.Uri.parse(`copilotcloud-pr-changes:/${prNumber}`),
-			title: vscode.l10n.t('Pull Request #{0}', prNumber),
-			resources: multiDiffPart.value
-		});
-	}
-
 	private findActiveResponseCallback(
 		sessions: SessionInfo[],
 		pr: PullRequestSearchItem
