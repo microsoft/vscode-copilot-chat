@@ -154,6 +154,9 @@ type RequestTelemetryMeasurements = {
 	messageTokenCount: number;
 	numToolCalls: number;
 	availableToolCount: number;
+	toolTokenCount: number;
+	isBYOK: number;
+	isAuto: number;
 };
 
 type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
@@ -164,8 +167,6 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	maybeOffTopic: number;
 	userPromptCount: number;
 	summarizationEnabled: number;
-	isBYOK: number;
-	isAuto: number;
 };
 
 // EVENT: inline.request
@@ -223,9 +224,9 @@ export class ChatTelemetryBuilder {
 		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
 	}
 
-	public makeRequest(intent: IIntent, location: ChatLocation.Editor, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry;
-	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): PanelChatTelemetry;
-	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
+	public makeRequest(intent: IIntent, location: ChatLocation.Editor, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): InlineChatTelemetry;
+	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): PanelChatTelemetry;
+	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): InlineChatTelemetry | PanelChatTelemetry {
 
 		if (location === ChatLocation.Editor) {
 			return this.instantiationService.createInstance(InlineChatTelemetry,
@@ -243,6 +244,7 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				toolTokenCount,
 				this._repoInfoTelemetry
 			);
 		} else {
@@ -261,6 +263,7 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				toolTokenCount,
 				this._repoInfoTelemetry
 			);
 		}
@@ -316,6 +319,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		promptTokenLength: number,
 		protected readonly _genericTelemetryData: readonly TelemetryData[],
 		protected readonly _availableToolCount: number,
+		protected readonly _toolTokenCount: number,
 		protected readonly _repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 	) {
@@ -464,6 +468,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			promptTokenCount: this._userTelemetry.measurements.promptTokenLen,
 			messageCharLen: this._userTelemetry.measurements.messageCharLen,
 			availableToolCount: availableTools.length,
+			toolTokenCount: this._toolTokenCount,
 			invalidToolCallCount
 		};
 
@@ -482,6 +487,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were in the last generated prompt." },
 				"messageCharLen": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many characters were in the user message." },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"responseType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the final response was successful or how it failed." },
 				"invalidToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of tool call rounds that had an invalid tool call." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." }
@@ -534,6 +540,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		toolTokenCount: number,
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -553,6 +560,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			toolTokenCount,
 			repoInfoTelemetry,
 			telemetryService
 		);
@@ -646,6 +654,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
@@ -681,6 +690,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			...getCustomInstructionTelemetry(turn.references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
+			toolTokenCount: this._toolTokenCount,
 			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0,
 			isBYOK: isBYOKModel(this._endpoint),
 			isAuto: isAutoModel(this._endpoint)
@@ -771,6 +781,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		toolTokenCount: number,
 		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
@@ -790,6 +801,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			toolTokenCount,
 			repoInfoTelemetry,
 			telemetryService
 		);
@@ -871,8 +883,11 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"userSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the user selection" },
-				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" }
+				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
@@ -915,8 +930,11 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			...getCustomInstructionTelemetry(this._references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
+			toolTokenCount: this._toolTokenCount,
 			userSelectionLength,
 			adjustedSelectionLength,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 

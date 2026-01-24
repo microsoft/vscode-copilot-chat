@@ -200,7 +200,7 @@ class EditAttemptsElement extends PromptElement<EditAttemptsElementProps> {
 				return (
 					<KeepWith>
 						<ToolMessage toolCallId={toolCall.id}>
-							<ToolResult content={result.content} />
+							<ToolResult content={result.content} toolCallId={toolCall.id} />
 						</ToolMessage>
 					</KeepWith>
 				);

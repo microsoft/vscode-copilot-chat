@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
+import { GhostTextLogContext } from '../../extension/completions-core/common/ghostTextContext';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
@@ -661,7 +662,7 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this.ghostText.getInlineCompletions(textDocument, position, token, options);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined));
 	}
 
 	async inlineCompletionShown(completionId: string): Promise<void> {

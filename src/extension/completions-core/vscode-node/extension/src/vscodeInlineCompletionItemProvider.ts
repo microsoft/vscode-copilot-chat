@@ -22,7 +22,7 @@ import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { LineBasedText } from '../../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { InlineEditLogger } from '../../../../inlineEdits/vscode-node/parts/inlineEditLogger';
-import { GhostTextContext } from '../../../common/ghostTextContext';
+import { GhostTextLogContext } from '../../../common/ghostTextContext';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
@@ -80,7 +80,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
-		const logContext = new GhostTextContext(doc.uri.toString(), doc.version, context);
+		const logContext = new GhostTextLogContext(doc.uri.toString(), doc.version, context);
 		try {
 			return await this._provideInlineCompletionItems(doc, position, context, logContext, token);
 		} catch (e) {
@@ -95,7 +95,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		doc: TextDocument,
 		position: Position,
 		context: InlineCompletionContext,
-		logContext: GhostTextContext,
+		logContext: GhostTextLogContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
@@ -117,7 +117,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		}
 
 		try {
-			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
+			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, logContext, token);
 
 			if (!items) {
 				if (token.isCancellationRequested) {
@@ -172,7 +172,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 	}
 
 	private logSuggestion(
-		logContext: GhostTextContext,
+		logContext: GhostTextLogContext,
 		doc: TextDocument,
 		items: InlineCompletionList
 	) {

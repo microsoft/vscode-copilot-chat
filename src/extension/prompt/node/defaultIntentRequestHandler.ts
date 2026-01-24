@@ -533,7 +533,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
 
-		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
+		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
 				this.toolGrouping?.didInvalidateCache();
 			}
@@ -547,7 +547,8 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				result.references,
 				options.invocation.endpoint,
 				result.metadata.getAll(TelemetryData) ?? [],
-				tools.length
+				tools.length,
+				toolTokenCount
 			);
 		}));
 

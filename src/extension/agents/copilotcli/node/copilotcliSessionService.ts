@@ -18,6 +18,7 @@ import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableMap, IDisposable, IReference, RefCountedDisposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { joinPath } from '../../../../util/vs/base/common/resources';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatSessionStatus } from '../../../../vscodeTypes';
@@ -94,7 +95,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 	protected monitorSessionFiles() {
 		try {
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
-			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '*.jsonl')));
+			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '**/*.jsonl')));
 			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
 		} catch (error) {
 			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
@@ -143,6 +144,13 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 							if (typeof sessionFilterResult === 'undefined') {
 								showSession = true;
 							}
+						}
+						// Possible we have the workspace info in cli metadata.
+						if (!showSession && metadata.context && (
+							(metadata.context.cwd && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.cwd))) ||
+							(metadata.context.gitRoot && this.workspaceService.getWorkspaceFolder(URI.file(metadata.context.gitRoot)))
+						)) {
+							showSession = true;
 						}
 					}
 					if (!showSession) {
