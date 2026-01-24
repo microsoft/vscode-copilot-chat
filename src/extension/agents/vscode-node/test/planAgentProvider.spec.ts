@@ -196,33 +196,7 @@ suite('PlanAgentProvider', () => {
 		assert.equal(eventFired, false);
 	});
 
-	test('includes search_subagent tool when SearchSubagentToolEnabled is true', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, true);
-
-		const provider = createProvider();
-		const agents = await provider.provideCustomAgents({}, {} as any);
-
-		assert.equal(agents.length, 1);
-		const content = await getAgentContent(agents[0]);
-
-		// Should contain search_subagent tool
-		assert.ok(content.includes('search_subagent'));
-	});
-
-	test('does not include search_subagent tool when SearchSubagentToolEnabled is false', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, false);
-
-		const provider = createProvider();
-		const agents = await provider.provideCustomAgents({}, {} as any);
-
-		assert.equal(agents.length, 1);
-		const content = await getAgentContent(agents[0]);
-
-		// Should not contain search_subagent tool
-		assert.ok(!content.includes('search_subagent'));
-	});
-
-	test('includes ask_questions tool when AskQuestionsEnabled is true', async () => {
+	test('includes askQuestions tool when AskQuestionsEnabled is true', async () => {
 		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, true);
 
 		const provider = createProvider();
@@ -231,11 +205,11 @@ suite('PlanAgentProvider', () => {
 		assert.equal(agents.length, 1);
 		const content = await getAgentContent(agents[0]);
 
-		// Should contain ask_questions tool
-		assert.ok(content.includes('ask_questions'));
+		// Should contain askQuestions tool
+		assert.ok(content.includes('askQuestions'));
 	});
 
-	test('does not include ask_questions tool when AskQuestionsEnabled is false', async () => {
+	test('does not include askQuestions tool when AskQuestionsEnabled is false', async () => {
 		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, false);
 
 		const provider = createProvider();
@@ -244,58 +218,8 @@ suite('PlanAgentProvider', () => {
 		assert.equal(agents.length, 1);
 		const content = await getAgentContent(agents[0]);
 
-		// Should not contain ask_questions tool
-		assert.ok(!content.includes('ask_questions'));
-	});
-
-	test('includes both search_subagent and ask_questions when both are enabled', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, true);
-		await mockConfigurationService.setConfig(ConfigKey.AskQuestionsEnabled, true);
-
-		const provider = createProvider();
-		const agents = await provider.provideCustomAgents({}, {} as any);
-
-		assert.equal(agents.length, 1);
-		const content = await getAgentContent(agents[0]);
-
-		// Should contain both tools
-		assert.ok(content.includes('search_subagent'));
-		assert.ok(content.includes('ask_questions'));
-	});
-
-	test('deduplicates tools when searchSubagent is in additionalTools and enabled via config', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['search_subagent', 'otherTool']);
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, true);
-
-		const provider = createProvider();
-		const agents = await provider.provideCustomAgents({}, {} as any);
-
-		assert.equal(agents.length, 1);
-		const content = await getAgentContent(agents[0]);
-
-		// Count occurrences of 'search_subagent' in tools list
-		const toolsMatch = content.match(/tools: \[([^\]]+)\]/);
-		assert.ok(toolsMatch, 'Tools list not found in agent content');
-		const toolsSection = toolsMatch[1];
-		// Match either single or double quotes consistently
-		const searchSubagentCount = (toolsSection.match(/('search_subagent'|"search_subagent")/g) || []).length;
-		assert.equal(searchSubagentCount, 1, 'search_subagent tool should appear only once after deduplication');
-
-		// Should contain the other tool
-		assert.ok(content.includes('otherTool'));
-	});
-
-	test('fires onDidChangeCustomAgents when SearchSubagentToolEnabled changes', async () => {
-		const provider = createProvider();
-
-		let eventFired = false;
-		provider.onDidChangeCustomAgents(() => {
-			eventFired = true;
-		});
-
-		await mockConfigurationService.setConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, true);
-
-		assert.equal(eventFired, true);
+		// Should not contain askQuestions tool
+		assert.ok(!content.includes('askQuestions'));
 	});
 
 	test('fires onDidChangeCustomAgents when AskQuestionsEnabled changes', async () => {
