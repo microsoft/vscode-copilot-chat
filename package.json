@@ -2612,6 +2612,12 @@
 				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
 				"icon": "$(git-pull-request)",
 				"category": "GitHub Pull Request"
+			},
+			{
+				"command": "github.copilot.chat.cloudSessions.openRepository",
+				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
+				"icon": "$(repo)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -4495,6 +4501,10 @@
 				},
 				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.cloudSessions.openRepository",
 					"when": "false"
 				},
 				{

@@ -381,6 +381,7 @@
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
 	"github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply": "Apply",
 	"github.copilot.command.checkoutPullRequestReroute.title": "Checkout",
+	"github.copilot.command.cloudSessions.openRepository.title": "Browse repositories...",
 	"github.copilot.command.applyCopilotCLIAgentSessionChanges": "Apply Changes to Workspace",
 	"github.copilot.config.githubMcpServer.enabled": "Enable built-in support for the GitHub MCP Server.",
 	"github.copilot.config.githubMcpServer.toolsets": "Specify toolsets to use from the GitHub MCP Server. [Learn more](https://aka.ms/vscode-gh-mcp-toolsets).",
