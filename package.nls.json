@@ -292,6 +292,8 @@
 	"copilot.tools.memory.description": "Manage persistent memory across conversations. Create, view, update, and delete memory files that remember important information between chat sessions. Only available with BYOK Anthropic Claude models.",
 	"copilot.tools.askQuestions.name": "Ask Questions",
 	"copilot.tools.askQuestions.description": "Ask questions to clarify requirements before proceeding with a task.",
+	"copilot.tools.switchAgent.name": "Switch Agent",
+	"copilot.tools.switchAgent.description": "Switch to a different agent mode. Currently only the Plan agent is supported.",
 	"copilot.tools.findTestFiles.name": "Find Test Files",
 	"copilot.tools.getDocInfo.name": "Doc Info",
 	"copilot.tools.createDirectory.name": "Create Directory",

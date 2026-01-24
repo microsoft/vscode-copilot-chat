@@ -1148,7 +1148,6 @@
 				"userDescription": "%copilot.tools.askQuestions.description%",
 				"modelDescription": "Ask the user questions to clarify intent, validate assumptions, or choose between implementation approaches. Prefer proposing a sensible default so users can confirm quickly.\n\nOnly use this tool when the user's answer provides information you cannot determine or reasonably assume yourself. This tool is for gathering information, not for reporting status or problems. If a question has an obvious best answer, take that action instead of asking.\n\nWhen to use:\n- Clarify ambiguous requirements before proceeding\n- Get user preferences on implementation choices\n- Confirm decisions that meaningfully affect outcome\n\nWhen NOT to use:\n- The answer is determinable from code or context\n- Asking for permission to continue or abort\n- Confirming something you can reasonably decide yourself\n- Reporting a problem (instead, attempt to resolve it)\n\nQuestion guidelines:\n- Batch related questions into a single call (max 4 questions, 2-6 options each; omit options for free text input)\n- Provide brief context explaining what is being decided and why\n- Mark one option as `recommended` with a short justification\n- Keep options mutually exclusive for single-select; use `multiSelect: true` only when choices are additive and phrase the question accordingly\n\nAfter receiving answers:\n- Incorporate decisions and continue without re-asking unless requirements change\n\nAn \"Other\" option is automatically shown to users—do not add your own.",
 				"icon": "$(question)",
-				"canBeReferencedInPrompt": true,
 				"when": "config.github.copilot.chat.askQuestions.enabled",
 				"inputSchema": {
 					"type": "object",
@@ -1211,6 +1210,29 @@
 					},
 					"required": [
 						"questions"
+					]
+				}
+			},
+			{
+				"name": "copilot_switchAgent",
+				"toolReferenceName": "switchAgent",
+				"displayName": "%copilot.tools.switchAgent.name%",
+				"userDescription": "%copilot.tools.switchAgent.description%",
+				"modelDescription": "Switch to a different agent mode. Use this tool when you determine that the current task would be better handled by a different agent mode.\n\nCurrently supported agents:\n- 'Plan': Switch to Plan mode when the task requires careful planning before implementation. Use Plan mode when:\n  - The task is complex and requires multiple steps\n  - You need to explore the codebase and design an implementation approach\n  - The user would benefit from reviewing and approving a plan before you make changes\n  - The task involves architectural decisions or significant code modifications\n\nAfter calling this tool, the conversation will continue in the new agent mode.",
+				"icon": "$(arrow-swap)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"agentName": {
+							"type": "string",
+							"description": "The name of the agent to switch to. Currently only 'Plan' is supported.",
+							"enum": [
+								"Plan"
+							]
+						}
+					},
+					"required": [
+						"agentName"
 					]
 				}
 			},
@@ -1282,6 +1304,8 @@
 					"newWorkspace",
 					"openSimpleBrowser",
 					"runCommand",
+					"askQuestions",
+					"switchAgent",
 					"vscodeAPI"
 				]
 			},
