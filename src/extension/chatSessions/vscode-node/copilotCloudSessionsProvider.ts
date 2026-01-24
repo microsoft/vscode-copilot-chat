@@ -343,7 +343,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						resource: sessionItemResource,
 						updates: [{
 							optionId: REPOSITORIES_OPTION_GROUP_ID,
-							value: { id: REPOSITORIES_OPTION_GROUP_ID, name: selected.label, icon: new vscode.ThemeIcon('repo') }
+							value: { id: selected.label, name: selected.label, icon: new vscode.ThemeIcon('repo') }
 						}]
 					});
 				}
@@ -602,7 +602,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				if (repoIds && repoIds.length > 0) {
 					repoIds.forEach((repoId, index) => {
 						items.push({
-							id: REPOSITORIES_OPTION_GROUP_ID,
+							id: `${repoId.org}/${repoId.repo}`,
 							name: `${repoId.org}/${repoId.repo}`,
 							default: index === 0,
 							icon: new vscode.ThemeIcon('repo'),
@@ -615,7 +615,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						for (const repo of recentlyCommittedRepos) {
 							const nwo = `${repo.owner}/${repo.name}`;
 							items.push({
-								id: REPOSITORIES_OPTION_GROUP_ID,
+								id: nwo,
 								name: nwo,
 								icon: new vscode.ThemeIcon('repo'),
 							});
@@ -639,7 +639,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Sort alphabetically and convert to option items
 			return repos
-				.map(repo => ({ id: REPOSITORIES_OPTION_GROUP_ID, name: `${repo.owner}/${repo.name}` }))
+				.map(repo => ({ id: `${repo.owner}/${repo.name}`, name: `${repo.owner}/${repo.name}` }))
 				.sort((a, b) => a.name.localeCompare(b.name));
 		} catch (error) {
 			this.logService.error(`Error fetching repositories from GitHub: ${error}`);
