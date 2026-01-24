@@ -186,10 +186,10 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.
 			</Tag>
 			<Tag name='special_formatting'>
-				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
-				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
-				</Tag>
+				Use proper Markdown formatting:
+				- Wrap symbol names (classes, methods, variables) in backticks: `MyClass`, `handleClick()`<br />
+				- When mentioning files or line numbers, always follow the rules in fileLinkification section below:
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
@@ -263,7 +263,6 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				Generally, ensure your final answers adapt their shape and depth to the request. For example, answers to code explanations should have a precise, structured explanation with code references that answer the question directly. For tasks with a simple implementation, lead with the outcome and supplement only with what's needed for clarity. Larger changes can be presented as a logical walkthrough of your approach, grouping related steps, explaining rationale where it adds value, and highlighting next actions to accelerate the user. Your answers should provide the right level of detail while being easily scannable.<br />
 				<br />
 				For casual greetings, acknowledgements, or other one-off conversational messages that are not delivering substantive information or structured results, respond naturally without section headers or bullet formatting.
-				<FileLinkificationInstructions />
 			</Tag>
 			<ResponseTranslationRules />
 		</InstructionMessage >;
