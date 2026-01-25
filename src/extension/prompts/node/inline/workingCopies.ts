@@ -53,6 +53,8 @@ export class WorkingCopyDerivedDocument {
 			outputStream.push(value);
 		}, (reason) => {
 			outputStream.clearToPreviousToolInvocation(reason);
+		}, undefined, undefined, undefined, (questions, allowSkip) => {
+			return outputStream.questionCarousel(questions, allowSkip);
 		});
 	}
 

@@ -1862,23 +1862,6 @@
 						},
 						"models": {
 							"type": "array",
-							"defaultSnippets": [
-								{
-									"label": "New Model",
-									"description": "Add a new custom model configuration",
-									"body": [
-										{
-											"id": "$1",
-											"name": "$2",
-											"url": "$3",
-											"toolCalling": "^${4|true,false|}",
-											"vision": "^${5|true,false|}",
-											"maxInputTokens": "^${6:128000}",
-											"maxOutputTokens": "^${7:16000}"
-										}
-									]
-								}
-							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -1942,7 +1925,6 @@
 									}
 								},
 								"required": [
-									"id",
 									"name",
 									"url",
 									"toolCalling",
@@ -1969,23 +1951,6 @@
 						},
 						"models": {
 							"type": "array",
-							"defaultSnippets": [
-								{
-									"label": "New Model",
-									"description": "Add a new custom model configuration",
-									"body": [
-										{
-											"id": "$1",
-											"name": "$2",
-											"url": "$3",
-											"toolCalling": "^${4|true,false|}",
-											"vision": "^${5|true,false|}",
-											"maxInputTokens": "^${6:128000}",
-											"maxOutputTokens": "^${7:16000}"
-										}
-									]
-								}
-							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -2036,7 +2001,6 @@
 									}
 								},
 								"required": [
-									"id",
 									"name",
 									"url",
 									"toolCalling",
@@ -3459,15 +3423,6 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.alternateZaiPrompt.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"description": "%github.copilot.config.alternateZaiPrompt.enabled%"
-					},
 					"github.copilot.chat.anthropic.useMessagesApi": {
 						"type": "boolean",
 						"default": true,
@@ -3488,7 +3443,7 @@
 					},
 					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"experimental",
