@@ -320,7 +320,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			// Handle dynamic search
 			let searchTimeout: ReturnType<typeof setTimeout> | undefined;
-			quickPick.onDidChangeValue(async (value) => {
+			const onDidChangeValueDisposable = quickPick.onDidChangeValue(async (value) => {
 				if (searchTimeout) {
 					clearTimeout(searchTimeout);
 				}
@@ -335,7 +335,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				}, 300);
 			});
 
-			quickPick.onDidAccept(() => {
+			const onDidAcceptDisposable = quickPick.onDidAccept(() => {
 				const selected = quickPick.selectedItems[0];
 				if (selected && sessionItemResource) {
 					this.sessionRepositoryMap.set(sessionItemResource, selected.label);
@@ -350,7 +350,14 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				quickPick.hide();
 			});
 
-			quickPick.onDidHide(() => quickPick.dispose());
+			quickPick.onDidHide(() => {
+				if (searchTimeout) {
+					clearTimeout(searchTimeout);
+				}
+				onDidChangeValueDisposable.dispose();
+				onDidAcceptDisposable.dispose();
+				quickPick.dispose();
+			});
 		};
 		this._register(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, openRepositoryCommand));
 	}
