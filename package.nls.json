@@ -162,7 +162,7 @@
 	"copilot.vscode.description": "Ask questions about VS Code",
 	"copilot.workspaceSymbols.tool.description": "Search for workspace symbols using language services.",
 	"copilot.listCodeUsages.tool.description": "Find references, definitions, and other usages of a symbol",
-	"copilot.codebase.tool.description": "Find relevant file chunks, symbols, and other information in your codebase",
+	"copilot.codebase.tool.description": "Find relevant file chunks, symbols, and other information via semantic search",
 	"copilot.vscode.tool.description": "Use VS Code API references to answer questions about VS Code extension development.",
 	"copilot.testFailure.tool.description": "Include information about the last unit test failure",
 	"copilot.vscode.sampleRequest": "What is the command to open the integrated terminal?",
