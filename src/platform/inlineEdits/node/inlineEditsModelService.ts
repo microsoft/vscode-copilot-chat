@@ -260,7 +260,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			pushMany(models, filteredFetchedModels);
 		} else {
 			// push default model if /models doesn't give us any models
-			logger.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels}`);
+			logger.trace(`adding built-in default model: useSlashModels ${useSlashModels}, fetchedNesModels ${fetchedNesModels?.length ?? 'undefined'}`);
 
 			const defaultModel = this.determineDefaultModel(copilotToken, defaultModelConfigString);
 			if (defaultModel) {

@@ -25,7 +25,7 @@ import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
-import type { ILogger } from '../../../platform/log/common/logService';
+import { ILogger } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams, Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
@@ -114,7 +114,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		this.userInteractionMonitor.handleRejection();
 	}
 
-	public async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: logger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	public async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 		const telemetry = new StatelessNextEditTelemetryBuilder(request);
 
 		logContext.setProviderStartTime();
@@ -170,7 +170,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private doGetNextEdit(
 		request: StatelessNextEditRequest,
 		delaySession: DelaySession,
-		logger: logger,
+		logger: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -192,7 +192,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		request: StatelessNextEditRequest,
 		selection: Range | null,
 		delaySession: DelaySession,
-		parentTracer: logger,
+		parentTracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -371,7 +371,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		activeDocument: StatelessNextEditDocument,
 		cursorPosition: Position,
 		promptOptions: ModelConfig,
-		tracer: logger,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
@@ -404,7 +404,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		delaySession: DelaySession,
 		activeDocument: StatelessNextEditDocument,
 		cursorPosition: Position,
-		tracer: logger,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
@@ -496,7 +496,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			retryState: RetryState.t;
 		},
 		delaySession: DelaySession,
-		parentTracer: logger,
+		parentTracer: ILogger,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
@@ -566,7 +566,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			retryState: RetryState.t;
 		},
 		delaySession: DelaySession,
-		parentTracer: logger,
+		parentTracer: ILogger,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
@@ -852,7 +852,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		editWindow: OffsetRange,
 		promptPieces: PromptPieces,
 		delaySession: DelaySession,
-		tracer: logger,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -934,7 +934,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: logger, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
+	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ILogger, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		const currentDocLines = currentDocument.lines;
 		const cursorLineOffset = currentDocument.cursorLineOffset;
 
@@ -1161,7 +1161,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: logger, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
@@ -1177,7 +1177,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		await timeout(debounceTime);
 	}
 
-	private determineArtificialDelayMs(delaySession: DelaySession, logger: logger, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
+	private determineArtificialDelayMs(delaySession: DelaySession, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
