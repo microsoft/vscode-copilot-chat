@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import type { LanguageModelToolInformation } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicContextEditingEnabled } from '../../../../platform/networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -18,6 +19,82 @@ import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, getEditingReminder, McpToolInstructions, NotebookInstructions, ReminderInstructionsProps } from './defaultAgentInstructions';
 import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
+
+interface ToolSearchToolPromptProps extends BasePromptElementProps {
+	readonly availableTools: readonly LanguageModelToolInformation[] | undefined;
+	readonly modelFamily: string | undefined;
+}
+
+/**
+ * Prompt component that provides instructions for using the tool search tool
+ * to load deferred tools before calling them directly.
+ */
+class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
+	constructor(
+		props: PromptElementProps<ToolSearchToolPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+
+		// Check if tool search is enabled for this model
+		const toolSearchEnabled = endpoint
+			? isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+
+		if (!toolSearchEnabled || !this.props.availableTools) {
+			return;
+		}
+
+		// Get the list of deferred tools (tools not in the non-deferred set)
+		const deferredTools = this.props.availableTools
+			.filter(tool => !nonDeferredToolNames.has(tool.name))
+			.map(tool => tool.name)
+			.sort();
+
+		if (deferredTools.length === 0) {
+			return;
+		}
+
+		return <Tag name='toolSearchInstructions'>
+			Use the {TOOL_SEARCH_TOOL_NAME} tool to search for deferred tools before calling them.<br />
+			<br />
+			<Tag name='mandatory'>
+				You MUST use the {TOOL_SEARCH_TOOL_NAME} tool to load deferred tools BEFORE calling them directly.<br />
+				This is a BLOCKING REQUIREMENT - deferred tools listed below are NOT available until you load them using the {TOOL_SEARCH_TOOL_NAME} tool. Once a tool appears in the results, it is immediately available to call.<br />
+				<br />
+				Why this is required:<br />
+				- Deferred tools are not loaded until discovered via {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling a deferred tool without first loading it will fail<br />
+			</Tag>
+			<br />
+			<Tag name='regexPatternSyntax'>
+				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
+				- `^mcp__github__` - matches tools starting with "mcp__github__"<br />
+				- `issue|pull_request` - matches tools containing "issue" OR "pull_request"<br />
+				- `create.*branch` - matches tools with "create" followed by "branch"<br />
+				- `mcp__.*__list` - matches MCP tools ending with "list"<br />
+				<br />
+				The pattern is matched case-insensitively against tool names.<br />
+			</Tag>
+			<br />
+			<Tag name='incorrectUsagePatterns'>
+				NEVER do these:<br />
+				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+			</Tag>
+			<br />
+			<Tag name='availableDeferredTools'>
+				Available deferred tools (must be loaded with {TOOL_SEARCH_TOOL_NAME} before use):<br />
+				{deferredTools.join('\n')}
+			</Tag>
+		</Tag>;
+	}
+}
 
 class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -215,6 +292,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
 			</Tag>}
 			{tools[ToolName.Memory] && this.props.isNewChat && <RepoMemoryContextPrompt />}
+			<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			<Tag name='communicationStyle'>
 				Maintain clarity and directness in all responses, delivering complete information while matching response depth to the task's complexity.<br />
 				For straightforward queries, keep answers brief - typically a few lines excluding code or tool invocations. Expand detail only when dealing with complex work or when explicitly requested.<br />

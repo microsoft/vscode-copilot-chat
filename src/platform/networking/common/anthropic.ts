@@ -89,6 +89,9 @@ export const nonDeferredToolNames = new Set([
 	'manage_todo_list',
 ]);
 
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
+
 /**
  * Context management types for Anthropic Messages API
  * Based on https://platform.claude.com/docs/en/build-with-claude/context-editing
