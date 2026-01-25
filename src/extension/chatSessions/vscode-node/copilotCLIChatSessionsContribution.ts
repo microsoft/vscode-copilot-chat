@@ -168,7 +168,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			return !!this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath));
 		}
 		// Unless we are in an empty window, exclude sessions without workspace folder or git repo association.
-		if (this.workspaceService.getWorkspaceFolders().length || vscode.workspace.workspaceFile) {
+		if (this.workspaceService.getWorkspaceFolders().length) {
 			return false;
 		}
 		return undefined;
