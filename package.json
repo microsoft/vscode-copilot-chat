@@ -1862,6 +1862,23 @@
 						},
 						"models": {
 							"type": "array",
+							"defaultSnippets": [
+								{
+									"label": "New Model",
+									"description": "Add a new custom model configuration",
+									"body": [
+										{
+											"id": "$1",
+											"name": "$2",
+											"url": "$3",
+											"toolCalling": "^${4|true,false|}",
+											"vision": "^${5|true,false|}",
+											"maxInputTokens": "^${6:128000}",
+											"maxOutputTokens": "^${7:16000}"
+										}
+									]
+								}
+							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -1925,6 +1942,7 @@
 									}
 								},
 								"required": [
+									"id",
 									"name",
 									"url",
 									"toolCalling",
@@ -1951,6 +1969,23 @@
 						},
 						"models": {
 							"type": "array",
+							"defaultSnippets": [
+								{
+									"label": "New Model",
+									"description": "Add a new custom model configuration",
+									"body": [
+										{
+											"id": "$1",
+											"name": "$2",
+											"url": "$3",
+											"toolCalling": "^${4|true,false|}",
+											"vision": "^${5|true,false|}",
+											"maxInputTokens": "^${6:128000}",
+											"maxOutputTokens": "^${7:16000}"
+										}
+									]
+								}
+							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -2001,6 +2036,7 @@
 									}
 								},
 								"required": [
+									"id",
 									"name",
 									"url",
 									"toolCalling",
