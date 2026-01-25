@@ -214,7 +214,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				error?: string;
 				isEmptyWindow: boolean;
 			} = {
-				isEmptyWindow: !vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0
+				isEmptyWindow: (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) && !vscode.workspace.workspaceFile
 			};
 			if (repoIds && repoIds.length > 0) {
 				let intervalMs: number;
@@ -835,8 +835,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private isGitHubRepoOrEmpty(repoIds: GithubRepoId[] | undefined) {
-		const hasOpenedFolder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
-		if (!hasOpenedFolder) {
+		const hasOpenedWorkspace = (vscode.workspace.workspaceFolders?.length ?? 0) > 0 || !!vscode.workspace.workspaceFile;
+		if (!hasOpenedWorkspace) {
 			return true;
 		}
 		const hasGitHubRepo = repoIds && repoIds.length > 0;
