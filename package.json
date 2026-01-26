@@ -2966,6 +2966,14 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
+					},
+					"github.copilot.chat.claudeAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},
@@ -4093,25 +4101,10 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.claudeCode.enabled": {
-						"type": [
-							"boolean",
-							"string"
-						],
-						"default": false,
-						"markdownDescription": "%github.copilot.config.claudeCode.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
-						"tags": [
-							"advanced"
-						]
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
 					},
 					"github.copilot.chat.gpt5AlternativePatch": {
 						"type": "boolean",
@@ -5254,7 +5247,7 @@
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
 				"description": "The Claude Agent works on your local machine",
-				"when": "config.github.copilot.chat.claudeCode.enabled",
+				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true
