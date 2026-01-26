@@ -273,6 +273,7 @@ class ContextResolver implements Copilot.ContextResolver<Copilot.SupportedContex
 		return [{
 			name: 'User\'s current task context',
 			value: summary,
+			importance: 100
 		}];
 	}
 }

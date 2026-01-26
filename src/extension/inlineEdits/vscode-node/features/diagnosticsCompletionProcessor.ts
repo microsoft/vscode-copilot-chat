@@ -13,11 +13,10 @@ import { ObservableGit } from '../../../../platform/inlineEdits/common/observabl
 import { IObservableDocument } from '../../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../../platform/inlineEdits/common/utils/observable';
 import { WorkspaceDocumentEditHistory } from '../../../../platform/inlineEdits/common/workspaceEditTracker/workspaceDocumentEditTracker';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isNotebookCell } from '../../../../util/common/notebooks';
-import { createTracer, ITracer } from '../../../../util/common/tracing';
 import { equals } from '../../../../util/vs/base/common/arrays';
 import { findFirstMonotonous } from '../../../../util/vs/base/common/arraysFind';
 import { ThrottledDelayer } from '../../../../util/vs/base/common/async';
@@ -165,7 +164,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	private readonly _workspaceDocumentEditHistory: WorkspaceDocumentEditHistory;
 	private readonly _currentDiagnostics = new DiagnosticsCollection();
 
-	private readonly _tracer: ITracer;
+	private readonly _logger: ILogger;
 
 	constructor(
 		private readonly _workspace: VSCodeWorkspace,
@@ -180,12 +179,12 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._workspaceDocumentEditHistory = this._register(new WorkspaceDocumentEditHistory(this._workspace, git, 100));
 
-		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.trace(s));
+		this._logger = logService.createSubLogger(['NES', 'DiagnosticsInlineCompletionProvider']);
 
 		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsDiagnosticsExplorationEnabled);
 
-		const importProvider = new ImportDiagnosticCompletionProvider(this._tracer.sub('Import'), workspaceService, fileSystemService);
-		const asyncProvider = new AsyncDiagnosticCompletionProvider(this._tracer.sub('Async'));
+		const importProvider = new ImportDiagnosticCompletionProvider(this._logger.createSubLogger('Import'), workspaceService, fileSystemService);
+		const asyncProvider = new AsyncDiagnosticCompletionProvider(this._logger.createSubLogger('Async'));
 
 		this._diagnosticsCompletionProviders = derived(reader => {
 			const providers: IDiagnosticCompletionProvider[] = [
@@ -194,13 +193,13 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			];
 
 			if (diagnosticsExplorationEnabled.read(reader)) {
-				providers.push(new AnyDiagnosticCompletionProvider(this._tracer.sub('All')));
+				providers.push(new AnyDiagnosticCompletionProvider(this._logger.createSubLogger('All')));
 			}
 
 			return providers;
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this._rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._tracer.trace(s)));
+		this._rejectionCollector = this._register(new RejectionCollector(this._workspace, logService));
 
 		const isValidEditor = (editor: vscode.TextEditor | undefined): editor is vscode.TextEditor => {
 			return !!editor && (isNotebookCell(editor.document.uri) || isEditorFromEditorGrid(editor));
@@ -220,7 +219,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 			// update state because diagnostics changed
 			reader.store.add(runOnChange(activeDocument.diagnostics, (diagnostics) => {
-				this._tracer.trace(`Diagnostics changed received in processor: ${diagnostics.map(d => '\n- ' + d.message).join('')}`);
+				this._logger.trace(`Diagnostics changed received in processor: ${diagnostics.map(d => '\n- ' + d.message).join('')}`);
 				this._updateState();
 			}));
 		}));
@@ -283,7 +282,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return;
 		}
 
-		this._tracer.trace('Scheduled update for diagnostics inline completion');
+		this._logger.trace('Scheduled update for diagnostics inline completion');
 
 		await this._worker.schedule(async (token: CancellationToken) => this._runCompletionHandler(workspaceDocument, diagnosticsSorted, cursor, log, token));
 	}
@@ -298,7 +297,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			const diagnosticsAfter = filterFn(diagnostics);
 			const diagnosticsDiff = diagnostics.filter(diagnostic => !diagnosticsAfter.includes(diagnostic));
 			if (diagnosticsDiff.length > 0) {
-				logList(message, diagnosticsDiff, logContext, this._tracer);
+				logList(message, diagnosticsDiff, logContext, this._logger);
 			}
 			return diagnosticsAfter;
 		};
@@ -319,13 +318,13 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		let completionItem = null;
 		try {
-			this._tracer.trace('Running diagnostics inline completion handler');
+			this._logger.trace('Running diagnostics inline completion handler');
 			completionItem = await this._getCompletionFromDiagnostics(workspaceDocument, diagnosticsSorted, cursor, log, token, telemetryBuilder);
 		} catch (error) {
 			log.setError(error);
 		}
 
-		this._tracer.trace('Diagnostic Providers returned completion item: ' + (completionItem ? completionItem.toString() : 'null'));
+		this._logger.trace('Diagnostic Providers returned completion item: ' + (completionItem ? completionItem.toString() : 'null'));
 
 		if (completionItem instanceof ImportDiagnosticCompletionItem) {
 			telemetryBuilder.setImportTelemetry(completionItem);
@@ -359,14 +358,14 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return { item: undefined, telemetry: telemetryBuilder.addDroppedReason('wrong-document').build(), logContext, workInProgress };
 		}
 
-		log('following known diagnostics:\n' + this._currentDiagnostics.toString(), undefined, this._tracer);
+		log('following known diagnostics:\n' + this._currentDiagnostics.toString(), undefined, this._logger);
 
 		return { item: completionItem, telemetry: telemetryBuilder.build(), logContext, workInProgress };
 	}
 
 	private async _getCompletionFromDiagnostics(workspaceDocument: IVSCodeObservableDocument, diagnosticsSorted: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken, tb: DiagnosticsCompletionHandlerTelemetry): Promise<DiagnosticCompletionItem | null> {
 		if (diagnosticsSorted.length === 0) {
-			log(`No diagnostics available for document ${workspaceDocument.id.toString()}`, logContext, this._tracer);
+			log(`No diagnostics available for document ${workspaceDocument.id.toString()}`, logContext, this._logger);
 			return null;
 		}
 
@@ -387,7 +386,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return result;
 		}));
 
-		this._tracer.trace(`Provider durations: ${providerTimings.map(timing => `\n- ${timing.provider}: ${timing.duration}ms`).join('')}`);
+		this._logger.trace(`Provider durations: ${providerTimings.map(timing => `\n- ${timing.provider}: ${timing.duration}ms`).join('')}`);
 
 		return providerResults.filter(item => !!item) as DiagnosticCompletionItem[];
 	}
@@ -422,35 +421,35 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 	private _isCompletionItemValid(item: DiagnosticCompletionItem, workspaceDocument: IObservableDocument, logContext: DiagnosticInlineEditRequestLogContext, tb: DiagnosticsCompletionHandlerTelemetry): boolean {
 		if (!item.diagnostic.isValid()) {
-			log('Diagnostic completion item is no longer valid', logContext, this._tracer);
+			log('Diagnostic completion item is no longer valid', logContext, this._logger);
 			tb.addDroppedReason('no-longer-valid', item);
 			logContext.markToBeLogged();
 			return false;
 		}
 
 		if (this._isDiagnosticCompletionRejected(item)) {
-			log('Diagnostic completion item has been rejected before', logContext, this._tracer);
+			log('Diagnostic completion item has been rejected before', logContext, this._logger);
 			tb.addDroppedReason('recently-rejected', item);
 			logContext.markToBeLogged();
 			return false;
 		}
 
 		if (this._isUndoRecentEdit(item)) {
-			log('Diagnostic completion item is an undo operation', logContext, this._tracer);
+			log('Diagnostic completion item is an undo operation', logContext, this._logger);
 			tb.addDroppedReason('undo-operation', item);
 			logContext.markToBeLogged();
 			return false;
 		}
 
 		if (this._hasDiagnosticRecentlyBeenAccepted(item.diagnostic)) {
-			log('Completion item fixing the diagnostic has been accepted recently', logContext, this._tracer);
+			log('Completion item fixing the diagnostic has been accepted recently', logContext, this._logger);
 			tb.addDroppedReason('recently-accepted', item);
 			logContext.markToBeLogged();
 			return false;
 		}
 
 		if (this._hasRecentlyBeenAddedWithoutNES(item)) {
-			log('Diagnostic has been fixed without NES recently', logContext, this._tracer);
+			log('Diagnostic has been fixed without NES recently', logContext, this._logger);
 			tb.addDroppedReason('recently-added-without-nes', item);
 			logContext.markToBeLogged();
 			return false;
@@ -458,7 +457,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		const provider = this._diagnosticsCompletionProviders.get().find(p => p.providerName === item.providerName);
 		if (provider && provider.isCompletionItemStillValid && !provider.isCompletionItemStillValid(item, workspaceDocument)) {
-			log(`${provider.providerName}: Completion item is no longer valid`, logContext, this._tracer);
+			log(`${provider.providerName}: Completion item is no longer valid`, logContext, this._logger);
 			tb.addDroppedReason(`${provider.providerName}-no-longer-valid`, item);
 			logContext.markToBeLogged();
 			return false;

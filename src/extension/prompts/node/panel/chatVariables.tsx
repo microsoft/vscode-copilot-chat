@@ -445,7 +445,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 	private renderChatToolResult(id: string, toolResult: IToolCallResult, priority?: number): PromptElement {
 		return <Tag name='attachment' attrs={toolResult.name ? { tool: toolResult.name } : undefined} priority={priority}>
 			<meta value={new ToolResultMetadata(id, toolResult.value)}></meta>
-			<ToolResult content={toolResult.value.content} />
+			<ToolResult content={toolResult.value.content} toolCallId={id} sessionId={this.props.promptContext.request?.sessionId} />
 		</Tag>;
 	}
 

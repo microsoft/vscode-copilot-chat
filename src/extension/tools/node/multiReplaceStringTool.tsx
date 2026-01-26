@@ -14,11 +14,10 @@ import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { AbstractReplaceStringTool, IAbstractReplaceStringInput } from './abstractReplaceStringTool';
-import { IReplaceStringToolParams } from './replaceStringTool';
 
 export interface IMultiReplaceStringToolParams {
 	explanation: string;
-	replacements: IReplaceStringToolParams[];
+	replacements: IAbstractReplaceStringInput[];
 }
 
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {

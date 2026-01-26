@@ -7,3 +7,4 @@
 
 import './askQuestionsTool';
 import './fetchWebPageTool';
+import './switchAgentTool';

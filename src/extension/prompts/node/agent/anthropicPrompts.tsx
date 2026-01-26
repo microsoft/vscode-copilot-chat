@@ -3,12 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import type { LanguageModelToolInformation } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { isAnthropicContextEditingEnabled } from '../../../../platform/networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { RepoMemoryContextPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
@@ -17,6 +19,82 @@ import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, getEditingReminder, McpToolInstructions, NotebookInstructions, ReminderInstructionsProps } from './defaultAgentInstructions';
 import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
+
+interface ToolSearchToolPromptProps extends BasePromptElementProps {
+	readonly availableTools: readonly LanguageModelToolInformation[] | undefined;
+	readonly modelFamily: string | undefined;
+}
+
+/**
+ * Prompt component that provides instructions for using the tool search tool
+ * to load deferred tools before calling them directly.
+ */
+class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
+	constructor(
+		props: PromptElementProps<ToolSearchToolPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+
+		// Check if tool search is enabled for this model
+		const toolSearchEnabled = endpoint
+			? isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+
+		if (!toolSearchEnabled || !this.props.availableTools) {
+			return;
+		}
+
+		// Get the list of deferred tools (tools not in the non-deferred set)
+		const deferredTools = this.props.availableTools
+			.filter(tool => !nonDeferredToolNames.has(tool.name))
+			.map(tool => tool.name)
+			.sort();
+
+		if (deferredTools.length === 0) {
+			return;
+		}
+
+		return <Tag name='toolSearchInstructions'>
+			Use the {TOOL_SEARCH_TOOL_NAME} tool to search for deferred tools before calling them.<br />
+			<br />
+			<Tag name='mandatory'>
+				You MUST use the {TOOL_SEARCH_TOOL_NAME} tool to load deferred tools BEFORE calling them directly.<br />
+				This is a BLOCKING REQUIREMENT - deferred tools listed below are NOT available until you load them using the {TOOL_SEARCH_TOOL_NAME} tool. Once a tool appears in the results, it is immediately available to call.<br />
+				<br />
+				Why this is required:<br />
+				- Deferred tools are not loaded until discovered via {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling a deferred tool without first loading it will fail<br />
+			</Tag>
+			<br />
+			<Tag name='regexPatternSyntax'>
+				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
+				- `^mcp__github__` - matches tools starting with "mcp__github__"<br />
+				- `issue|pull_request` - matches tools containing "issue" OR "pull_request"<br />
+				- `create.*branch` - matches tools with "create" followed by "branch"<br />
+				- `mcp__.*__list` - matches MCP tools ending with "list"<br />
+				<br />
+				The pattern is matched case-insensitively against tool names.<br />
+			</Tag>
+			<br />
+			<Tag name='incorrectUsagePatterns'>
+				NEVER do these:<br />
+				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+			</Tag>
+			<br />
+			<Tag name='availableDeferredTools'>
+				Available deferred tools (must be loaded with {TOOL_SEARCH_TOOL_NAME} before use):<br />
+				{deferredTools.join('\n')}
+			</Tag>
+		</Tag>;
+	}
+}
 
 class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -185,6 +263,36 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
 			</Tag>
+			{tools[ToolName.Memory] && <Tag name='repoMemory'>
+				If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the memory tool to store it at /memories/repo/. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
+				- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
+				- Important information about the structure or logic of the codebase<br />
+				- Commands for linting, building, or running tests that have been verified through a successful run<br />
+				<br />
+				<Tag name='examples'>
+					- "Use ErrKind wrapper for every public API error"<br />
+					- "Prefer ExpectNoLog helper over silent nil checks in tests"<br />
+					- "Always use Python typing"<br />
+					- "Follow the Google JavaScript Style Guide"<br />
+					- "Use html_escape as a sanitizer to avoid cross site scripting vulnerabilities"<br />
+					- "The code can be built with `npm run build` and tested with `npm run test`"<br />
+				</Tag>
+				<br />
+				Only store facts that meet the following criteria:<br />
+				<Tag name='factsCriteria'>
+					- Are likely to have actionable implications for a future task<br />
+					- Are independent of changes you are making as part of your current task, and will remain relevant if your current code isn't merged<br />
+					- Are unlikely to change over time<br />
+					- Cannot always be inferred from a limited code sample<br />
+					- Contain no secrets or sensitive data<br />
+				</Tag>
+				<br />
+				Store one fact per file at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
+				Use the memory tool's create command if the file doesn't exist, or insert command to append a new line. Always include the reason and citations fields.<br />
+				Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
+			</Tag>}
+			{tools[ToolName.Memory] && this.props.isNewChat && <RepoMemoryContextPrompt />}
+			<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			<Tag name='communicationStyle'>
 				Maintain clarity and directness in all responses, delivering complete information while matching response depth to the task's complexity.<br />
 				For straightforward queries, keep answers brief - typically a few lines excluding code or tool invocations. Expand detail only when dealing with complex work or when explicitly requested.<br />

@@ -31,6 +31,7 @@ interface PlanAgentConfig {
 	argumentHint: string;
 	tools: string[];
 	model?: string;
+	target?: string;
 	handoffs: PlanAgentHandoff[];
 	body: string;
 }
@@ -43,6 +44,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	name: 'Plan',
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
+	target: 'vscode',
 	tools: [
 		'github/issue_read',
 		'agent',
@@ -56,7 +58,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	handoffs: [
 		{
 			label: 'Start Implementation',
-			agent: 'agent',
+			agent: 'Implement',
 			prompt: 'Start implementation',
 			send: true
 		},
@@ -151,6 +153,9 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	if (config.model) {
 		lines.push(`model: ${config.model}`);
 	}
+	if (config.target) {
+		lines.push(`target: ${config.target}`);
+	}
 
 	// Tools array - flow style for readability
 	// Escape single quotes by doubling them (YAML spec)
@@ -209,7 +214,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// Listen for settings changes to refresh agents
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId)) {
 				this.logService.trace('[PlanAgentProvider] Settings changed, refreshing agent');
 				this._onDidChangeCustomAgents.fire();
 			}
@@ -261,10 +267,20 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
 		};
 
+		// Collect tools to add
+		const toolsToAdd: string[] = [...additionalTools];
+
+		// Add askQuestions tool if enabled
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+		if (askQuestionsEnabled) {
+			toolsToAdd.push('askQuestions');
+			this.logService.trace(`[PlanAgentProvider] Adding askQuestions tool (enabled)`);
+		}
+
 		// Merge additional tools (deduplicated)
-		if (additionalTools.length > 0) {
-			config.tools = [...new Set([...config.tools, ...additionalTools])];
-			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${additionalTools.join(', ')}`);
+		if (toolsToAdd.length > 0) {
+			config.tools = [...new Set([...config.tools, ...toolsToAdd])];
+			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${toolsToAdd.join(', ')}`);
 		}
 
 		// Apply model override

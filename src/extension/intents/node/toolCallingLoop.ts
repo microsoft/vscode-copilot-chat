@@ -101,7 +101,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
 
-	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number }>());
+	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
 
 	private readonly _onDidReceiveResponse = this._register(new Emitter<IToolCallingResponseEvent>());
@@ -364,8 +364,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
+		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
 		await this.throwIfCancelled(token);
-		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
+		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?

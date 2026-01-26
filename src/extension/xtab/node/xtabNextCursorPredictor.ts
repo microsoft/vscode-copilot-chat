@@ -17,7 +17,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
-import { ITracer } from '../../../util/common/tracing';
+import { ILogger } from '../../../platform/log/common/logService';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -66,9 +66,9 @@ export class XtabNextCursorPredictor {
 	}
 
 
-	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ITracer, telemetryBuilder: StatelessNextEditTelemetryBuilder | undefined, cancellationToken: CancellationToken): Promise<Result</* zero-based line number */ number, Error>> {
+	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ILogger, telemetryBuilder: StatelessNextEditTelemetryBuilder | undefined, cancellationToken: CancellationToken): Promise<Result</* zero-based line number */ number, Error>> {
 
-		const tracer = parentTracer.sub('predictNextCursorPosition');
+		const tracer = parentTracer.createSubLogger('predictNextCursorPosition');
 
 		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context. If you don't think anywhere is a good next line jump target, just output the current line number of the cursor. Make sure to just output the line number and nothing else (no explanation, reasoning, etc.).`;
 

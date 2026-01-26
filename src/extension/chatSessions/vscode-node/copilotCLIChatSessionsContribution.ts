@@ -10,7 +10,6 @@ import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from '
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
-import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -167,6 +166,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (worktree && this.workspaceService.getWorkspaceFolders().length) {
 			// If we have a repository path, then its easy to tell whether this should be displayed or hidden.
 			return !!this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath));
+		}
+		// Unless we are in an empty window, exclude sessions without workspace folder or git repo association.
+		if (this.workspaceService.getWorkspaceFolders().length) {
+			return false;
 		}
 		return undefined;
 	}
@@ -1246,48 +1249,6 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
-	}));
-	disposableStore.add(vscode.commands.registerCommand('agentSession.copilotcli.openChanges', async (sessionItemResource?: vscode.Uri) => {
-		if (!sessionItemResource) {
-			return;
-		}
-
-		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		const sessionWorktree = copilotCLIWorktreeManagerService.getWorktreePath(sessionId);
-		const sessionWorktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-
-		if (!sessionWorktree || !sessionWorktreeProperties) {
-			return;
-		}
-
-		const repository = await gitService.getRepository(sessionWorktree);
-		if (!repository?.changes) {
-			return;
-		}
-
-		const title = l10n.t('Background Agent ({0})', sessionWorktreeProperties.branchName);
-		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
-		const resources = repository.changes.indexChanges.map(change => {
-			switch (change.status) {
-				case 1 /* Status.INDEX_ADDED */:
-					return {
-						originalUri: undefined,
-						modifiedUri: change.uri
-					};
-				case 2 /* Status.INDEX_DELETED */:
-					return {
-						originalUri: toGitUri(change.uri, 'HEAD'),
-						modifiedUri: undefined
-					};
-				default:
-					return {
-						originalUri: toGitUri(change.uri, 'HEAD'),
-						modifiedUri: change.uri
-					};
-			}
-		});
-
-		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
 	}));
 
 	const applyChanges = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {

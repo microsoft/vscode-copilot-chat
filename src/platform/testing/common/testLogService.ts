@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ILogger, ILogService } from '../../log/common/logService';
+import { ILogger, ILogService, ILogTarget } from '../../log/common/logService';
 
 export class TestLogService implements ILogService {
 	_serviceBrand: undefined;
@@ -14,6 +14,9 @@ export class TestLogService implements ILogService {
 	error(error: string | Error, message?: string): void { }
 	show(preserveFocus?: boolean): void { }
 	createSubLogger(_topic: string | readonly string[]): ILogger {
+		return this;
+	}
+	withExtraTarget(_target: ILogTarget): ILogger {
 		return this;
 	}
 }
