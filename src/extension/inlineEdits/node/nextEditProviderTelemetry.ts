@@ -58,8 +58,8 @@ export interface ITelemetryRecording {
 
 export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> { // it's partial because the next edit can be pulled from cache resulting in no stateless provider telemetry
 	readonly providerId: string;
-	readonly headerRequestId: string;
-	readonly nextEditProviderDuration: number;
+	readonly headerRequestId: string | undefined;
+	readonly nextEditProviderDuration: number | undefined;
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
 	readonly subsequentEditOrder: number | undefined;
@@ -210,8 +210,8 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 		return {
 			providerId: this._providerId,
-			headerRequestId: this._headerRequestId || '',
-			nextEditProviderDuration: this._duration || 0,
+			headerRequestId: this._headerRequestId,
+			nextEditProviderDuration: this._duration,
 			isFromCache: this._isFromCache,
 			subsequentEditOrder: this._subsequentEditOrder,
 			documentsCount,
@@ -222,7 +222,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			fetchStartedAfterMs,
 			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
-			isNotebook: isNotebook,
+			isNotebook,
 			notebookType,
 			status: this._status,
 			nextEditProviderError: this._nextEditProviderError,
