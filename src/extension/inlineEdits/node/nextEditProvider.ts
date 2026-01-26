@@ -174,7 +174,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	): Promise<NextEditResult> {
 
 		const logger = parentLogger.createSubLogger('_getNextEdit');
-		logger.trace(`invoked with trigger id = ${context.changeHint?.data}`);
+		logger.trace(`invoked with trigger id = ${context.changeHint === undefined ? 'undefined' : `uuid = ${context.changeHint.data.uuid}, reason = ${context.changeHint.data.reason}`}`);
 
 		const doc = this._workspace.getDocument(docId);
 		if (!doc) {
