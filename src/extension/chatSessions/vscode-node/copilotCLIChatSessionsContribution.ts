@@ -954,7 +954,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			},
 			buttons
 		);
-
+		if (context.chatSessionContext?.chatSessionItem) {
+			// Open the chat session if not already open
+			try {
+				vscode.commands.executeCommand('vscode.open', context.chatSessionContext.chatSessionItem.resource);
+			} catch (e) {
+				this.logService.error('Failed to open session', e);
+			}
+		}
 		return {};
 	}
 

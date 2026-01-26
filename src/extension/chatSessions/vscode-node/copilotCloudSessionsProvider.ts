@@ -1543,6 +1543,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				},
 				buttons
 			);
+			if (context.chatSessionContext) {
+				try {
+					await vscode.commands.executeCommand('vscode.open', context.chatSessionContext.chatSessionItem.resource);
+				} catch (error) {
+					this.logService.error(`Failed to open session ${error}`);
+				}
+			}
 		} else {
 			// No confirmation
 			await this.delegate(
