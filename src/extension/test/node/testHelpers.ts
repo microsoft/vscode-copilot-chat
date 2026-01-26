@@ -43,7 +43,7 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 	public uris: string[] = [];
 	public externalEditUris: Uri[] = [];
 	constructor(push: ((part: ExtendedChatResponsePart) => void) = () => { }) {
-		super(push, () => { });
+		super(push, () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 	}
 	override markdown(content: string | MarkdownString): void {
 		this.output.push(typeof content === 'string' ? content : content.value);

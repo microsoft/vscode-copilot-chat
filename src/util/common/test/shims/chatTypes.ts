@@ -222,6 +222,53 @@ export class ChatResponseConfirmationPart {
 	}
 }
 
+export enum ChatQuestionType {
+	Text = 1,
+	SingleSelect = 2,
+	MultiSelect = 3
+}
+
+export class ChatQuestion implements vscode.ChatQuestion {
+	id: string;
+	type: vscode.ChatQuestionType;
+	title: string;
+	message?: string | vscode.MarkdownString;
+	options?: vscode.ChatQuestionOption[];
+	defaultValue?: string | string[];
+	allowFreeformInput?: boolean;
+
+	constructor(
+		id: string,
+		type: vscode.ChatQuestionType,
+		title: string,
+		options?: {
+			message?: string | vscode.MarkdownString;
+			options?: vscode.ChatQuestionOption[];
+			defaultValue?: string | string[];
+			allowFreeformInput?: boolean;
+		}
+	) {
+		this.id = id;
+		this.type = type;
+		this.title = title;
+		if (options) {
+			this.message = options.message;
+			this.options = options.options;
+			this.defaultValue = options.defaultValue;
+			this.allowFreeformInput = options.allowFreeformInput;
+		}
+	}
+}
+
+export class ChatResponseQuestionCarouselPart implements vscode.ChatResponseQuestionCarouselPart {
+	questions: vscode.ChatQuestion[];
+	allowSkip: boolean;
+	constructor(questions: vscode.ChatQuestion[], allowSkip?: boolean) {
+		this.questions = questions;
+		this.allowSkip = allowSkip ?? false;
+	}
+}
+
 export class ChatRequestTurn implements vscode.ChatRequestTurn {
 	constructor(
 		readonly prompt: string,
