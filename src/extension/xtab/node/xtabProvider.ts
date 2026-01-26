@@ -686,9 +686,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
-			// Parse the edit_intent tag from the response and filter based on aggressiveness
-			// This short-circuits on no_edit to avoid parsing the rest of the response
-			const { editIntent, remainingLinesStream, parseError } = await this.parseEditIntentFromStream(linesStream, promptPieces.aggressivenessLevel, tracer);
+			// Parse the edit_intent tag from the response
+			const { editIntent, remainingLinesStream, parseError } = await this.parseEditIntentFromStream(linesStream, tracer);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
@@ -877,16 +876,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	 * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
 	 * Returns the parsed EditIntent and a new stream with the remaining content.
 	 *
-	 * When the edit intent is no_edit, this method short-circuits and returns an empty stream
-	 * to avoid parsing the rest of the response unnecessarily.
-	 *
 	 * Expected format (first line only):
 	 * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
 	 * ... rest of edited code ...
 	 */
 	private async parseEditIntentFromStream(
 		linesStream: AsyncIterableObject<string>,
-		aggressivenessLevel: xtabPromptOptions.AggressivenessLevel,
 		tracer: ILogger,
 	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string>; parseError?: string }> {
 		const EDIT_INTENT_START_TAG = '<|edit_intent|>';
@@ -921,14 +916,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
 			tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
-
-			// Short-circuit: if edit intent indicates we shouldn't show this edit, return empty stream
-			// This avoids parsing the rest of the response unnecessarily
-			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, aggressivenessLevel)) {
-				tracer.trace(`Short-circuiting response parsing due to edit intent "${editIntent}" with aggressiveness "${aggressivenessLevel}"`);
-				const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
-				return { editIntent, remainingLinesStream };
-			}
 
 			// Calculate remaining content after the end tag on the first line
 			const afterEndTag = firstLine.substring(endIdx + EDIT_INTENT_END_TAG.length);
