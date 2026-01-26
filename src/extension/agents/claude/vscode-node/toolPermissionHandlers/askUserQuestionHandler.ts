@@ -4,7 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AskUserQuestionInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
-import * as vscode from 'vscode';
+import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
+import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { ToolName } from '../../../../tools/common/toolNames';
+import { IToolsService } from '../../../../tools/common/toolsService';
+import { IAnswerResult } from '../../../../tools/vscode-node/askQuestionsTool';
 import {
 	ClaudeToolPermissionContext,
 	ClaudeToolPermissionResult,
@@ -15,119 +19,79 @@ import { ClaudeToolNames } from '../../common/claudeTools';
 
 /**
  * Handler for the AskUserQuestion tool.
- * Uses VS Code's QuickPick to ask the user questions.
+ * Delegates to the AskQuestions tool for improved UX with step navigation,
+ * back button support, and custom text input.
  */
 export class AskUserQuestionHandler implements IClaudeToolPermissionHandler<ClaudeToolNames.AskUserQuestion> {
 	public readonly toolNames = [ClaudeToolNames.AskUserQuestion] as const;
 
+	constructor(
+		@IToolsService private readonly toolsService: IToolsService,
+	) { }
+
 	public async handle(
 		_toolName: ClaudeToolNames.AskUserQuestion,
 		input: AskUserQuestionInput,
-		_context: ClaudeToolPermissionContext
+		context: ClaudeToolPermissionContext
 	): Promise<ClaudeToolPermissionResult> {
-		const answers: Record<string, string> = {};
+		try {
+			// Invoke the AskQuestions tool
+			const result = await this.toolsService.invokeTool(
+				ToolName.AskQuestions,
+				{
+					input,
+					toolInvocationToken: context.toolInvocationToken,
+				},
+				CancellationToken.None
+			);
 
-		// Process each question
-		for (const questionItem of input.questions) {
-			const options = questionItem.options;
+			// Parse the result
+			const firstPart = result.content.at(0);
+			if (!(firstPart instanceof LanguageModelTextPart)) {
+				return {
+					behavior: 'deny',
+					message: 'The user cancelled the question'
+				};
+			}
 
-			// Create QuickPick items from options
-			const quickPickItems: vscode.QuickPickItem[] = options.map(opt => ({
-				label: opt.label,
-				description: opt.description
-			}));
+			const toolResult: IAnswerResult = JSON.parse(firstPart.value);
 
-			// Add "Other" option for free-form input
-			const other = {
-				label: '$(edit) ' + vscode.l10n.t('Other...'),
-				description: vscode.l10n.t('Enter a custom response')
+			// Check if all questions were skipped
+			const allSkipped = Object.values(toolResult.answers).every(a => a.skipped);
+			if (allSkipped) {
+				return {
+					behavior: 'deny',
+					message: 'The user cancelled the question'
+				};
+			}
+
+			// Transform result back to SDK expected format (answers keyed by question text)
+			const answers: Record<string, string> = {};
+			for (const questionItem of input.questions) {
+				const answer = toolResult.answers[questionItem.header];
+				if (answer && !answer.skipped) {
+					// Combine selected options and free text
+					const parts: string[] = [...answer.selected];
+					if (answer.freeText) {
+						parts.push(answer.freeText);
+					}
+					answers[questionItem.question] = parts.join(', ');
+				}
+			}
+
+			return {
+				behavior: 'allow',
+				updatedInput: {
+					...input,
+					answers
+				}
 			};
-			quickPickItems.push(other);
-
-			let selectedOption: string;
-
-			if (questionItem.multiSelect) {
-				// Multi-select mode
-				const selected = await vscode.window.showQuickPick(quickPickItems, {
-					placeHolder: questionItem.question,
-					title: questionItem.header,
-					ignoreFocusOut: true,
-					canPickMany: true
-				});
-
-				if (selected === undefined || selected.length === 0) {
-					return {
-						behavior: 'deny',
-						message: 'The user cancelled the question'
-					};
-				}
-
-				// Check if "Other" was selected
-				if (selected.includes(other)) {
-					const customAnswer = await vscode.window.showInputBox({
-						prompt: questionItem.question,
-						title: questionItem.header,
-						ignoreFocusOut: true
-					});
-
-					if (customAnswer === undefined) {
-						return {
-							behavior: 'deny',
-							message: 'The user cancelled the question'
-						};
-					}
-
-					// Combine regular selections with custom answer
-					const regularSelections = selected.filter(s => s !== other).map(s => s.label);
-					selectedOption = [...regularSelections, customAnswer].join(', ');
-				} else {
-					selectedOption = selected.map(s => s.label).join(', ');
-				}
-			} else {
-				// Single-select mode
-				const selected = await vscode.window.showQuickPick(quickPickItems, {
-					placeHolder: questionItem.question,
-					title: questionItem.header,
-					ignoreFocusOut: true
-				});
-
-				if (selected === undefined) {
-					return {
-						behavior: 'deny',
-						message: 'The user cancelled the question'
-					};
-				}
-
-				if (selected === other) {
-					// Free-form input
-					const customAnswer = await vscode.window.showInputBox({
-						prompt: questionItem.question,
-						title: questionItem.header,
-						ignoreFocusOut: true
-					});
-
-					if (customAnswer === undefined) {
-						return {
-							behavior: 'deny',
-							message: 'The user cancelled the question'
-						};
-					}
-					selectedOption = customAnswer;
-				} else {
-					selectedOption = selected.label;
-				}
-			}
-
-			answers[questionItem.question] = selectedOption;
+		} catch {
+			return {
+				behavior: 'deny',
+				message: 'The user cancelled the question'
+			};
 		}
-
-		return {
-			behavior: 'allow',
-			updatedInput: {
-				...input,
-				answers
-			}
-		};
 	}
 }
 

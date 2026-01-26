@@ -12,7 +12,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -87,7 +87,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (toolSearchEnabled) {
-		finalTools.push({ name: 'tool_search_tool_bm25', type: 'tool_search_tool_bm25_20251119', defer_loading: false });
+		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
 	if (anthropicTools) {

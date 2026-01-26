@@ -185,11 +185,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			})
 		);
 		this.copilotCloudRegistrations.add(
-			vscode.commands.registerCommand('agentSession.copilot-cloud-agent.openChanges', async (sessionItemResource: vscode.Uri) => {
-				await cloudSessionsProvider.openChanges(sessionItemResource);
-			})
-		);
-		this.copilotCloudRegistrations.add(
 			vscode.commands.registerCommand(CLOSE_SESSION_PR_CMD, async (ctx: CrossChatSessionWithPR) => {
 				try {
 					const success = await this.octoKitService.closePullRequest(

@@ -456,3 +456,126 @@ suite('MemoryTool', () => {
 		expect(result).toBeDefined();
 	});
 });
+
+suite('MemoryTool session and workspace paths', () => {
+	let accessor: ITestingServicesAccessor;
+	let storageUri: URI;
+	const testSessionId = 'test-session-123';
+
+	beforeAll(() => {
+		const services = createExtensionUnitTestingServices();
+		accessor = services.createTestingAccessor();
+
+		// Set up storage URI for memory tool
+		const extensionContext = accessor.get(IVSCodeExtensionContext);
+		storageUri = URI.file('/test-storage');
+		(extensionContext as any).storageUri = storageUri;
+	});
+
+	afterAll(() => {
+		accessor.dispose();
+	});
+
+	test('create session memory file', async () => {
+		const toolsService = accessor.get(IToolsService);
+		const fileSystem = accessor.get(IFileSystemService);
+
+		const input: IMemoryToolParams = {
+			command: 'create',
+			path: '/memories/session/user-preferences.md',
+			file_text: '# User Preferences\n\n- Prefers TypeScript\n- Uses tabs for indentation'
+		};
+
+		const toolInvocationToken = { sessionResource: URI.parse(`vscode-chat-session:/${testSessionId}`) } as never;
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken }, CancellationToken.None);
+		const resultStr = await toolResultToString(accessor, result);
+
+		expect(resultStr).toContain('created successfully');
+
+		// Verify the file was created at the translated session path (sessions/<sessionId>)
+		const expectedPath = URI.joinPath(storageUri, `memory-tool/memories/sessions/${testSessionId}/user-preferences.md`);
+		const content = await fileSystem.readFile(expectedPath);
+		expect(new TextDecoder().decode(content)).toContain('Prefers TypeScript');
+	});
+
+	test('view session directory', async () => {
+		const toolsService = accessor.get(IToolsService);
+		const fileSystem = accessor.get(IFileSystemService);
+
+		// Create a test file in the translated session path
+		const sessionDir = URI.joinPath(storageUri, `memory-tool/memories/sessions/${testSessionId}`);
+		await fileSystem.createDirectory(sessionDir);
+		const testFile = URI.joinPath(sessionDir, 'task-history.md');
+		await fileSystem.writeFile(testFile, new TextEncoder().encode('# Task History'));
+
+		const input: IMemoryToolParams = {
+			command: 'view',
+			path: '/memories/session'
+		};
+
+		const toolInvocationToken = { sessionResource: URI.parse(`vscode-chat-session:/${testSessionId}`) } as never;
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken }, CancellationToken.None);
+		const resultStr = await toolResultToString(accessor, result);
+
+		expect(resultStr).toContain('task-history.md');
+	});
+
+	test('session path requires session ID', async () => {
+		// Session paths should fail without a session ID
+		const toolsService = accessor.get(IToolsService);
+
+		const input: IMemoryToolParams = {
+			command: 'create',
+			path: '/memories/session/notes.md',
+			file_text: 'Session notes'
+		};
+
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const resultStr = await toolResultToString(accessor, result);
+
+		expect(resultStr).toContain('Error');
+		expect(resultStr).toContain('Session ID');
+	});
+
+	test('create repo memory file', async () => {
+		const toolsService = accessor.get(IToolsService);
+		const fileSystem = accessor.get(IFileSystemService);
+
+		const input: IMemoryToolParams = {
+			command: 'create',
+			path: '/memories/repo/build-command.jsonl',
+			file_text: '{"subject":"build","fact":"npm run build","citations":"package.json:10","reason":"Build command","category":"bootstrap_and_build"}'
+		};
+
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const resultStr = await toolResultToString(accessor, result);
+
+		expect(resultStr).toContain('created successfully');
+
+		// Verify the file was created at the repo path
+		const expectedPath = URI.joinPath(storageUri, 'memory-tool/memories/repo/build-command.jsonl');
+		const content = await fileSystem.readFile(expectedPath);
+		expect(new TextDecoder().decode(content)).toContain('npm run build');
+	});
+
+	test('view repo directory', async () => {
+		const toolsService = accessor.get(IToolsService);
+		const fileSystem = accessor.get(IFileSystemService);
+
+		// Create a test file in the repo path
+		const repoDir = URI.joinPath(storageUri, 'memory-tool/memories/repo');
+		await fileSystem.createDirectory(repoDir);
+		const testFile = URI.joinPath(repoDir, 'test-convention.jsonl');
+		await fileSystem.writeFile(testFile, new TextEncoder().encode('{"subject":"test"}'));
+
+		const input: IMemoryToolParams = {
+			command: 'view',
+			path: '/memories/repo'
+		};
+
+		const result = await toolsService.invokeTool(ContributedToolName.Memory, { input, toolInvocationToken: null as never }, CancellationToken.None);
+		const resultStr = await toolResultToString(accessor, result);
+
+		expect(resultStr).toContain('test-convention.jsonl');
+	});
+});

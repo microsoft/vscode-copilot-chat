@@ -8,9 +8,11 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { basename } from '../../../util/vs/base/common/resources';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IDocumentContext } from '../../prompt/node/documentContext';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
-import { ProgressMessageScenario, ProgressMessagesPrompt, ProgressMessagesPromptProps } from '../../prompts/node/inline/progressMessages';
+import { ContextualProgressMessagePrompt, ContextualProgressMessagePromptProps, ProgressMessageScenario, ProgressMessagesPrompt, ProgressMessagesPromptProps } from '../../prompts/node/inline/progressMessages';
 
 const MESSAGES_PER_FETCH = 10;
 const REFETCH_THRESHOLD = 3;
@@ -78,6 +80,74 @@ export class InlineChatProgressMessages {
 		}
 
 		return message;
+	}
+
+	/**
+	 * Gets a contextual progress message based on the user's prompt and document context.
+	 * Falls back to generic messages if contextual generation fails or times out.
+	 */
+	async getContextualMessage(prompt: string, documentContext: IDocumentContext, token: CancellationToken): Promise<string> {
+		const scenario: ProgressMessageScenario = documentContext.selection.isEmpty ? 'generate' : 'edit';
+
+		if (this._envService.isSimulation()) {
+			return this.getNextMessage(scenario);
+		}
+
+		try {
+			const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
+
+			const selectedCode = documentContext.selection.isEmpty
+				? undefined
+				: documentContext.document.getText(documentContext.selection);
+
+			const props: ContextualProgressMessagePromptProps = {
+				prompt,
+				fileName: basename(documentContext.document.uri),
+				uri: documentContext.document.uri,
+				languageId: documentContext.document.languageId,
+				selectedCode,
+			};
+
+			const { messages: promptMessages } = await renderPromptElement(
+				this._instantiationService,
+				endpoint,
+				ContextualProgressMessagePrompt,
+				props
+			);
+
+			const response = await endpoint.makeChatRequest2({
+				debugName: 'contextualProgressMessage',
+				messages: promptMessages,
+				finishedCb: undefined,
+				location: ChatLocation.Editor,
+				userInitiatedRequest: false,
+				isConversationRequest: false,
+			}, token);
+
+			if (response.type === ChatFetchResponseType.Success) {
+				const message = this._parseContextualMessage(response.value);
+				if (message) {
+					this._logService.trace(`[InlineChatProgressMessages] Generated contextual message: ${message}`);
+					return message;
+				}
+			}
+		} catch (err) {
+			this._logService.trace(`[InlineChatProgressMessages] Contextual message generation failed, using fallback: ${err}`);
+		}
+
+		// Fall back to generic message
+		return this.getNextMessage(scenario);
+	}
+
+	private _parseContextualMessage(responseText: string): string | undefined {
+		const trimmed = responseText.trim();
+		// Remove any surrounding quotes if present
+		const unquoted = trimmed.replace(/^["']|["']$/g, '');
+		// Validate the message is reasonable length
+		if (unquoted.length > 0 && unquoted.length < 60) {
+			return unquoted;
+		}
+		return undefined;
 	}
 
 	/**

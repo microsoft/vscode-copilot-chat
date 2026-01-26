@@ -21,6 +21,7 @@ import { ISurveyService } from '../../../../../../platform/survey/common/surveyS
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
+import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
 import { GhostText } from '../../../lib/src/inlineCompletion';
@@ -50,6 +51,7 @@ export class GhostTextProvider {
 		vscodeDoc: TextDocument,
 		position: Position,
 		context: InlineCompletionContext,
+		logContext: GhostTextLogContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
 		const textDocument = wrapDoc(vscodeDoc);
@@ -65,12 +67,18 @@ export class GhostTextProvider {
 
 		const formattingOptions = window.visibleTextEditors.find(e => e.document.uri === vscodeDoc.uri)?.options;
 
-		const rawCompletions = await this.ghostText.getInlineCompletions(textDocument, position, token, {
-			isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
-			selectedCompletionInfo: context.selectedCompletionInfo,
-			formattingOptions,
-			opportunityId,
-		});
+		const rawCompletions = await this.ghostText.getInlineCompletions(
+			textDocument,
+			position,
+			token,
+			{
+				isCycling: context.triggerKind === InlineCompletionTriggerKind.Invoke,
+				selectedCompletionInfo: context.selectedCompletionInfo,
+				formattingOptions,
+				opportunityId,
+			},
+			logContext,
+		);
 
 		if (!rawCompletions) {
 			return;

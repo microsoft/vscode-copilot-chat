@@ -329,9 +329,33 @@ export type Mutable<T> = {
 };
 
 /**
+ * A type that adds readonly to all properties of T, recursively.
+ */
+export type DeepImmutable<T> = T extends (infer U)[]
+	? ReadonlyArray<DeepImmutable<U>>
+	: T extends ReadonlyArray<infer U>
+	? ReadonlyArray<DeepImmutable<U>>
+	: T extends Map<infer K, infer V>
+	? ReadonlyMap<K, DeepImmutable<V>>
+	: T extends Set<infer U>
+	? ReadonlySet<DeepImmutable<U>>
+	: T extends object
+	? {
+		readonly [K in keyof T]: DeepImmutable<T[K]>;
+	}
+	: T;
+
+/**
  * A single object or an array of the objects.
  */
 export type SingleOrMany<T> = T | T[];
+
+/**
+ * Given a `type X = { foo?: string }` checking that an object `satisfies X`
+ * will ensure each property was explicitly defined, ensuring no properties
+ * are omitted or forgotten.
+ */
+export type WithDefinedProps<T> = { [K in keyof Required<T>]: T[K] };
 
 
 /**

@@ -16,10 +16,11 @@ export { type IDerivedReader } from './observables/derivedImpl';
 export { ObservableLazy, ObservableLazyPromise, ObservablePromise, PromiseResult, } from './utils/promise';
 export { derivedWithCancellationToken, waitForState } from './utils/utilsCancellation';
 export {
-	debouncedObservableDeprecated, debouncedObservable, derivedObservableWithCache,
+	debouncedObservable, debouncedObservable2, derivedObservableWithCache,
 	derivedObservableWithWritableCache, keepObserved, mapObservableArrayCached, observableFromPromise,
 	recomputeInitiallyAndOnChange,
 	signalFromObservable, wasEventTriggeredRecently,
+	isObservable,
 } from './utils/utils';
 export { type DebugOwner } from './debugName';
 export { type IChangeContext, type IChangeTracker, recordChanges, recordChangesLazy } from './changeTracker';
@@ -42,10 +43,10 @@ import { addLogger, setLogObservableFn } from './logging/logging';
 import { ConsoleObservableLogger, logObservableToConsole } from './logging/consoleObservableLogger';
 import { DevToolsLogger } from './logging/debugger/devToolsLogger';
 import { env } from '../process';
-import { _setDebugGetDependencyGraph } from './observables/baseObservable';
-import { debugGetDependencyGraph } from './logging/debugGetDependencyGraph';
+import { _setDebugGetObservableGraph } from './observables/baseObservable';
+import { debugGetObservableGraph } from './logging/debugGetDependencyGraph';
 
-_setDebugGetDependencyGraph(debugGetDependencyGraph);
+_setDebugGetObservableGraph(debugGetObservableGraph);
 setLogObservableFn(logObservableToConsole);
 
 // Remove "//" in the next line to enable logging

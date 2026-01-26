@@ -105,9 +105,12 @@ import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVaria
 import { RequestLogger } from '../../prompt/vscode-node/requestLoggerImpl';
 import { ScenarioAutomationEndpointProviderImpl } from '../../prompt/vscode-node/scenarioAutomationEndpointProviderImpl';
 import { SettingsEditorSearchServiceImpl } from '../../prompt/vscode-node/settingsEditorSearchServiceImpl';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
+import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
@@ -133,6 +136,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
+	builder.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
+	builder.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	builder.define(IRequestLogger, new SyncDescriptor(RequestLogger));
 	builder.define(INativeEnvService, new SyncDescriptor(NativeEnvServiceImpl));
 

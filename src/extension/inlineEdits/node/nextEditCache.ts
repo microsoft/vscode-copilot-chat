@@ -7,10 +7,9 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
-import { ILogService } from '../../../platform/log/common/logService';
+import { ILogger, ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { LRUCache } from '../../../util/common/cache';
-import { createTracer, ITracer } from '../../../util/common/tracing';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached } from '../../../util/vs/base/common/observableInternal';
 import { AnnotatedStringReplacement, StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -149,25 +148,25 @@ export class NextEditCache extends Disposable {
 class DocumentEditCache {
 
 	private readonly _trackedCachedEdits: CachedEdit[] = [];
-	private _tracer: ITracer;
+	private _logger: ILogger;
 
 	constructor(
 		private readonly _nextEditCache: NextEditCache,
 		public readonly docId: DocumentId,
 		private readonly _doc: IObservableDocument,
 		private readonly _sharedCache: LRUCache<CachedEdit>,
-		private readonly _logService: ILogService,
+		_logService: ILogService,
 	) {
-		this._tracer = createTracer(['NES', 'DocumentEditCache'], (s) => this._logService.trace(s));
+		this._logger = _logService.createSubLogger(['NES', 'DocumentEditCache']);
 	}
 
 	public handleEdit(edit: StringEdit): void {
-		const tracer = this._tracer.sub('handleEdit');
+		const logger = this._logger.createSubLogger('handleEdit');
 		for (const cachedEdit of this._trackedCachedEdits) {
 			if (cachedEdit.userEditSince) {
 				cachedEdit.userEditSince = cachedEdit.userEditSince.compose(edit);
 				cachedEdit.rebaseFailed = false;
-				if (!checkEditConsistency(cachedEdit.documentBeforeEdit.value, cachedEdit.userEditSince, this._doc.value.get().value, tracer)) {
+				if (!checkEditConsistency(cachedEdit.documentBeforeEdit.value, cachedEdit.userEditSince, this._doc.value.get().value, logger)) {
 					cachedEdit.userEditSince = undefined;
 				}
 			}
@@ -189,7 +188,7 @@ class DocumentEditCache {
 		const key = this._getKey(documentContents.value);
 		const cachedEdit: CachedEdit = { docId: this.docId, edit: nextEdit, edits: nextEdits, detailedEdits: [], userEditSince, subsequentN, source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now(), isFromCursorJump: opts.isFromCursorJump };
 		if (userEditSince) {
-			if (!checkEditConsistency(cachedEdit.documentBeforeEdit.value, userEditSince, this._doc.value.get().value, this._tracer.sub('setKthNextEdit'))) {
+			if (!checkEditConsistency(cachedEdit.documentBeforeEdit.value, userEditSince, this._doc.value.get().value, this._logger.createSubLogger('setKthNextEdit'))) {
 				cachedEdit.userEditSince = undefined;
 			} else {
 				this._trackedCachedEdits.unshift(cachedEdit);
@@ -241,10 +240,10 @@ class DocumentEditCache {
 	}
 
 	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedEdit | undefined {
-		const tracer = this._tracer.sub('tryRebaseCacheEntry');
+		const logger = this._logger.createSubLogger('tryRebaseCacheEntry');
 		if (cachedEdit.userEditSince && !cachedEdit.rebaseFailed) {
 			const originalEdits = cachedEdit.edits || (cachedEdit.edit ? [cachedEdit.edit] : []);
-			const res = tryRebase(cachedEdit.documentBeforeEdit.value, cachedEdit.editWindow, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', tracer, nesConfigs);
+			const res = tryRebase(cachedEdit.documentBeforeEdit.value, cachedEdit.editWindow, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger, nesConfigs);
 			if (res === 'rebaseFailed') {
 				cachedEdit.rebaseFailed = true;
 			} else if (res === 'inconsistentEdits' || res === 'error') {
@@ -264,7 +263,7 @@ class DocumentEditCache {
 	}
 
 	public isRejectedNextEdit(currentDocumentContents: StringText, edit: StringReplacement, nesConfigs: INesConfigs) {
-		const tracer = this._tracer.sub('isRejectedNextEdit');
+		const logger = this._logger.createSubLogger('isRejectedNextEdit');
 		const resultEdit = edit.removeCommonSuffixAndPrefix(currentDocumentContents.value);
 		for (const rejectedEdit of this._trackedCachedEdits.filter(edit => edit.rejected)) {
 			if (!rejectedEdit.userEditSince) {
@@ -274,13 +273,13 @@ class DocumentEditCache {
 			if (!edits.length) {
 				continue; // cached 'no edits'
 			}
-			const rejectedEdits = tryRebase(rejectedEdit.documentBeforeEdit.value, undefined, edits, rejectedEdit.detailedEdits, rejectedEdit.userEditSince, currentDocumentContents.value, [], 'lenient', tracer, nesConfigs);
+			const rejectedEdits = tryRebase(rejectedEdit.documentBeforeEdit.value, undefined, edits, rejectedEdit.detailedEdits, rejectedEdit.userEditSince, currentDocumentContents.value, [], 'lenient', logger, nesConfigs);
 			if (typeof rejectedEdits === 'string') {
 				continue;
 			}
 			const rejected = rejectedEdits.some(rejected => rejected.rebasedEdit.removeCommonSuffixAndPrefix(currentDocumentContents.value).equals(resultEdit));
 			if (rejected) {
-				tracer.trace('Found rejected edit that matches current edit');
+				logger.trace('Found rejected edit that matches current edit');
 				return true;
 			}
 		}

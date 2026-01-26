@@ -69,7 +69,8 @@ suite('Notebook Cell Linkifier', () => {
 		debug: () => { /* no-op */ },
 		trace: () => { /* no-op */ },
 		show: () => { /* no-op */ },
-		createSubLogger(): ILogger { return logger; }
+		createSubLogger(): ILogger { return logger; },
+		withExtraTarget(): ILogger { return logger; }
 	};
 	const mockLogger = new class implements ILogService {
 		_serviceBrand: undefined;
@@ -84,6 +85,9 @@ suite('Notebook Cell Linkifier', () => {
 			//
 		}
 		createSubLogger(): ILogger {
+			return this;
+		}
+		withExtraTarget(): ILogger {
 			return this;
 		}
 	}();
