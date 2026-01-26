@@ -67,12 +67,15 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 
 		// Convert IQuestion array to ChatQuestion array
 		const chatQuestions = questions.map(q => this._convertToChatQuestion(q));
+		this._logService.trace(`[AskQuestionsTool] ChatQuestions: ${JSON.stringify(chatQuestions.map(q => ({ id: q.id, title: q.title, type: q.type })))}`);
 
 		// Show the question carousel and wait for answers
 		const carouselAnswers = await stream.questionCarousel(chatQuestions, true);
+		this._logService.trace(`[AskQuestionsTool] Raw carousel answers: ${JSON.stringify(carouselAnswers)}`);
 
 		// Convert carousel answers back to IAnswerResult format
 		const result = this._convertCarouselAnswers(questions, carouselAnswers);
+		this._logService.trace(`[AskQuestionsTool] Converted result: ${JSON.stringify(result)}`);
 
 		// Calculate telemetry metrics from results
 		const answers = Object.values(result.answers);
@@ -97,8 +100,10 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			stopWatch.elapsed()
 		);
 
+		const toolResultJson = JSON.stringify(result);
+		this._logService.trace(`[AskQuestionsTool] Returning tool result: ${toolResultJson}`);
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart(JSON.stringify(result))
+			new LanguageModelTextPart(toolResultJson)
 		]);
 	}
 
@@ -151,6 +156,12 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	private _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
 		const result: IAnswerResult = { answers: {} };
 
+		// Log all available keys in carouselAnswers for debugging
+		if (carouselAnswers) {
+			this._logService.trace(`[AskQuestionsTool] Carousel answer keys: ${Object.keys(carouselAnswers).join(', ')}`);
+			this._logService.trace(`[AskQuestionsTool] Question headers: ${questions.map(q => q.header).join(', ')}`);
+		}
+
 		for (const question of questions) {
 			if (!carouselAnswers) {
 				// User skipped all questions
@@ -163,6 +174,8 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			}
 
 			const answer = carouselAnswers[question.header];
+			this._logService.trace(`[AskQuestionsTool] Processing question "${question.header}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
+
 			if (answer === undefined) {
 				result.answers[question.header] = {
 					selected: [],
@@ -191,8 +204,58 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 					freeText: null,
 					skipped: false
 				};
+			} else if (typeof answer === 'object' && answer !== null) {
+				// Handle object answers - VS Code returns { selectedValue: string } or { selectedValues: string[] }
+				const answerObj = answer as Record<string, unknown>;
+				if ('selectedValues' in answerObj && Array.isArray(answerObj.selectedValues)) {
+					// Multi-select answer
+					result.answers[question.header] = {
+						selected: answerObj.selectedValues.map(v => String(v)),
+						freeText: null,
+						skipped: false
+					};
+				} else if ('selectedValue' in answerObj) {
+					const value = answerObj.selectedValue;
+					if (typeof value === 'string') {
+						if (question.options?.some(opt => opt.label === value)) {
+							result.answers[question.header] = {
+								selected: [value],
+								freeText: null,
+								skipped: false
+							};
+						} else {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: value,
+								skipped: false
+							};
+						}
+					} else if (Array.isArray(value)) {
+						result.answers[question.header] = {
+							selected: value.map(v => String(v)),
+							freeText: null,
+							skipped: false
+						};
+					}
+				} else if ('label' in answerObj && typeof answerObj.label === 'string') {
+					// Answer might be the raw option object
+					result.answers[question.header] = {
+						selected: [answerObj.label],
+						freeText: null,
+						skipped: false
+					};
+				} else {
+					// Unknown object format
+					this._logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.header}": ${JSON.stringify(answer)}`);
+					result.answers[question.header] = {
+						selected: [],
+						freeText: null,
+						skipped: true
+					};
+				}
 			} else {
 				// Unknown format, treat as skipped
+				this._logService.warn(`[AskQuestionsTool] Unknown answer format for "${question.header}": ${typeof answer}`);
 				result.answers[question.header] = {
 					selected: [],
 					freeText: null,
