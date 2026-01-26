@@ -59,8 +59,12 @@ export class ScmContextProviderContribution extends Disposable {
 	private _registerCacheInvalidation(): IDisposable {
 		const disposables = new DisposableStore();
 
-		// Invalidate cache when text documents are saved
-		disposables.add(this._workspaceService.onDidChangeTextDocument(() => {
+		// Invalidate cache when workspace text documents change, excluding SCM input documents
+		disposables.add(this._workspaceService.onDidChangeTextDocument(e => {
+			const scheme = e.document.uri.scheme;
+			if (scheme === 'vscode-scm' || scheme === 'vscode-source-control') {
+				return;
+			}
 			this._resolver.invalidateCache();
 		}));
 
