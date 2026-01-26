@@ -62,6 +62,7 @@ describe('EditIntent.fromString', () => {
 
 describe('EditIntent.shouldShowEdit', () => {
 	// Matrix of expected results: [intent][aggressiveness] = shouldShow
+	// High confidence → always show, Low confidence → only high aggression
 	const expectations: Record<EditIntent, Record<AggressivenessLevel, boolean>> = {
 		[EditIntent.NoEdit]: {
 			[AggressivenessLevel.Low]: false,
@@ -69,19 +70,19 @@ describe('EditIntent.shouldShowEdit', () => {
 			[AggressivenessLevel.High]: false,
 		},
 		[EditIntent.Low]: {
-			[AggressivenessLevel.Low]: true,
-			[AggressivenessLevel.Medium]: true,
+			[AggressivenessLevel.Low]: false,
+			[AggressivenessLevel.Medium]: false,
 			[AggressivenessLevel.High]: true,
 		},
 		[EditIntent.Medium]: {
-			[AggressivenessLevel.Low]: true,
+			[AggressivenessLevel.Low]: false,
 			[AggressivenessLevel.Medium]: true,
-			[AggressivenessLevel.High]: false,
+			[AggressivenessLevel.High]: true,
 		},
 		[EditIntent.High]: {
 			[AggressivenessLevel.Low]: true,
-			[AggressivenessLevel.Medium]: false,
-			[AggressivenessLevel.High]: false,
+			[AggressivenessLevel.Medium]: true,
+			[AggressivenessLevel.High]: true,
 		},
 	};
 
@@ -227,24 +228,28 @@ describe('Edit Intent Filtering Integration', () => {
 		);
 	});
 
-	describe('low intent never filtered', () => {
-		it.each([AggressivenessLevel.Low, AggressivenessLevel.Medium, AggressivenessLevel.High])(
-			'should NOT filter low intent with %s aggressiveness',
-			async (aggressiveness) => {
+	describe('low intent only shown for high aggressiveness', () => {
+		it.each([
+			[AggressivenessLevel.Low, false],
+			[AggressivenessLevel.Medium, false],
+			[AggressivenessLevel.High, true],
+		])(
+			'with %s aggressiveness should return %s',
+			async (aggressiveness, expected) => {
 				const linesStream = AsyncIterableObject.fromArray(['<|edit_intent|>low<|/edit_intent|>', 'code']);
 				const { editIntent } = await parseEditIntentFromStream(linesStream, createMockLogger());
 
 				expect(editIntent).toBe(EditIntent.Low);
-				expect(EditIntent.shouldShowEdit(editIntent, aggressiveness)).toBe(true);
+				expect(EditIntent.shouldShowEdit(editIntent, aggressiveness)).toBe(expected);
 			}
 		);
 	});
 
-	describe('medium intent filtered at high aggressiveness only', () => {
+	describe('medium intent shown for medium/high aggressiveness', () => {
 		it.each([
-			[AggressivenessLevel.Low, true],
+			[AggressivenessLevel.Low, false],
 			[AggressivenessLevel.Medium, true],
-			[AggressivenessLevel.High, false],
+			[AggressivenessLevel.High, true],
 		])('with %s aggressiveness should return %s', async (aggressiveness, expected) => {
 			const linesStream = AsyncIterableObject.fromArray(['<|edit_intent|>medium<|/edit_intent|>', 'code']);
 			const { editIntent } = await parseEditIntentFromStream(linesStream, createMockLogger());
@@ -253,16 +258,16 @@ describe('Edit Intent Filtering Integration', () => {
 		});
 	});
 
-	describe('high intent filtered at medium/high aggressiveness', () => {
-		it.each([
-			[AggressivenessLevel.Low, true],
-			[AggressivenessLevel.Medium, false],
-			[AggressivenessLevel.High, false],
-		])('with %s aggressiveness should return %s', async (aggressiveness, expected) => {
-			const linesStream = AsyncIterableObject.fromArray(['<|edit_intent|>high<|/edit_intent|>', 'code']);
-			const { editIntent } = await parseEditIntentFromStream(linesStream, createMockLogger());
+	describe('high intent never filtered (always shown)', () => {
+		it.each([AggressivenessLevel.Low, AggressivenessLevel.Medium, AggressivenessLevel.High])(
+			'should NOT filter high intent with %s aggressiveness',
+			async (aggressiveness) => {
+				const linesStream = AsyncIterableObject.fromArray(['<|edit_intent|>high<|/edit_intent|>', 'code']);
+				const { editIntent } = await parseEditIntentFromStream(linesStream, createMockLogger());
 
-			expect(EditIntent.shouldShowEdit(editIntent, aggressiveness)).toBe(expected);
-		});
+				expect(editIntent).toBe(EditIntent.High);
+				expect(EditIntent.shouldShowEdit(editIntent, aggressiveness)).toBe(true);
+			}
+		);
 	});
 });
