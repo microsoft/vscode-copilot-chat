@@ -9,6 +9,7 @@ import { suite, test } from 'vitest';
 import type { TextEdit, Uri } from 'vscode';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { PromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { NullWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -24,7 +25,7 @@ suite('PatchEditGeneration - sync', function () {
 	for (const entry of entries) {
 		const fixturesFolder = path.join(fixturesRootFolder, entry);
 		createTestsFromFixtures(fixturesFolder, (data) => {
-			const replyProcessor = getPatchEditReplyProcessor(new PromptPathRepresentationService());
+			const replyProcessor = getPatchEditReplyProcessor(new PromptPathRepresentationService(new NullWorkspaceService()));
 			const res = replyProcessor.process(data.patch, data.original);
 			const actual = applyEdits(data.original, res.edits);
 			deepStrictEqual(Lines.fromString(actual), Lines.fromString(data.expected));

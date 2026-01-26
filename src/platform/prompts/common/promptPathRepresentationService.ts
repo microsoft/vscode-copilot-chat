@@ -9,6 +9,7 @@ import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import { URI } from '../../../util/vs/base/common/uri';
+import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 export const IPromptPathRepresentationService = createServiceIdentifier<IPromptPathRepresentationService>('IPromptPathRepresentationService');
 
@@ -34,18 +35,27 @@ export interface IPromptPathRepresentationService {
  * When readong a LLM response, use `resolveFilePath` to get the URI from from a `filepath`
  *
  * Do not use this service for other usages than prompts.
- * We currently use the fsPath for local and remote filesystems, and URI.toString() for other schemes.
+ * We use fsPath for local files, and uri.path for remote filesystems to preserve POSIX paths.
  */
 export class PromptPathRepresentationService implements IPromptPathRepresentationService {
 
 	_serviceBrand: undefined;
+
+	constructor(
+		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
+	) { }
 
 	protected isWindows() {
 		return isWindows;
 	}
 
 	getFilePath(uri: Uri): string {
-		if (uri.scheme === Schemas.file || uri.scheme === Schemas.vscodeRemote) {
+		if (uri.scheme === Schemas.vscodeRemote) {
+			// Remote filesystems (WSL, SSH, etc.) use POSIX paths.
+			// Don't use fsPath which converts forward slashes to backslashes on Windows.
+			return uri.path;
+		}
+		else if (uri.scheme === Schemas.file) {
 			return uri.fsPath;
 		}
 		return uri.toString();
@@ -60,6 +70,18 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 	 * @returns The resolved URI or undefined if filepath does not look like a file path or URI.
 	 */
 	resolveFilePath(filepath: string, predominantScheme = Schemas.file): Uri | undefined {
+		// Check if workspace uses vscode-remote scheme (WSL, SSH, etc.)
+		// If so, construct URI with remote scheme and authority instead of using the default logic.
+		const folders = this.workspaceService.getWorkspaceFolders();
+		if (folders.length > 0 && folders[0].scheme === Schemas.vscodeRemote && filepath.startsWith('/')) {
+			return URI.from({
+				scheme: Schemas.vscodeRemote,
+				authority: folders[0].authority,
+				path: filepath
+			});
+		}
+
+		// Original logic for local files and other cases
 		// Always check for posix-like absolute paths, and also for platform-like
 		// (i.e. Windows) absolute paths in case the model generates them.
 		const isPosixPath = filepath.startsWith('/');

@@ -5,6 +5,8 @@
 
 import { afterAll, describe, expect, test } from 'vitest';
 import type { ChatResponseStream, LanguageModelToolInvocationOptions, NotebookDocument } from 'vscode';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { getCellId } from '../../../../platform/notebook/common/helpers';
@@ -19,8 +21,6 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Range, TextEdit, Uri } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { EditNotebookTool, IEditNotebookToolParams } from '../editNotebookTool';
-import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 
 describe('Edit Notebook Tool', () => {
 	const disposables = new DisposableStore();
@@ -31,7 +31,7 @@ describe('Edit Notebook Tool', () => {
 		const accessor = disposables.add(createExtensionUnitTestingServices()).createTestingAccessor();
 		const workspaceService = disposables.add(new TestWorkspaceService([], [], [notebook]));
 		const editTool = new EditNotebookTool(
-			new PromptPathRepresentationService(),
+			new PromptPathRepresentationService(workspaceService),
 			accessor.get(IInstantiationService),
 			workspaceService,
 			accessor.get(IAlternativeNotebookContentService),
