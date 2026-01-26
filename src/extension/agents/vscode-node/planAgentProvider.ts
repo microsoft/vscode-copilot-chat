@@ -58,7 +58,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	handoffs: [
 		{
 			label: 'Start Implementation',
-			agent: 'agent',
+			agent: 'Implement',
 			prompt: 'Start implementation',
 			send: true
 		},

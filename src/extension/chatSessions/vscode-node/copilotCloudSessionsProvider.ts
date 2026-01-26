@@ -62,6 +62,7 @@ const DEFAULT_REPOSITORY_ID = '___vscode_repository_default___';
 
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
+const OPEN_REPOSITORY_COMMAND_ID = 'github.copilot.chat.cloudSessions.openRepository';
 
 // TODO: No API from GH yet.
 const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string }[] = [
@@ -144,6 +145,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 	private readonly _onDidChangeChatSessionProviderOptions = this._register(new vscode.EventEmitter<void>());
 	public readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
+	private readonly _onDidChangeChatSessionOptions = this._register(new vscode.EventEmitter<vscode.ChatSessionOptionChangeEvent>());
+	public readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
 	private readonly sessionCustomAgentMap = new ResourceMap<string>();
@@ -295,6 +298,68 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		};
 		this._register(vscode.commands.registerCommand('github.copilot.chat.checkoutPullRequestReroute', checkoutPullRequestReroute));
+
+		// Command for browsing repositories in the repository picker
+		const openRepositoryCommand = async (sessionItemResource?: vscode.Uri) => {
+			const quickPick = vscode.window.createQuickPick();
+			quickPick.placeholder = l10n.t('Search for a repository...');
+			quickPick.matchOnDescription = true;
+			quickPick.matchOnDetail = true;
+			quickPick.busy = true;
+			quickPick.show();
+
+			// Load initial repositories
+			try {
+				const repos = await this.fetchAllRepositoriesFromGitHub();
+				quickPick.items = repos.map(repo => ({ label: repo.name }));
+			} catch (error) {
+				this.logService.error(`Error fetching initial repositories: ${error}`);
+			} finally {
+				quickPick.busy = false;
+			}
+
+			// Handle dynamic search
+			let searchTimeout: ReturnType<typeof setTimeout> | undefined;
+			const onDidChangeValueDisposable = quickPick.onDidChangeValue(async (value) => {
+				if (searchTimeout) {
+					clearTimeout(searchTimeout);
+				}
+				searchTimeout = setTimeout(async () => {
+					quickPick.busy = true;
+					try {
+						const searchResults = await this.fetchAllRepositoriesFromGitHub(value);
+						quickPick.items = searchResults.map(repo => ({ label: repo.name }));
+					} finally {
+						quickPick.busy = false;
+					}
+				}, 300);
+			});
+
+			const onDidAcceptDisposable = quickPick.onDidAccept(() => {
+				const selected = quickPick.selectedItems[0];
+				if (selected && sessionItemResource) {
+					this.sessionRepositoryMap.set(sessionItemResource, selected.label);
+					this._onDidChangeChatSessionOptions.fire({
+						resource: sessionItemResource,
+						updates: [{
+							optionId: REPOSITORIES_OPTION_GROUP_ID,
+							value: { id: selected.label, name: selected.label, icon: new vscode.ThemeIcon('repo') }
+						}]
+					});
+				}
+				quickPick.hide();
+			});
+
+			quickPick.onDidHide(() => {
+				if (searchTimeout) {
+					clearTimeout(searchTimeout);
+				}
+				onDidChangeValueDisposable.dispose();
+				onDidAcceptDisposable.dispose();
+				quickPick.dispose();
+			});
+		};
+		this._register(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, openRepositoryCommand));
 	}
 
 	private getRefreshIntervalTime(hasHistoricalSessions: boolean): number {
@@ -514,12 +579,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					optionGroups.push({
 						id: REPOSITORIES_OPTION_GROUP_ID,
 						name: vscode.l10n.t('Repository'),
+						description: vscode.l10n.t('Select repository'),
 						icon: new vscode.ThemeIcon('repo'),
 						items,
-						onSearch: async (query, token) => {
-							return await this.fetchAllRepositoriesFromGitHub(query);
-						},
-						searchable: true
+						commands: [{
+							command: OPEN_REPOSITORY_COMMAND_ID,
+							title: vscode.l10n.t('Browse repositories...'),
+						}]
 					});
 				}
 
@@ -546,6 +612,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							id: `${repoId.org}/${repoId.repo}`,
 							name: `${repoId.org}/${repoId.repo}`,
 							default: index === 0,
+							icon: new vscode.ThemeIcon('repo'),
 						});
 					});
 				} else {
@@ -557,6 +624,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 							items.push({
 								id: nwo,
 								name: nwo,
+								icon: new vscode.ThemeIcon('repo'),
 							});
 						}
 					} catch (error) {

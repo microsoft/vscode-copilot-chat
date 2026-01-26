@@ -11,6 +11,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
+import { ImplementAgentProvider } from './implementAgentProvider';
 import { PlanAgentProvider } from './planAgentProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
@@ -33,6 +34,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Plan agent provider for dynamic settings-based customization
 			const planProvider = instantiationService.createInstance(PlanAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+
+			// Register Implement agent provider for dynamic settings-based customization
+			const implementProvider = instantiationService.createInstance(ImplementAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(implementProvider));
 		}
 
 		// Register instructions provider

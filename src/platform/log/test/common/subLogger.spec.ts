@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { LogLevel, LogServiceImpl } from '../../common/logService';
+import { ILogTarget, LogLevel, LogServiceImpl, LogTarget } from '../../common/logService';
 import { TestLogTarget } from './loggerHelpers';
 
 describe('SubLogger', () => {
@@ -155,6 +155,166 @@ describe('SubLogger', () => {
 
 			logTarget.assertHasMessage(LogLevel.Info, '[Parent] parent message');
 			logTarget.assertHasMessage(LogLevel.Info, '[Parent][Child] child message');
+		});
+	});
+
+	describe('withExtraTarget', () => {
+		test('extra target receives log messages', () => {
+			const extraTarget = new TestLogTarget();
+			const logger = logService
+				.createSubLogger('Feature')
+				.withExtraTarget(extraTarget);
+
+			logger.info('test message');
+
+			// Primary target receives prefixed message
+			logTarget.assertHasMessage(LogLevel.Info, '[Feature] test message');
+			// Extra target also receives prefixed message
+			extraTarget.assertHasMessage(LogLevel.Info, '[Feature] test message');
+		});
+
+		test('withExtraTarget returns new immutable logger', () => {
+			const extraTarget = new TestLogTarget();
+			const original = logService.createSubLogger('Feature');
+			const withExtra = original.withExtraTarget(extraTarget);
+
+			original.info('original only');
+			withExtra.info('with extra');
+
+			// Extra target only receives from withExtra logger
+			expect(extraTarget.hasMessage(LogLevel.Info, '[Feature] original only')).toBe(false);
+			extraTarget.assertHasMessage(LogLevel.Info, '[Feature] with extra');
+		});
+
+		test('sub-loggers inherit extra targets', () => {
+			const extraTarget = new TestLogTarget();
+			const parent = logService
+				.createSubLogger('Parent')
+				.withExtraTarget(extraTarget);
+			const child = parent.createSubLogger('Child');
+
+			child.info('child message');
+
+			extraTarget.assertHasMessage(LogLevel.Info, '[Parent][Child] child message');
+		});
+
+		test('can chain multiple extra targets', () => {
+			const extra1 = new TestLogTarget();
+			const extra2 = new TestLogTarget();
+			const logger = logService
+				.createSubLogger('Feature')
+				.withExtraTarget(extra1)
+				.withExtraTarget(extra2);
+
+			logger.info('test');
+
+			extra1.assertHasMessage(LogLevel.Info, '[Feature] test');
+			extra2.assertHasMessage(LogLevel.Info, '[Feature] test');
+		});
+
+		test('extra target errors do not affect primary logging', () => {
+			const throwingTarget: ILogTarget = {
+				logIt: () => { throw new Error('Target error'); }
+			};
+			const logger = logService
+				.createSubLogger('Feature')
+				.withExtraTarget(throwingTarget);
+
+			// Should not throw
+			logger.info('test message');
+
+			// Primary target still receives the message
+			logTarget.assertHasMessage(LogLevel.Info, '[Feature] test message');
+		});
+
+		test('extra targets receive all log levels', () => {
+			const extraTarget = new TestLogTarget();
+			const logger = logService
+				.createSubLogger('Test')
+				.withExtraTarget(extraTarget);
+
+			logger.trace('trace msg');
+			logger.debug('debug msg');
+			logger.info('info msg');
+			logger.warn('warn msg');
+			logger.error('error msg');
+
+			extraTarget.assertHasMessage(LogLevel.Trace, '[Test] trace msg');
+			extraTarget.assertHasMessage(LogLevel.Debug, '[Test] debug msg');
+			extraTarget.assertHasMessage(LogLevel.Info, '[Test] info msg');
+			extraTarget.assertHasMessage(LogLevel.Warning, '[Test] warn msg');
+			extraTarget.assertHasMessage(LogLevel.Error, '[Test] error msg');
+		});
+
+		test('show() calls show on extra targets', () => {
+			let showCalled = false;
+			let preserveFocusValue: boolean | undefined;
+			const extraTarget: ILogTarget = {
+				logIt: () => { },
+				show: (preserveFocus) => {
+					showCalled = true;
+					preserveFocusValue = preserveFocus;
+				}
+			};
+			const logger = logService
+				.createSubLogger('Test')
+				.withExtraTarget(extraTarget);
+
+			logger.show(true);
+
+			expect(showCalled).toBe(true);
+			expect(preserveFocusValue).toBe(true);
+		});
+
+		test('withExtraTarget works on LogServiceImpl directly', () => {
+			const extraTarget = new TestLogTarget();
+			const logger = logService.withExtraTarget(extraTarget);
+
+			logger.info('direct message');
+
+			logTarget.assertHasMessage(LogLevel.Info, 'direct message');
+			extraTarget.assertHasMessage(LogLevel.Info, 'direct message');
+		});
+	});
+
+	describe('LogTarget.fromCallback', () => {
+		test('creates valid ILogTarget from callback', () => {
+			const messages: Array<{ level: LogLevel; msg: string }> = [];
+			const logger = logService
+				.createSubLogger('Feature')
+				.withExtraTarget(LogTarget.fromCallback((level, msg) => {
+					messages.push({ level, msg });
+				}));
+
+			logger.warn('warning message');
+
+			expect(messages).toHaveLength(1);
+			expect(messages[0]).toEqual({
+				level: LogLevel.Warning,
+				msg: '[Feature] warning message'
+			});
+		});
+
+		test('callback receives correct log levels', () => {
+			const levels: LogLevel[] = [];
+			const logger = logService
+				.withExtraTarget(LogTarget.fromCallback((level) => {
+					levels.push(level);
+				}));
+
+			logger.trace('');
+			logger.debug('');
+			logger.info('');
+			logger.warn('');
+			logger.error('');
+
+			expect(levels).toEqual([
+				LogLevel.Trace,
+				LogLevel.Debug,
+				LogLevel.Info,
+				LogLevel.Warning,
+				LogLevel.Error
+			]);
 		});
 	});
 });

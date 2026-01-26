@@ -23,6 +23,17 @@ type RawStoredSDKMessage = SDKMessage & {
 	readonly timestamp: string;
 	readonly isMeta?: boolean;
 }
+
+/**
+ * Minimal entry used only for parent-chain resolution.
+ * These entries lack a message field and are marked as meta entries
+ * so they're filtered from final output but still enable parent traversal.
+ */
+interface ChainLinkEntry {
+	readonly uuid: string;
+	readonly parentUuid: string | null;
+}
+
 interface SummaryEntry {
 	readonly type: 'summary';
 	readonly summary: string;
@@ -37,7 +48,7 @@ type StoredSDKMessage = SDKMessage & {
 }
 
 interface ParsedSessionMessage {
-	readonly raw: RawStoredSDKMessage;
+	readonly raw: RawStoredSDKMessage | ChainLinkEntry;
 	readonly isMeta: boolean;
 }
 
@@ -326,7 +337,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		const summaries = new Map<string, SummaryEntry>();
 		try {
 			// Read and parse the JSONL file
-			const content = await this._fileSystem.readFile(fileUri);
+			// Claude session files can be large (>5MB), so we disable the size limit
+			const content = await this._fileSystem.readFile(fileUri, true);
 			if (token.isCancellationRequested) {
 				throw new CancellationError();
 			}
@@ -359,6 +371,21 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 							raw: normalizedRaw,
 							isMeta: Boolean(isMeta)
 						});
+					} else if ('uuid' in entry && entry.uuid && 'parentUuid' in entry) {
+						// Handle entries without 'message' field (e.g., system messages, metadata entries)
+						// These are needed for parent chain linking but should not appear in final output
+						const uuid = entry.uuid;
+						const parentUuid = ('parentUuid' in entry ? entry.parentUuid : null) as string | null;
+
+						const chainLink: ChainLinkEntry = {
+							uuid,
+							parentUuid: parentUuid ?? null
+						};
+
+						rawMessages.set(uuid, {
+							raw: chainLink,
+							isMeta: true  // Mark as meta so it's used for linking but filtered from output
+						});
 					} else if ('summary' in entry && entry.summary && !entry.summary.toLowerCase().startsWith('api error: 401') && !entry.summary.toLowerCase().startsWith('invalid api key')) {
 						const summaryEntry = entry as SummaryEntry;
 						const uuid = summaryEntry.leafUuid;
@@ -382,7 +409,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	private _computeFolderSlug(folderUri: URI): string {
 		return folderUri.path
 			.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
-			.replace(/[\/\.]/g, '-');
+			.replace(/[\/ .]/g, '-');
 	}
 
 	private _generateSessionLabel(summaryEntry: SummaryEntry | undefined, messages: SDKMessage[]): string {
@@ -453,11 +480,20 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			.trim();
 	}
 
+	private _isRawStoredSDKMessage(entry: RawStoredSDKMessage | ChainLinkEntry): entry is RawStoredSDKMessage {
+		return 'type' in entry && 'sessionId' in entry && 'timestamp' in entry;
+	}
+
 	private _reviveStoredMessages(rawMessages: Map<string, ParsedSessionMessage>): Map<string, StoredSDKMessage> {
 		const messages = new Map<string, StoredSDKMessage>();
 
 		for (const [uuid, entry] of rawMessages) {
 			if (entry.isMeta) {
+				continue;
+			}
+
+			// Non-meta entries should always be RawStoredSDKMessage, not ChainLinkEntry
+			if (!this._isRawStoredSDKMessage(entry.raw)) {
 				continue;
 			}
 

@@ -52,7 +52,7 @@ export class MockFileSystemService implements IFileSystemService {
 		return this.mockDirs.get(uriString) || [];
 	}
 
-	async readFile(uri: URI): Promise<Uint8Array> {
+	async readFile(uri: URI, disableLimit?: boolean): Promise<Uint8Array> {
 		const uriString = uri.toString();
 		if (this.mockErrors.has(uriString)) {
 			throw this.mockErrors.get(uriString);

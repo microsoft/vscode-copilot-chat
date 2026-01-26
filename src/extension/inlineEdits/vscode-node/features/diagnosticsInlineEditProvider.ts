@@ -9,9 +9,8 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ILogService, ILogger } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
-import { createTracer, ITracer } from '../../../../util/common/tracing';
 import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
@@ -53,7 +52,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	}
 
 	private readonly _diagnosticsCompletionHandler: DiagnosticsCompletionProcessor;
-	private _tracer: ITracer;
+	private _logger: ILogger;
 
 	constructor(
 		workspace: VSCodeWorkspace,
@@ -63,7 +62,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'DiagnosticsNextEditProvider'], (s) => logService.trace(s));
+		this._logger = logService.createSubLogger(['NES', 'DiagnosticsNextEditProvider']);
 		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 
@@ -76,7 +75,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		try {
 			await timeout(delayStart);
 			if (cancellationToken.isCancellationRequested) {
-				this._tracer.trace('cancellationRequested before started');
+				this._logger.trace('cancellationRequested before started');
 				return new DiagnosticsNextEditResult(logContext.requestId, undefined);
 			}
 
@@ -100,10 +99,10 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		} catch (error) {
 			const errorMessage = `Error occurred while waiting for diagnostic edit: ${errors.toString(errors.fromUnknown(error))}`;
 			logContext.addLog(errorMessage);
-			this._tracer.trace(errorMessage);
+			this._logger.trace(errorMessage);
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
 		} finally {
-			this._tracer.trace('DiagnosticsInlineCompletionProvider runUntilNextEdit complete' + (cancellationToken.isCancellationRequested ? ' (cancelled)' : ''));
+			this._logger.trace('DiagnosticsInlineCompletionProvider runUntilNextEdit complete' + (cancellationToken.isCancellationRequested ? ' (cancelled)' : ''));
 		}
 	}
 
@@ -123,7 +122,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		// Diagnostics might not have updated yet since accepting a diagnostics based NES
 		if (item && this._hasRecentlyBeenAccepted(item)) {
 			tb.addDroppedReason(`${item.type}:recently-accepted`);
-			this._tracer.trace('recently accepted');
+			this._logger.trace('recently accepted');
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
@@ -131,14 +130,14 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		tb.setDiagnosticRunTelemetry(telemetry);
 
 		if (!item) {
-			this._tracer.trace('no diagnostic edit result');
+			this._logger.trace('no diagnostic edit result');
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
 		tb.setType(item.type);
 		logContext.setDiagnosticsResult(item.getRootedLineEdit());
 
-		this._tracer.trace(`created next edit result`);
+		this._logger.trace(`created next edit result`);
 
 		return new DiagnosticsNextEditResult(logContext.requestId, {
 			edit: item.toOffsetEdit(),

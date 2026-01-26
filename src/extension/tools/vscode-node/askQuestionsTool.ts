@@ -13,24 +13,24 @@ import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
-interface IQuestionOption {
+export interface IQuestionOption {
 	label: string;
 	description?: string;
 	recommended?: boolean;
 }
 
-interface IQuestion {
+export interface IQuestion {
 	header: string;
 	question: string;
 	multiSelect?: boolean;
 	options?: IQuestionOption[];
 }
 
-interface IAskQuestionsParams {
+export interface IAskQuestionsParams {
 	questions: IQuestion[];
 }
 
-interface IQuestionAnswer {
+export interface IQuestionAnswer {
 	selected: string[];
 	freeText: string | null;
 	skipped: boolean;
@@ -38,7 +38,7 @@ interface IQuestionAnswer {
 
 type AskQuestionResult = IQuestionAnswer | 'back' | 'skipped';
 
-interface IAnswerResult {
+export interface IAnswerResult {
 	answers: Record<string, IQuestionAnswer>;
 }
 

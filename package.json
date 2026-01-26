@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260121",
+		"vscode": "^1.109.0-20260124",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1861,6 +1861,23 @@
 						},
 						"models": {
 							"type": "array",
+							"defaultSnippets": [
+								{
+									"label": "New Model",
+									"description": "Add a new custom model configuration",
+									"body": [
+										{
+											"id": "$1",
+											"name": "$2",
+											"url": "$3",
+											"toolCalling": "^${4|true,false|}",
+											"vision": "^${5|true,false|}",
+											"maxInputTokens": "^${6:128000}",
+											"maxOutputTokens": "^${7:16000}"
+										}
+									]
+								}
+							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -1924,6 +1941,7 @@
 									}
 								},
 								"required": [
+									"id",
 									"name",
 									"url",
 									"toolCalling",
@@ -1950,6 +1968,23 @@
 						},
 						"models": {
 							"type": "array",
+							"defaultSnippets": [
+								{
+									"label": "New Model",
+									"description": "Add a new custom model configuration",
+									"body": [
+										{
+											"id": "$1",
+											"name": "$2",
+											"url": "$3",
+											"toolCalling": "^${4|true,false|}",
+											"vision": "^${5|true,false|}",
+											"maxInputTokens": "^${6:128000}",
+											"maxOutputTokens": "^${7:16000}"
+										}
+									]
+								}
+							],
 							"items": {
 								"type": "object",
 								"properties": {
@@ -2000,6 +2035,7 @@
 									}
 								},
 								"required": [
+									"id",
 									"name",
 									"url",
 									"toolCalling",
@@ -2635,6 +2671,12 @@
 				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
 				"icon": "$(git-pull-request)",
 				"category": "GitHub Pull Request"
+			},
+			{
+				"command": "github.copilot.chat.cloudSessions.openRepository",
+				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
+				"icon": "$(repo)",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -3400,6 +3442,15 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
+					"github.copilot.chat.alternateZaiPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.alternateZaiPrompt.enabled%"
+					},
 					"github.copilot.chat.anthropic.useMessagesApi": {
 						"type": "boolean",
 						"default": true,
@@ -3420,7 +3471,7 @@
 					},
 					"github.copilot.chat.anthropic.toolSearchTool.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.anthropic.toolSearchTool.enabled%",
 						"tags": [
 							"experimental",
@@ -3583,6 +3634,15 @@
 						"default": "",
 						"scope": "resource",
 						"markdownDescription": "%github.copilot.config.planAgent.model%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.implementAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.implementAgent.model%",
 						"tags": [
 							"experimental"
 						]
@@ -4493,6 +4553,10 @@
 				},
 				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.cloudSessions.openRepository",
 					"when": "false"
 				},
 				{

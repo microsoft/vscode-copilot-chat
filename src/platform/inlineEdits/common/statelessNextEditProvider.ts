@@ -5,7 +5,6 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { Result } from '../../../util/common/result';
-import { ITracer } from '../../../util/common/tracing';
 import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
@@ -16,6 +15,7 @@ import { Position } from '../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { ChatFetchResponseType, FetchResponse } from '../../chat/common/commonTypes';
+import { ILogger } from '../../log/common/logService';
 import { ISerializedOffsetRange, LogEntry, serializeOffsetRange } from '../../workspaceRecorder/common/workspaceLog';
 import { DocumentId } from './dataTypes/documentId';
 import { Edits } from './dataTypes/edit';
@@ -43,7 +43,7 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
 	readonly showNextEditPreference?: ShowNextEditPreference;
-	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
+	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
 }
