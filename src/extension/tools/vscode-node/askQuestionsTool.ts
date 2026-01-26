@@ -24,6 +24,7 @@ export interface IQuestion {
 	question: string;
 	multiSelect?: boolean;
 	options?: IQuestionOption[];
+	allowFreeFormInput?: boolean;
 }
 
 export interface IAskQuestionsParams {
@@ -158,7 +159,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 					value: opt.label
 				})),
 				defaultValue,
-				allowFreeformInput: true
+				allowFreeformInput: question.allowFreeFormInput
 			}
 		);
 	}
