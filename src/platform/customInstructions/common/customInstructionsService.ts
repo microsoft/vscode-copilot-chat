@@ -482,7 +482,7 @@ class InstructionIndexFile implements IInstructionIndexFile {
 	}
 
 	/**
-	 * Finds an file paths or names in the index file. The index file has XML format: <listElementName><elementName><propertyName>value</propertyName></elementName></listElementName>
+	 * Finds file paths or names in the index file. The index file has XML format: <listElementName><elementName><propertyName>value</propertyName></elementName></listElementName>
 	 */
 	private getValuesInIndexFile(listElementName: string, elementName: string, propertyName: string): string[] {
 		const result: string[] = [];
