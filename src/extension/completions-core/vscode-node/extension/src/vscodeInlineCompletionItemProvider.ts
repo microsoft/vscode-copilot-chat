@@ -110,12 +110,13 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		} catch (e) {
 			logContext.setError(e);
 			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
+			const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
+			return emptyList;
 		} finally {
 			this.inlineEditLogger.add(logContext);
-		}
 
-		const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
-		return emptyList;
+			telemetryBuilder.nesBuilder.markEndTime();
+		}
 	}
 
 	private async _provideInlineCompletionItems(
