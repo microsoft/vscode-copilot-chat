@@ -174,4 +174,126 @@ describe('EditIntent', () => {
 			});
 		});
 	});
+
+	describe('short-circuit filtering scenarios', () => {
+		// These tests verify the filtering logic that would cause the stream to short-circuit
+		// in the xtabProvider's parseEditIntentFromStream method
+
+		describe('no_edit intent always short-circuits', () => {
+			it('should filter out no_edit with Low aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>no_edit<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Low)).toBe(false);
+			});
+
+			it('should filter out no_edit with Medium aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>no_edit<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Medium)).toBe(false);
+			});
+
+			it('should filter out no_edit with High aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>no_edit<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.High)).toBe(false);
+			});
+		});
+
+		describe('high intent short-circuits at medium/high aggressiveness', () => {
+			it('should NOT short-circuit high intent with Low aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>high<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Low)).toBe(true);
+			});
+
+			it('should short-circuit high intent with Medium aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>high<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Medium)).toBe(false);
+			});
+
+			it('should short-circuit high intent with High aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>high<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.High)).toBe(false);
+			});
+		});
+
+		describe('medium intent short-circuits at high aggressiveness', () => {
+			it('should NOT short-circuit medium intent with Low aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>medium<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Low)).toBe(true);
+			});
+
+			it('should NOT short-circuit medium intent with Medium aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>medium<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Medium)).toBe(true);
+			});
+
+			it('should short-circuit medium intent with High aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>medium<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.High)).toBe(false);
+			});
+		});
+
+		describe('low intent never short-circuits', () => {
+			it('should NOT short-circuit low intent with Low aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>low<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Low)).toBe(true);
+			});
+
+			it('should NOT short-circuit low intent with Medium aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>low<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Medium)).toBe(true);
+			});
+
+			it('should NOT short-circuit low intent with High aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('<|edit_intent|>low<|/edit_intent|>\ncode');
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.High)).toBe(true);
+			});
+		});
+
+		describe('missing tag defaults to High (most permissive for short-circuit)', () => {
+			it('should NOT short-circuit missing tag with Low aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('code without tag');
+				expect(editIntent).toBe(EditIntent.High);
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Low)).toBe(true);
+			});
+
+			it('should short-circuit missing tag with Medium aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('code without tag');
+				expect(editIntent).toBe(EditIntent.High);
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.Medium)).toBe(false);
+			});
+
+			it('should short-circuit missing tag with High aggressiveness', () => {
+				const { editIntent } = EditIntent.parseFromResponse('code without tag');
+				expect(editIntent).toBe(EditIntent.High);
+				expect(EditIntent.shouldShowEdit(editIntent, AggressivenessLevel.High)).toBe(false);
+			});
+		});
+	});
+
+	describe('remaining content after edit intent tag', () => {
+		it('should correctly extract remaining content when tag is followed by newline', () => {
+			const response = '<|edit_intent|>low<|/edit_intent|>\nline1\nline2\nline3';
+			const { remainingContent } = EditIntent.parseFromResponse(response);
+			expect(remainingContent).toBe('line1\nline2\nline3');
+		});
+
+		it('should correctly extract remaining content when tag is followed by content on same line', () => {
+			const response = '<|edit_intent|>low<|/edit_intent|>line1\nline2';
+			const { remainingContent } = EditIntent.parseFromResponse(response);
+			// Note: parseFromResponse strips the leading newline if present
+			expect(remainingContent).toBe('line1\nline2');
+		});
+
+		it('should return empty remaining content when only tag is present', () => {
+			const response = '<|edit_intent|>no_edit<|/edit_intent|>';
+			const { editIntent, remainingContent } = EditIntent.parseFromResponse(response);
+			expect(editIntent).toBe(EditIntent.NoEdit);
+			expect(remainingContent).toBe('');
+		});
+
+		it('should handle tag followed by only whitespace', () => {
+			const response = '<|edit_intent|>no_edit<|/edit_intent|>\n   \n';
+			const { editIntent, remainingContent } = EditIntent.parseFromResponse(response);
+			expect(editIntent).toBe(EditIntent.NoEdit);
+			expect(remainingContent).toBe('   \n');
+		});
+	});
 });

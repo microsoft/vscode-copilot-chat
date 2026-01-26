@@ -687,7 +687,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cleanedLinesStream = linesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
 			// Parse the edit_intent tag from the response
-			const { editIntent, remainingLinesStream, parseError } = await this.parseEditIntentFromStream(linesStream, tracer);
+			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, tracer);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
@@ -869,100 +869,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			// Properly handle the error by pushing it as a result
 			return new NoNextEditReason.Unexpected(errors.fromUnknown(err));
 		}
-	}
-
-	/**
-	 * Parses the edit_intent tag from the first line of the response stream.
-	 * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
-	 * Returns the parsed EditIntent and a new stream with the remaining content.
-	 *
-	 * Expected format (first line only):
-	 * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
-	 * ... rest of edited code ...
-	 */
-	private async parseEditIntentFromStream(
-		linesStream: AsyncIterableObject<string>,
-		tracer: ILogger,
-	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string>; parseError?: string }> {
-		const EDIT_INTENT_START_TAG = '<|edit_intent|>';
-		const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
-
-		let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no tag found
-		let parseError: string | undefined;
-
-		const linesIter = linesStream[Symbol.asyncIterator]();
-		const firstLineResult = await linesIter.next();
-
-		if (firstLineResult.done) {
-			// Empty stream
-			parseError = 'emptyResponse';
-			tracer.warn(`Empty response stream, no edit_intent tag found`);
-			const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
-			return { editIntent, remainingLinesStream, parseError };
-		}
-
-		const firstLine = firstLineResult.value;
-
-		// Check if the first line contains the complete edit_intent tag
-		const startIdx = firstLine.indexOf(EDIT_INTENT_START_TAG);
-		const endIdx = firstLine.indexOf(EDIT_INTENT_END_TAG);
-
-		if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-			// Found complete tag on first line
-			const intentValue = firstLine.substring(
-				startIdx + EDIT_INTENT_START_TAG.length,
-				endIdx
-			).trim().toLowerCase();
-
-			editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
-			tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
-
-			// Calculate remaining content after the end tag on the first line
-			const afterEndTag = firstLine.substring(endIdx + EDIT_INTENT_END_TAG.length);
-
-			// Create a new stream that first yields remaining content from first line, then continues
-			const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
-				// Only yield remaining content from first line if non-empty
-				if (afterEndTag.trim() !== '') {
-					emitter.emitOne(afterEndTag);
-				}
-				// Continue with rest of the stream
-				let next = await linesIter.next();
-				while (!next.done) {
-					emitter.emitOne(next.value);
-					next = await linesIter.next();
-				}
-			});
-
-			return { editIntent, remainingLinesStream };
-		}
-
-		// Determine the parse error type
-		if (startIdx !== -1 && endIdx === -1) {
-			// Start tag found but no end tag - malformed (possibly split across lines)
-			parseError = 'malformedTag:startWithoutEnd';
-		} else if (startIdx === -1 && endIdx !== -1) {
-			// End tag found but no start tag - malformed
-			parseError = 'malformedTag:endWithoutStart';
-		} else {
-			// No tag found at all
-			parseError = 'noTagFound';
-		}
-
-		tracer.warn(`Edit intent parse error: ${parseError} (using Xtab275EditIntent prompting strategy). ` +
-			`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
-
-		// Return the first line plus the rest of the stream
-		const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
-			emitter.emitOne(firstLine);
-			let next = await linesIter.next();
-			while (!next.done) {
-				emitter.emitOne(next.value);
-				next = await linesIter.next();
-			}
-		});
-
-		return { editIntent, remainingLinesStream, parseError };
 	}
 
 	private async *doGetNextEditsWithCursorJump(
@@ -1348,6 +1254,106 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 
+}
+
+export interface ParseEditIntentResult {
+	editIntent: xtabPromptOptions.EditIntent;
+	remainingLinesStream: AsyncIterableObject<string>;
+	parseError?: string;
+}
+
+/**
+ * Parses the edit_intent tag from the first line of the response stream.
+ * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
+ * Returns the parsed EditIntent and a new stream with the remaining content.
+ *
+ * Expected format (first line only):
+ * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
+ * ... rest of edited code ...
+ */
+export async function parseEditIntentFromStream(
+	linesStream: AsyncIterableObject<string>,
+	tracer: ILogger,
+): Promise<ParseEditIntentResult> {
+	const EDIT_INTENT_START_TAG = '<|edit_intent|>';
+	const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
+
+	let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no tag found
+	let parseError: string | undefined;
+
+	const linesIter = linesStream[Symbol.asyncIterator]();
+	const firstLineResult = await linesIter.next();
+
+	if (firstLineResult.done) {
+		// Empty stream
+		parseError = 'emptyResponse';
+		tracer.warn(`Empty response stream, no edit_intent tag found`);
+		const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
+		return { editIntent, remainingLinesStream, parseError };
+	}
+
+	const firstLine = firstLineResult.value;
+
+	// Check if the first line contains the complete edit_intent tag
+	const startIdx = firstLine.indexOf(EDIT_INTENT_START_TAG);
+	const endIdx = firstLine.indexOf(EDIT_INTENT_END_TAG);
+
+	if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+		// Found complete tag on first line
+		const intentValue = firstLine.substring(
+			startIdx + EDIT_INTENT_START_TAG.length,
+			endIdx
+		).trim().toLowerCase();
+
+		editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
+		tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
+
+		// Calculate remaining content after the end tag on the first line
+		const afterEndTag = firstLine.substring(endIdx + EDIT_INTENT_END_TAG.length);
+
+		// Create a new stream that first yields remaining content from first line, then continues
+		const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+			// Only yield remaining content from first line if non-empty
+			if (afterEndTag.trim() !== '') {
+				emitter.emitOne(afterEndTag);
+			}
+			// Continue with rest of the stream
+			let next = await linesIter.next();
+			while (!next.done) {
+				emitter.emitOne(next.value);
+				next = await linesIter.next();
+			}
+		});
+
+		return { editIntent, remainingLinesStream };
+	}
+
+	// Determine the parse error type
+	if (startIdx !== -1 && endIdx === -1) {
+		// Start tag found but no end tag - malformed (possibly split across lines)
+		parseError = 'malformedTag:startWithoutEnd';
+	} else if (startIdx === -1 && endIdx !== -1) {
+		// End tag found but no start tag - malformed
+		parseError = 'malformedTag:endWithoutStart';
+	} else {
+		// No tag found at all
+		parseError = 'noTagFound';
+	}
+
+	tracer.warn(`Edit intent parse error: ${parseError} (using Xtab275EditIntent prompting strategy). ` +
+		`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
+
+	// Return the first line plus the rest of the stream
+	const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+		emitter.emitOne(firstLine);
+		let next = await linesIter.next();
+		while (!next.done) {
+			emitter.emitOne(next.value);
+			next = await linesIter.next();
+		}
+	});
+
+	return { editIntent, remainingLinesStream, parseError };
 }
 
 /**
