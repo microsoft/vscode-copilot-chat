@@ -1174,9 +1174,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [markdown] - merge markdown sections",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [python] - issue #1198: Multi-lingual queries throw off the inline response formatting",
@@ -1195,9 +1195,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - Context Outline: TypeScript in method",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - convert ternary to if/else in short function",
@@ -1209,9 +1209,9 @@
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: add enum variant",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-InlineChatIntent [inline] [typescript] - edit: add toString1",
