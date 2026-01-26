@@ -123,6 +123,14 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 		return Promise.resolve(true);
 	}
+
+	override requestResourceTrust(options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
+
+	override requestWorkspaceTrust(options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
 }
 
 export class SimulationLanguageDiagnosticsService extends AbstractLanguageDiagnosticsService {

@@ -19,8 +19,9 @@ import { disposableTimeout, raceCancellation } from '../../../util/vs/base/commo
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { autorun } from '../../../util/vs/base/common/observable';
-import { extUri, isEqual } from '../../../util/vs/base/common/resources';
+import { basename, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
@@ -67,6 +68,15 @@ const _sessionModel: Map<string, string | undefined> = new Map();
 // There's an issue in core (about holding onto ref of the Chat Model).
 // As a temporary solution, return the same untitled session id back to core until the session is completed.
 const _untitledSessionIdMap = new Map<string, string>();
+
+// We want to keep track of the date/time when a repo was added.
+const untitledWorkspaceRepositories = new ResourceMap<number>();
+// We want to keep track of the date/time when a folder was added.
+const untitledWorkspaceFodlers = new ResourceMap<number>();
+
+const listOfKnownRepos = new ResourceSet();
+
+const untrustedFolderMessage = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
 
 export class CopilotCLISessionIsolationManager {
 	private _sessionIsolation: Map<string, boolean> = new Map();
@@ -315,7 +325,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				if (lastUsedRepos.length > 0) {
 					const firstRepo = lastUsedRepos[0];
 					options[REPOSITORY_OPTION_ID] = firstRepo.id;
-					await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo.id);
+					if (listOfKnownRepos.has(URI.file(firstRepo.id))) {
+						await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo.id);
+						await this.workspaceFolderService.deleteTrackedWorkspaceFolder(copilotcliSessionId);
+					} else {
+						await this.workspaceFolderService.trackSessionWorkspaceFolder(copilotcliSessionId, firstRepo.id);
+						await this.copilotCLIWorktreeManagerService.deleteSessionRepository(copilotcliSessionId);
+					}
 				}
 			}
 		} else {
@@ -340,7 +356,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					const firstOption = repositories[0];
 					options[REPOSITORY_OPTION_ID] = firstOption.id;
 					// Track based on whether first option is a git repo or workspace folder
-					if (this.isWorkspaceFolderWithoutRepo(firstOption.id)) {
+					if (await this.isWorkspaceFolderWithoutRepo(URI.file(firstOption.id))) {
 						await Promise.all([
 							this.workspaceFolderService.trackSessionWorkspaceFolder(copilotcliSessionId, firstOption.id),
 							this.copilotCLIWorktreeManagerService.deleteSessionRepository(copilotcliSessionId)
@@ -439,24 +455,27 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	/**
 	 * Check if the given path is a workspace folder that doesn't have any git repos.
 	 */
-	private isWorkspaceFolderWithoutRepo(path: string): boolean {
-		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-		if (workspaceFolders.length <= 1) {
+	private async isWorkspaceFolderWithoutRepo(uri: Uri): Promise<boolean> {
+		const repositories = this.gitService.repositories.filter(repo => repo.kind !== 'worktree');
+		const repo = repositories.find(r => isEqual(r.rootUri, uri)) ?? await this.gitService.getRepository(uri, true);
+		if (repo) {
 			return false;
 		}
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (!workspaceFolders.length) {
+			return true;
+		}
 
-		const uri = URI.file(path);
 		// Check if the path is a workspace folder
-		const isWorkspaceFolder = workspaceFolders.some(folder => folder.fsPath === uri.fsPath);
+		const isWorkspaceFolder = workspaceFolders.some(folder => isEqual(folder, uri));
 		if (!isWorkspaceFolder) {
-			return false;
+			return true;
 		}
 
 		// Check if any git repo belongs to this workspace folder
-		const repositories = this.gitService.repositories.filter(repo => repo.kind !== 'worktree');
 		for (const repo of repositories) {
 			const folder = this.workspaceService.getWorkspaceFolder(repo.rootUri);
-			if (folder && folder.fsPath === uri.fsPath) {
+			if (folder && isEqual(folder, uri)) {
 				return false; // This folder has a git repo
 			}
 		}
@@ -500,14 +519,57 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	 * Get repository option items for untitled workspaces using last used repositories.
 	 */
 	private async getRepositoryOptionItemsForUntitledWorkspace(): Promise<ChatSessionProviderOptionItem[]> {
-		const last10Repos = [];
+		const latestReposAndFolders: { uri: Uri; type: 'repo' | 'folder'; lastUsed: number }[] = [];
+		const seenUris = new ResourceSet();
+
+		untitledWorkspaceRepositories.forEach((lastUsed, uri) => {
+			seenUris.add(uri);
+			latestReposAndFolders.push({ uri, type: 'repo', lastUsed });
+		});
+
+		untitledWorkspaceFodlers.forEach((lastUsed, uri) => {
+			seenUris.add(uri);
+			latestReposAndFolders.push({ uri, type: 'folder', lastUsed });
+		});
+
+		// Last used git repositories
 		for (const repo of this.gitService.getRecentRepositories()) {
-			last10Repos.push(repo);
-			if (last10Repos.length >= 10) {
-				break;
+			if (seenUris.has(repo.rootUri)) {
+				continue;
 			}
+			seenUris.add(repo.rootUri);
+			listOfKnownRepos.add(repo.rootUri);
+			latestReposAndFolders.push({ uri: repo.rootUri, type: 'repo', lastUsed: repo.lastAccessTime });
 		}
-		return last10Repos.map((repoAccess, index) => toRepositoryOptionItem(repoAccess.rootUri));
+
+		// Last used workspace folders without git repos
+		for (const repo of this.workspaceFolderService.getRecentFolders()) {
+			if (seenUris.has(repo.folder)) {
+				continue;
+			}
+			seenUris.add(repo.folder);
+			latestReposAndFolders.push({ uri: repo.folder, type: 'folder', lastUsed: repo.lastAccessTime });
+		}
+
+		// Filter out items that no longer exist.
+		const latest10ReposAndFolders: { uri: Uri; type: 'repo' | 'folder'; lastUsed: number }[] = [];
+		await Promise.all(latestReposAndFolders.slice(0, 20).map(async (repoAccess) => {
+			if (await checkFileExists(repoAccess.uri, this.fileSystem)) {
+				latest10ReposAndFolders.push(repoAccess);
+			}
+		}));
+
+		// Sort by last used time descending and take top 10
+		latest10ReposAndFolders.sort((a, b) => b.lastUsed - a.lastUsed);
+		const latestReposAndFoldersLimited = latest10ReposAndFolders.slice(0, 10);
+
+		return latestReposAndFoldersLimited.map((repoAccess) => {
+			if (repoAccess.type === 'folder') {
+				return toWorkspaceFolderOptionItem(repoAccess.uri, basename(repoAccess.uri));
+			} else {
+				return toRepositoryOptionItem(repoAccess.uri);
+			}
+		});
 	}
 
 	// Handle option changes for a session (store current state in a map)
@@ -526,7 +588,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string') {
 				// Track based on whether selection is a git repo or workspace folder without git
-				if (this.isWorkspaceFolderWithoutRepo(update.value)) {
+				if (await this.isWorkspaceFolderWithoutRepo(URI.file(update.value))) {
 					await Promise.all([
 						this.workspaceFolderService.trackSessionWorkspaceFolder(sessionId, update.value),
 						this.copilotCLIWorktreeManagerService.deleteSessionRepository(sessionId)
@@ -623,7 +685,6 @@ const CLI_CANCEL = l10n.t('Cancel');
 export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly untitledSessionIdMapping = new Map<string, string>();
 	constructor(
-		private readonly isolationManager: CopilotCLISessionIsolationManager,
 		private readonly contentProvider: CopilotCLIChatSessionContentProvider,
 		private readonly promptResolver: CopilotCLIPromptResolver,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
@@ -675,6 +736,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (chatSessionContext?.chatSessionItem) {
 				if (chatSessionContext.isUntitled) {
 					selectedRepository = this.copilotCLIWorktreeManagerService.getSessionRepository(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
+					// Possible user selected a folder, and its possible the folder is a git repo
+					if (!selectedRepository) {
+						const folder = this.workspaceFolderService.getSessionWorkspaceFolder(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
+						if (folder) {
+							selectedRepository = await this.gitService.getRepository(folder, true);
+						}
+					}
 				} else {
 					// Existing session, get worktree repository, and no need to migrate changes.
 				}
@@ -1062,20 +1130,43 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		workingDirectory: Uri | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
 	}> {
-		const createWorkingTreeIfRequired = async (create: boolean, sessionId: string | undefined) => {
+		const createWorkingTreeIfRequired = async (sessionId: string | undefined) => {
 			// Check if the session has a workspace folder tracked (folder without git repo)
 			const sessionWorkspaceFolder = sessionId ? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId) : undefined;
-			const selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSessionRepository(sessionId) : undefined;
+			let selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSessionRepository(sessionId) : undefined;
 			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository.rootUri) : undefined;
 
 			if (!selectedRepository && sessionWorkspaceFolder) {
-				// Workspace folder without git repo - no worktree can be created, use folder directly
-				return { workingDirectory: sessionWorkspaceFolder, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
+				// Possible we now have a git repo in this folder, check again.
+				selectedRepository = await this.gitService.getRepository(sessionWorkspaceFolder, true);
+				if (!selectedRepository) {
+					// Verify this folder is trusted.
+					const isTrusted = await this.workspaceService.requestResourceTrust({ uri: sessionWorkspaceFolder, message: untrustedFolderMessage });
+					if (!isTrusted) {
+						stream.warning(l10n.t('The selected workspace folder is not trusted. Proceeding without isolation.'));
+						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
+					}
+					// Workspace folder without git repo - no worktree can be created, use folder directly
+					return { workingDirectory: sessionWorkspaceFolder, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
+				}
 			}
 
-			if (!create) {
+			// Verify we have a git repo and it is trusted.
+			selectedRepository = selectedRepository ?? (sessionId ? await this.copilotCLIWorktreeManagerService.getSessionRepository(sessionId) : undefined);
+
+			// Verify repository is trusted
+			if (selectedRepository) {
+				const isTrusted = await this.workspaceService.requestResourceTrust({ uri: selectedRepository.rootUri, message: untrustedFolderMessage });
+				if (!isTrusted) {
+					stream.warning(l10n.t('The selected workspace folder is not trusted. Proceeding without isolation.'));
+					return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
+				}
+			}
+
+			if (!selectedRepository) {
 				return { workingDirectory, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: false };
 			}
+
 
 			const worktreeProperties = await this.copilotCLIWorktreeManagerService.createWorktree(sessionId, stream);
 			if (worktreeProperties) {
@@ -1095,10 +1186,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 			const id = existingSessionId ?? SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
 			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
-			isolationEnabled = this.isolationManager.getIsolationPreference(id);
 
 			if (isNewSession) {
-				({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo } = await createWorkingTreeIfRequired(isolationEnabled, id));
+				({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo } = await createWorkingTreeIfRequired(id));
 				// Means we failed to create worktree or this is a workspace folder without git repo
 				if (!worktreeProperties) {
 					isolationEnabled = false;
@@ -1116,7 +1206,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		} else {
 			// This happens when we're delegating from a non-Background session to a new Background session
 			isolationEnabled = this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get();
-			({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo } = await createWorkingTreeIfRequired(isolationEnabled, undefined));
+			({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo } = await createWorkingTreeIfRequired(undefined));
 			// Means we failed to create worktree or this is a workspace folder without git repo
 			if (!worktreeProperties) {
 				isolationEnabled = false;
@@ -1328,13 +1418,15 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	// Command to open a folder picker and select a repository for untitled workspaces
 	disposableStore.add(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, async (sessionItemResource?: vscode.Uri) => {
+		if (!sessionItemResource) {
+			return;
+		}
 		// Open folder picker dialog
 		const folderUris = await vscode.window.showOpenDialog({
 			canSelectFiles: false,
 			canSelectFolders: true,
 			canSelectMany: false,
-			openLabel: l10n.t('Select Repository'),
-			title: l10n.t('Select a folder containing a git repository')
+			openLabel: l10n.t('Open Folder...'),
 		});
 
 		if (!folderUris || folderUris.length === 0) {
@@ -1345,23 +1437,29 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		// Check if the selected folder contains a git repository
 		const repository = await gitService.getRepository(selectedFolderUri, true);
-		if (!repository) {
-			await vscode.window.showErrorMessage(
-				l10n.t('Selected folder does not contain a git repository. Please select a folder with a git repository.'),
-				{ modal: true }
-			);
-			return;
-		}
 
 		// If we have a session resource, update the session's repository
-		if (sessionItemResource) {
+		if (repository) {
 			const sessionId = SessionIdForCLI.parse(sessionItemResource);
+			untitledWorkspaceRepositories.set(repository.rootUri, Date.now());
+			await copilotCliWorkspaceSession.deleteTrackedWorkspaceFolder(sessionId);
 			await copilotCLIWorktreeManagerService.setSessionRepository(sessionId, repository.rootUri.fsPath);
 
 			// Notify VS Code that the option changed
 			contentProvider.notifySessionOptionsChange(sessionItemResource, [{
 				optionId: REPOSITORY_OPTION_ID,
 				value: toRepositoryOptionItem(repository)
+			}]);
+		} else {
+			const sessionId = SessionIdForCLI.parse(sessionItemResource);
+			untitledWorkspaceFodlers.set(selectedFolderUri, Date.now());
+			await copilotCliWorkspaceSession.trackSessionWorkspaceFolder(sessionId, selectedFolderUri.fsPath);
+			await copilotCLIWorktreeManagerService.deleteSessionRepository(sessionId);
+
+			// Notify VS Code that the option changed
+			contentProvider.notifySessionOptionsChange(sessionItemResource, [{
+				optionId: REPOSITORY_OPTION_ID,
+				value: toWorkspaceFolderOptionItem(selectedFolderUri, basename(selectedFolderUri)),
 			}]);
 		}
 

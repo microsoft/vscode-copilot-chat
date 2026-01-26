@@ -141,7 +141,8 @@
 		"contribEditorContentMenu",
 		"chatPromptFiles",
 		"mcpServerDefinitions",
-		"tabInputMultiDiff"
+		"tabInputMultiDiff",
+		"workspaceTrust"
 	],
 	"contributes": {
 		"languageModelTools": [

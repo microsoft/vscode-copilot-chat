@@ -241,7 +241,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		participant = new CopilotCLIChatSessionParticipant(
-			isolationManager,
 			contentProvider,
 			promptResolver,
 			itemProvider,

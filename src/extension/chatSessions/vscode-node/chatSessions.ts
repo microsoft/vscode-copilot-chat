@@ -134,7 +134,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
 			CopilotCLIChatSessionParticipant,
-			copilotcliSessionIsolationManager,
 			copilotcliChatSessionContentProvider,
 			promptResolver,
 			copilotcliSessionItemProvider,
