@@ -206,12 +206,19 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				};
 			} else if (typeof answer === 'object' && answer !== null) {
 				// Handle object answers - VS Code returns { selectedValue: string } or { selectedValues: string[] }
+				// Also may include { freeformValue: string } when user enters free text with options
 				const answerObj = answer as Record<string, unknown>;
+
+				// Extract freeform text if present (treat empty string as no freeform)
+				const freeformValue = ('freeformValue' in answerObj && typeof answerObj.freeformValue === 'string' && answerObj.freeformValue)
+					? answerObj.freeformValue
+					: null;
+
 				if ('selectedValues' in answerObj && Array.isArray(answerObj.selectedValues)) {
 					// Multi-select answer
 					result.answers[question.header] = {
 						selected: answerObj.selectedValues.map(v => String(v)),
-						freeText: null,
+						freeText: freeformValue,
 						skipped: false
 					};
 				} else if ('selectedValue' in answerObj) {
@@ -220,23 +227,46 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 						if (question.options?.some(opt => opt.label === value)) {
 							result.answers[question.header] = {
 								selected: [value],
-								freeText: null,
+								freeText: freeformValue,
 								skipped: false
 							};
 						} else {
+							// selectedValue is not a known option - treat it as free text
 							result.answers[question.header] = {
 								selected: [],
-								freeText: value,
+								freeText: freeformValue ?? value,
 								skipped: false
 							};
 						}
 					} else if (Array.isArray(value)) {
 						result.answers[question.header] = {
 							selected: value.map(v => String(v)),
-							freeText: null,
+							freeText: freeformValue,
 							skipped: false
 						};
+					} else if (value === undefined || value === null) {
+						// No selection made, but might have freeform text
+						if (freeformValue) {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: freeformValue,
+								skipped: false
+							};
+						} else {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: null,
+								skipped: true
+							};
+						}
 					}
+				} else if ('freeformValue' in answerObj && freeformValue) {
+					// Only freeform text provided, no selection
+					result.answers[question.header] = {
+						selected: [],
+						freeText: freeformValue,
+						skipped: false
+					};
 				} else if ('label' in answerObj && typeof answerObj.label === 'string') {
 					// Answer might be the raw option object
 					result.answers[question.header] = {
