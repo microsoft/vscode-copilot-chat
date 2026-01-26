@@ -688,7 +688,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
 			// TODO(bensteenhoek): Remove this hardcoded override after testing
 			// Set to e.g. 'low', 'medium', 'high', or 'no_edit' to force a specific intent, or undefined to use model response
-			const HARDCODED_EDIT_INTENT: string | undefined = undefined;
+			// const HARDCODED_EDIT_INTENT: string | undefined = xtabPromptOptions.EditIntent.NoEdit;
+			// const HARDCODED_EDIT_INTENT: string | undefined = xtabPromptOptions.EditIntent.High;
+			// const HARDCODED_EDIT_INTENT: string | undefined = xtabPromptOptions.EditIntent.Medium;
+			const HARDCODED_EDIT_INTENT: string | undefined = xtabPromptOptions.EditIntent.Low;
 
 			// Optionally prepend a hardcoded edit intent tag to simulate model response
 			const streamWithIntent = HARDCODED_EDIT_INTENT !== undefined
@@ -718,8 +721,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			// Check if we should show this edit based on intent and aggressiveness
 			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, promptPieces.aggressivenessLevel)) {
 				tracer.trace(`Filtered out edit due to edit intent "${editIntent}" with aggressiveness "${promptPieces.aggressivenessLevel}"`);
-				// Short-circuit: resolve the fetch stream source to stop receiving/parsing the rest of the response
-				fetchStreamSource.resolve();
 				return new NoNextEditReason.FilteredOut(`editIntent:${editIntent} aggressivenessLevel:${promptPieces.aggressivenessLevel}`);
 			}
 
