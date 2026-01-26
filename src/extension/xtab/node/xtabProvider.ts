@@ -1332,7 +1332,7 @@ export async function parseEditIntentFromStream(
 			}
 		});
 
-		return { editIntent, remainingLinesStream };
+		return { editIntent, remainingLinesStream, parseError };
 	}
 
 	// Determine the parse error type
