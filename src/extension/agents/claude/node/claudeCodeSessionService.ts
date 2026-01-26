@@ -408,7 +408,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	private _computeFolderSlug(folderUri: URI): string {
 		return folderUri.path
 			.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
-			.replace(/[\/\.]/g, '-');
+			.replace(/[\/ .]/g, '-');
 	}
 
 	private _generateSessionLabel(summaryEntry: SummaryEntry | undefined, messages: SDKMessage[]): string {
