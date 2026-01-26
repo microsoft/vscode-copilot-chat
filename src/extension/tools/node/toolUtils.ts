@@ -16,6 +16,7 @@ import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../util/vs/base/common/path';
 import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
+import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
@@ -23,7 +24,6 @@ import { isPromptInstructionText } from '../../prompt/common/chatVariablesCollec
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
-import { isString } from '../../../util/vs/base/common/types';
 
 export function checkCancellation(token: CancellationToken): void {
 	if (token.isCancellationRequested) {
@@ -200,7 +200,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	return true;
 }
 
-export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI): boolean {
+export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): boolean {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 
@@ -210,9 +210,15 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
-	if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
-		return false;
+	if (buildPromptContext) {
+		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
+		if (instructionIndexFile && instructionIndexFile.skillFolders.has(normalizedUri)) {
+			return false;
+		}
+	} else {
+		if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
+			return false;
+		}
 	}
-
 	return true;
 }

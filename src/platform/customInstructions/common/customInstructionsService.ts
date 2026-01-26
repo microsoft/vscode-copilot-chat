@@ -83,6 +83,7 @@ export interface ICustomInstructionsService {
 export interface IInstructionIndexFile {
 	readonly instructions: ResourceSet;
 	readonly skills: ResourceSet;
+	readonly skillFolders: ResourceSet;
 	readonly agents: Set<string>;
 }
 
@@ -472,6 +473,7 @@ class InstructionIndexFile implements IInstructionIndexFile {
 
 	private instructionUris: ResourceSet | undefined;
 	private skillUris: ResourceSet | undefined;
+	private skillFolderUris: ResourceSet | undefined;
 	private agentNames: Set<string> | undefined;
 
 	constructor(
@@ -520,6 +522,17 @@ class InstructionIndexFile implements IInstructionIndexFile {
 			this.skillUris = this.getURIsFromFilePaths(this.getValuesInIndexFile('skills', 'skill', 'file'));
 		}
 		return this.skillUris;
+	}
+
+	get skillFolders(): ResourceSet {
+		if (this.skillFolderUris === undefined) {
+			this.skillFolderUris = new ResourceSet();
+			for (const skillUri of this.skills) {
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(skillUri);
+				this.skillFolderUris.add(skillFolderUri);
+			}
+		}
+		return this.skillFolderUris;
 	}
 
 	get agents(): Set<string> {
