@@ -65,6 +65,10 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
+		if (this._editIntent) {
+			lines.push(`Edit Intent: **${this._editIntent}**\n`);
+		}
+
 		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
 
 		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
@@ -579,6 +583,11 @@ export class InlineEditRequestLogContext {
 		this._languageContext = langCtx;
 	}
 
+	private _editIntent: string | undefined;
+	setEditIntent(editIntent: string): void {
+		this._editIntent = editIntent;
+	}
+
 	/**
 	 * Convert the current instance into a JSON format to enable serialization
 	 * @returns JSON representation of the current state
@@ -605,7 +614,8 @@ export class InlineEditRequestLogContext {
 			logs: this._logs,
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
-			diagnostics: this._getDiagnosticsForTrackedFiles()
+			diagnostics: this._getDiagnosticsForTrackedFiles(),
+			editIntent: this._editIntent
 		};
 	}
 }
@@ -651,4 +661,5 @@ export interface ISerializedInlineEditLogContext {
 	isAccepted: boolean | undefined;
 	languageContext: SerializedContextResponse | undefined;
 	diagnostics: SerializedDiagnostic[] | undefined;
+	editIntent: string | undefined;
 }

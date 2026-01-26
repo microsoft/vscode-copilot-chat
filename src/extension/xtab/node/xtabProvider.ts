@@ -686,12 +686,28 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
+			// TODO(bensteenhoek): Remove this hardcoded override after testing
+			// Set to e.g. 'low', 'medium', 'high', or 'no_edit' to force a specific intent, or undefined to use model response
+			const HARDCODED_EDIT_INTENT: string | undefined = undefined;
+
+			// Optionally prepend a hardcoded edit intent tag to simulate model response
+			const streamWithIntent = HARDCODED_EDIT_INTENT !== undefined
+				? new AsyncIterableObject<string>(async (emitter) => {
+					emitter.emitOne(`<|edit_intent|>${HARDCODED_EDIT_INTENT}<|/edit_intent|>`);
+					for await (const line of linesStream) {
+						emitter.emitOne(line);
+					}
+				})
+				: linesStream;
+
 			// Parse the edit_intent tag from the response
-			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, tracer);
+			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(streamWithIntent, tracer);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
+			logContext.setEditIntent(editIntent);
 			logContext.addLog(`Edit intent: ${editIntent}`);
+
 
 			// Log parse errors for telemetry - this helps detect malformed model output during flights
 			if (parseError) {
