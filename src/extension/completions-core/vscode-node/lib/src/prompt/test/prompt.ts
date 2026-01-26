@@ -11,6 +11,7 @@ import { TelemetryWithExp } from '../../telemetry';
 import { IPosition, ITextDocument } from '../../textDocument';
 import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { extractPrompt, ExtractPromptOptions } from '../prompt';
+import { GhostTextLogContext } from '../../../../../common/ghostTextContext';
 
 export async function extractPromptInternal(
 	accessor: ServicesAccessor,
@@ -32,5 +33,5 @@ export async function getGhostTextInternal(
 	position: IPosition,
 	token?: CancellationToken
 ) {
-	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' });
+	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' }, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined));
 }

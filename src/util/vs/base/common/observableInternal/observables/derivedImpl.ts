@@ -383,9 +383,7 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 		super.addObserver(observer);
 
 		if (shouldCallBeginUpdate) {
-			if (this._removedObserverToCallEndUpdateOn && this._removedObserverToCallEndUpdateOn.has(observer)) {
-				this._removedObserverToCallEndUpdateOn.delete(observer);
-			} else {
+			if (!this._removedObserverToCallEndUpdateOn?.delete(observer)) {
 				observer.beginUpdate(this);
 			}
 		}
@@ -418,10 +416,15 @@ export class Derived<T, TChangeSummary = any, TChange = void> extends BaseObserv
 	}
 
 	public debugRecompute(): void {
-		if (!this._isComputing) {
-			this._recompute();
-		} else {
-			this._state = DerivedState.stale;
+		this.beginUpdate(this);
+		try {
+			if (!this._isComputing) {
+				this._recompute();
+			} else {
+				this._state = DerivedState.stale;
+			}
+		} finally {
+			this.endUpdate(this);
 		}
 	}
 

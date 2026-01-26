@@ -150,4 +150,6 @@
 	},
 	"githubPullRequests.codingAgent.enabled": true,
 	"githubPullRequests.codingAgent.uiIntegration": true,
+	"python-envs.defaultEnvManager": "ms-python.python:system",
+	"python-envs.pythonProjects": [],
 }

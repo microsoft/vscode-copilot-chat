@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { createServiceIdentifier } from '../../../util/common/services';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
@@ -94,6 +95,8 @@ export interface IBuildPromptContext {
 	readonly stream?: vscode.ChatResponseStream;
 	readonly isContinuation?: boolean;
 }
+
+export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');
 
 export enum WorkingSetEntryState {
 	Initial = 0,

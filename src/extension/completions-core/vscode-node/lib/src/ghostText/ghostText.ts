@@ -8,6 +8,7 @@ import { ITelemetryService } from '../../../../../../platform/telemetry/common/t
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
 import { ICompletionsNotifierService } from '../completionNotifier';
@@ -27,7 +28,7 @@ import { ICompletionsContextProviderService } from '../prompt/contextProviderSta
 import {
 	contextIndentation,
 } from '../prompt/parseBlock';
-import { ExtractPromptOptions, Prompt, PromptResponsePresent, extractPrompt, trimLastLine } from '../prompt/prompt';
+import { ExtractPromptOptions, Prompt, PromptResponse, PromptResponsePresent, extractPrompt, trimLastLine } from '../prompt/prompt';
 import { ComputationStatus, extractRepoInfoInBackground } from '../prompt/repository';
 import { checkSuffix, postProcessChoiceInContext } from '../suggestions/suggestions';
 import {
@@ -142,7 +143,8 @@ export class GhostTextComputer {
 	public async getGhostText(
 		completionState: CompletionState,
 		token: ICancellationToken | undefined,
-		options: Partial<GetGhostTextOptions>
+		options: Partial<GetGhostTextOptions>,
+		logContext: GhostTextLogContext,
 	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 		const id = generateUuid();
 		this.currentGhostText.currentRequestId = id;
@@ -162,7 +164,7 @@ export class GhostTextComputer {
 				options
 			);
 			this.notifierService.notifyRequest(completionState, id, telemetryData, token, options);
-			const result = await this.getGhostTextWithoutAbortHandling(completionState, id, telemetryData, token, options);
+			const result = await this.getGhostTextWithoutAbortHandling(completionState, id, telemetryData, token, options, logContext);
 			const statistics = this.contextproviderStatistics.getStatisticsForCompletion(id);
 			const opportunityId = options?.opportunityId ?? 'unknown';
 			for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
@@ -214,8 +216,9 @@ export class GhostTextComputer {
 		completionState: CompletionState,
 		ourRequestId: string,
 		preIssuedTelemetryDataWithExp: TelemetryWithExp,
-		cancellationToken?: ICancellationToken,
-		options?: Partial<GetGhostTextOptions>
+		cancellationToken: ICancellationToken | undefined,
+		options: Partial<GetGhostTextOptions>,
+		logContext: GhostTextLogContext,
 	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 		let start = preIssuedTelemetryDataWithExp.issuedTime; // Start before getting exp assignments
 		const performanceMetrics: [string, number][] = [];
@@ -251,9 +254,12 @@ export class GhostTextComputer {
 			completionState,
 			preIssuedTelemetryDataWithExp,
 			undefined,
-			ghostTextOptions
+			ghostTextOptions,
 		);
 		recordPerformance('prompt');
+
+		logContext.setPrompt(PromptResponse.toString(prompt));
+
 		if (prompt.type === 'copilotContentExclusion') {
 			this.logger.debug('Copilot not available, due to content exclusion');
 			return {
@@ -624,11 +630,12 @@ export async function getGhostText(
 	accessor: ServicesAccessor,
 	completionState: CompletionState,
 	token: ICancellationToken | undefined,
-	options: Partial<GetGhostTextOptions>
+	options: Partial<GetGhostTextOptions>,
+	logContext: GhostTextLogContext,
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 	const instaService = accessor.get(IInstantiationService);
 	const ghostTextComputer = instaService.createInstance(GhostTextComputer);
-	return ghostTextComputer.getGhostText(completionState, token, options);
+	return ghostTextComputer.getGhostText(completionState, token, options, logContext);
 }
 
 /**
