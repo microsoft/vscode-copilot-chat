@@ -81,7 +81,7 @@ describe('AutomodeService', () => {
 	});
 
 	describe('resolveAutoModeEndpoint', () => {
-		it('should skip router fetch for inline chat when cache exists', async () => {
+		it('should not use router for inline chat', async () => {
 			// Enable router via config
 			(configurationService as InMemoryConfigurationService).setConfig(
 				ConfigKey.TeamInternal.AutoModeRouterUrl,
@@ -104,92 +104,10 @@ describe('AutomodeService', () => {
 				toolInvocationToken: { sessionId: 'test-session' } as any
 			};
 
-			// First call - should route since no cache
-			(mockFetcherService.fetch as any).mockResolvedValue({
-				ok: true,
-				status: 200,
-				json: vi.fn().mockResolvedValue({
-					predicted_label: 'no_reasoning',
-					confidence: 0.85,
-					latency_ms: 50,
-					chosen_model: 'gpt-4o-mini',
-					candidate_models: ['gpt-4o', 'gpt-4o-mini'],
-					scores: {
-						needs_reasoning: 0.15,
-						no_reasoning: 0.85
-					}
-				})
-			});
-
 			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint]);
 
-			// Verify that router fetch WAS called for first inline chat (no cache)
-			expect(mockFetcherService.fetch).toHaveBeenCalledWith(
-				'https://router.example.com/api',
-				expect.objectContaining({
-					method: 'POST'
-				})
-			);
-
-			// Reset mock
-			(mockFetcherService.fetch as any).mockClear();
-
-			// Second call with same session - should skip router fetch due to cache
-			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint]);
-
-			// Verify that router fetch was NOT called for second inline chat (has cache)
+			// Verify that router fetch was NOT called for inline chat
 			expect(mockFetcherService.fetch).not.toHaveBeenCalled();
-		});
-
-		it('should use router for inline chat when no cache exists', async () => {
-			// Enable router via config
-			(configurationService as InMemoryConfigurationService).setConfig(
-				ConfigKey.TeamInternal.AutoModeRouterUrl,
-				'https://router.example.com/api'
-			);
-
-			// Mock successful router response
-			(mockFetcherService.fetch as any).mockResolvedValue({
-				ok: true,
-				status: 200,
-				json: vi.fn().mockResolvedValue({
-					predicted_label: 'no_reasoning',
-					confidence: 0.85,
-					latency_ms: 50,
-					chosen_model: 'gpt-4o-mini',
-					candidate_models: ['gpt-4o', 'gpt-4o-mini'],
-					scores: {
-						needs_reasoning: 0.15,
-						no_reasoning: 0.85
-					}
-				})
-			});
-
-			automodeService = new AutomodeService(
-				mockCAPIClientService,
-				mockAuthService,
-				mockLogService,
-				mockInstantiationService,
-				mockExpService,
-				mockFetcherService,
-				configurationService
-			);
-
-			const chatRequest: Partial<ChatRequest> = {
-				location: ChatLocation.Editor,
-				prompt: 'test prompt',
-				toolInvocationToken: { sessionId: 'test-session-new' } as any
-			};
-
-			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint]);
-
-			// Verify that router fetch WAS called for inline chat when no cache
-			expect(mockFetcherService.fetch).toHaveBeenCalledWith(
-				'https://router.example.com/api',
-				expect.objectContaining({
-					method: 'POST'
-				})
-			);
 		});
 
 		it('should use router for panel chat when enabled', async () => {
@@ -265,29 +183,12 @@ describe('AutomodeService', () => {
 			expect(mockFetcherService.fetch).not.toHaveBeenCalled();
 		});
 
-		it('should use router for terminal chat when enabled', async () => {
+		it('should not use router for terminal chat', async () => {
 			// Enable router via config
 			(configurationService as InMemoryConfigurationService).setConfig(
 				ConfigKey.TeamInternal.AutoModeRouterUrl,
 				'https://router.example.com/api'
 			);
-
-			// Mock successful router response
-			(mockFetcherService.fetch as any).mockResolvedValue({
-				ok: true,
-				status: 200,
-				json: vi.fn().mockResolvedValue({
-					predicted_label: 'no_reasoning',
-					confidence: 0.85,
-					latency_ms: 50,
-					chosen_model: 'gpt-4o-mini',
-					candidate_models: ['gpt-4o', 'gpt-4o-mini'],
-					scores: {
-						needs_reasoning: 0.15,
-						no_reasoning: 0.85
-					}
-				})
-			});
 
 			automodeService = new AutomodeService(
 				mockCAPIClientService,
@@ -306,13 +207,8 @@ describe('AutomodeService', () => {
 
 			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint]);
 
-			// Verify that router fetch WAS called for terminal chat
-			expect(mockFetcherService.fetch).toHaveBeenCalledWith(
-				'https://router.example.com/api',
-				expect.objectContaining({
-					method: 'POST'
-				})
-			);
+			// Verify that router fetch was NOT called for terminal chat
+			expect(mockFetcherService.fetch).not.toHaveBeenCalled();
 		});
 	});
 });
