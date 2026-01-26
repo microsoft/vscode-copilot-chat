@@ -141,21 +141,21 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
 }
 
-let cachedInstructionIndexFile: { requestd: string; file: IInstructionIndexFile } | undefined;
+let cachedInstructionIndexFile: { requestId: string; file: IInstructionIndexFile } | undefined;
 
 function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, customInstructionsService: ICustomInstructionsService): IInstructionIndexFile | undefined {
 	if (!buildPromptContext.requestId) {
 		return undefined;
 	}
 
-	if (cachedInstructionIndexFile?.requestd === buildPromptContext.requestId) {
+	if (cachedInstructionIndexFile?.requestId === buildPromptContext.requestId) {
 		return cachedInstructionIndexFile.file;
 	}
 
 	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
 	if (indexVariable && isString(indexVariable.value)) {
 		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
-		cachedInstructionIndexFile = { requestd: buildPromptContext.requestId, file: indexFile };
+		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };
 		return indexFile;
 	}
 	cachedInstructionIndexFile = undefined;
