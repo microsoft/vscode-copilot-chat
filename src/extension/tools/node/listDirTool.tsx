@@ -18,6 +18,7 @@ import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { checkCancellation, isDirExternalAndNeedsConfirmation, resolveToolInputPath } from './toolUtils';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 
 interface IListDirParams {
 	path: string;
@@ -25,6 +26,8 @@ interface IListDirParams {
 
 class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 	public static readonly toolName = ToolName.ListDirectory;
+
+	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
 		@IFileSystemService private readonly fsService: IFileSystemService,
@@ -50,7 +53,7 @@ class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 
 		// Check if directory is external (outside workspace)
 		const isExternal = this.instantiationService.invokeFunction(
-			(accessor: ServicesAccessor) => isDirExternalAndNeedsConfirmation(accessor, uri)
+			(accessor: ServicesAccessor) => isDirExternalAndNeedsConfirmation(accessor, uri, this._promptContext)
 		);
 
 		if (isExternal) {
@@ -72,6 +75,11 @@ class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),
 		};
+	}
+
+	async resolveInput(input: IListDirParams, promptContext: IBuildPromptContext): Promise<IListDirParams> {
+		this._promptContext = promptContext;
+		return input;
 	}
 }
 

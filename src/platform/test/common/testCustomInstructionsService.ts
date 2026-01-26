@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import type { Uri } from '../../../vscodeTypes';
 import { Config } from '../../configuration/common/configurationService';
-import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService } from '../../customInstructions/common/customInstructionsService';
+import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService, IInstructionIndexFile } from '../../customInstructions/common/customInstructionsService';
 
 /**
  * A configurable mock implementation of ICustomInstructionsService for testing.
@@ -19,6 +20,15 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	private externalFiles = new Set<string>();
 	private externalFolders = new Set<string>();
 	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI }>();
+
+	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile {
+		return {
+			instructions: new ResourceSet(),
+			skills: new ResourceSet(),
+			skillFolders: new ResourceSet(),
+			agents: new Set<string>()
+		};
+	}
 
 	/**
 	 * Set the URIs that should be recognized as skill files.

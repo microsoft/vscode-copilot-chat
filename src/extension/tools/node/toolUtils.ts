@@ -5,7 +5,7 @@
 
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -16,9 +16,12 @@ import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../util/vs/base/common/path';
 import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
+import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 
@@ -91,16 +94,16 @@ export function resolveToolInputPath(path: string, promptPathRepresentationServi
 	return uri;
 }
 
-export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
 	try {
-		await assertFileOkForTool(accessor, uri);
+		await assertFileOkForTool(accessor, uri, buildPromptContext);
 		return true;
 	} catch {
 		return false;
 	}
 }
 
-export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<void> {
+export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): Promise<void> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
@@ -110,17 +113,54 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	await assertFileNotContentExcluded(accessor, uri);
 
 	const normalizedUri = normalizePath(uri);
-
-	// Allow files in workspace, untitled, external instructions, or session resources
-	if (!workspaceService.getWorkspaceFolder(normalizedUri) &&
-		uri.scheme !== Schemas.untitled &&
-		!await customInstructionsService.isExternalInstructionsFile(normalizedUri) &&
-		!diskSessionResources.isSessionResourceUri(normalizedUri)) {
-		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
-		if (!fileOpenInSomeTab) {
-			throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
+		return;
+	}
+	if (uri.scheme === Schemas.untitled) {
+		return;
+	}
+	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
+	if (fileOpenInSomeTab) {
+		return;
+	}
+	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
+		return;
+	}
+	if (buildPromptContext) {
+		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
+		if (instructionIndexFile) {
+			if (instructionIndexFile.instructions.has(normalizedUri) || instructionIndexFile.skills.has(normalizedUri)) {
+				return;
+			}
+		}
+	} else {
+		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+			return;
 		}
 	}
+	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+}
+
+let cachedInstructionIndexFile: { requestId: string; file: IInstructionIndexFile } | undefined;
+
+function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, customInstructionsService: ICustomInstructionsService): IInstructionIndexFile | undefined {
+	if (!buildPromptContext.requestId) {
+		return undefined;
+	}
+
+	if (cachedInstructionIndexFile?.requestId === buildPromptContext.requestId) {
+		return cachedInstructionIndexFile.file;
+	}
+
+	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	if (indexVariable && isString(indexVariable.value)) {
+		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
+		cachedInstructionIndexFile = { requestId: buildPromptContext.requestId, file: indexFile };
+		return indexFile;
+	}
+	cachedInstructionIndexFile = undefined;
+	return undefined;
+
 }
 
 export async function assertFileNotContentExcluded(accessor: ServicesAccessor, uri: URI): Promise<void> {
@@ -160,7 +200,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	return true;
 }
 
-export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI): boolean {
+export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): boolean {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
 
@@ -170,9 +210,15 @@ export function isDirExternalAndNeedsConfirmation(accessor: ServicesAccessor, ur
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
-	if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
-		return false;
+	if (buildPromptContext) {
+		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
+		if (instructionIndexFile && instructionIndexFile.skillFolders.has(normalizedUri)) {
+			return false;
+		}
+	} else {
+		if (customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
+			return false;
+		}
 	}
-
 	return true;
 }

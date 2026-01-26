@@ -377,6 +377,7 @@
 	"github.copilot.config.nextEditSuggestions.preferredModel": "Preferred model for next edit suggestions.",
 	"github.copilot.command.deleteAgentSession": "Delete...",
 	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Terminal",
+	"github.copilot.command.cli.sessions.openRepository": "Open Repository",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
