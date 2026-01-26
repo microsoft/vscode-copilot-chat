@@ -361,6 +361,7 @@ export interface IStatelessNextEditTelemetry {
 
 	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent) */
 	readonly editIntent: string | undefined;
+	readonly editIntentParseError: string | undefined;
 
 	/* cursor jump info */
 	readonly cursorJumpPrompt: string | undefined;
@@ -438,6 +439,7 @@ export class StatelessNextEditTelemetryBuilder {
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
 			editIntent: this._editIntent,
+			editIntentParseError: this._editIntentParseError,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
 		};
@@ -589,6 +591,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntent: string | undefined;
 	public setEditIntent(editIntent: string): this {
 		this._editIntent = editIntent;
+		return this;
+	}
+
+	private _editIntentParseError: string | undefined;
+	public setEditIntentParseError(error: string): this {
+		this._editIntentParseError = error;
 		return this;
 	}
 }

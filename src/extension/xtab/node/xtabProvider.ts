@@ -688,11 +688,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
 			// Parse the edit_intent tag from the response and filter based on aggressiveness
 			// This short-circuits on no_edit to avoid parsing the rest of the response
-			const { editIntent, remainingLinesStream } = await this.parseEditIntentFromStream(linesStream, promptPieces.aggressivenessLevel, tracer);
+			const { editIntent, remainingLinesStream, parseError } = await this.parseEditIntentFromStream(linesStream, promptPieces.aggressivenessLevel, tracer);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
 			logContext.addLog(`Edit intent: ${editIntent}`);
+
+			// Log parse errors for telemetry - this helps detect malformed model output during flights
+			if (parseError) {
+				telemetryBuilder.setEditIntentParseError(parseError);
+				logContext.addLog(`Edit intent parse error: ${parseError}`);
+			}
 
 			// Check if we should show this edit based on intent and aggressiveness
 			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, promptPieces.aggressivenessLevel)) {
@@ -882,20 +888,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		linesStream: AsyncIterableObject<string>,
 		aggressivenessLevel: xtabPromptOptions.AggressivenessLevel,
 		tracer: ILogger,
-	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string> }> {
+	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string>; parseError?: string }> {
 		const EDIT_INTENT_START_TAG = '<|edit_intent|>';
 		const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
 
 		let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no tag found
+		let parseError: string | undefined;
 
 		const linesIter = linesStream[Symbol.asyncIterator]();
 		const firstLineResult = await linesIter.next();
 
 		if (firstLineResult.done) {
 			// Empty stream
+			parseError = 'emptyResponse';
 			tracer.warn(`Empty response stream, no edit_intent tag found`);
 			const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
-			return { editIntent, remainingLinesStream };
+			return { editIntent, remainingLinesStream, parseError };
 		}
 
 		const firstLine = firstLineResult.value;
@@ -942,8 +950,19 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return { editIntent, remainingLinesStream };
 		}
 
-		// No valid edit_intent tag on the first line - warn and use default
-		tracer.warn(`No edit_intent tag found on first line (using Xtab275EditIntent prompting strategy). ` +
+		// Determine the parse error type
+		if (startIdx !== -1 && endIdx === -1) {
+			// Start tag found but no end tag - malformed (possibly split across lines)
+			parseError = 'malformedTag:startWithoutEnd';
+		} else if (startIdx === -1 && endIdx !== -1) {
+			// End tag found but no start tag - malformed
+			parseError = 'malformedTag:endWithoutStart';
+		} else {
+			// No tag found at all
+			parseError = 'noTagFound';
+		}
+
+		tracer.warn(`Edit intent parse error: ${parseError} (using Xtab275EditIntent prompting strategy). ` +
 			`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
 
 		// Return the first line plus the rest of the stream
@@ -956,7 +975,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 		});
 
-		return { editIntent, remainingLinesStream };
+		return { editIntent, remainingLinesStream, parseError };
 	}
 
 	private async *doGetNextEditsWithCursorJump(
