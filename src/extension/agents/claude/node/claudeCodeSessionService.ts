@@ -337,7 +337,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		const summaries = new Map<string, SummaryEntry>();
 		try {
 			// Read and parse the JSONL file
-			const content = await this._fileSystem.readFile(fileUri);
+			// Claude session files can be large (>5MB), so we disable the size limit
+			const content = await this._fileSystem.readFile(fileUri, true);
 			if (token.isCancellationRequested) {
 				throw new CancellationError();
 			}

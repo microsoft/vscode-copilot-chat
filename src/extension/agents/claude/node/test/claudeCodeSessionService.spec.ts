@@ -56,6 +56,50 @@ describe('ClaudeCodeSessionService', () => {
 		service = instaService.createInstance(ClaudeCodeSessionService);
 	});
 
+	it('handles large session files (>5MB) correctly', async () => {
+		// Create a large session file by repeating a valid message entry
+		const fileName = 'large-session.jsonl';
+		const timestamp = new Date().toISOString();
+
+		// Create a base message entry
+		const baseMessage = JSON.stringify({
+			parentUuid: null,
+			sessionId: 'large-session',
+			type: 'user',
+			message: { role: 'user', content: 'x'.repeat(1000) }, // 1KB per message
+			uuid: 'uuid-1',
+			timestamp
+		});
+
+		// Repeat the message 6000 times to create ~6MB file
+		const lines: string[] = [];
+		for (let i = 0; i < 6000; i++) {
+			const message = JSON.parse(baseMessage);
+			message.uuid = `uuid-${i}`;
+			if (i > 0) {
+				message.parentUuid = `uuid-${i - 1}`;
+			}
+			lines.push(JSON.stringify(message));
+		}
+
+		const largeFileContents = lines.join('\n');
+		const fileSizeInMB = Math.round(largeFileContents.length / (1024 * 1024));
+
+		// Verify the file is actually large enough (>5MB)
+		expect(fileSizeInMB).toBeGreaterThan(5);
+
+		mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+		mockFs.mockFile(URI.joinPath(dirUri, fileName), largeFileContents, 1000);
+
+		// Should not throw an error for large files
+		const sessions = await service.getAllSessions(CancellationToken.None);
+
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].id).toBe('large-session');
+		// Verify we loaded all messages
+		expect(sessions[0].messages).toHaveLength(6000);
+	});
+
 	it('loads 2 sessions from 3 real fixture files', async () => {
 		// Setup mock with all 3 real fixture files
 		const fileName1 = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
