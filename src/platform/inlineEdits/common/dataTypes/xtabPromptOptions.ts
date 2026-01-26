@@ -116,16 +116,16 @@ export namespace EditIntent {
 		switch (editIntent) {
 			case EditIntent.NoEdit:
 				return false;
-			case EditIntent.Low:
-				// Low confidence edits show for all aggressiveness levels
+			case EditIntent.High:
+				// High confidence edits show for all aggressiveness levels
 				return true;
 			case EditIntent.Medium:
-				// Medium confidence edits show for low or medium aggressiveness
-				return aggressivenessLevel === AggressivenessLevel.Low ||
-					aggressivenessLevel === AggressivenessLevel.Medium;
-			case EditIntent.High:
-				// High confidence edits only show for low aggressiveness
-				return aggressivenessLevel === AggressivenessLevel.Low;
+				// Medium confidence edits show for medium or high aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.Medium ||
+					aggressivenessLevel === AggressivenessLevel.High;
+			case EditIntent.Low:
+				// Low confidence edits only show for high aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.High;
 			default:
 				assertNever(editIntent);
 		}
