@@ -170,7 +170,11 @@ export class TestingServicesAccessor implements ITestingServicesAccessor {
 	}
 
 	getIfExists<T>(id: ServiceIdentifier<T>): T | undefined {
-		return this._instaService.invokeFunction(accessor => accessor.getIfExists(id));
+		try {
+			return this._instaService.invokeFunction(accessor => accessor.get(id));
+		} catch {
+			return undefined;
+		}
 	}
 }
 

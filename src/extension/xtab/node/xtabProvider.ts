@@ -25,6 +25,7 @@ import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
+import { ILogger } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams, Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
@@ -33,7 +34,6 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { raceFilter } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { ITracer } from '../../../util/common/tracing';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -118,7 +118,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		this.userInteractionMonitor.handleIgnored();
 	}
 
-	public async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	public async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 		const telemetry = new StatelessNextEditTelemetryBuilder(request);
 
 		logContext.setProviderStartTime();
@@ -129,7 +129,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
 
-			const iterator = this.doGetNextEdit(request, delaySession, tracer, logContext, cancellationToken, telemetry, RetryState.NotRetrying.INSTANCE);
+			const iterator = this.doGetNextEdit(request, delaySession, logger, logContext, cancellationToken, telemetry, RetryState.NotRetrying.INSTANCE);
 
 			let res = await iterator.next(); // for-async-await loop doesn't work because we need to access the final return value
 
@@ -174,7 +174,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	private doGetNextEdit(
 		request: StatelessNextEditRequest,
 		delaySession: DelaySession,
-		tracer: ITracer,
+		logger: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -184,7 +184,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			request,
 			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
 			delaySession,
-			tracer,
+			logger,
 			logContext,
 			cancellationToken,
 			telemetryBuilder,
@@ -196,14 +196,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		request: StatelessNextEditRequest,
 		selection: Range | null,
 		delaySession: DelaySession,
-		parentTracer: ITracer,
+		parentTracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState.t,
 	): EditStreaming {
 
-		const tracer = parentTracer.sub(['XtabProvider', 'doGetNextEditWithSelection']);
+		const tracer = parentTracer.createSubLogger(['XtabProvider', 'doGetNextEditWithSelection']);
 
 		const activeDocument = request.getActiveDocument();
 
@@ -377,7 +377,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		activeDocument: StatelessNextEditDocument,
 		cursorPosition: Position,
 		promptOptions: ModelConfig,
-		tracer: ITracer,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
@@ -410,7 +410,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		delaySession: DelaySession,
 		activeDocument: StatelessNextEditDocument,
 		cursorPosition: Position,
-		tracer: ITracer,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): Promise<LanguageContextResponse | undefined> {
@@ -504,12 +504,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			userHappinessScore: number | undefined;
 		},
 		delaySession: DelaySession,
-		parentTracer: ITracer,
+		parentTracer: ILogger,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): EditStreaming {
-		const tracer = parentTracer.sub('streamEditsWithFiltering');
+		const tracer = parentTracer.createSubLogger('streamEditsWithFiltering');
 
 		const iterator = this.streamEdits(
 			request,
@@ -576,12 +576,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			userHappinessScore: number | undefined;
 		},
 		delaySession: DelaySession,
-		parentTracer: ITracer,
+		parentTracer: ILogger,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 	): EditStreaming {
-		const tracer = parentTracer.sub('streamEdits');
+		const tracer = parentTracer.createSubLogger('streamEdits');
 
 		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
 
@@ -866,7 +866,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		editWindow: OffsetRange,
 		promptPieces: PromptPieces,
 		delaySession: DelaySession,
-		tracer: ITracer,
+		tracer: ILogger,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -948,7 +948,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
+	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ILogger, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		const currentDocLines = currentDocument.lines;
 		const cursorLineOffset = currentDocument.cursorLineOffset;
 
@@ -1175,23 +1175,23 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private async debounce(delaySession: DelaySession, retryState: RetryState.t, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder) {
+	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder) {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
 		if (retryState instanceof RetryState.Retrying) {
-			tracer.trace('Skipping debounce on retry');
+			logger.trace('Skipping debounce on retry');
 			return;
 		}
 		const debounceTime = delaySession.getDebounceTime();
 
-		tracer.trace(`Debouncing for ${debounceTime} ms`);
+		logger.trace(`Debouncing for ${debounceTime} ms`);
 		telemetry.setDebounceTime(debounceTime);
 
 		await timeout(debounceTime);
 	}
 
-	private determineArtificialDelayMs(delaySession: DelaySession, tracer: ITracer, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
+	private determineArtificialDelayMs(delaySession: DelaySession, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder): number | undefined {
 		if (this.simulationCtx.isInSimulationTests) {
 			return;
 		}
@@ -1201,7 +1201,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return undefined;
 		}
 
-		tracer.trace(`Enforcing artificial delay of ${artificialDelay} ms`);
+		logger.trace(`Enforcing artificial delay of ${artificialDelay} ms`);
 		telemetry.setArtificialDelay(artificialDelay);
 
 		return artificialDelay;

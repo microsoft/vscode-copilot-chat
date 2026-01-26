@@ -87,7 +87,15 @@ export const nonDeferredToolNames = new Set([
 	// Other high-usage tools
 	'get_errors',
 	'manage_todo_list',
+	// Subagent tools
+	'runSubagent',
+	'search_subagent',
+	// Testing
+	'runTests',
 ]);
+
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
 /**
  * Context management types for Anthropic Messages API
@@ -193,21 +201,6 @@ export function modelSupportsMemory(modelId: string): boolean {
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
-}
-
-
-export function isAnthropicMemoryEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-): boolean {
-
-	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!modelSupportsMemory(effectiveModelId)) {
-		return false;
-	}
-
-	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
 export function isAnthropicToolSearchEnabled(

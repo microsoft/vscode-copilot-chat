@@ -12,11 +12,13 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
+import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 
 interface AnthropicStreamEvent {
@@ -85,7 +87,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (toolSearchEnabled) {
-		finalTools.push({ name: 'tool_search_tool_bm25', type: 'tool_search_tool_bm25_20251119', defer_loading: false });
+		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
 	if (anthropicTools) {
@@ -287,6 +289,7 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 
 export async function processResponseFromMessagesEndpoint(
 	instantiationService: IInstantiationService,
+	telemetryService: ITelemetryService,
 	logService: ILogService,
 	response: Response,
 	finishCallback: FinishedCallback,
@@ -311,6 +314,25 @@ export async function processResponseFromMessagesEndpoint(
 				}
 				const completion = processor.push({ ...parsed, type } as AnthropicStreamEvent, finishCallback);
 				if (completion) {
+					logService.info(`[messagesAPI] message ${completion.choiceIndex} returned. finish reason: [${completion.finishReason}]`);
+
+					const dataToSendToTelemetry = telemetryData.extendedBy({
+						completionChoiceFinishReason: completion.finishReason,
+						headerRequestId: completion.requestId.headerRequestId
+					});
+					telemetryService.sendGHTelemetryEvent('completion.finishReason', dataToSendToTelemetry.properties, dataToSendToTelemetry.measurements);
+
+					const telemetryMessage = rawMessageToCAPI(completion.message);
+					let telemetryDataWithUsage = telemetryData;
+					if (completion.usage) {
+						telemetryDataWithUsage = telemetryData.extendedBy({}, {
+							promptTokens: completion.usage.prompt_tokens,
+							completionTokens: completion.usage.completion_tokens,
+							totalTokens: completion.usage.total_tokens
+						});
+					}
+					sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
+
 					feed.emitOne(completion);
 				}
 			} catch (e) {
@@ -341,6 +363,7 @@ export class AnthropicMessagesProcessor {
 	private cacheReadTokens: number = 0;
 	private contextManagementResponse?: ContextManagementResponse;
 	private toolSearchRequests: number = 0;
+	private stopReason: string | undefined;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -560,8 +583,12 @@ export class AnthropicMessagesProcessor {
 						contextManagement: chunk.context_management
 					});
 				}
+				// Track stop_reason for determining finish reason in message_stop
+				if (chunk.delta?.stop_reason) {
+					this.stopReason = chunk.delta.stop_reason;
+				}
 				return;
-			case 'message_stop':
+			case 'message_stop': {
 				if (this.contextManagementResponse) {
 					const totalClearedTokens = this.contextManagementResponse.applied_edits.reduce(
 						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
@@ -580,6 +607,20 @@ export class AnthropicMessagesProcessor {
 						toolSearchUsed: 'true',
 						toolSearchRequests: this.toolSearchRequests.toString(),
 					});
+				}
+
+				let finishReason: FinishedCompletionReason;
+				switch (this.stopReason) {
+					case 'refusal':
+						finishReason = FinishedCompletionReason.ClientDone;
+						break;
+					case 'max_tokens':
+					case 'model_context_window_exceeded':
+						finishReason = FinishedCompletionReason.Length;
+						break;
+					default:
+						finishReason = FinishedCompletionReason.Stop;
+						break;
 				}
 
 				return {
@@ -609,7 +650,7 @@ export class AnthropicMessagesProcessor {
 							rejected_prediction_tokens: 0,
 						},
 					},
-					finishReason: FinishedCompletionReason.Stop,
+					finishReason,
 					message: {
 						role: Raw.ChatRole.Assistant,
 						content: this.textAccumulator ? [{
@@ -628,6 +669,7 @@ export class AnthropicMessagesProcessor {
 						} : {})
 					}
 				};
+			}
 			case 'error': {
 				const errorMessage = (chunk as unknown as { error?: { message?: string } }).error?.message || 'Unknown error';
 				return onProgress({

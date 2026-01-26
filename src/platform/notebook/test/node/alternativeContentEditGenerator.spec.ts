@@ -32,7 +32,8 @@ describe('Alternative Content Edit Generator', () => {
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
 			show: () => { /* no-op */ },
-			createSubLogger(): ILogger { return mockLogger; }
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		function getEditGenerator(provider: BaseAlternativeNotebookContentProvider) {
 			return new AlternativeNotebookContentEditGenerator(new class implements IAlternativeNotebookContentService {
@@ -56,6 +57,9 @@ describe('Alternative Content Edit Generator', () => {
 					//
 				}
 				createSubLogger(): ILogger {
+					return this;
+				}
+				withExtraTarget(): ILogger {
 					return this;
 				}
 			}(), new NullTelemetryService());

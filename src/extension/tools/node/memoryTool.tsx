@@ -11,8 +11,8 @@ import * as extpath from '../../../util/vs/base/common/extpath';
 import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { MEMORY_DIR_NAME } from '../common/agentMemoryService';
+import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface IMemoryParams {
 	command: 'view' | 'create' | 'str_replace' | 'insert' | 'delete' | 'rename';
@@ -36,10 +36,8 @@ interface MemoryResult {
  * All memory operations are confined to the /memories directory within the extension's
  * workspace-specific storage location. Each workspace maintains its own isolated memory.
  */
-class MemoryTool implements ICopilotTool<IMemoryParams> {
-	public static readonly toolName = ToolName.Memory;
-
-	private static readonly MEMORY_DIR_NAME = 'memory-tool/memories';
+class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
+	private static readonly SESSION_PATH_PREFIX = '/memories/session';
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -48,7 +46,9 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const params = options.input;
-		const result = await this.execute(params);
+		const sessionResource = (options.toolInvocationToken as any)?.sessionResource;
+		const sessionId = this.extractSessionId(sessionResource);
+		const result = await this.execute(params, sessionId);
 
 		const resultText = result.error
 			? `Error: ${result.error}`
@@ -59,23 +59,32 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 		]);
 	}
 
-	private async execute(params: IMemoryParams): Promise<MemoryResult> {
+	private extractSessionId(chatSessionResource: vscode.Uri | undefined): string | undefined {
+		if (!chatSessionResource) {
+			return undefined;
+		}
+		const path = chatSessionResource.path;
+		const pathSegments = path.split('/').filter(s => s.length > 0);
+		return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : undefined;
+	}
+
+	private async execute(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const command = params.command;
 
 		try {
 			switch (command) {
 				case 'view':
-					return await this._view(params);
+					return await this._view(params, sessionId);
 				case 'create':
-					return await this._create(params);
+					return await this._create(params, sessionId);
 				case 'str_replace':
-					return await this._strReplace(params);
+					return await this._strReplace(params, sessionId);
 				case 'insert':
-					return await this._insert(params);
+					return await this._insert(params, sessionId);
 				case 'delete':
-					return await this._delete(params);
+					return await this._delete(params, sessionId);
 				case 'rename':
-					return await this._rename(params);
+					return await this._rename(params, sessionId);
 				default:
 					return {
 						error: `Unknown command: ${command}. ` +
@@ -91,9 +100,32 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	}
 
 	/**
+	 * Translate /memories/session paths to use the actual session ID.
+	 * Paths like /memories/session/prefs.md become /memories/sessions/<sessionId>/prefs.md
+	 */
+	private translateSessionPath(memoryPath: string, sessionId: string | undefined): string {
+		const normalizedPath = extpath.toPosixPath(memoryPath);
+
+		// Check if path starts with /memories/session
+		if (normalizedPath === MemoryTool.SESSION_PATH_PREFIX ||
+			normalizedPath.startsWith(MemoryTool.SESSION_PATH_PREFIX + '/')) {
+
+			if (!sessionId) {
+				throw new Error('Session ID is not available. Session memory operations require an active chat session.');
+			}
+
+			// Replace /memories/session with /memories/sessions/<sessionId>
+			const suffix = normalizedPath.substring(MemoryTool.SESSION_PATH_PREFIX.length);
+			return `/memories/sessions/${sessionId}${suffix}`;
+		}
+
+		return memoryPath;
+	}
+
+	/**
 	 * Validate and resolve memory paths to prevent directory traversal attacks.
 	 */
-	private validatePath(memoryPath: string): URI {
+	private validatePath(memoryPath: string, sessionId: string | undefined): URI {
 
 		const storageUri = this.extensionContext.storageUri;
 		if (!storageUri) {
@@ -101,7 +133,9 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			throw new Error('No workspace is currently open. Memory operations require an active workspace.');
 		}
 
-		const normalizedPath = extpath.toPosixPath(memoryPath);
+		// Translate session paths to use actual session ID
+		const translatedPath = this.translateSessionPath(memoryPath, sessionId);
+		const normalizedPath = extpath.toPosixPath(translatedPath);
 
 		// Validate that path starts with /memories as required by spec
 		if (!normalizedPath.startsWith('/memories')) {
@@ -113,7 +147,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 
 		// Extract relative path after /memories
 		const relativePath = normalizedPath.substring('/memories'.length).replace(/^\/+/, '');
-		const memoryRoot = URI.joinPath(storageUri, MemoryTool.MEMORY_DIR_NAME);
+		const memoryRoot = URI.joinPath(storageUri, MEMORY_DIR_NAME);
 		const pathSegments = relativePath ? relativePath.split('/').filter(s => s.length > 0) : [];
 		const fullPath = pathSegments.length > 0
 			? URI.joinPath(memoryRoot, ...pathSegments)
@@ -130,7 +164,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 		return normalizedFullPath;
 	}
 
-	private async _view(params: IMemoryParams): Promise<MemoryResult> {
+	private async _view(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const viewRange = params.view_range;
 
@@ -138,7 +172,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
-		const fullPath = this.validatePath(memoryPath);
+		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
 
@@ -203,7 +237,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	/**
 	 * Create or overwrite a file.
 	 */
-	private async _create(params: IMemoryParams): Promise<MemoryResult> {
+	private async _create(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const fileText = params.file_text ?? '';
 
@@ -211,7 +245,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
-		const fullPath = this.validatePath(memoryPath);
+		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const parentDir = URI.joinPath(fullPath, '..');
 			await this.fileSystem.createDirectory(parentDir);
@@ -228,7 +262,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	/**
 	 * Replace text in a file.
 	 */
-	private async _strReplace(params: IMemoryParams): Promise<MemoryResult> {
+	private async _strReplace(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const oldStr = params.old_str;
 		const newStr = params.new_str ?? '';
@@ -237,7 +271,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			return { error: 'Missing required parameters: path, old_str' };
 		}
 
-		const fullPath = this.validatePath(memoryPath);
+		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
 			if (stat.type !== 1 /* File */) {
@@ -283,7 +317,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	/**
 	 * Insert text at a specific line.
 	 */
-	private async _insert(params: IMemoryParams): Promise<MemoryResult> {
+	private async _insert(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const insertLine = params.insert_line;
 		const insertText = params.insert_text ?? '';
@@ -292,7 +326,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			return { error: 'Missing required parameters: path, insert_line' };
 		}
 
-		const fullPath = this.validatePath(memoryPath);
+		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
 			if (stat.type !== 1 /* File */) {
@@ -325,14 +359,14 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	/**
 	 * Delete a file or directory.
 	 */
-	private async _delete(params: IMemoryParams): Promise<MemoryResult> {
+	private async _delete(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 
 		if (!memoryPath) {
 			return { error: 'Missing required parameter: path' };
 		}
 
-		const fullPath = this.validatePath(memoryPath);
+		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
 
@@ -352,7 +386,7 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	/**
 	 * Rename or move a file/directory.
 	 */
-	private async _rename(params: IMemoryParams): Promise<MemoryResult> {
+	private async _rename(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const oldPath = params.old_path;
 		const newPath = params.new_path;
 
@@ -360,8 +394,8 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 			return { error: 'Missing required parameters: old_path, new_path' };
 		}
 
-		const oldFullPath = this.validatePath(oldPath);
-		const newFullPath = this.validatePath(newPath);
+		const oldFullPath = this.validatePath(oldPath, sessionId);
+		const newFullPath = this.validatePath(newPath, sessionId);
 
 		try {
 			const newParentDir = URI.joinPath(newFullPath, '..');
@@ -379,4 +413,71 @@ class MemoryTool implements ICopilotTool<IMemoryParams> {
 	}
 }
 
-ToolRegistry.registerTool(MemoryTool);
+ToolRegistry.registerModelSpecificTool(
+	{
+		name: 'copilot_memory',
+		toolReferenceName: 'memory',
+		displayName: 'Memory',
+		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',
+		userDescription: 'Manage persistent memory files across conversations',
+		source: undefined,
+		tags: [],
+		models: [
+			{ id: 'claude-opus-4.5' },
+			{ id: 'claude-sonnet-4.5' },
+			{ id: 'claude-haiku-4.5' },
+		],
+		toolSet: 'vscode',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				command: {
+					type: 'string',
+					enum: ['view', 'create', 'str_replace', 'insert', 'delete', 'rename'],
+					description: 'The memory operation to perform:\n- view: Show directory contents or file contents (optional line ranges)\n- create: Create or overwrite a file\n- str_replace: Replace text in a file\n- insert: Insert text at a specific line\n- delete: Delete a file or directory\n- rename: Rename or move a file or directory'
+				},
+				path: {
+					type: 'string',
+					description: 'Path to the memory file or directory. Must start with /memories.\n- For view: /memories or /memories/file.md\n- For create/str_replace/insert/delete: /memories/file.md\n- Not used for rename (use old_path/new_path instead)'
+				},
+				view_range: {
+					type: 'array',
+					items: { type: 'number' },
+					minItems: 2,
+					maxItems: 2,
+					description: '[view only] Optional line range [start, end] to view specific lines. Example: [1, 10]'
+				},
+				file_text: {
+					type: 'string',
+					description: '[create only] Content to write to the file. Required for create command.'
+				},
+				old_str: {
+					type: 'string',
+					description: '[str_replace only] The exact literal text to find and replace. Must be unique in the file. Required for str_replace command.'
+				},
+				new_str: {
+					type: 'string',
+					description: '[str_replace only] The exact literal text to replace old_str with. Can be empty string. Required for str_replace command.'
+				},
+				insert_line: {
+					type: 'number',
+					description: '[insert only] Line number at which to insert text (0-indexed, 0 = before first line). Required for insert command.'
+				},
+				insert_text: {
+					type: 'string',
+					description: '[insert only] Text to insert at the specified line. Required for insert command.'
+				},
+				old_path: {
+					type: 'string',
+					description: '[rename only] Current path of the file or directory. Must start with /memories. Required for rename command.'
+				},
+				new_path: {
+					type: 'string',
+					description: '[rename only] New path for the file or directory. Must start with /memories. Required for rename command.'
+				}
+			},
+			required: ['command']
+		}
+	},
+	MemoryTool
+);

@@ -10,8 +10,8 @@ import { CodeActionData } from '../../../../../platform/inlineEdits/common/dataT
 import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ITracer } from '../../../../../util/common/tracing';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { isAbsolute } from '../../../../../util/vs/base/common/path';
 import { dirname, resolvePath } from '../../../../../util/vs/base/common/resources';
@@ -190,7 +190,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 	private readonly _importHandlers: Map<string, ILanguageImportHandler>;
 
 	constructor(
-		private readonly _tracer: ITracer,
+		private readonly _logger: ILogger,
 		private readonly _workspaceService: IWorkspaceService,
 		private readonly _fileService: IFileSystemService,
 	) {
@@ -238,21 +238,21 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 		const availableCodeActions = await workspaceDocument.getCodeActions(importDiagnosticToFix.range, 3, token);
 		const resolveCodeActionDuration = Date.now() - startTime;
 		if (availableCodeActions === undefined) {
-			log(`Fetching code actions likely timed out for \`${importDiagnosticToFix.message}\``, logContext, this._tracer);
+			log(`Fetching code actions likely timed out for \`${importDiagnosticToFix.message}\``, logContext, this._logger);
 			return null;
 		}
 
-		log(`Resolving code actions for \`${importDiagnosticToFix.message}\` took \`${resolveCodeActionDuration}ms\``, logContext, this._tracer);
+		log(`Resolving code actions for \`${importDiagnosticToFix.message}\` took \`${resolveCodeActionDuration}ms\``, logContext, this._logger);
 
 		const availableImportCodeActions = this._getImportCodeActions(availableCodeActions, workspaceDocument, importDiagnosticToFix, this._workspaceInfo);
 		if (availableImportCodeActions.length === 0) {
-			log('No import code actions found in the available code actions', logContext, this._tracer);
+			log('No import code actions found in the available code actions', logContext, this._logger);
 			return null;
 		}
 
 		const sortedImportCodeActions = availableImportCodeActions.sort((a, b) => a.compareTo(b));
 
-		logList(`Sorted import code actions for \`${importDiagnosticToFix.message}\``, sortedImportCodeActions, logContext, this._tracer);
+		logList(`Sorted import code actions for \`${importDiagnosticToFix.message}\``, sortedImportCodeActions, logContext, this._logger);
 
 		for (const codeAction of sortedImportCodeActions) {
 			const importCodeActionLabel = availableImportCodeActions.length === 1 && codeAction.importSource !== ImportSource.external ? codeAction.labelShort : codeAction.labelDeduped;
@@ -260,12 +260,12 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, importCodeActionLabel, workspaceDocument, availableImportCodeActions.length - 1);
 
 			if (this._hasImportBeenRejected(item)) {
-				log(`Rejected import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._tracer);
+				log(`Rejected import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._logger);
 				logContext.markToBeLogged();
 				continue;
 			}
 
-			log(`Created import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._tracer);
+			log(`Created import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._logger);
 
 			return item;
 		}

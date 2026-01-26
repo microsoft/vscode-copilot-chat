@@ -297,6 +297,10 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		}
 
 		await waitForState(this._isInitialized, state => state, undefined, cancelOnDispose(this._store));
+
+		if (this.repositories.length > 0) {
+			await waitForState(this.activeRepository, state => state !== undefined, undefined, cancelOnDispose(this._store));
+		}
 	}
 
 	private async doOpenRepository(repository: Repository): Promise<void> {

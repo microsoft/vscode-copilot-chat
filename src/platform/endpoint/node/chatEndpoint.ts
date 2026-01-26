@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
+import * as l10n from '@vscode/l10n';
 import { OpenAI, Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
@@ -29,7 +30,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily } from '../common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -128,6 +129,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
 	public readonly customModel?: CustomModel | undefined;
+	public readonly maxPromptImages?: number | undefined;
 
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -167,17 +169,19 @@ export class ChatEndpoint implements IChatEndpoint {
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = modelMetadata.policy;
 		this.customModel = modelMetadata.custom_model;
+		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
 	public getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
-		if (modelProviderPreference) {
-			headers['X-Model-Provider-Preference'] = modelProviderPreference;
-		}
-
 		if (this.useMessagesApi) {
+
+			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
+			if (modelProviderPreference) {
+				headers['X-Model-Provider-Preference'] = modelProviderPreference;
+			}
+
 			const betaFeatures: string[] = [];
 
 			// Add thinking beta if enabled
@@ -294,6 +298,15 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		// Validate image count if endpoint has max_prompt_images limit (Gemini only for now)
+		if (isGeminiFamily(this) && this.maxPromptImages !== undefined) {
+			const imageCount = this.countImages(options.messages, this.maxPromptImages);
+			if (imageCount > this.maxPromptImages) {
+				const errorMsg = l10n.t('Too many images in request: {0} images provided, but the model supports a maximum of {1} images.', imageCount, this.maxPromptImages);
+				throw new Error(errorMsg);
+			}
+		}
+
 		if (this.useResponsesApi) {
 			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this);
 			return this.customizeResponsesBody(body);
@@ -304,6 +317,24 @@ export class ChatEndpoint implements IChatEndpoint {
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
 			return this.customizeCapiBody(body, options);
 		}
+	}
+
+	private countImages(messages: Raw.ChatMessage[], maxAllowed?: number): number {
+		let imageCount = 0;
+		for (const message of messages) {
+			if (Array.isArray(message.content)) {
+				for (const part of message.content) {
+					if (part.type === Raw.ChatCompletionContentPartKind.Image) {
+						imageCount++;
+						// Early exit if we've already exceeded the limit
+						if (maxAllowed !== undefined && imageCount > maxAllowed) {
+							return imageCount;
+						}
+					}
+				}
+			}
+		}
+		return imageCount;
 	}
 
 	protected getCompletionsCallback(): RawMessageConversionCallback | undefined {
@@ -355,7 +386,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
 		} else if (this.useMessagesApi) {
-			return processResponseFromMessagesEndpoint(this._instantiationService, logService, response, finishCallback, telemetryData);
+			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
 		} else {

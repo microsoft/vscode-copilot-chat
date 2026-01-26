@@ -10,7 +10,6 @@ import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from '
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
-import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -20,7 +19,7 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observable';
-import { isEqual } from '../../../util/vs/base/common/resources';
+import { extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
@@ -153,21 +152,26 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return diskSessions;
 	}
 
-	private shouldShowSession(sessionId: string): boolean {
+	private shouldShowSession(sessionId: string): boolean | undefined {
 		if (isUntitledSessionId(sessionId)) {
 			return true;
 		}
 		// If we have a workspace folder for this and the workspace folder belongs to one of the open workspace folders, show it.
 		const workspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-		if (workspaceFolder && this.workspaceService.getWorkspaceFolder(workspaceFolder)) {
-			return true;
+		if (workspaceFolder && this.workspaceService.getWorkspaceFolders().length) {
+			return !!this.workspaceService.getWorkspaceFolder(workspaceFolder);
 		}
 		// If we have a git worktree and the worktree's repo belongs to one of the workspace folders, show it.
 		const worktree = this.worktreeManager.getWorktreeProperties(sessionId);
-		if (worktree && this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath))) {
-			return true;
+		if (worktree && this.workspaceService.getWorkspaceFolders().length) {
+			// If we have a repository path, then its easy to tell whether this should be displayed or hidden.
+			return !!this.workspaceService.getWorkspaceFolder(URI.file(worktree.repositoryPath));
 		}
-		return false;
+		// Unless we are in an empty window, exclude sessions without workspace folder or git repo association.
+		if (this.workspaceService.getWorkspaceFolders().length) {
+			return false;
+		}
+		return undefined;
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
@@ -1246,48 +1250,6 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));
-	disposableStore.add(vscode.commands.registerCommand('agentSession.copilotcli.openChanges', async (sessionItemResource?: vscode.Uri) => {
-		if (!sessionItemResource) {
-			return;
-		}
-
-		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-		const sessionWorktree = copilotCLIWorktreeManagerService.getWorktreePath(sessionId);
-		const sessionWorktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-
-		if (!sessionWorktree || !sessionWorktreeProperties) {
-			return;
-		}
-
-		const repository = await gitService.getRepository(sessionWorktree);
-		if (!repository?.changes) {
-			return;
-		}
-
-		const title = l10n.t('Background Agent ({0})', sessionWorktreeProperties.branchName);
-		const multiDiffSourceUri = Uri.parse(`copilotcli-worktree-changes:/${sessionId}`);
-		const resources = repository.changes.indexChanges.map(change => {
-			switch (change.status) {
-				case 1 /* Status.INDEX_ADDED */:
-					return {
-						originalUri: undefined,
-						modifiedUri: change.uri
-					};
-				case 2 /* Status.INDEX_DELETED */:
-					return {
-						originalUri: toGitUri(change.uri, 'HEAD'),
-						modifiedUri: undefined
-					};
-				default:
-					return {
-						originalUri: toGitUri(change.uri, 'HEAD'),
-						modifiedUri: change.uri
-					};
-			}
-		});
-
-		await vscode.commands.executeCommand('_workbench.openMultiDiffEditor', { multiDiffSourceUri, title, resources });
-	}));
 
 	const applyChanges = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
@@ -1298,8 +1260,26 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
+		// Apply changes
 		const sessionId = SessionIdForCLI.parse(resource);
 		await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
+
+		// Close the multi-file diff editor if it's open
+		const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+		const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
+
+		if (worktreePath) {
+			// Select the tabs to close
+			const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
+				.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
+					extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
+					extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
+
+			if (multiDiffTabToClose.length > 0) {
+				// Close the tabs
+				await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+			}
+		}
 
 		// Pick up new git state
 		copilotcliSessionItemProvider.notifySessionsChange();

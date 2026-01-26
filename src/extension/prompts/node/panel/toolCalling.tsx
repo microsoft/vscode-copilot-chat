@@ -25,13 +25,16 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
 import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolMCPSource, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
+import { toJsonSchema } from '../../../tools/common/toJsonSchema';
 import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { IChatDiskSessionResources } from '../../common/chatDiskSessionResources';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 
@@ -66,8 +69,13 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			return;
 		}
 
+		// Create a child instantiation service with IBuildPromptContext registered
+		const hydratedInstantiationService = this.instantiationService.createChild(
+			new ServiceCollection([IBuildPromptContext, this.props.promptContext])
+		);
+
 		const toolCallRounds = this.props.toolCallRounds.flatMap((round, i) => {
-			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length);
+			return this.renderOneToolCallRound(round, i, this.props.toolCallRounds!.length, hydratedInstantiationService);
 		});
 		if (!toolCallRounds.length) {
 			return;
@@ -84,7 +92,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	/**
 	 * Render one round of tool calling: the assistant message text, its tool calls, and the results of those tool calls.
 	 */
-	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number): PromptElement[] {
+	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number, hydratedInstantiationService: IInstantiationService): PromptElement[] {
 		let fixedNameToolCalls = round.toolCalls.map(tc => ({ ...tc, name: this.toolsService.validateToolName(tc.name) ?? tc.name }));
 		if (this.props.isHistorical) {
 			fixedNameToolCalls = fixedNameToolCalls.filter(tc => tc.id && this.props.toolCallResults?.[tc.id]);
@@ -121,7 +129,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			const KeepWith = assistantToolCalls[i].keepWith;
 			children.push(
 				<KeepWith priority={index} flexGrow={index + 1} flexReserve={`/${1 / reserve1N}`}>
-					{this.instantiationService.invokeFunction(buildToolResultElement, {
+					{hydratedInstantiationService.invokeFunction(buildToolResultElement, {
 						toolCall: toolCall,
 						toolInvocationToken: this.props.promptContext.tools!.toolInvocationToken,
 						toolCallResult: this.props.toolCallResults?.[toolCall.id!],
@@ -129,10 +137,10 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 						validateInput: round.toolInputRetry < MAX_INPUT_VALIDATION_RETRIES,
 						requestId: this.props.promptContext.requestId,
 						toolCallMode: this.props.toolCallMode ?? CopilotToolMode.PartialContext,
-						promptContext: this.props.promptContext,
 						isLast: !this.props.isHistorical && i === fixedNameToolCalls.length - 1 && index === total - 1,
 						enableCacheBreakpoints: this.props.enableCacheBreakpoints ?? false,
 						truncateAt: this.props.truncateAt,
+						sessionId: this.props.promptContext.request?.sessionId,
 					})}
 				</KeepWith>,
 			);
@@ -149,10 +157,10 @@ interface ToolResultOpts {
 	readonly validateInput?: boolean;
 	readonly requestId?: string;
 	readonly toolCallMode: CopilotToolMode;
-	readonly promptContext: IBuildPromptContext;
 	readonly isLast: boolean;
 	readonly enableCacheBreakpoints: boolean;
 	readonly truncateAt?: number;
+	readonly sessionId: string | undefined;
 }
 
 const toolErrorSuffix = '\nPlease check your input and try again.';
@@ -168,6 +176,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const telemetryService: ITelemetryService = accessor.get(ITelemetryService);
 	const endpointProvider: IEndpointProvider = accessor.get(IEndpointProvider);
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
+	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -204,17 +213,17 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 			let outcome: ToolInvocationOutcome = toolResult === undefined ? ToolInvocationOutcome.Success : ToolInvocationOutcome.InvalidInput;
 			if (toolResult === undefined) {
 				try {
-					if (props.promptContext.tools && !props.promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
+					if (promptContext.tools && !promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
 						outcome = ToolInvocationOutcome.DisabledByUser;
 						throw new Error(`Tool ${props.toolCall.name} is currently disabled by the user, and cannot be called.`);
 					}
 
 					if (copilotTool?.resolveInput) {
-						inputObj = await copilotTool.resolveInput(inputObj, props.promptContext, props.toolCallMode);
+						inputObj = await copilotTool.resolveInput(inputObj, promptContext, props.toolCallMode);
 					}
 
-					const subAgentInvocationId = props.promptContext.request?.subAgentInvocationId;
-					const subAgentName = props.promptContext.request?.subAgentName;
+					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
+					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
@@ -227,7 +236,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
 
-					toolResult = await toolsService.invokeTool(props.toolCall.name, invocationOptions, CancellationToken.None);
+					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
@@ -242,7 +251,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 				}
 			}
-			sendToolCallTelemetry(props, outcome, validation, endpointProvider, telemetryService);
+			sendToolCallTelemetry(props, promptContext, outcome, validation, endpointProvider, telemetryService);
 		}
 
 		return { toolResult, isCancelled, extraMetadata };
@@ -262,12 +271,13 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 		truncateAt={props.truncateAt}
 		toolCall={props.toolCall}
 		isLast={props.isLast}
+		sessionId={props.sessionId}
 	/>;
 }
 
 
-async function sendToolCallTelemetry(props: ToolResultOpts, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
-	const model = props.promptContext.request?.model && (await endpointProvider.getChatEndpoint(props.promptContext.request?.model)).model;
+async function sendToolCallTelemetry(props: ToolResultOpts, promptContext: IBuildPromptContext, invokeOutcome: ToolInvocationOutcome, validateOutcome: ToolValidationOutcome, endpointProvider: IEndpointProvider, telemetryService: ITelemetryService) {
+	const model = promptContext.request?.model && (await endpointProvider.getChatEndpoint(promptContext.request?.model)).model;
 	const toolName = props.toolCall.name;
 
 	/* __GDPR__
@@ -303,6 +313,7 @@ interface IToolResultElementActualProps {
 	enableCacheBreakpoints: boolean;
 	truncateAt: number | undefined;
 	toolCall: IToolCall;
+	sessionId: string | undefined;
 	isLast: boolean;
 }
 
@@ -315,10 +326,10 @@ class ToolResultElement extends PromptElement<IToolResultElementActualProps & Ba
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
 				<Chunk>
-					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
+					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />
 				</Chunk>
 			</> :
-			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />;
+			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} toolCallId={this.props.toolCall.id} sessionId={this.props.sessionId} />;
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
@@ -567,6 +578,14 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 	 * Number of tokens at which truncation will be triggered for string content.
 	 */
 	truncate?: number;
+	/**
+	 * The tool call associated with this result.
+	 */
+	toolCallId: string | undefined;
+	/**
+	 * The session ID associated with this result.
+	 */
+	sessionId?: string;
 }
 
 
@@ -575,6 +594,19 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
  * and unfortunately I can't figure out how to work around that with the tools we have!
  */
 export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
+	constructor(
+		props: IToolResultProps,
+		@IPromptEndpoint endpoint: IPromptEndpoint,
+		@IAuthenticationService authService: IAuthenticationService,
+		@ILogService private readonly _logService: ILogService,
+		@IImageService imageService: IImageService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IChatDiskSessionResources private readonly diskSessionResources: IChatDiskSessionResources,
+	) {
+		super(props, endpoint, authService, _logService, imageService, _configurationService, _experimentationService);
+	}
+
 	protected override async onTSX(part: JSONTree.PromptElementJSON): Promise<any> {
 		if (this.props.truncate) {
 			return <TokenLimit max={this.props.truncate}>{await super.onTSX(part)}</TokenLimit>;
@@ -584,6 +616,54 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 	}
 
 	protected override async onText(content: string): Promise<string> {
+		const isDiskCachingEnabled = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.Advanced.LargeToolResultsToDiskEnabled,
+			this._experimentationService
+		);
+
+		if (isDiskCachingEnabled && this.diskSessionResources && this.props.toolCallId && this.props.sessionId) {
+			const thresholdBytes = this._configurationService.getExperimentBasedConfig(
+				ConfigKey.Advanced.LargeToolResultsToDiskThreshold,
+				this._experimentationService
+			);
+
+			if (content.length > thresholdBytes) {
+				try {
+					const sessionId = this.props.sessionId ?? 'unknown';
+					const toolCallId = this.props.toolCallId;
+
+					let contentFile = 'content.txt';
+					let schema: string | undefined;
+					try {
+						const parsed = JSON.parse(content);
+						schema = JSON.stringify(toJsonSchema(parsed));
+						// re-stringify it as it's more friendly to line-based offsets in the read_file tool
+						content = JSON.stringify(parsed, null, 2);
+						contentFile = 'content.json';
+					} catch {
+						// ignored
+					}
+
+					const fileUri = await this.diskSessionResources.ensure(
+						sessionId,
+						toolCallId,
+						{ [contentFile]: content, 'schema.json': schema },
+					);
+
+					const filePath = fileUri.fsPath;
+					const contentFileUri = URI.joinPath(fileUri, contentFile);
+					const schemaFileUri = schema ? URI.joinPath(fileUri, 'schema.json') : undefined;
+					this._logService?.debug(`[ToolResult] Large tool result (${content.length} bytes) written to disk: ${filePath}`);
+
+					return `Large tool result (${Math.round(content.length / 1024)}KB) written to file. Use the ${ToolName.ReadFile} tool to access the content at: ${contentFileUri.fsPath}${schemaFileUri ? `\n\nData schema found at: ${schemaFileUri.fsPath}` : ''}`;
+				} catch (err) {
+					this._logService?.warn(`[ToolResult] Failed to write large tool result to disk: ${toErrorMessage(err)}`);
+					// Fall through to normal truncation
+				}
+			}
+		}
+
+		// Standard truncation logic
 		const truncateAtTokens = this.props.truncate;
 		if (!truncateAtTokens || content.length < truncateAtTokens) { // always >=1 character per token, early bail-out
 			return content;
@@ -632,7 +712,7 @@ export class ToolCallResultWrapper extends PromptElement<IToolCallResultWrapperP
 			<>
 				{Object.entries(this.props.toolCallResults ?? {}).map(([toolCallId, toolCallResult]) => (
 					<ToolMessage toolCallId={toolCallId}>
-						<ToolResult content={toolCallResult.content} />
+						<ToolResult content={toolCallResult.content} toolCallId={undefined} />
 					</ToolMessage>
 				))}
 			</>

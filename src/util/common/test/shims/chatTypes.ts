@@ -469,6 +469,21 @@ export class LanguageModelChatMessage implements vscode.LanguageModelChatMessage
 	}
 }
 
+export class McpToolInvocationContentData implements vscode.McpToolInvocationContentData {
+	mimeType: string;
+	data: Uint8Array;
+
+	constructor(data: Uint8Array, mimeType: string) {
+		this.data = data;
+		this.mimeType = mimeType;
+	}
+}
+
+export interface ChatMcpToolInvocationData extends vscode.ChatMcpToolInvocationData {
+	input: string;
+	output: McpToolInvocationContentData[];
+}
+
 export class ChatToolInvocationPart {
 	toolName: string;
 	toolCallId: string;
@@ -478,7 +493,7 @@ export class ChatToolInvocationPart {
 	pastTenseMessage?: string | vscode.MarkdownString;
 	isConfirmed?: boolean;
 	isComplete?: boolean;
-	toolSpecificData?: vscode.ChatTerminalToolInvocationData;
+	toolSpecificData?: vscode.ChatTerminalToolInvocationData | ChatMcpToolInvocationData;
 
 	constructor(toolName: string,
 		toolCallId: string,
