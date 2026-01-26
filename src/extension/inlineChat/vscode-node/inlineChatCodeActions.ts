@@ -6,17 +6,9 @@
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { TreeSitterOffsetRange } from '../../../platform/parser/node/nodes';
-import { IParserService } from '../../../platform/parser/node/parserService';
-import { TestableNode } from '../../../platform/parser/node/testGenParsing';
 import { IReviewService } from '../../../platform/review/common/reviewService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { filterMap } from '../../../util/common/arrays';
 import { extractImageAttributes } from '../../../util/common/imageUtils';
-import { raceCancellation } from '../../../util/vs/base/common/async';
 import * as path from '../../../util/vs/base/common/path';
-import { Range } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { workspaceIntentId } from '../../intents/node/workspaceIntent';
 
@@ -188,26 +180,17 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 
 export class RefactorsProvider implements vscode.CodeActionProvider {
 
-	private static readonly MAX_FILE_SIZE = 1024 * 1024; // 1 MB
 
 	private static readonly generateOrModifyKind = vscode.CodeActionKind.RefactorRewrite.append('copilot');
-	private static readonly generateDocsKind = vscode.CodeActionKind.RefactorRewrite.append('generateDocs').append('copilot');
-	private static readonly generateTestsKind = vscode.CodeActionKind.RefactorRewrite.append('generateTests').append('copilot');
 
 	static readonly providedCodeActionKinds = [
 		this.generateOrModifyKind,
-		this.generateDocsKind,
-		this.generateTestsKind,
 	];
 
 	constructor(
-		@ILogService private readonly logger: ILogService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
-		@IParserService private readonly parserService: IParserService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService,
-	) {
-	}
+	) { }
 
 	async provideCodeActions(
 		doc: vscode.TextDocument,
@@ -229,13 +212,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			return;
 		}
 
-		const codeActions = await raceCancellation(Promise.allSettled([
-			this.provideGenerateUsingCopilotCodeAction(doc, range),
-			this.provideDocGenCodeAction(doc, range, cancellationToken),
-			this.provideTestGenCodeAction(doc, range, cancellationToken),
-		]), cancellationToken);
-
-		return codeActions === undefined ? undefined : filterMap(codeActions, r => (r.status === 'fulfilled' && r.value !== undefined) ? r.value : undefined);
+		return this.provideGenerateUsingCopilotCodeAction(doc, range);
 	}
 
 	/**
@@ -243,7 +220,11 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 * - `Generate using Copilot` is shown when the selection is empty and the line of the selection contains only white-space characters or tabs.
 	 * - `Modify using Copilot` is shown when the selection is not empty and the selection does not contain only white-space characters or tabs.
 	 */
-	private provideGenerateUsingCopilotCodeAction(doc: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | undefined {
+	private provideGenerateUsingCopilotCodeAction(doc: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
+
+		if (vscode.workspace.getConfiguration('inlineChat').get('affordance') !== 'off') {
+			return undefined;
+		}
 
 		let codeActionTitle: string | undefined;
 
@@ -277,117 +258,6 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			],
 		};
 
-		return codeAction;
-	}
-
-	/**
-	 * Provides code action `Document using Copilot: '${documentableNode.identifier}'` if:
-	 * - the document languageId is supported by tree-sitter parsers we have
-	 * - the range is on an identifier AND the identifier is a child of a documentable node
-	 *
-	 * The code action invokes the inline chat, expanding the inline chat's "wholeRange" (blue region)
-	 * to the whole documentable node.
-	 */
-	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
-
-		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
-			return;
-		}
-
-		const offsetRange: TreeSitterOffsetRange = {
-			startIndex: doc.offsetAt(range.start),
-			endIndex: doc.offsetAt(range.end)
-		};
-
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST === undefined) {
-			return;
-		}
-
-		let documentableNode: { identifier: string; nodeRange?: TreeSitterOffsetRange } | undefined;
-		try {
-			documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
-		} catch (e) {
-			this.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-		}
-
-		if (documentableNode === undefined || cancellationToken.isCancellationRequested) {
-			return undefined;
-		}
-
-		const title = vscode.l10n.t('Generate Docs');
-
-		const codeAction = new AICodeAction(title, RefactorsProvider.generateDocsKind);
-
-		// to expand the inline chat to the whole documentable node
-		const initialRange =
-			documentableNode.nodeRange === undefined
-				? undefined
-				: new Range(
-					doc.positionAt(documentableNode.nodeRange.startIndex),
-					doc.positionAt(documentableNode.nodeRange.endIndex)
-				);
-
-		codeAction.command = {
-			title,
-			command: 'vscode.editorChat.start',
-			arguments: [
-				{
-					autoSend: true,
-					message: `/doc`,
-					initialRange,
-				},
-			],
-		};
-
-		return codeAction;
-	}
-
-	private async provideTestGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
-
-		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
-			return;
-		}
-
-		const offsetRange: TreeSitterOffsetRange = {
-			startIndex: doc.offsetAt(range.start),
-			endIndex: doc.offsetAt(range.end),
-		};
-
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST === undefined) {
-			return;
-		}
-
-		let testableNode: TestableNode | null = null;
-		try {
-			testableNode = await treeSitterAST.getTestableNode(offsetRange);
-		} catch (e) {
-			this.logger.error(e, 'RefactorsProvider: getTestableNode failed');
-			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
-		}
-
-		if (!testableNode || cancellationToken.isCancellationRequested) {
-			return undefined;
-		}
-
-		const identifierRange = new Range(
-			doc.positionAt(testableNode.identifier.range.startIndex),
-			doc.positionAt(testableNode.identifier.range.endIndex)
-		);
-		if (!identifierRange.contains(range)) {
-			return undefined;
-		}
-
-		const title = vscode.l10n.t('Generate Tests');
-		const codeAction = new AICodeAction(title, RefactorsProvider.generateTestsKind);
-
-		codeAction.command = {
-			title,
-			command: 'github.copilot.chat.generateTests',
-		};
-
-		return codeAction;
+		return [codeAction];
 	}
 }
