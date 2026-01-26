@@ -25,6 +25,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return {
 			instructions: new ResourceSet(),
 			skills: new ResourceSet(),
+			skillFolders: new ResourceSet(),
 			agents: new Set<string>()
 		};
 	}
