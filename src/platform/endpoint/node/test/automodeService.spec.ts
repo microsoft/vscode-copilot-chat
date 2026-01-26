@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatRequest } from 'vscode';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation } from '../../../../vscodeTypes';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
@@ -12,11 +13,10 @@ import { DefaultsOnlyConfigurationService } from '../../../configuration/common/
 import { InMemoryConfigurationService } from '../../../configuration/test/common/inMemoryConfigurationService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
+import { IChatEndpoint } from '../../../networking/common/networking';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
-import { IChatEndpoint } from '../../../networking/common/networking';
 
 describe('AutomodeService', () => {
 	let automodeService: AutomodeService;
