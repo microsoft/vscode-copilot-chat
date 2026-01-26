@@ -82,39 +82,6 @@ export enum EditIntent {
 }
 
 export namespace EditIntent {
-	const EDIT_INTENT_START_TAG = '<|edit_intent|>';
-	const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
-
-	/**
-	 * Parses the edit intent from a response string.
-	 * Returns the EditIntent and the remaining content after the tag.
-	 */
-	export function parseFromResponse(response: string): { editIntent: EditIntent; remainingContent: string } {
-		const startIdx = response.indexOf(EDIT_INTENT_START_TAG);
-		if (startIdx === -1) {
-			// No edit intent tag found, assume high confidence (always show)
-			return { editIntent: EditIntent.High, remainingContent: response };
-		}
-
-		const contentStartIdx = startIdx + EDIT_INTENT_START_TAG.length;
-		const endIdx = response.indexOf(EDIT_INTENT_END_TAG, contentStartIdx);
-		if (endIdx === -1) {
-			// Malformed tag (no end tag), assume high confidence
-			return { editIntent: EditIntent.High, remainingContent: response };
-		}
-
-		const intentValue = response.substring(contentStartIdx, endIdx).trim().toLowerCase();
-		let remainingContent = response.substring(endIdx + EDIT_INTENT_END_TAG.length);
-
-		// Strip leading newline if present (the edit intent tag is expected on its own line)
-		if (remainingContent.startsWith('\n')) {
-			remainingContent = remainingContent.substring(1);
-		}
-
-		const editIntent = fromString(intentValue);
-		return { editIntent, remainingContent };
-	}
-
 	/**
 	 * Converts a string value to EditIntent enum.
 	 * Returns High (most permissive) for invalid values.
