@@ -36,8 +36,6 @@ export interface IQuestionAnswer {
 	skipped: boolean;
 }
 
-type AskQuestionResult = IQuestionAnswer | 'back' | 'skipped';
-
 export interface IAnswerResult {
 	answers: Record<string, IQuestionAnswer>;
 }
