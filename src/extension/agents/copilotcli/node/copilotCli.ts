@@ -331,6 +331,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 	}
@@ -370,6 +371,20 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
+		// Check if proxy URLs are configured - if so, skip client-side token validation
+		// as the proxy will handle authentication server-side
+		const overrideProxyUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
+		const overrideCapiUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideCAPIUrl);
+
+		if (overrideProxyUrl || overrideCapiUrl) {
+			this.logService.info('[CopilotCLISession] Proxy URL configured, skipping client-side token validation');
+			return {
+				type: 'token',
+				token: '',
+				host: 'https://github.com'
+			};
+		}
+
 		const copilotToken = await this.authentService.getGitHubSession('any', { silent: true });
 		return {
 			type: 'token',
