@@ -145,8 +145,8 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService?.hasSupportedNotebooks(activeDoc.id.toUri()) || false;
-			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
-			const git = this._gitExtensionService.getExtensionApi();
+			notebookType = this._workspaceService === undefined ? undefined : findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
+			const git = this._gitExtensionService?.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
 				if (activeDocRepository) {
@@ -174,8 +174,8 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		}
 
 		let alternativeAction: IAlternativeAction | undefined;
-		if (includeAlternativeAction) {
-			const originalText = this._originalDoc.value;
+		if (includeAlternativeAction && this.editCollectingInfo !== undefined) {
+			const originalText = this.editCollectingInfo.originalDoc.value;
 			let recording: ITelemetryRecording | undefined;
 			if (this._debugRecorder && this._requestBookmark) {
 				const entries = this._debugRecorder.getRecentLog();
@@ -189,11 +189,11 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			alternativeAction = {
 				text: originalText.length > 200 * 1024 ? undefined : originalText,
 				textLength: originalText.length,
-				selection: this._originalSelection.map(range => ({
+				selection: this.editCollectingInfo.originalSelection.map(range => ({
 					start: range.start,
 					endExclusive: range.endExclusive,
 				})),
-				edits: this._edits.map(edit => edit.edit.replacements.map(e => ({
+				edits: this.editCollectingInfo.edits.map(edit => edit.edit.replacements.map(e => ({
 					time: edit.time.toISOString(),
 					start: e.replaceRange.start,
 					endExclusive: e.replaceRange.endExclusive,
@@ -236,36 +236,48 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	}
 
 	private _startTime: number;
-	private _originalDoc: StringText;
-	private _originalSelection: readonly OffsetRange[];
-	private _edits: { time: Date; edit: StringEdit }[] = [];
 
+	/** Dependent on the observable document to track edits and selections */
+	private editCollectingInfo: undefined | {
+		originalDoc: StringText;
+		originalSelection: readonly OffsetRange[];
+		edits: { time: Date; edit: StringEdit }[];
+	};
+
+	/**
+	 * @param _doc passing an observable document allows to track edits and selections
+	 */
 	constructor(
-		private readonly _gitExtensionService: IGitExtensionService,
+		private readonly _gitExtensionService: IGitExtensionService | undefined,
 		private readonly _notebookService: INotebookService | undefined,
-		private readonly _workspaceService: IWorkspaceService,
+		private readonly _workspaceService: IWorkspaceService | undefined,
 		private readonly _providerId: string,
-		private readonly _doc: IObservableDocument,
+		private readonly _doc: IObservableDocument | undefined,
 		private readonly _debugRecorder?: DebugRecorder,
 		private readonly _requestBookmark?: DebugRecorderBookmark,
 	) {
 		super();
 		this._startTime = Date.now();
 
-		this._originalDoc = this._doc.value.get();
-		this._originalSelection = this._doc.selection.get();
+		if (this._doc) {
+			this.editCollectingInfo = {
+				originalDoc: this._doc.value.get(),
+				originalSelection: this._doc.selection.get(),
+				edits: [],
+			};
 
-		this._store.add(autorunWithChanges(this, {
-			value: this._doc.value,
-		}, (data) => {
-			const time = new Date();
-			data.value.changes.forEach(change => {
-				this._edits.push({
-					time,
-					edit: change,
+			this._store.add(autorunWithChanges(this, {
+				value: this._doc.value,
+			}, (data) => {
+				const time = new Date();
+				data.value.changes.forEach(change => {
+					this.editCollectingInfo?.edits.push({
+						time,
+						edit: change,
+					});
 				});
-			});
-		}));
+			}));
+		}
 	}
 
 	private _nesConfigs: INesConfigs | undefined;
@@ -449,12 +461,15 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		return this._diagnosticsBuilder;
 	}
 
+	/**
+	 * @param _doc passing an observable document allows to track edits and selections
+	 */
 	constructor(
-		gitExtensionService: IGitExtensionService,
+		gitExtensionService: IGitExtensionService | undefined,
 		notebookService: INotebookService | undefined,
-		workspaceService: IWorkspaceService,
+		workspaceService: IWorkspaceService | undefined,
 		providerId: string,
-		doc: IObservableDocument,
+		doc: IObservableDocument | undefined,
 		debugRecorder?: DebugRecorder,
 		requestBookmark?: DebugRecorderBookmark,
 	) {
