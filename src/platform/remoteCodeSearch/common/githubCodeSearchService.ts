@@ -26,6 +26,7 @@ import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { postRequest } from '../../networking/common/networking';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
@@ -109,6 +110,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -118,6 +120,13 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const repoNwo = toGithubNwo(githubRepoId);
+
+		// Check for custom semantic search endpoint (for local blackbird testing)
+		const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+		if (customEndpoint) {
+			this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Using custom endpoint, returning Ready status.`);
+			return Result.ok({ status: RemoteCodeSearchIndexStatus.Ready, indexedCommit: 'custom-endpoint' });
+		}
 
 		if (repoNwo.startsWith('microsoft/simuluation-test-')) {
 			return Result.ok({ status: RemoteCodeSearchIndexStatus.NotYetIndexed });
@@ -261,6 +270,12 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
+		// Check for custom semantic search endpoint (for local blackbird testing)
+		const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+		if (customEndpoint) {
+			return this.searchCustomEndpoint(customEndpoint, embeddingType, repo, searchQuery, maxResults, options, telemetryInfo, token);
+		}
+
 		const authToken = await this.getGithubAccessToken(auth.silent);
 		if (!authToken) {
 			throw new Error('No valid auth token');
@@ -369,6 +384,57 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		// - size of 0 indicates no content
 		// - missing default_branch often means no commits
 		return data.size === 0 || !data.default_branch;
+	}
+
+	/**
+	 * Search using a custom endpoint (for local blackbird testing)
+	 */
+	private async searchCustomEndpoint(
+		endpoint: string,
+		embeddingType: EmbeddingType,
+		repo: GithubCodeSearchRepoInfo,
+		searchQuery: string,
+		maxResults: number,
+		options: CodeSearchOptions,
+		telemetryInfo: TelemetryCorrelationId,
+		token: CancellationToken
+	): Promise<CodeSearchResult> {
+		this._logService.trace(`GithubCodeSearchService::searchCustomEndpoint. Using custom endpoint: ${endpoint}`);
+
+		const searchUrl = `${endpoint}/api/v1/search`;
+		const requestBody = {
+			prompt: truncateToMaxUtf8Length(searchQuery, 7800),
+			limit: maxResults,
+			embedding_model: embeddingType.id,
+			scoping_query: `repo:${toGithubNwo(repo.githubRepoId)}`,
+		};
+
+		const response = await raceCancellationError(
+			this._fetcherService.fetch(
+				searchUrl,
+				{
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(requestBody),
+				}
+			),
+			token
+		);
+
+		if (!response.ok) {
+			this._logService.error(`GithubCodeSearchService::searchCustomEndpoint. Custom endpoint search failed: ${response.status}`);
+			throw new Error(`Custom endpoint search failed with status: ${response.status}`);
+		}
+
+		const body = await raceCancellationError(response.json(), token) as ResponseShape;
+		if (!Array.isArray(body.results)) {
+			this._logService.error('GithubCodeSearchService::searchCustomEndpoint. Custom endpoint returned invalid response');
+			throw new Error('Custom endpoint returned invalid response');
+		}
+
+		return parseGithubCodeSearchResponse(body, repo, options, this._ignoreService);
 	}
 }
 
