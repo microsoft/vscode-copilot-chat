@@ -249,8 +249,8 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		// Should preserve body content
-		assert.ok(content.includes('You are a PLANNING AGENT, NOT an implementation agent.'));
-		assert.ok(content.includes('Your SOLE responsibility is planning, NEVER even consider to start implementation.'));
+		assert.ok(content.includes('You are a PLANNING AGENT, pairing with the user'));
+		assert.ok(content.includes('Your SOLE responsibility is planning. NEVER start implementation.'));
 	});
 
 	test('handles empty additionalTools array gracefully', async () => {
