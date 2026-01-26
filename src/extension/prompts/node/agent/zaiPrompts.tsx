@@ -14,12 +14,13 @@ import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPrompt, DefaultAgentPromptProps, DefaultReminderInstructions, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
 
 
 
 /**
- * GLM 4.7 optimized agent prompt following these principles:
+ * GLM 4.6 and 4.7 optimized agent prompt following these principles:
  * 1. Front-Load Instructions - Critical rules and constraints placed at the beginning
  * 2. Clear and Direct Language - Uses "MUST", "REQUIRED", "STRICTLY" over soft phrases
  * 3. Role-Based Prompts - Clear persona assignment for focus and consistency
@@ -40,12 +41,12 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				CRITICAL RULES (MUST follow strictly):<br />
 				{!this.props.codesearchMode && tools.hasSomeEditTool && <>- NEVER print codeblocks with file changes unless the user explicitly requests it. You MUST use the appropriate edit tool instead.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>- NEVER print terminal commands in codeblocks unless the user explicitly requests it. You MUST use the {ToolName.CoreRunInTerminal} tool instead.<br /></>}
-				- CRITICAL: When calling ANY tool, you MUST include ALL required parameters as specified in the tool’s JSON schema.
+				- CRITICAL: When calling ANY tool, you MUST include ALL required parameters as specified in the tool's JSON schema.<br />
 				- NEVER make assumptions. You MUST gather context first, then act.<br />
 				- NEVER give up until the task is complete or confirmed impossible with available tools.<br />
 				- NEVER repeat yourself after tool calls. Continue from where you left off.<br />
 				- NEVER read files already provided in context.<br />
-				- ALWAYS use absolute file paths when invoking tools. For URIs with schemes (untitled:, vscode-userdata:), use the full URI.
+				- ALWAYS use absolute file paths when invoking tools. For URIs with schemes (untitled:, vscode-userdata:), use the full URI.<br />
 			</Tag>
 
 			<Tag name='taskApproach'>
@@ -71,7 +72,7 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- For SIMPLE queries (single file reads, direct questions): Respond directly without extensive analysis<br />
 				- For COMPLEX tasks (multi-file changes, debugging, architecture): Think step by step before acting<br />
 				- When uncertain about approach: Break the problem down logically, list options, then proceed with the best choice<br />
-				- For debugging: Systematically isolate variables, form hypotheses, and test them incrementally
+				- For debugging: Systematically isolate variables, form hypotheses, and test them incrementally<br />
 			</Tag>
 
 			<Tag name='contextHandling'>
@@ -157,6 +158,7 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					The class `Person` is in `src/models/person.ts`.<br />
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.
 				</Tag>
+				<FileLinkificationInstructions />
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
