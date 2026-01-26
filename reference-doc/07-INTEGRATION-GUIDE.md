@@ -467,7 +467,7 @@ flowchart TB
 #### 5.2.2 Server Lifecycle
 
 ```mermaid
-stateDiagram_v2
+stateDiagram-v2
     [*] --> Configured: User adds config
 
     Configured --> Starting: Extension activates
