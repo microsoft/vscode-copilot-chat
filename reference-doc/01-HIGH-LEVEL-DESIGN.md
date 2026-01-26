@@ -277,15 +277,15 @@ flowchart TB
 sequenceDiagram
     participant User
     participant ChatUI as Chat UI
-    participant Participant as Chat Participant
+    participant ChatParticipant as Chat Participant
     participant Intent as Intent Handler
     participant Prompt as Prompt Engine
     participant Model as AI Model
     participant Tools as Tool Executor
 
     User->>ChatUI: Types message
-    ChatUI->>Participant: handleRequest
-    Participant->>Intent: routeToIntent
+    ChatUI->>ChatParticipant: handleRequest
+    ChatParticipant->>Intent: routeToIntent
     Intent->>Prompt: buildPrompt
     Prompt->>Model: sendRequest
     Model-->>Intent: responseStream
@@ -306,31 +306,31 @@ sequenceDiagram
 sequenceDiagram
     participant User
     participant Agent as Agent Mode
-    participant Loop as Tool Calling Loop
+    participant ToolLoop as Tool Calling Loop
     participant Tools as Tools Service
     participant Workspace as Workspace
 
     User->>Agent: Start task
-    Agent->>Loop: initializeLoop
+    Agent->>ToolLoop: initializeLoop
 
     loop Until Complete
-        Loop->>Loop: buildPrompt
-        Loop->>Loop: callModel
+        ToolLoop->>ToolLoop: buildPrompt
+        ToolLoop->>ToolLoop: callModel
 
         alt Tool Call
-            Loop->>Tools: executeTool
+            ToolLoop->>Tools: executeTool
             Tools->>Workspace: performAction
             Workspace-->>Tools: result
-            Tools-->>Loop: toolResult
+            Tools-->>ToolLoop: toolResult
         end
 
         alt Confirmation Required
-            Loop->>User: requestConfirmation
-            User-->>Loop: approve or deny
+            ToolLoop->>User: requestConfirmation
+            User-->>ToolLoop: approve or deny
         end
     end
 
-    Loop-->>Agent: taskComplete
+    ToolLoop-->>Agent: taskComplete
     Agent-->>User: finalResult
 ```
 
