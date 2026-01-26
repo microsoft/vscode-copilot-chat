@@ -21,7 +21,7 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	private externalFolders = new Set<string>();
 	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI }>();
 
-	parseInstructionIndexFile(prommtFileIndexText: string): IInstructionIndexFile {
+	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile {
 		return {
 			instructions: new ResourceSet(),
 			skills: new ResourceSet(),
