@@ -383,7 +383,7 @@ function extractChromiumDetails(details: any): any {
 			is_issued_by_known_root: tls.is_issued_by_known_root,
 			handshake_type: tls.handshake_type,
 			client_cert_sent: tls.client_cert_sent,
-			key_exchange_group: tls.key_exchange_group,
+			exchange_group: tls.key_exchange_group,
 			ct_compliance: tls.ct_compliance,
 			alps_negotiated: tls.alps_negotiated,
 		};
