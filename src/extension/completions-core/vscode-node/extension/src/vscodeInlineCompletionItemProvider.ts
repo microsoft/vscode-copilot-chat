@@ -142,9 +142,11 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
 
 		try {
-			const items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, token);
+			const list = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, token);
 
-			if (!items) {
+			telemetryBuilder.nesBuilder.setHasNextEdit(list !== undefined && list.items.length > 0);
+
+			if (!list) {
 				if (token.isCancellationRequested) {
 					logContext.setIsSkipped();
 				} else {
@@ -154,11 +156,11 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 				return emptyList;
 			}
 
-			this.logSuggestion(logContext, doc, items);
-			logContext.setResponseResults(items.items);
+			this.logSuggestion(logContext, doc, list);
+			logContext.setResponseResults(list.items);
 
 			return {
-				...items,
+				...list,
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
