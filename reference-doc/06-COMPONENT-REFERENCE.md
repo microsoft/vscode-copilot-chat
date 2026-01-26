@@ -194,7 +194,7 @@ Manages the iterative conversation loop with tool execution:
 #### Loop State Machine
 
 ```mermaid
-stateDiagram_v2
+stateDiagram-v2
     [*] --> Initializing
 
     Initializing --> BuildingPrompt: initialized
