@@ -19,10 +19,11 @@ import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
-import { IBuildPromptContext } from '../../prompt/common/intents';
 import { isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
-import { isString } from 'mobx/dist/internal';
+import { IBuildPromptContext } from '../../prompt/common/intents';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { isString } from '../../../util/vs/base/common/types';
 
 export function checkCancellation(token: CancellationToken): void {
 	if (token.isCancellationRequested) {
@@ -107,6 +108,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
@@ -119,6 +121,9 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	}
 	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 	if (fileOpenInSomeTab) {
+		return;
+	}
+	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return;
 	}
 	if (buildPromptContext) {
@@ -171,10 +176,11 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 
 	const normalizedUri = normalizePath(uri);
 
-	// Not external if: in workspace, untitled, instructions file, or open in editor
+	// Not external if: in workspace, untitled, instructions file, session resource, or open in editor
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
@@ -182,6 +188,9 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+		return false;
+	}
+	if (diskSessionResources.isSessionResourceUri(normalizedUri)) {
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
