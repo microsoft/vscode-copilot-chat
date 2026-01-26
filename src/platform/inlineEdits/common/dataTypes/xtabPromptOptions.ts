@@ -63,21 +63,11 @@ export enum AggressivenessLevel {
 /**
  * EditIntent indicates the model's confidence level for the suggested edit.
  * The model returns this as <|edit_intent|>value<|/edit_intent|> in the response.
- *
- * Filtering logic (edit_intent vs user aggressiveness):
- * - no_edit: Never show the edit
- * - high: Show for all aggressiveness levels (high confidence = always show)
- * - medium: Show only if user aggressiveness is medium or high
- * - low: Show only if user aggressiveness is high
  */
 export enum EditIntent {
-	/** Model indicates no edit should be suggested */
 	NoEdit = 'no_edit',
-	/** Low confidence - only show for high aggressiveness */
 	Low = 'low',
-	/** Medium confidence - show for medium/high aggressiveness */
 	Medium = 'medium',
-	/** High confidence - show for all aggressiveness settings */
 	High = 'high',
 }
 
@@ -105,12 +95,12 @@ export namespace EditIntent {
 	/**
 	 * Determines if the edit should be shown based on the edit intent
 	 * and the user's aggressiveness level.
-	 *
-	 * Filtering logic:
-	 * - no_edit: Never show
-	 * - high confidence: Show for all aggressiveness levels
-	 * - medium confidence: Show for medium/high aggressiveness
-	 * - low confidence: Show only for high aggressiveness
+	   *
+	 * Filtering logic (edit_intent vs user aggressiveness):
+	 * - no_edit: Never show the edit
+	 * - high confidence: Show for all aggressiveness levels (high confidence = always show)
+	 * - medium confidence: Show only if user aggressiveness is medium or high
+	 * - low confidence: Show only if user aggressiveness is high
 	 */
 	export function shouldShowEdit(editIntent: EditIntent, aggressivenessLevel: AggressivenessLevel): boolean {
 		switch (editIntent) {
