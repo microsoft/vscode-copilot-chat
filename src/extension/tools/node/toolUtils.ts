@@ -5,7 +5,7 @@
 
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -20,6 +20,9 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { IBuildPromptContext } from '../../prompt/common/intents';
+import { isPromptInstructionText } from '../../prompt/common/chatVariablesCollection';
+import { isString } from 'mobx/dist/internal';
 
 export function checkCancellation(token: CancellationToken): void {
 	if (token.isCancellationRequested) {
@@ -90,16 +93,16 @@ export function resolveToolInputPath(path: string, promptPathRepresentationServi
 	return uri;
 }
 
-export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
 	try {
-		await assertFileOkForTool(accessor, uri);
+		await assertFileOkForTool(accessor, uri, buildPromptContext);
 		return true;
 	} catch {
 		return false;
 	}
 }
 
-export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<void> {
+export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, buildPromptContext?: IBuildPromptContext): Promise<void> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
@@ -108,13 +111,51 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	await assertFileNotContentExcluded(accessor, uri);
 
 	const normalizedUri = normalizePath(uri);
-
-	if (!workspaceService.getWorkspaceFolder(normalizedUri) && uri.scheme !== Schemas.untitled && !await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
-		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
-		if (!fileOpenInSomeTab) {
-			throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
+		return;
+	}
+	if (uri.scheme === Schemas.untitled) {
+		return;
+	}
+	const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
+	if (fileOpenInSomeTab) {
+		return;
+	}
+	if (buildPromptContext) {
+		const instructionIndexFile = getInstructionsIndexFile(buildPromptContext, customInstructionsService);
+		if (instructionIndexFile) {
+			if (instructionIndexFile.instructions.has(normalizedUri) || instructionIndexFile.skills.has(normalizedUri)) {
+				return;
+			}
+		}
+	} else {
+		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
+			return;
 		}
 	}
+	throw new Error(`File ${promptPathRepresentationService.getFilePath(normalizedUri)} is outside of the workspace, and not open in an editor, and can't be read`);
+}
+
+let cachedInstructionIndexFile: { requestd: string; file: IInstructionIndexFile } | undefined;
+
+function getInstructionsIndexFile(buildPromptContext: IBuildPromptContext, customInstructionsService: ICustomInstructionsService): IInstructionIndexFile | undefined {
+	if (!buildPromptContext.requestId) {
+		return undefined;
+	}
+
+	if (cachedInstructionIndexFile?.requestd === buildPromptContext.requestId) {
+		return cachedInstructionIndexFile.file;
+	}
+
+	const indexVariable = buildPromptContext.chatVariables.find(isPromptInstructionText);
+	if (indexVariable && isString(indexVariable.value)) {
+		const indexFile = customInstructionsService.parseInstructionIndexFile(indexVariable.value);
+		cachedInstructionIndexFile = { requestd: buildPromptContext.requestId, file: indexFile };
+		return indexFile;
+	}
+	cachedInstructionIndexFile = undefined;
+	return undefined;
+
 }
 
 export async function assertFileNotContentExcluded(accessor: ServicesAccessor, uri: URI): Promise<void> {

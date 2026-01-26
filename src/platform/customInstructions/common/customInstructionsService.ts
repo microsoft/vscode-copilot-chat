@@ -13,7 +13,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { IObservable, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
 import { extUriBiasedIgnorePathCase } from '../../../util/vs/base/common/resources';
-import { isObject, isString } from '../../../util/vs/base/common/types';
+import { isObject } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { FileType, Uri } from '../../../vscodeTypes';
 import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
@@ -61,6 +61,8 @@ export interface ICustomInstructionsService {
 
 	getAgentInstructions(): Promise<URI[]>;
 
+	parseInstructionIndexFile(prommtFileIndexText: string): IInstructionIndexFile;
+
 	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
 	isSkillFile(uri: URI): boolean;
@@ -76,6 +78,12 @@ export interface ICustomInstructionsService {
 	refreshExtensionPromptFiles(): Promise<void>;
 	/** Gets skill info for extension-contributed skill files */
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
+}
+
+export interface IInstructionIndexFile {
+	readonly instructions: ResourceSet;
+	readonly skills: ResourceSet;
+	readonly agents: Set<string>;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -404,28 +412,9 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		return undefined;
 	}
 
-
-	private indexFileCache: InstructionIndexFile | undefined;
-
-	private getInstructionIndexFile(promptContext: IBuildPromptContext): InstructionIndexFile {
-		if (!this.indexFileCache || this.indexFileCache.promptContext.requestId !== promptContext.requestId) {
-			this.indexFileCache = new InstructionIndexFile(promptContext, this.promptPathRepresentationService);
-		}
-		return this.indexFileCache;
+	public parseInstructionIndexFile(content: string): InstructionIndexFile {
+		return new InstructionIndexFile(content, this.promptPathRepresentationService);
 	}
-
-	public isInstructionFileFromRequest(uri: URI, promptContext: IBuildPromptContext): boolean {
-		return this.getInstructionIndexFile(promptContext).instructions.has(uri);
-	}
-
-	public isSkillFileFromRequest(uri: URI, promptContext: IBuildPromptContext): boolean {
-		return this.getInstructionIndexFile(promptContext).skills.has(uri);
-	}
-
-	public isAgentFromRequest(name: string, promptContext: IBuildPromptContext): boolean {
-		return this.getInstructionIndexFile(promptContext).agents.has(name);
-	}
-
 
 	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
@@ -479,14 +468,14 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	}
 }
 
-class InstructionIndexFile {
+class InstructionIndexFile implements IInstructionIndexFile {
 
 	private instructionUris: ResourceSet | undefined;
 	private skillUris: ResourceSet | undefined;
 	private agentNames: Set<string> | undefined;
 
 	constructor(
-		public readonly promptContext: IBuildPromptContext,
+		public readonly content: string,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService) {
 	}
 
@@ -494,12 +483,8 @@ class InstructionIndexFile {
 	 * Finds an file paths or names in the index file. The index file has XML format: <listElementName><elementName><propertyName>value</propertyName></elementName></listElementName>
 	 */
 	private getValuesInIndexFile(listElementName: string, elementName: string, propertyName: string): string[] {
-		const indexFile = this.promptContext.chatVariables.find(isPromptInstructionText);
-		if (!indexFile || !isString(indexFile.value)) {
-			return [];
-		}
 		const result: string[] = [];
-		const lists = xmlContents(indexFile.value, listElementName);
+		const lists = xmlContents(this.content, listElementName);
 		for (const list of lists) {
 			const instructions = xmlContents(list, elementName);
 			for (const instruction of instructions) {
