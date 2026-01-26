@@ -22,6 +22,21 @@ describe('CopilotCLISDK Authentication', () => {
 	let authService: IAuthenticationService;
 	let logService: ILogService;
 
+	// Helper to create a mock extension context
+	function createMockExtensionContext(): IVSCodeExtensionContext {
+		return new class extends mock<IVSCodeExtensionContext>() {
+			override workspaceState = {
+				get: () => ({}),
+				update: async () => { }
+			};
+		};
+	}
+
+	// Helper to create a mock env service
+	function createMockEnvService(): IEnvService {
+		return new class extends mock<IEnvService>() { };
+	}
+
 	beforeEach(() => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
@@ -38,7 +53,7 @@ describe('CopilotCLISDK Authentication', () => {
 	it('should skip token validation when proxy URL is configured', async () => {
 		// Mock configuration to return a proxy URL
 		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig(key: any) {
+			override getConfig(key: string) {
 				if (key === ConfigKey.Shared.DebugOverrideProxyUrl) {
 					return 'https://proxy.example.com';
 				}
@@ -53,18 +68,9 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		};
 
-		const mockExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState = {
-				get: () => ({}),
-				update: async () => { }
-			};
-		};
-
-		const mockEnvService = new class extends mock<IEnvService>() { };
-
 		const sdk = new CopilotCLISDK(
-			mockExtensionContext,
-			mockEnvService,
+			createMockExtensionContext(),
+			createMockEnvService(),
 			logService,
 			instantiationService,
 			mockAuthService,
@@ -81,7 +87,7 @@ describe('CopilotCLISDK Authentication', () => {
 	it('should skip token validation when CAPI URL is configured', async () => {
 		// Mock configuration to return a CAPI URL
 		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig(key: any) {
+			override getConfig(key: string) {
 				if (key === ConfigKey.Shared.DebugOverrideCAPIUrl) {
 					return 'https://capi.example.com';
 				}
@@ -96,18 +102,9 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		};
 
-		const mockExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState = {
-				get: () => ({}),
-				update: async () => { }
-			};
-		};
-
-		const mockEnvService = new class extends mock<IEnvService>() { };
-
 		const sdk = new CopilotCLISDK(
-			mockExtensionContext,
-			mockEnvService,
+			createMockExtensionContext(),
+			createMockEnvService(),
 			logService,
 			instantiationService,
 			mockAuthService,
@@ -143,18 +140,9 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		};
 
-		const mockExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState = {
-				get: () => ({}),
-				update: async () => { }
-			};
-		};
-
-		const mockEnvService = new class extends mock<IEnvService>() { };
-
 		const sdk = new CopilotCLISDK(
-			mockExtensionContext,
-			mockEnvService,
+			createMockExtensionContext(),
+			createMockEnvService(),
 			logService,
 			instantiationService,
 			mockAuthService,
@@ -183,18 +171,9 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		};
 
-		const mockExtensionContext = new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState = {
-				get: () => ({}),
-				update: async () => { }
-			};
-		};
-
-		const mockEnvService = new class extends mock<IEnvService>() { };
-
 		const sdk = new CopilotCLISDK(
-			mockExtensionContext,
-			mockEnvService,
+			createMockExtensionContext(),
+			createMockEnvService(),
 			logService,
 			instantiationService,
 			mockAuthService,
