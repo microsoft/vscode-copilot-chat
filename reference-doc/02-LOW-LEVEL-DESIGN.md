@@ -432,13 +432,13 @@ classDiagram
 ```mermaid
 sequenceDiagram
     participant Model as AI Model
-    participant Loop as Tool Calling Loop
+    participant ToolLoop as Tool Calling Loop
     participant Service as Tools Service
     participant Tool as Tool Implementation
     participant Confirm as Confirmation UI
 
-    Model->>Loop: tool_call request
-    Loop->>Service: prepareInvocation
+    Model->>ToolLoop: tool_call request
+    ToolLoop->>Service: prepareInvocation
     Service->>Tool: prepareInvocation
     Tool-->>Service: PreparedToolInvocation
 
@@ -446,15 +446,15 @@ sequenceDiagram
         Service->>Confirm: show confirmation
         Confirm-->>Service: user decision
         alt User Denied
-            Service-->>Loop: ToolCallCancelledError
-            Loop->>Model: tool denied message
+            Service-->>ToolLoop: ToolCallCancelledError
+            ToolLoop->>Model: tool denied message
         end
     end
 
     Service->>Tool: invoke
     Tool-->>Service: ToolResult
-    Service-->>Loop: formatted result
-    Loop->>Model: tool_result message
+    Service-->>ToolLoop: formatted result
+    ToolLoop->>Model: tool_result message
 ```
 
 ---
@@ -464,7 +464,7 @@ sequenceDiagram
 #### 3.6.1 Loop State Machine
 
 ```mermaid
-stateDiagram_v2
+stateDiagram-v2
     [*] --> Initializing: Start Loop
 
     Initializing --> BuildingPrompt: Initialize Complete
