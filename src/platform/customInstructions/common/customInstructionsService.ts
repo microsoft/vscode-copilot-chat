@@ -61,7 +61,7 @@ export interface ICustomInstructionsService {
 
 	getAgentInstructions(): Promise<URI[]>;
 
-	parseInstructionIndexFile(prommtFileIndexText: string): IInstructionIndexFile;
+	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile;
 
 	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
