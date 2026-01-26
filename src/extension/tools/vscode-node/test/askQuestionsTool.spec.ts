@@ -32,11 +32,11 @@ interface IAnswerResult {
 }
 
 /**
- * Test subclass that exposes private methods for testing
+ * Test subclass that exposes protected methods for testing
  */
 class TestableAskQuestionsTool extends AskQuestionsTool {
 	public testConvertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
-		return (this as any)._convertCarouselAnswers(questions, carouselAnswers);
+		return this._convertCarouselAnswers(questions, carouselAnswers);
 	}
 }
 

@@ -11,7 +11,7 @@ import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { ChatQuestion, ChatQuestionType, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface IQuestionOption {
 	label: string;
@@ -58,8 +58,20 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		const stream = this._promptContext?.stream;
 		if (!stream) {
 			this._logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
+
+			// When no stream is available, return a schema-compliant result with all questions marked as skipped
+			const skippedAnswers: Record<string, IQuestionAnswer> = {};
+			for (const question of questions) {
+				skippedAnswers[question.header] = {
+					selected: [],
+					freeText: null,
+					skipped: true
+				};
+			}
+
+			const toolResultJson = JSON.stringify({ answers: skippedAnswers });
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart(JSON.stringify({ answers: {}, error: 'No stream available' }))
+				new LanguageModelTextPart(toolResultJson)
 			]);
 		}
 
@@ -105,7 +117,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		]);
 	}
 
-	async resolveInput(input: IAskQuestionsParams, promptContext: IBuildPromptContext): Promise<IAskQuestionsParams> {
+	async resolveInput(input: IAskQuestionsParams, promptContext: IBuildPromptContext, _mode: CopilotToolMode): Promise<IAskQuestionsParams> {
 		this._promptContext = promptContext;
 		return input;
 	}
@@ -142,7 +154,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				message: question.question,
 				options: question.options?.map(opt => ({
 					id: opt.label,
-					label: opt.label,
+					label: `${opt.label}${opt.description ? ' - ' + opt.description : ''}`,
 					value: opt.label
 				})),
 				defaultValue,
@@ -151,7 +163,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		);
 	}
 
-	private _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
+	protected _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
 		const result: IAnswerResult = { answers: {} };
 
 		// Log all available keys in carouselAnswers for debugging
