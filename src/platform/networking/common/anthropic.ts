@@ -92,6 +92,10 @@ export const nonDeferredToolNames = new Set([
 	'search_subagent',
 	// Testing
 	'runTests',
+	// Misc
+	'ask_questions',
+	'switch_agent'
+
 ]);
 
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
