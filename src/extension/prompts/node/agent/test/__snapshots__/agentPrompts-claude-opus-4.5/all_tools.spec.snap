@@ -89,7 +89,6 @@ read_notebook_cell_output
 read_project_structure
 run_notebook_cell
 run_vscode_command
-search_subagent
 search_workspace_symbols
 test_failure
 test_search
