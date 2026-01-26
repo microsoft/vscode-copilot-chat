@@ -14,6 +14,7 @@ import { IConversationOptions } from '../../../platform/chat/common/conversation
 import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
@@ -167,7 +168,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let actualStatusCode: number | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
-			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
+			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions, chatEndpoint, this._configurationService, this._experimentationService);
 			if (!payloadValidationResult.isValid) {
 				response = {
 					type: FetchResponseKind.Failed,
@@ -1360,7 +1361,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
  * @param params The params being sent in the chat request
  * @returns Whether the chat payload is valid
  */
-function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams): { isValid: boolean; reason: string } {
+function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams, endpoint: IChatEndpoint, configurationService: IConfigurationService, experimentationService: IExperimentationService): { isValid: boolean; reason: string } {
 	if (messages.length === 0) {
 		return { isValid: false, reason: asUnexpected('No messages provided') };
 	}
@@ -1376,7 +1377,7 @@ function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalCh
 		return { isValid: false, reason: asUnexpected('Function names must match ^[a-zA-Z0-9_-]+$') };
 	}
 
-	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT) {
+	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT && !isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService)) {
 		return { isValid: false, reason: `Tool limit exceeded (${postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 

@@ -21,6 +21,7 @@ import { ISurveyService } from '../../../../../../platform/survey/common/surveyS
 import { assertNever } from '../../../../../../util/vs/base/common/assert';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createCorrelationId } from '../../../../../inlineEdits/common/correlationId';
+import { NextEditProviderTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { CopilotCompletion } from '../../../lib/src/ghostText/copilotCompletion';
 import { handleGhostTextPostInsert, handleGhostTextShown, handlePartialGhostTextPostInsert } from '../../../lib/src/ghostText/last';
@@ -30,10 +31,13 @@ import { wrapDoc } from '../textDocumentManager';
 
 export interface GhostTextCompletionList extends InlineCompletionList {
 	items: GhostTextCompletionItem[];
+	telemetryBuilder: NextEditProviderTelemetryBuilder;
 }
 
 export interface GhostTextCompletionItem extends InlineCompletionItem {
+	opportunityId: string;
 	copilotCompletion: CopilotCompletion;
+	telemetryBuilder: NextEditProviderTelemetryBuilder;
 }
 
 export class GhostTextProvider {
@@ -51,6 +55,7 @@ export class GhostTextProvider {
 		vscodeDoc: TextDocument,
 		position: Position,
 		context: InlineCompletionContext,
+		telemetryBuilder: NextEditProviderTelemetryBuilder,
 		logContext: GhostTextLogContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
@@ -88,14 +93,16 @@ export class GhostTextProvider {
 			const { start, end } = completion.range;
 			const newRange = new Range(start.line, start.character, end.line, end.character);
 			return {
+				opportunityId,
 				insertText: completion.insertText,
 				range: newRange,
 				copilotCompletion: completion,
 				correlationId: createCorrelationId('completions', {}),
+				telemetryBuilder,
 			} satisfies GhostTextCompletionItem;
 		});
 
-		return { items };
+		return { items, telemetryBuilder } satisfies GhostTextCompletionList;
 	}
 
 	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
@@ -113,6 +120,7 @@ export class GhostTextProvider {
 		const copilotCompletion = completionItem.copilotCompletion;
 		switch (reason.kind) {
 			case InlineCompletionEndOfLifeReasonKind.Accepted: {
+				completionItem.telemetryBuilder.setAcceptance('accepted');
 				this.instantiationService.invokeFunction(handleGhostTextPostInsert, copilotCompletion);
 				this._surveyService.signalUsage('completions').catch(() => {
 					// Ignore errors from the survey command execution
@@ -120,11 +128,17 @@ export class GhostTextProvider {
 				return;
 			}
 			case InlineCompletionEndOfLifeReasonKind.Rejected: {
+				completionItem.telemetryBuilder.setAcceptance('rejected');
 				this.instantiationService.invokeFunction(telemetry, 'ghostText.dismissed', copilotCompletion.telemetry);
 				return;
 			}
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
-				// @ulugbekna: no-op ?
+				completionItem.telemetryBuilder.setAcceptance('notAccepted');
+				if (reason.supersededBy) {
+					const supersededByItem = reason.supersededBy as GhostTextCompletionItem;
+					completionItem.telemetryBuilder.setSupersededBy(supersededByItem.opportunityId);
+				}
+				completionItem.telemetryBuilder.setUserTypingDisagreed(reason.userTypingDisagreed);
 				return;
 			}
 			default: {

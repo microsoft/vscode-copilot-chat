@@ -114,13 +114,12 @@
 		"aiRelatedInformation",
 		"aiSettingsSearch",
 		"chatParticipantAdditions",
-		"chatEditing",
 		"defaultChatParticipant@4",
 		"contribSourceControlInputBoxMenu",
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@11",
+		"chatParticipantPrivate@12",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -3034,22 +3033,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.imageUpload.enabled%"
 					},
-					"github.copilot.chat.edits.suggestRelatedFilesFromGitHistory": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.edits.suggestRelatedFilesFromGitHistory%"
-					},
-					"github.copilot.chat.edits.suggestRelatedFilesForTests": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.chat.edits.suggestRelatedFilesForTests%"
-					},
 					"github.copilot.chat.codeGeneration.instructions": {
 						"markdownDeprecationMessage": "%github.copilot.config.codeGeneration.instructions.deprecated%",
 						"type": "array",
@@ -4196,15 +4179,6 @@
 							"advanced",
 							"experimental",
 							"onExp"
-						]
-					},
-					"github.copilot.chat.suggestRelatedFilesFromGitHistory.useEmbeddings": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.suggestRelatedFilesFromGitHistory.useEmbeddings%",
-						"tags": [
-							"advanced",
-							"experimental"
 						]
 					},
 					"github.copilot.chat.cli.customAgents.enabled": {

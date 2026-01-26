@@ -72,7 +72,7 @@ suite('ApplyPatch Tool', () => {
 				}
 			}
 
-		}, () => { }, () => { });
+		}, () => { }, () => { }, undefined, undefined, () => Promise.resolve(undefined));
 
 		const input2 = await tool.resolveInput(input, {
 			history: [],

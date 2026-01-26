@@ -645,7 +645,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		sw: StopWatch,
 		logger: ILogger,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
-	) {
+	): Promise<SingularCompletionList | undefined> {
 		logger.trace(`waiting for completions and/or NES responses`);
 
 		const completionsR = completionsP ? await completionsP : undefined;
@@ -675,19 +675,23 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		}
 
 		// return empty completions
-		return this._returnCompletions(completionsR ?? { items: [] }, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, nesP, sw, logger, tokens);
+		return this._returnCompletions(completionsR, { kind: vscode.InlineCompletionsDisposeReasonKind.NotTaken }, nesP, sw, logger, tokens);
 	}
 
 	private _returnCompletions(
-		completionsR: GhostTextCompletionList,
+		completionsR: GhostTextCompletionList | undefined,
 		nesDisposeReason: vscode.InlineCompletionsDisposeReason,
 		nesP: Promise<NesCompletionList | undefined> | undefined,
 		sw: StopWatch,
 		logger: ILogger,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
-	) {
+	): SingularCompletionList | undefined {
 		void setEndOfLifeReason(this._inlineEditProvider, nesP, nesDisposeReason);
 		tokens.nesCts.cancel(); // cancel NES request if still pending
+		if (completionsR === undefined) {
+			logger.trace(`Return: no completions to return in ${sw.elapsed()}ms`);
+			return undefined;
+		}
 		const list: SingularCompletionList = toCompletionsList(completionsR);
 		logger.trace(`Return: use completions response in ${sw.elapsed()}ms`);
 		return list;
@@ -700,7 +704,7 @@ class JointCompletionsProvider extends Disposable implements vscode.InlineComple
 		sw: StopWatch,
 		logger: ILogger,
 		tokens: { coreToken: CancellationToken; completionsCts: CancellationTokenSource; nesCts: CancellationTokenSource },
-	) {
+	): SingularCompletionList {
 		void setEndOfLifeReason(this._completionsProvider, completionsP, completionsDisposeReason);
 		tokens.completionsCts.cancel(); // cancel completions request if still pending
 		const list: SingularCompletionList = toInlineEditsList(nesR);
