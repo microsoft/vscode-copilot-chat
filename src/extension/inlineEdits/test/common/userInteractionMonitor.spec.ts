@@ -26,6 +26,9 @@ class NullLogService implements ILogService {
 	createSubLogger(_topic: string | readonly string[]): ILogger {
 		return this;
 	}
+	withExtraTarget(_target: unknown): ILogger {
+		return this;
+	}
 }
 
 /**
