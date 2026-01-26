@@ -3036,14 +3036,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.edits.suggestRelatedFilesFromGitHistory%"
 					},
-					"github.copilot.chat.edits.suggestRelatedFilesForTests": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.chat.edits.suggestRelatedFilesForTests%"
-					},
 					"github.copilot.chat.codeGeneration.instructions": {
 						"markdownDeprecationMessage": "%github.copilot.config.codeGeneration.instructions.deprecated%",
 						"type": "array",

@@ -8,7 +8,6 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { GitRelatedFilesProvider } from '../node/gitRelatedFilesProvider';
-import { TestRelatedFilesProvider } from '../node/testRelatedFilesProvider';
 
 export class RelatedFilesProviderContribution extends Disposable implements IExtensionContribution {
 
@@ -16,6 +15,5 @@ export class RelatedFilesProviderContribution extends Disposable implements IExt
 		super();
 
 		this._register(vscode.chat.registerRelatedFilesProvider(this._instantiationService.createInstance(GitRelatedFilesProvider), { description: 'Git' }));
-		this._register(vscode.chat.registerRelatedFilesProvider(this._instantiationService.createInstance(TestRelatedFilesProvider), { description: 'Tests' }));
 	}
 }

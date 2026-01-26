@@ -106,7 +106,6 @@
 	"github.copilot.config.debugTerminalCommands": "Whether to quick fix hints in the debug terminal and the `copilot-debug` command.",
 	"github.copilot.config.debugTerminalCommandPatterns": "A list of commands for which the \"Debug Command\" quick fix action should be shown in the debug terminal.",
 	"github.copilot.config.edits.suggestRelatedFilesFromGitHistory": "Whether to suggest related files from git history for the Copilot Edits working set.",
-	"github.copilot.chat.edits.suggestRelatedFilesForTests": "Whether to suggest source files from test files for the Copilot Edits working set.",
 	"github.copilot.config.suggestRelatedFilesFromGitHistory.useEmbeddings": "Use embeddings to suggest related files from git history.",
 	"github.copilot.config.codeGeneration.instructions": "A set of instructions that will be added to Copilot requests that generate code.\nInstructions can come from: \n- a file in the workspace: `{ \"file\": \"fileName\" }`\n- text in natural language: `{ \"text\": \"Use underscore for field names.\" }`\n\nNote: Keep your instructions short and precise. Poor instructions can degrade Copilot's quality and performance.",
 	"github.copilot.config.codeGeneration.instructions.deprecated": "Use instructions files instead. See https://aka.ms/vscode-ghcp-custom-instructions for more information.",
