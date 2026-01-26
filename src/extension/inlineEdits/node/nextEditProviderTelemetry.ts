@@ -122,6 +122,8 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly hadDiagnosticsNES: boolean;
 	readonly pickedNES: 'llm' | 'diagnostics' | undefined;
 	readonly configIsDiagnosticsNESEnabled: boolean;
+
+	readonly userTypingDisagreed: boolean | undefined;
 }
 
 export class LlmNESTelemetryBuilder extends Disposable {
@@ -403,7 +405,7 @@ export class DiagnosticsTelemetryBuilder {
 
 export class NextEditProviderTelemetryBuilder extends Disposable {
 
-	private static requestN = 0;
+	private static providerIdToReqN = new Map<string /* providerId */, number>();
 
 	/**
 	 * Whether telemetry for this builder has been sent -- only for ordinary telemetry, not enhanced telemetry
@@ -447,6 +449,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
 			postProcessingOutcome: this._postProcessingOutcome,
+			userTypingDisagreed: this._userTypingDisagreed
 		};
 	}
 
@@ -474,7 +477,10 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		requestBookmark?: DebugRecorderBookmark,
 	) {
 		super();
-		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
+
+		let requestN = NextEditProviderTelemetryBuilder.providerIdToReqN.get(providerId) || 0;
+		this._requestN = ++requestN;
+		NextEditProviderTelemetryBuilder.providerIdToReqN.set(providerId, requestN);
 
 		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, workspaceService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
@@ -507,6 +513,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _supersededByOpportunityId: string | undefined = undefined;
 	public setSupersededBy(opportunityId: string | undefined): this {
 		this._supersededByOpportunityId = opportunityId;
+		return this;
+	}
+
+	private _userTypingDisagreed: boolean | undefined = undefined;
+	public setUserTypingDisagreed(userTypingDisagreed: boolean): this {
+		this._userTypingDisagreed = userTypingDisagreed;
 		return this;
 	}
 
@@ -841,7 +853,8 @@ export class TelemetrySender implements IDisposable {
 				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
 				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" },
 				"xtabAggressivenessLevel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The aggressiveness level used for xtabAggressiveness prompting strategy (low, medium, high)" },
-				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true }
+				"xtabUserHappinessScore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User happiness score (0-1) when using xtabAggressiveness prompting strategy", "isMeasurement": true },
+				"userTypingDisagreed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the user typing disagreed with the suggestion", "isMeasurement": true }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -910,6 +923,7 @@ export class TelemetrySender implements IDisposable {
 				acceptedPredictionTokens: usage?.completion_tokens_details?.accepted_prediction_tokens,
 				rejectedPredictionTokens: usage?.completion_tokens_details?.rejected_prediction_tokens,
 				hasNextEdit: this._boolToNum(hasNextEdit),
+				userTypingDisagreed: this._boolToNum(telemetry.userTypingDisagreed),
 				nextEditLogprob,
 				hadDiagnosticsNES: this._boolToNum(hadDiagnosticsNES),
 				hadLlmNES: this._boolToNum(hadLlmNES),
