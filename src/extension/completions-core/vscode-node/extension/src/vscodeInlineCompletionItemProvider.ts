@@ -146,12 +146,15 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			if (!items) {
 				if (token.isCancellationRequested) {
 					logContext.setIsSkipped();
+				} else {
+					logContext.markAsNoSuggestions();
 				}
 
 				return emptyList;
 			}
 
 			this.logSuggestion(logContext, doc, items);
+			logContext.setResponseResults(items.items);
 
 			return {
 				...items,
