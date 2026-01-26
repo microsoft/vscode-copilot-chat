@@ -60,6 +60,111 @@ export enum AggressivenessLevel {
 	High = 'high',
 }
 
+/**
+ * EditIntent indicates the model's confidence level for the suggested edit.
+ * The model returns this as <|edit_intent|>value<|/edit_intent|> in the response.
+ *
+ * Filtering logic (edit_intent vs user aggressiveness):
+ * - no_edit: Never show the edit
+ * - low: Show for all aggressiveness levels (low, medium, high)
+ * - medium: Show only if user aggressiveness is low or medium
+ * - high: Show only if user aggressiveness is low
+ */
+export enum EditIntent {
+	/** Model indicates no edit should be suggested */
+	NoEdit = 'no_edit',
+	/** Low confidence - show for all aggressiveness settings */
+	Low = 'low',
+	/** Medium confidence - show for low/medium aggressiveness */
+	Medium = 'medium',
+	/** High confidence - only show for low aggressiveness */
+	High = 'high',
+}
+
+export namespace EditIntent {
+	const EDIT_INTENT_START_TAG = '<|edit_intent|>';
+	const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
+
+	/**
+	 * Parses the edit intent from a response string.
+	 * Returns the EditIntent and the remaining content after the tag.
+	 */
+	export function parseFromResponse(response: string): { editIntent: EditIntent; remainingContent: string } {
+		const startIdx = response.indexOf(EDIT_INTENT_START_TAG);
+		if (startIdx === -1) {
+			// No edit intent tag found, assume high confidence (always show)
+			return { editIntent: EditIntent.High, remainingContent: response };
+		}
+
+		const contentStartIdx = startIdx + EDIT_INTENT_START_TAG.length;
+		const endIdx = response.indexOf(EDIT_INTENT_END_TAG, contentStartIdx);
+		if (endIdx === -1) {
+			// Malformed tag (no end tag), assume high confidence
+			return { editIntent: EditIntent.High, remainingContent: response };
+		}
+
+		const intentValue = response.substring(contentStartIdx, endIdx).trim().toLowerCase();
+		let remainingContent = response.substring(endIdx + EDIT_INTENT_END_TAG.length);
+
+		// Strip leading newline if present (the edit intent tag is expected on its own line)
+		if (remainingContent.startsWith('\n')) {
+			remainingContent = remainingContent.substring(1);
+		}
+
+		const editIntent = fromString(intentValue);
+		return { editIntent, remainingContent };
+	}
+
+	/**
+	 * Converts a string value to EditIntent enum.
+	 * Returns High (most permissive) for invalid values.
+	 */
+	export function fromString(value: string): EditIntent {
+		switch (value) {
+			case 'no_edit':
+				return EditIntent.NoEdit;
+			case 'low':
+				return EditIntent.Low;
+			case 'medium':
+				return EditIntent.Medium;
+			case 'high':
+				return EditIntent.High;
+			default:
+				// For unknown values, default to High (always show)
+				return EditIntent.High;
+		}
+	}
+
+	/**
+	 * Determines if the edit should be shown based on the edit intent
+	 * and the user's aggressiveness level.
+	 *
+	 * Filtering logic:
+	 * - no_edit: Never show
+	 * - low intent: Show for all aggressiveness levels
+	 * - medium intent: Show for low/medium aggressiveness
+	 * - high intent: Show only for low aggressiveness
+	 */
+	export function shouldShowEdit(editIntent: EditIntent, aggressivenessLevel: AggressivenessLevel): boolean {
+		switch (editIntent) {
+			case EditIntent.NoEdit:
+				return false;
+			case EditIntent.Low:
+				// Low confidence edits show for all aggressiveness levels
+				return true;
+			case EditIntent.Medium:
+				// Medium confidence edits show for low or medium aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.Low ||
+					aggressivenessLevel === AggressivenessLevel.Medium;
+			case EditIntent.High:
+				// High confidence edits only show for low aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.Low;
+			default:
+				assertNever(editIntent);
+		}
+	}
+}
+
 export type PromptOptions = {
 	readonly promptingStrategy: PromptingStrategy | undefined /* default */;
 	readonly currentFile: CurrentFileOptions;
@@ -86,6 +191,12 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
 	PatchBased = 'patchBased',
+	/**
+	 * Xtab275-based strategy with edit intent tag parsing.
+	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
+	 * followed by the edit window content.
+	 */
+	Xtab275EditIntent = 'xtab275EditIntent',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -97,6 +208,7 @@ export enum ResponseFormat {
 	UnifiedWithXml = 'unifiedWithXml',
 	EditWindowOnly = 'editWindowOnly',
 	CustomDiffPatch = 'customDiffPatch',
+	EditWindowWithEditIntent = 'editWindowWithEditIntent',
 }
 
 export namespace ResponseFormat {
@@ -111,6 +223,8 @@ export namespace ResponseFormat {
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
+			case PromptingStrategy.Xtab275EditIntent:
+				return ResponseFormat.EditWindowWithEditIntent;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:
 			case undefined:

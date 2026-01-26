@@ -272,8 +272,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
-		// Log aggressiveness level and user happiness score when using XtabAggressiveness prompting strategy
-		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness) {
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness or Xtab275EditIntent prompting strategy
+		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness ||
+			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
 			if (userHappinessScore !== undefined) {
 				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
@@ -684,6 +685,21 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
+			// Parse the edit_intent tag from the response and filter based on aggressiveness
+			const { editIntent, remainingLinesStream } = await this.parseEditIntentFromStream(linesStream, tracer);
+
+			// Log the edit intent for telemetry
+			telemetryBuilder.setEditIntent(editIntent);
+			logContext.addLog(`Edit intent: ${editIntent}`);
+
+			// Check if we should show this edit based on intent and aggressiveness
+			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, promptPieces.aggressivenessLevel)) {
+				tracer.trace(`Filtered out edit due to edit intent "${editIntent}" with aggressiveness "${promptPieces.aggressivenessLevel}"`);
+				return new NoNextEditReason.FilteredOut(`editIntent:${editIntent} aggressivenessLevel:${promptPieces.aggressivenessLevel}`);
+			}
+
+			cleanedLinesStream = remainingLinesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
 			return yield* XtabCustomDiffPatchResponseHandler.handleResponse(
 				linesStream,
@@ -845,6 +861,91 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			// Properly handle the error by pushing it as a result
 			return new NoNextEditReason.Unexpected(errors.fromUnknown(err));
 		}
+	}
+
+	/**
+	 * Parses the edit_intent tag from the first line of the response stream.
+	 * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
+	 * Returns the parsed EditIntent and a new stream with the remaining content.
+	 *
+	 * Expected format (first line only):
+	 * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
+	 * ... rest of edited code ...
+	 */
+	private async parseEditIntentFromStream(
+		linesStream: AsyncIterableObject<string>,
+		tracer: ILogger,
+	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string> }> {
+		const EDIT_INTENT_START_TAG = '<|edit_intent|>';
+		const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
+
+		let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no tag found
+		let foundIntent = false;
+
+		const linesIter = linesStream[Symbol.asyncIterator]();
+		const firstLineResult = await linesIter.next();
+
+		if (firstLineResult.done) {
+			// Empty stream
+			tracer.warn(`Empty response stream, no edit_intent tag found`);
+			const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
+			return { editIntent, remainingLinesStream };
+		}
+
+		const firstLine = firstLineResult.value;
+
+		// Check if the first line contains the complete edit_intent tag
+		const startIdx = firstLine.indexOf(EDIT_INTENT_START_TAG);
+		const endIdx = firstLine.indexOf(EDIT_INTENT_END_TAG);
+
+		if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+			// Found complete tag on first line
+			const intentValue = firstLine.substring(
+				startIdx + EDIT_INTENT_START_TAG.length,
+				endIdx
+			).trim().toLowerCase();
+
+			editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
+			foundIntent = true;
+			tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
+
+			// Calculate remaining content after the end tag on the first line
+			const afterEndTag = firstLine.substring(endIdx + EDIT_INTENT_END_TAG.length);
+
+			// Create a new stream that first yields remaining content from first line, then continues
+			const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+				// Only yield remaining content from first line if non-empty
+				if (afterEndTag.trim() !== '') {
+					emitter.emitOne(afterEndTag);
+				}
+				// Continue with rest of the stream
+				let next = await linesIter.next();
+				while (!next.done) {
+					emitter.emitOne(next.value);
+					next = await linesIter.next();
+				}
+			});
+
+			return { editIntent, remainingLinesStream };
+		}
+
+		// No valid edit_intent tag on the first line - warn and use default
+		if (!foundIntent) {
+			tracer.warn(`No edit_intent tag found on first line (using Xtab275EditIntent prompting strategy). ` +
+				`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
+		}
+
+		// Return the first line plus the rest of the stream
+		const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+			emitter.emitOne(firstLine);
+			let next = await linesIter.next();
+			while (!next.done) {
+				emitter.emitOne(next.value);
+				next = await linesIter.next();
+			}
+		});
+
+		return { editIntent, remainingLinesStream };
 	}
 
 	private async *doGetNextEditsWithCursorJump(
@@ -1101,6 +1202,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.PatchBased:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
+			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
@@ -1150,6 +1252,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			return editWindowLines.join('\n');
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
+			// For EditWindowWithIntent, we predict the edit intent as high (most likely case) followed by the code
+			return ['<|edit_intent|>high<|/edit_intent|>', ...editWindowLines].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			return ['```', ...editWindowLines, '```'].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
