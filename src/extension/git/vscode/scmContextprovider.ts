@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -13,7 +14,8 @@ export class ScmContextProviderContribution extends Disposable {
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
-		@ILanguageContextProviderService private readonly _languageContextProviderService: ILanguageContextProviderService
+		@ILanguageContextProviderService private readonly _languageContextProviderService: ILanguageContextProviderService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService
 	) {
 		super();
 
@@ -27,7 +29,7 @@ export class ScmContextProviderContribution extends Disposable {
 			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'scm-context-provider',
 				selector: { scheme: 'vscode-scm' }, // TODO: Verify if this is the correct document selector for SCM
-				resolver: new ScmContextResolver()
+				resolver: new ScmContextResolver(this._configurationService)
 			};
 			disposables.add(this._languageContextProviderService.registerContextProvider(provider, [ProviderTarget.Completions]));
 		} catch (error) {
@@ -40,24 +42,44 @@ export class ScmContextProviderContribution extends Disposable {
 
 class ScmContextResolver implements Copilot.ContextResolver<Copilot.SupportedContextItem> {
 
-	constructor() { }
+	constructor(
+		private readonly _configurationService: IConfigurationService
+	) { }
 
 	async resolve(request: Copilot.ResolveRequest, token: CancellationToken): Promise<Copilot.SupportedContextItem[]> {
-		return [{
-			// Provide some informational context. Will be included in the prompt with the format "name: value". Check promptFileContextService.ts for nice examples.
-			name: '...',
-			value: '...',
-			importance: 100 // High importance
-		}, {
-			// File snippets should use this CodeSnippet format so the ignore service can exclude the contents if needed
-			uri: '...',
-			name: '...',
-			value: 'const example = "This is an example content from a file in SCM."',
-			importance: 50 // Medium importance.
-		}];
-	}
+		const contextItems: Copilot.SupportedContextItem[] = [];
 
-	resolveOnTimeout(request: Copilot.ResolveRequest): Copilot.SupportedContextItem[] {
-		return []; // Is called after a timeout for a last chance to provide context
+		// Get git configuration values that affect commit message formatting
+		const inputValidationLength = this._configurationService.getNonExtensionConfig<number>('git.inputValidationLength') ?? 72;
+		const inputValidationSubjectLength = this._configurationService.getNonExtensionConfig<number>('git.inputValidationSubjectLength') ?? 50;
+
+		// Build commit message guidelines based on configuration
+		const guidelines: string[] = [
+			'This is a commit message input field.',
+			'Write a concise commit message that describes the feature implemented or bug fixed.',
+			'Use imperative mood (e.g., "Add feature" not "Added feature").',
+			'The first line should be a brief summary of the change.',
+			'If more detail is needed, add a blank line followed by a more detailed description.',
+		];
+
+		contextItems.push({
+			name: 'Commit message guidelines',
+			value: guidelines.join(' '),
+			importance: 100
+		});
+
+		contextItems.push({
+			name: 'Commit message subject length limit',
+			value: `${inputValidationSubjectLength} characters`,
+			importance: 90
+		});
+
+		contextItems.push({
+			name: 'Commit message line length limit',
+			value: `${inputValidationLength} characters per line`,
+			importance: 90
+		});
+
+		return contextItems;
 	}
 }
