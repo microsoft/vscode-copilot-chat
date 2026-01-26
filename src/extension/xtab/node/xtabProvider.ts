@@ -691,14 +691,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
-			logContext.setEditIntent(editIntent);
-			logContext.addLog(`Edit intent: ${editIntent}`);
-
 
 			// Log parse errors for telemetry - this helps detect malformed model output during flights
 			if (parseError) {
 				telemetryBuilder.setEditIntentParseError(parseError);
-				logContext.addLog(`Edit intent parse error: ${parseError}`);
 			}
 
 			// Check if we should show this edit based on intent and aggressiveness
