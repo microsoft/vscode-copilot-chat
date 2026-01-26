@@ -687,7 +687,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			cleanedLinesStream = linesStream;
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
 			// Parse the edit_intent tag from the response and filter based on aggressiveness
-			const { editIntent, remainingLinesStream } = await this.parseEditIntentFromStream(linesStream, tracer);
+			// This short-circuits on no_edit to avoid parsing the rest of the response
+			const { editIntent, remainingLinesStream } = await this.parseEditIntentFromStream(linesStream, promptPieces.aggressivenessLevel, tracer);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
@@ -696,6 +697,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			// Check if we should show this edit based on intent and aggressiveness
 			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, promptPieces.aggressivenessLevel)) {
 				tracer.trace(`Filtered out edit due to edit intent "${editIntent}" with aggressiveness "${promptPieces.aggressivenessLevel}"`);
+				// Short-circuit: resolve the fetch stream source to stop receiving/parsing the rest of the response
+				fetchStreamSource.resolve();
 				return new NoNextEditReason.FilteredOut(`editIntent:${editIntent} aggressivenessLevel:${promptPieces.aggressivenessLevel}`);
 			}
 
@@ -868,19 +871,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	 * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
 	 * Returns the parsed EditIntent and a new stream with the remaining content.
 	 *
+	 * When the edit intent is no_edit, this method short-circuits and returns an empty stream
+	 * to avoid parsing the rest of the response unnecessarily.
+	 *
 	 * Expected format (first line only):
 	 * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
 	 * ... rest of edited code ...
 	 */
 	private async parseEditIntentFromStream(
 		linesStream: AsyncIterableObject<string>,
+		aggressivenessLevel: xtabPromptOptions.AggressivenessLevel,
 		tracer: ILogger,
 	): Promise<{ editIntent: xtabPromptOptions.EditIntent; remainingLinesStream: AsyncIterableObject<string> }> {
 		const EDIT_INTENT_START_TAG = '<|edit_intent|>';
 		const EDIT_INTENT_END_TAG = '<|/edit_intent|>';
 
 		let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no tag found
-		let foundIntent = false;
 
 		const linesIter = linesStream[Symbol.asyncIterator]();
 		const firstLineResult = await linesIter.next();
@@ -906,8 +912,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			).trim().toLowerCase();
 
 			editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
-			foundIntent = true;
 			tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
+
+			// Short-circuit: if edit intent indicates we shouldn't show this edit, return empty stream
+			// This avoids parsing the rest of the response unnecessarily
+			if (!xtabPromptOptions.EditIntent.shouldShowEdit(editIntent, aggressivenessLevel)) {
+				tracer.trace(`Short-circuiting response parsing due to edit intent "${editIntent}" with aggressiveness "${aggressivenessLevel}"`);
+				const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
+				return { editIntent, remainingLinesStream };
+			}
 
 			// Calculate remaining content after the end tag on the first line
 			const afterEndTag = firstLine.substring(endIdx + EDIT_INTENT_END_TAG.length);
@@ -930,10 +943,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		// No valid edit_intent tag on the first line - warn and use default
-		if (!foundIntent) {
-			tracer.warn(`No edit_intent tag found on first line (using Xtab275EditIntent prompting strategy). ` +
-				`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
-		}
+		tracer.warn(`No edit_intent tag found on first line (using Xtab275EditIntent prompting strategy). ` +
+			`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
 
 		// Return the first line plus the rest of the stream
 		const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
