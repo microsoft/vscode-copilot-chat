@@ -55,29 +55,20 @@ class ScmContextResolver implements Copilot.ContextResolver<Copilot.SupportedCon
 
 		// Build commit message guidelines based on configuration
 		const guidelines: string[] = [
-			'This is a commit message input field.',
-			'Write a concise commit message that describes the feature implemented or bug fixed.',
+			'This is a git commit message input field.',
+			'Only provide a completion if you are confident you understand the intent of the user\'s commit based on the staged changes.',
+			'Write in natural human language, not code or technical syntax.',
 			'Use imperative mood (e.g., "Add feature" not "Added feature").',
-			'The first line should be a brief summary of the change.',
-			'If more detail is needed, add a blank line followed by a more detailed description.',
+			`Keep the first line (subject) under ${inputValidationSubjectLength} characters.`,
+			`Keep all lines under ${inputValidationLength} characters.`,
+			'If the user continues to a second line, add a more detailed description of the change.',
+			'If the changes are unclear or ambiguous, do not provide a completion.'
 		];
 
 		contextItems.push({
 			name: 'Commit message guidelines',
 			value: guidelines.join(' '),
 			importance: 100
-		});
-
-		contextItems.push({
-			name: 'Commit message subject length limit',
-			value: `${inputValidationSubjectLength} characters`,
-			importance: 90
-		});
-
-		contextItems.push({
-			name: 'Commit message line length limit',
-			value: `${inputValidationLength} characters per line`,
-			importance: 90
 		});
 
 		return contextItems;
