@@ -1305,6 +1305,13 @@ export async function parseEditIntentFromStream(
 			endIdx
 		).trim().toLowerCase();
 
+		// Check if it's a known intent value
+		const knownIntentValues = ['no_edit', 'low', 'medium', 'high'];
+		if (!knownIntentValues.includes(intentValue)) {
+			parseError = `unknownIntentValue:${intentValue}`;
+			tracer.warn(`Unknown edit_intent value: "${intentValue}", defaulting to High`);
+		}
+
 		editIntent = xtabPromptOptions.EditIntent.fromString(intentValue);
 		tracer.trace(`Parsed edit_intent from first line: "${intentValue}" -> ${editIntent}`);
 

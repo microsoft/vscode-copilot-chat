@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it, vi } from 'vitest';
-import { EditIntent, AggressivenessLevel } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, EditIntent } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ILogger } from '../../../../platform/log/common/logService';
 import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
 import { parseEditIntentFromStream } from '../../node/xtabProvider';
-import { ILogger } from '../../../../platform/log/common/logService';
 
 function createMockLogger(): ILogger {
 	return {
@@ -178,7 +178,7 @@ describe('parseEditIntentFromStream', () => {
 			expect(remainingLines).toEqual(['low<|/edit_intent|>', 'const x = 1;']);
 		});
 
-		it('should handle unknown intent value and default to High', async () => {
+		it('should handle unknown intent value and default to High with error', async () => {
 			const inputLines = ['<|edit_intent|>unknown_value<|/edit_intent|>', 'const x = 1;'];
 			const linesStream = AsyncIterableObject.fromArray(inputLines);
 			const logger = createMockLogger();
@@ -186,7 +186,7 @@ describe('parseEditIntentFromStream', () => {
 			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, logger);
 
 			expect(editIntent).toBe(EditIntent.High);
-			expect(parseError).toBeUndefined(); // Tag was parsed, just unknown value
+			expect(parseError).toBe('unknownIntentValue:unknown_value');
 
 			const remainingLines = await collectStream(remainingLinesStream);
 			expect(remainingLines).toEqual(['const x = 1;']);
