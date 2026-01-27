@@ -15,6 +15,7 @@ import { ICompletionsSpeculativeRequestCache } from './ghostText/speculativeRequ
 import { GhostTextResultWithTelemetry, handleGhostTextResultTelemetry, logger } from './ghostText/telemetry';
 import { ICompletionsLogTargetService } from './logger';
 import { ITextDocument, TextDocumentContents } from './textDocument';
+import { LlmNESTelemetryBuilder } from '../../../../inlineEdits/node/nextEditProviderTelemetry';
 
 type GetInlineCompletionsOptions = Partial<GetGhostTextOptions> & {
 	formattingOptions?: ITextEditorOptions;
@@ -34,10 +35,11 @@ export class GhostText {
 		token: CancellationToken,
 		options: Exclude<Partial<GetInlineCompletionsOptions>, 'promptOnly'> = {},
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<CopilotCompletion[] | undefined> {
 		logCompletionLocation(this.logTargetService, textDocument, position);
 
-		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext);
+		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext, telemetryBuilder);
 		return this.instantiationService.invokeFunction(handleGhostTextResultTelemetry, result);
 	}
 
@@ -46,6 +48,7 @@ export class GhostText {
 		token: CancellationToken,
 		options: GetInlineCompletionsOptions = {},
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<GhostTextResultWithTelemetry<CopilotCompletion[]>> {
 		let lineLengthIncrease = 0;
 		// The golang.go extension (and quite possibly others) uses snippets for function completions, which collapse down
@@ -56,7 +59,7 @@ export class GhostText {
 			lineLengthIncrease = completionState.position.character - options.selectedCompletionInfo.range.end.character;
 		}
 
-		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext);
+		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext, telemetryBuilder);
 		if (result.type !== 'success') { return result; }
 		const [resultArray, resultType] = result.value;
 
@@ -95,7 +98,7 @@ export class GhostText {
 
 			// Cache speculative request to be triggered when telemetryShown is called
 			const specOpts = { isSpeculative: true, opportunityId: options.opportunityId };
-			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts, logContext);
+			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts, logContext, telemetryBuilder);
 			this.speculativeRequestCache.set(completions[0].clientCompletionId, fn);
 		}
 

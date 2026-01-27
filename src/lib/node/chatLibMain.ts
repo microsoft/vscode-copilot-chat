@@ -662,7 +662,8 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined));
+		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder);
 	}
 
 	async inlineCompletionShown(completionId: string): Promise<void> {

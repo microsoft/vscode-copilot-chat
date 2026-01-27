@@ -12,6 +12,7 @@ import { IPosition, ITextDocument } from '../../textDocument';
 import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { extractPrompt, ExtractPromptOptions } from '../prompt';
 import { GhostTextLogContext } from '../../../../../common/ghostTextContext';
+import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
 
 export async function extractPromptInternal(
 	accessor: ServicesAccessor,
@@ -33,5 +34,6 @@ export async function getGhostTextInternal(
 	position: IPosition,
 	token?: CancellationToken
 ) {
-	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' }, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined));
+	const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+	return getGhostText(accessor, createCompletionState(textDocument, position), token, { opportunityId: 'opId' }, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder);
 }

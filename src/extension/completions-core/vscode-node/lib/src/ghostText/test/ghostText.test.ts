@@ -34,6 +34,7 @@ import { ICompletionsCurrentGhostText } from '../current';
 import { getGhostText, GhostCompletion } from '../ghostText';
 import { ResultType } from '../resultType';
 import { mkBasicResultTelemetry } from '../telemetry';
+import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
 
 // Unit tests for ghostText that do not require network connectivity. For other
 // tests, see lib/e2e/src/ghostText.test.ts.
@@ -66,7 +67,8 @@ suite('Isolated GhostText tests', function () {
 
 		// Setup closures with the state as default
 		function requestGhostText(completionState = state) {
-			return getGhostText(accessor, completionState, token, {}, new GhostTextLogContext(filePath, doc.version, undefined));
+			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+			return getGhostText(accessor, completionState, token, {}, new GhostTextLogContext(filePath, doc.version, undefined), telemetryBuilder);
 		}
 		async function requestPrompt(completionState = state) {
 			const telemExp = TelemetryWithExp.createEmptyConfigForTesting();
@@ -653,7 +655,8 @@ suite('Isolated GhostText tests', function () {
 		configProvider.setConfig(ConfigKey.AlwaysRequestMultiline, true);
 		currentGhostText.hasAcceptedCurrentCompletion = () => true;
 
-		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true }, new GhostTextLogContext('file:///fizzbuzz.go', doc.version, undefined));
+		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true }, new GhostTextLogContext('file:///fizzbuzz.go', doc.version, undefined), telemetryBuilder);
 
 		assert.strictEqual(response.type, 'success');
 		assert.strictEqual(response.value[0].length, 1);
