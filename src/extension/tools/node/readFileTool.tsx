@@ -192,7 +192,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				};
 			}
 
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!));
+			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext));
 			documentSnapshot = await this.getSnapshot(uri);
 		} catch (err) {
 			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);

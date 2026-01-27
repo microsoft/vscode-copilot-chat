@@ -141,7 +141,8 @@
 		"contribEditorContentMenu",
 		"chatPromptFiles",
 		"mcpServerDefinitions",
-		"tabInputMultiDiff"
+		"tabInputMultiDiff",
+		"workspaceTrust"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -2138,6 +2139,12 @@
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
 				"title": "%github.copilot.command.cli.sessions.resumeInTerminal%",
 				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.openRepository",
+				"title": "%github.copilot.command.cli.sessions.openRepository%",
+				"icon": "$(folder-opened)",
 				"category": "Copilot CLI"
 			},
 			{
@@ -4525,6 +4532,10 @@
 				},
 				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openRepository",
 					"when": "false"
 				},
 				{

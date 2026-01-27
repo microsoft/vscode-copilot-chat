@@ -241,7 +241,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		participant = new CopilotCLIChatSessionParticipant(
-			isolationManager,
 			contentProvider,
 			promptResolver,
 			itemProvider,
@@ -284,6 +283,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
 		worktree.setSupported(true);
 		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+		worktree.setSelectedRepository({ rootUri: Uri.file(`${sep}repo`) } as RepoContext);
 		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
 			autoCommit: true,
 			baseCommit: 'deadbeef',

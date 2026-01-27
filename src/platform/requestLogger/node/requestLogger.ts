@@ -152,7 +152,7 @@ export interface IRequestLogger {
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
-	logServerToolCall(id: string, name: string, args: unknown): void;
+	logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
 	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 
@@ -235,7 +235,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 
 	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
-	public abstract logServerToolCall(id: string, name: string, args: unknown): void;
+	public abstract logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
