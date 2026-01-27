@@ -293,17 +293,14 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			// For untitled workspaces, check if session already has a repository selected
 			const repository = await this.copilotCLIWorktreeManagerService.getWorktreeRepository(copilotcliSessionId);
 			const sessionRepository = this.copilotCLIWorktreeManagerService.getSessionRepository(copilotcliSessionId);
+			const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(copilotcliSessionId);
 
 			if (repository) {
-				options[REPOSITORY_OPTION_ID] = {
-					...toRepositoryOptionItem(repository),
-					locked: true
-				};
+				options[REPOSITORY_OPTION_ID] = toRepositoryOptionItem(repository).id;
 			} else if (sessionRepository) {
-				options[REPOSITORY_OPTION_ID] = {
-					...toRepositoryOptionItem(sessionRepository),
-					locked: true
-				};
+				options[REPOSITORY_OPTION_ID] = toRepositoryOptionItem(sessionRepository).id;
+			} else if (sessionWorkspaceFolder) {
+				options[REPOSITORY_OPTION_ID] = toWorkspaceFolderOptionItem(sessionWorkspaceFolder, basename(sessionWorkspaceFolder)).id;
 			} else if (isUntitledSessionId(copilotcliSessionId)) {
 				// For new untitled sessions in untitled workspaces, auto-select the first last-used repo if available
 				const lastUsedRepos = await this.getRepositoryOptionItemsForUntitledWorkspace();
@@ -405,12 +402,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			const repositories = await this.getRepositoryOptionItemsForUntitledWorkspace();
 			optionGroups.push({
 				id: REPOSITORY_OPTION_ID,
-				name: l10n.t('Repository'),
-				description: l10n.t('Pick Repository'),
+				name: l10n.t('Folder'),
+				description: l10n.t('Pick Folder'),
 				items: repositories,
 				commands: [{
 					command: OPEN_REPOSITORY_COMMAND_ID,
-					title: l10n.t('Open Repository')
+					title: l10n.t('Open Folder...')
 				}]
 			});
 		} else {
@@ -418,8 +415,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			if (repositories.length > 1) {
 				optionGroups.push({
 					id: REPOSITORY_OPTION_ID,
-					name: l10n.t('Repository'),
-					description: l10n.t('Pick Repository'),
+					name: l10n.t('Folder'),
+					description: l10n.t('Pick Folder'),
 					items: repositories
 				});
 			}
@@ -1133,7 +1130,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// Verify this folder is trusted.
 					const isTrusted = await this.workspaceService.requestResourceTrust({ uri: sessionWorkspaceFolder, message: untrustedFolderMessage });
 					if (!isTrusted) {
-						stream.warning(l10n.t('The selected workspace folder is not trusted. Proceeding without isolation.'));
+						stream.warning(l10n.t('The selected folder is not trusted.'));
 						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
 					}
 					// Workspace folder without git repo - no worktree can be created, use folder directly
@@ -1148,7 +1145,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (selectedRepository) {
 				const isTrusted = await this.workspaceService.requestResourceTrust({ uri: selectedRepository.rootUri, message: untrustedFolderMessage });
 				if (!isTrusted) {
-					stream.warning(l10n.t('The selected workspace folder is not trusted. Proceeding without isolation.'));
+					stream.warning(l10n.t('The selected folder is not trusted.'));
 					return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
 				}
 			}

@@ -73,7 +73,7 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
 	private _selectedRepository: RepoContext | undefined;
-	constructor(_isSupported: boolean = false) {
+	constructor() {
 		super();
 	}
 	setSelectedRepository(repo: RepoContext | undefined) {
@@ -387,7 +387,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
 	});
 
-	it('handles /delegate command from another chat (no worktree support)', async () => {
+	it('handles /delegate command from another chat without active repositor', async () => {
 		expect(manager.sessions.size).toBe(0);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
