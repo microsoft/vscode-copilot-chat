@@ -355,11 +355,11 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineDistance: number | undefined;
 	};
 
-	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness or Xtab275EditIntent) */
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
-	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent) */
+	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
 	readonly editIntent: string | undefined;
 	readonly editIntentParseError: string | undefined;
 

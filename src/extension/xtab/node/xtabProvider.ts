@@ -272,9 +272,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
-		// Log aggressiveness level and user happiness score when using XtabAggressiveness or Xtab275EditIntent prompting strategy
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort prompting strategy
 		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent) {
+			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent ||
+			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntentShort) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
 			if (userHappinessScore !== undefined) {
 				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
@@ -1346,8 +1347,10 @@ async function parseEditIntentFromStreamShortName(
 	}
 
 	// Short name not found or invalid
-	parseError = `invalidShortName:${firstLine}`;
-	tracer.warn(`Invalid edit_intent short name: "${firstLine}", defaulting to High`);
+	parseError = `unknownIntentValue:${firstLine}`;
+
+	tracer.warn(`Edit intent parse error: ${parseError} (using Xtab275EditIntentShort prompting strategy). ` +
+		`Defaulting to High (always show). First line was: "${firstLine.substring(0, 100)}..."`);
 
 	// Return the first line plus the rest of the stream
 	const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
