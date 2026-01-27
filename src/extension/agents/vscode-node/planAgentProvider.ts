@@ -270,19 +270,19 @@ Keep iterating until explicit approval or handoff.
 
 <plan_style_guide>
 \`\`\`markdown
-## Plan: {Title (2–10 words)}
+## Plan: {Title (2-10 words)}
 
 {TL;DR — what, how, why. Reference key decisions. (30-200 words, depending on complexity)}
 
-### Steps
+**Steps**
 1. {Action with [file](path) links and \`symbol\` refs}
 2. {Next step}
 3. {…}
 
-### Verification
+**Verification**
 {How to test: commands, tests, manual checks}
 
-### Decisions (if applicable)
+**Decisions** (if applicable)
 - {Decision: chose X over Y}
 \`\`\`
 
