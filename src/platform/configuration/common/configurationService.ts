@@ -716,6 +716,9 @@ export namespace ConfigKey {
 			clearInputs?: boolean;
 			thinkingKeepTurns?: number;
 		} | null>('chat.anthropic.contextEditing.config', ConfigType.Simple, null);
+
+		/** Enable the built-in agent customization skill provider */
+		export const AgentCustomizationSkillEnabled = defineSetting<boolean>('chat.advanced.agentCustomizationSkill.enabled', ConfigType.ExperimentBased, false);
 	}
 
 	/**
