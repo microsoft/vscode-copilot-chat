@@ -20,7 +20,6 @@ import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
-import { autorun } from '../../../util/vs/base/common/observable';
 import { basename, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -79,24 +78,13 @@ const listOfKnownRepos = new ResourceSet();
 const untrustedFolderMessage = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
 
 export class CopilotCLISessionIsolationManager {
-	private _sessionIsolation: Map<string, boolean> = new Map();
-
 	constructor(@IChatSessionWorktreeService private readonly worktreeManagerService: IChatSessionWorktreeService) { }
 
-	private getDefaultIsolationPreference(): boolean {
-		return this.worktreeManagerService.isWorktreeSupportedObs.get();
-	}
-
 	getIsolationPreference(sessionId: string): boolean {
-		if (!this._sessionIsolation.has(sessionId)) {
-			const defaultIsolation = this.getDefaultIsolationPreference();
-			this._sessionIsolation.set(sessionId, defaultIsolation);
+		if (isUntitledSessionId(sessionId)) {
+			return true;
 		}
-		return this._sessionIsolation.get(sessionId) ?? true;
-	}
-
-	async setIsolationPreference(sessionId: string, enabled: boolean): Promise<void> {
-		this._sessionIsolation.set(sessionId, enabled);
+		return !!this.worktreeManagerService.getSessionRepository(sessionId);
 	}
 }
 
@@ -234,7 +222,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
-	private worktreeOptionShown: boolean = false;
 	constructor(
 		private readonly isolationManager: CopilotCLISessionIsolationManager,
 		@ICopilotCLIModels private readonly copilotCLIModels: ICopilotCLIModels,
@@ -249,15 +236,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	) {
 		super();
 
-		this._register(autorun(reader => {
-			const isSupported = this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.read(reader);
-
-			if (isSupported && !this.worktreeOptionShown) {
+		const originalRepos = this.getRepositoryOptionItems().length;
+		this._register(this.gitService.onDidFinishInitialization(() => {
+			if (originalRepos !== this.getRepositoryOptionItems().length) {
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
 		}));
-		const originalRepos = this.getRepositoryOptionItems().length;
-		this._register(this.gitService.onDidFinishInitialization(() => {
+		this._register(this.gitService.onDidOpenRepository(() => {
 			if (originalRepos !== this.getRepositoryOptionItems().length) {
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
@@ -749,7 +734,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			} else {
 				selectedRepository = this.gitService.activeRepository.get();
 			}
-			const hasUncommittedChanges = (this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get() && selectedRepository?.changes)
+			const hasUncommittedChanges = selectedRepository?.changes
 				? (selectedRepository.changes.indexChanges.length > 0 || selectedRepository.changes.workingTree.length > 0)
 				: false;
 
@@ -1055,7 +1040,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Check for uncommitted changes
-		if (!hasUncommittedChanges || !this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get()) {
+		if (!hasUncommittedChanges) {
 			return await this.createCLISessionAndSubmitRequest(request, undefined, request.references, context, undefined, stream, token);
 		}
 
@@ -1136,6 +1121,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			let selectedRepository = sessionId ? this.copilotCLIWorktreeManagerService.getSessionRepository(sessionId) : undefined;
 			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository.rootUri) : undefined;
 
+			// If user hasn't selected a repository, e.g. when delegating, then use the active repository.
+			if (!sessionId && !selectedRepository && !sessionWorkspaceFolder) {
+				selectedRepository = this.gitService.activeRepository.get();
+			}
+
 			if (!selectedRepository && sessionWorkspaceFolder) {
 				// Possible we now have a git repo in this folder, check again.
 				selectedRepository = await this.gitService.getRepository(sessionWorkspaceFolder, true);
@@ -1204,8 +1194,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 		} else {
-			// This happens when we're delegating from a non-Background session to a new Background session
-			isolationEnabled = this.copilotCLIWorktreeManagerService.isWorktreeSupportedObs.get();
 			({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo } = await createWorkingTreeIfRequired(undefined));
 			// Means we failed to create worktree or this is a workspace folder without git repo
 			if (!worktreeProperties) {
