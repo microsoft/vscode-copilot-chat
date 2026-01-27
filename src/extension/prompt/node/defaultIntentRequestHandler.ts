@@ -128,7 +128,17 @@ export class DefaultIntentRequestHandler {
 				return confirmationResult;
 			}
 
-			const resultDetails = await this._requestLogger.captureInvocation(new CapturingToken(this.request.prompt, 'comment', false), () => this.runWithToolCalling(intentInvocation));
+			// For subagent requests, use the subAgentInvocationId as the session ID.
+			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
+			const capturingToken = new CapturingToken(
+				this.request.prompt,
+				'comment',
+				false,
+				false,
+				this.request.subAgentInvocationId,
+				this.request.subAgentName,
+			);
+			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);

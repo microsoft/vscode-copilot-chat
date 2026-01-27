@@ -26,5 +26,12 @@ export class CapturingToken {
 		 * excluded from the children list and its content is shown when clicking the parent.
 		 */
 		public readonly promoteMainEntry: boolean = false,
+		/**
+		 * Optional pre-assigned subAgentInvocationId as session id for trajectory tracking.
+		 * When set, the trajectory will use this ID instead of generating a new one,
+		 * enabling explicit linking between parent tool calls and subagent trajectories.
+		 */
+		public readonly subAgentInvocationId?: string,
+		public readonly subAgentName?: string,
 	) { }
 }

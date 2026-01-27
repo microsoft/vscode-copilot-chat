@@ -13,6 +13,7 @@ import { TrajectoryLoggerAdapter } from '../../../platform/trajectory/node/traje
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
+import { renderToolResultToStringNoBudget } from '../../prompt/vscode-node/requestLoggerToolResult';
 
 const exportTrajectoriesCommand = 'github.copilot.chat.debug.exportTrajectories';
 
@@ -30,7 +31,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		super();
 		// Initialize adapter to bridge RequestLogger to TrajectoryLogger
 		// The adapter subscribes to RequestLogger events and populates TrajectoryLogger
-		this._register(new TrajectoryLoggerAdapter(requestLogger, trajectoryLogger));
+		this._register(new TrajectoryLoggerAdapter(requestLogger, trajectoryLogger, renderToolResultToStringNoBudget));
 		this.registerCommands();
 	}
 
@@ -81,7 +82,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 			},
 			{
 				label: 'Export all trajectories (separate files)',
-				description: 'Writes one .trajectory.json per session_id',
+				description: 'Writes one .trajectory.json per session; subagent filenames match trajectory_path',
 				exportKind: 'all'
 			}
 		];
@@ -266,11 +267,28 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		}
 
 		try {
-			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+			const sessionIdToTrajectoryPath = new Map<string, string>();
+			for (const trajectory of trajectories.values()) {
+				const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
+				for (const step of steps) {
+					const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
+					for (const r of results) {
+						for (const ref of r.subagent_trajectory_ref ?? []) {
+							if (ref.session_id && ref.trajectory_path && !sessionIdToTrajectoryPath.has(ref.session_id)) {
+								sessionIdToTrajectoryPath.set(ref.session_id, ref.trajectory_path);
+							}
+						}
+					}
+				}
+			}
+
 			let successCount = 0;
 
 			for (const [sessionId, trajectory] of trajectories) {
-				const filename = `${this.sanitizeFilename(sessionId)}_${timestamp}${TRAJECTORY_FILE_EXTENSION}`;
+				const referencedPath = sessionIdToTrajectoryPath.get(sessionId);
+				const filename = referencedPath
+					? this.sanitizeFilename(referencedPath)
+					: `${this.sanitizeFilename(sessionId)}${TRAJECTORY_FILE_EXTENSION}`;
 				const fileUri = vscode.Uri.joinPath(saveDir, filename);
 
 				const content = JSON.stringify(trajectory, null, 2);

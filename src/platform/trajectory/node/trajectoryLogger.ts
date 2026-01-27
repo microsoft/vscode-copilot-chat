@@ -36,6 +36,8 @@ export class TrajectoryLogger extends Disposable implements ITrajectoryLogger {
 		if (!builder) {
 			builder = new TrajectoryBuilder(sessionId, agentInfo);
 			this.trajectories.set(sessionId, builder);
+		} else {
+			builder.updateAgentInfo(agentInfo);
 		}
 		this.currentSessionId = sessionId;
 		this._onDidUpdateTrajectory.fire();
@@ -139,8 +141,16 @@ class TrajectoryBuilder {
 
 	constructor(
 		private readonly sessionId: string,
-		private readonly agentInfo: IAgentInfo
+		private agentInfo: IAgentInfo
 	) { }
+
+	public updateAgentInfo(agentInfo: IAgentInfo): void {
+		this.agentInfo = {
+			...this.agentInfo,
+			...agentInfo,
+			tool_definitions: agentInfo.tool_definitions ?? this.agentInfo.tool_definitions
+		};
+	}
 
 	public getSessionId(): string {
 		return this.sessionId;

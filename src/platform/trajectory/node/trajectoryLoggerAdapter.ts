@@ -9,6 +9,15 @@ import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPar
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
 import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
+import { IToolDefinition, TRAJECTORY_FILE_EXTENSION } from '../common/trajectoryTypes';
+
+const AGENT_NAME = 'Github Copilot Chat';
+
+/**
+ * Function type for rendering PromptTsx parts to strings.
+ * Injected from extension layer to avoid layering violations.
+ */
+export type PromptTsxRenderer = (part: LanguageModelPromptTsxPart) => Promise<string>;
 
 /**
  * Adapter that converts request logger entries to trajectory format.
@@ -16,7 +25,6 @@ import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolC
  */
 export class TrajectoryLoggerAdapter extends Disposable {
 	private sessionMap = new WeakMap<CapturingToken, string>();
-	private sessionInfoBySessionId = new Map<string, { label: string; firstSeenTime: number }>();
 	private processedEntries = new Set<string>();
 	private processedToolCalls = new Set<string>(); // Track processed tool calls by their ID
 	private lastUserMessageBySession = new Map<string, string>();
@@ -24,11 +32,11 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	private pendingStepContexts = new Map<string, IAgentStepContext>();
 	private requestToStepContext = new Map<string, { sessionId: string; context: IAgentStepContext; toolCallCount: number; processedToolCalls: number }>();
 	private runSubagentToolCallToSessionId = new Map<string, string>();
-	private claimedSubagentSessionIds = new Set<string>();
 
 	constructor(
 		private readonly requestLogger: IRequestLogger,
-		private readonly trajectoryLogger: ITrajectoryLogger
+		private readonly trajectoryLogger: ITrajectoryLogger,
+		private readonly promptTsxRenderer?: PromptTsxRenderer
 	) {
 		super();
 		// Subscribe to request logger updates
@@ -43,7 +51,6 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	public startTrajectory(token: CapturingToken, agentInfo: IAgentInfo): string {
 		const sessionId = this.generateSessionId(token.label);
 		this.sessionMap.set(token, sessionId);
-		this.sessionInfoBySessionId.set(sessionId, { label: token.label, firstSeenTime: Date.now() });
 		this.trajectoryLogger.startTrajectory(sessionId, agentInfo);
 		return sessionId;
 	}
@@ -68,36 +75,31 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			// Get or create session for this token
 			let sessionId = this.sessionMap.get(entry.token);
 			if (!sessionId) {
-				// Auto-create session if tracking is enabled
-				sessionId = this.generateSessionId(entry.token.label);
+				// Use the token's pre-assigned subAgentInvocationId if present (for explicit subagent linking),
+				// otherwise generate a new one
+				sessionId = entry.token.subAgentInvocationId ?? this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
-				this.sessionInfoBySessionId.set(sessionId, { label: entry.token.label, firstSeenTime: this.getEntryTimeMs(entry) });
+				// Use subAgentName as agent name for subagent trajectories
+				const agentName = entry.token.subAgentName ?? AGENT_NAME;
 				this.trajectoryLogger.startTrajectory(sessionId, {
-					name: this.extractAgentName(entry.token.label),
-					version: '1.0.0'
+					name: agentName,
+					version: '1.0.0',
+					tool_definitions: this.extractToolDefinitionsFromEntry(entry)
 				});
 			}
 
 			// Switch active session before processing the entry. This avoids the
 			// "last started wins" behavior where subagent sessions overwrite main.
+			// Use subAgentName as agent name for subagent trajectories
+			const agentName = entry.token.subAgentName ?? AGENT_NAME;
 			this.trajectoryLogger.startTrajectory(sessionId, {
-				name: this.extractAgentName(entry.token.label),
-				version: '1.0.0'
+				name: agentName,
+				version: '1.0.0',
+				tool_definitions: this.extractToolDefinitionsFromEntry(entry)
 			});
 
 			await this.processEntry(entry, sessionId);
 			this.processedEntries.add(entry.id);
-		}
-	}
-
-	private getEntryTimeMs(entry: LoggedInfo): number {
-		switch (entry.kind) {
-			case LoggedInfoKind.Request:
-				return 'startTime' in entry.entry ? entry.entry.startTime.getTime() : entry.entry.startTimeMs;
-			case LoggedInfoKind.ToolCall:
-				return entry.time;
-			case LoggedInfoKind.Element:
-				return Date.now();
 		}
 	}
 
@@ -315,11 +317,14 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		// Add observation first so subagent references merge into the same result.
 		stepContext.addObservation([observationResult]);
 
-		// Check if this is a subagent tool call (runSubagent)
-		if (entry.name === 'runSubagent') {
-			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForRunSubagent(entry, sessionId);
+		// Check if this is a subagent tool call (runSubagent or search_subagent)
+		if (entry.name === 'runSubagent' || entry.name === 'search_subagent') {
+			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForSubagentTool(entry, sessionId);
+			const subagentDescription = this.extractSubagentDescription(entry);
+			const trajectoryPath = `subagent-${this.sanitizeSubagentDescriptionForFilename(subagentDescription)}-${resolvedSubagentSessionId}${TRAJECTORY_FILE_EXTENSION}`;
 			stepContext.addSubagentReference(entry.id, {
-				session_id: resolvedSubagentSessionId
+				session_id: resolvedSubagentSessionId,
+				trajectory_path: trajectoryPath
 			});
 		}
 
@@ -333,80 +338,49 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		}
 	}
 
-	private resolveSubagentSessionIdForRunSubagent(entry: ILoggedToolCall, currentSessionId: string): string {
+	private resolveSubagentSessionIdForSubagentTool(entry: ILoggedToolCall, currentSessionId: string): string {
 		const cached = this.runSubagentToolCallToSessionId.get(entry.id);
 		if (cached) {
 			return cached;
 		}
 
-		const args = this.parseArguments(entry.args);
-		const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : undefined;
-		const description = typeof args.description === 'string' ? args.description.trim() : undefined;
-
-		const bestMatch = this.findBestMatchingSubagentSessionId(prompt, description, entry.time, currentSessionId);
-		const resolved = bestMatch ?? `subagent-${entry.id}`;
-		this.runSubagentToolCallToSessionId.set(entry.id, resolved);
-		if (bestMatch) {
-			this.claimedSubagentSessionIds.add(bestMatch);
+		// First, check if toolMetadata contains subAgentInvocationId (set at capture time)
+		// This is the principled approach: the subagent session ID is captured when
+		// the subagent is launched and attached to the tool result metadata
+		const metadata = entry.toolMetadata as { subAgentInvocationId?: string } | undefined;
+		if (metadata?.subAgentInvocationId) {
+			this.runSubagentToolCallToSessionId.set(entry.id, metadata.subAgentInvocationId);
+			return metadata.subAgentInvocationId;
 		}
+
+		const resolved = `subagent-${entry.id}`;
+		this.runSubagentToolCallToSessionId.set(entry.id, resolved);
 		return resolved;
 	}
 
-	private findBestMatchingSubagentSessionId(prompt: string | undefined, description: string | undefined, toolCallTime: number, currentSessionId: string): string | undefined {
-		if (!prompt && !description) {
-			return undefined;
+	private extractSubagentDescription(entry: ILoggedToolCall): string {
+		const metadata = entry.toolMetadata as { description?: unknown } | undefined;
+		if (metadata && typeof metadata.description === 'string' && metadata.description.trim().length > 0) {
+			return metadata.description;
 		}
 
-		const windowMs = 10 * 60 * 1000;
-		let best: { sessionId: string; score: number; timeDelta: number } | undefined;
-
-		for (const [sessionId, info] of this.sessionInfoBySessionId) {
-			if (sessionId === currentSessionId) {
-				continue;
-			}
-			if (this.claimedSubagentSessionIds.has(sessionId)) {
-				continue;
-			}
-			const timeDelta = Math.abs(info.firstSeenTime - toolCallTime);
-			if (timeDelta > windowMs) {
-				continue;
-			}
-
-			const label = info.label.trim();
-			let score = 0;
-			if (prompt) {
-				if (label === prompt) {
-					score = Math.max(score, 1000);
-				} else if (label.startsWith(prompt) || prompt.startsWith(label)) {
-					score = Math.max(score, 900);
-				} else if (label.includes(prompt) || prompt.includes(label)) {
-					score = Math.max(score, 700);
-				} else {
-					const promptFirstLine = prompt.split(/\r?\n/)[0]?.trim();
-					if (promptFirstLine && (label === promptFirstLine || label.startsWith(promptFirstLine) || promptFirstLine.startsWith(label))) {
-						score = Math.max(score, 650);
-					}
-				}
-			}
-
-			if (description) {
-				if (label === description) {
-					score = Math.max(score, 600);
-				} else if (label.includes(description) || description.includes(label)) {
-					score = Math.max(score, 400);
-				}
-			}
-
-			if (score === 0) {
-				continue;
-			}
-
-			if (!best || score > best.score || (score === best.score && timeDelta < best.timeDelta)) {
-				best = { sessionId, score, timeDelta };
-			}
+		const args = this.parseArguments(entry.args);
+		const description = args.description;
+		if (typeof description === 'string' && description.trim().length > 0) {
+			return description;
 		}
 
-		return best?.sessionId;
+		return entry.name;
+	}
+
+	private sanitizeSubagentDescriptionForFilename(description: string): string {
+		// Keep filenames stable and readable across platforms.
+		const sanitized = description
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+		return (sanitized || 'subagent').substring(0, 50);
 	}
 
 	private parseArguments(args: unknown): Record<string, unknown> {
@@ -432,16 +406,22 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			} else if (content instanceof LanguageModelDataPart) {
 				parts.push(this.renderDataPartToString(content));
 			} else if (content instanceof LanguageModelPromptTsxPart) {
-				parts.push(this.renderPromptTsxPartToStringNoBudget(content));
+				parts.push(await this.renderPromptTsxPartToStringNoBudget(content));
 			}
 		}
 
 		return parts.join('\n');
 	}
 
-	private renderPromptTsxPartToStringNoBudget(part: LanguageModelPromptTsxPart): string {
-		// Best-effort: keep the structured payload for later inspection without
-		// depending on extension-layer prompt rendering helpers.
+	private async renderPromptTsxPartToStringNoBudget(part: LanguageModelPromptTsxPart): Promise<string> {
+		if (this.promptTsxRenderer) {
+			try {
+				return await this.promptTsxRenderer(part);
+			} catch {
+				// Fall through to fallback
+			}
+		}
+		// Fallback: serialize the value as JSON
 		try {
 			return JSON.stringify(part.value, null, 2);
 		} catch {
@@ -486,27 +466,44 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		return Math.abs(hash).toString(36);
 	}
 
-	/**
-	 * Extract a meaningful agent name from a label or prompt.
-	 * For subagent prompts, extract the description or first meaningful line.
-	 */
-	private extractAgentName(label: string): string {
-		const normalizedLabel = label.trim().replace(/\s+/g, ' ');
-		// If it looks like a subagent prompt (starts with "You are" or similar)
-		if (normalizedLabel.startsWith('You are editing') || normalizedLabel.startsWith('You are ')) {
-			// Try to extract a meaningful name from the first line or task description
-			const firstLine = normalizedLabel.split('\n')[0];
-			if (firstLine.length > 80) {
-				return 'subagent-task';
+	private extractToolDefinitionsFromEntry(entry: LoggedInfo): IToolDefinition[] | undefined {
+		if (entry.kind !== LoggedInfoKind.Request) {
+			return undefined;
+		}
+
+		const request = entry.entry;
+		if (!('chatParams' in request)) {
+			return undefined;
+		}
+
+		const tools = request.chatParams.body?.tools as Array<Record<string, unknown>> | undefined;
+		if (!Array.isArray(tools) || tools.length === 0) {
+			return undefined;
+		}
+
+		const definitions: IToolDefinition[] = [];
+		for (const tool of tools) {
+			const type = tool.type;
+			if (type !== 'function') {
+				continue;
 			}
-			return firstLine.substring(0, 80);
+
+			const fn = tool.function as { name?: unknown; description?: unknown; parameters?: Record<string, unknown> } | undefined;
+			if (!fn || typeof fn.name !== 'string') {
+				continue;
+			}
+
+			definitions.push({
+				type: 'function',
+				function: {
+					name: fn.name,
+					description: typeof fn.description === 'string' ? fn.description : '',
+					parameters: fn.parameters
+				}
+			});
 		}
-		// If it's a short label, use it directly
-		if (normalizedLabel.length <= 80) {
-			return normalizedLabel;
-		}
-		// Otherwise truncate
-		return normalizedLabel.substring(0, 77) + '...';
+
+		return definitions.length > 0 ? definitions : undefined;
 	}
 
 	/**

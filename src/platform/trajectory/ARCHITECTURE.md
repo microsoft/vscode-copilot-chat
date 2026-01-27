@@ -114,18 +114,21 @@ ChatRequest (with CapturingToken)
 - [x] Add unit tests
 - [x] Document format
 
-### Phase 2: Integration (Current)
+### Phase 2: Integration (Completed)
 
-- [ ] Create `TrajectoryLoggerAdapter` to bridge existing logs
-- [ ] Register `ITrajectoryLogger` as a service
-- [ ] Add command contribution for export
-- [ ] Update `package.json` with new commands
+- [x] Create `TrajectoryLoggerAdapter` to bridge existing logs
+- [x] Register `ITrajectoryLogger` as a service
+- [x] Add command contribution for export
+- [x] Update `package.json` with new commands
+- [x] Pass `subAgentInvocationId` and `subAgentName` through `CapturingToken`
+- [x] Use `subAgentName` as agent name in subagent trajectories
+- [x] Generate correct subagent filenames with UUID session IDs
 
-### Phase 3: Enhancement
+### Phase 3: Enhancement (Current)
 
-- [ ] Integrate with `CapturingToken` creation points
-- [ ] Add trajectory tracking in `ToolCallingLoop`
-- [ ] Enhance subagent tool implementations
+- [x] Integrate with `CapturingToken` creation points
+- [x] Add trajectory tracking in `ToolCallingLoop`
+- [x] Enhance subagent tool implementations (via VS Code core's runSubagentTool)
 - [ ] Add MCP-specific tracking
 
 ### Phase 4: Visualization
@@ -138,24 +141,29 @@ ChatRequest (with CapturingToken)
 
 ### 1. CapturingToken Creation
 
-Trajectory sessions should be started when a `CapturingToken` is created:
+Trajectory sessions are started when a `CapturingToken` is created. For subagent requests, VS Code core provides the `subAgentInvocationId` and `subAgentName`:
 
 ```typescript
-// In DefaultIntentRequestHandler or similar
-const capturingToken = new CapturingToken(label, icon, false);
-
-// Start trajectory tracking
-const sessionId = trajectoryAdapter.startTrajectory(capturingToken, {
-  name: 'copilot-agent',
-  version: extensionVersion,
-  model_name: model
-});
+// In DefaultIntentRequestHandler
+const capturingToken = new CapturingToken(
+  this.request.prompt,
+  'comment',
+  false,
+  false,
+  this.request.subAgentInvocationId,  // UUID from VS Code core (for subagents)
+  this.request.subAgentName,           // Description from runSubagent args
+);
 
 // Execute with capturing
-await requestLogger.captureInvocation(capturingToken, async () => {
-  // ... agent execution
-});
+const resultDetails = await this._requestLogger.captureInvocation(
+  capturingToken,
+  () => this.runWithToolCalling(intentInvocation)
+);
 ```
+
+The `TrajectoryLoggerAdapter` automatically:
+- Uses `subAgentInvocationId` as session ID (if present)
+- Uses `subAgentName` as agent name (if present, otherwise "Github Copilot Chat")
 
 ### 2. Tool Call Logging
 
@@ -176,33 +184,65 @@ this._requestLogger.logToolCall(
 
 ### 3. Subagent Tracking
 
-Subagent implementations (like `SearchSubagentTool`) should:
+Subagent tracking is handled automatically through VS Code core's `runSubagentTool`:
 
-1. Create their own `CapturingToken`
-2. Start a new trajectory session
-3. Return the session ID in tool metadata
-4. Parent trajectory references the subagent
+1. VS Code core generates a unique `subAgentInvocationId` (UUID) for each subagent invocation
+2. The `subAgentName` (from runSubagent's `description` argument) identifies the subagent type
+3. Both are passed to the chat extension via `IChatAgentRequest`
+4. The `CapturingToken` stores these values for trajectory correlation
+5. `TrajectoryLoggerAdapter` uses `subAgentInvocationId` as the session ID and `subAgentName` as the agent name
 
+**Data Flow:**
+```
+runSubagentTool (VS Code core)
+    │
+    ├── subAgentInvocationId: invocation.callId (UUID)
+    ├── subAgentName: args.description
+    └── toolMetadata: { subAgentInvocationId }
+    │
+    ▼
+IChatAgentRequest → ChatRequest API
+    │
+    ▼
+CapturingToken (chat extension)
+    │
+    ├── subAgentInvocationId  → session_id in trajectory
+    └── subAgentName          → agent.name in trajectory
+    │
+    ▼
+TrajectoryLoggerAdapter
+    │
+    ├── Main trajectory: adds subagent_trajectory_ref with session_id = UUID
+    └── Subagent trajectory: session_id = UUID, agent.name = subAgentName
+```
+
+**Resulting File Names:**
+- Main: `{user-prompt-slug}-{session-id}.trajectory.json`
+- Subagent: `subagent-{description}-{subAgentInvocationId}.trajectory.json`
+
+**Example:**
 ```typescript
-// In SearchSubagentTool
-const subagentToken = new CapturingToken('Search: ' + query, 'search', false);
-const subagentSessionId = trajectoryLogger.startTrajectory(
-  subagentToken.label + '-' + Date.now(),
-  {
-    name: 'search-subagent',
-    version: '1.0.0'
-  }
+// VS Code core (runSubagentTool.ts) - already implemented
+const agentRequest: IChatAgentRequest = {
+  // ...
+  subAgentInvocationId: invocation.callId,  // UUID like "abc123-def456-..."
+  subAgentName: args.description,            // e.g., "search_subagent"
+};
+toolResult.toolMetadata = { subAgentInvocationId: invocation.callId };
+
+// Chat extension (defaultIntentRequestHandler.ts)
+const capturingToken = new CapturingToken(
+  this.request.prompt,
+  'comment',
+  false,
+  false,
+  this.request.subAgentInvocationId,  // Used as session ID
+  this.request.subAgentName,           // Used as agent name
 );
 
-// Execute subagent
-const result = await requestLogger.captureInvocation(subagentToken, () => {
-  return loop.run(stream, token);
-});
-
-// Include session ID in tool metadata
-const toolMetadata = {
-  subagent_session_id: subagentSessionId
-};
+// trajectoryLoggerAdapter.ts - uses these values
+const sessionId = entry.token.subAgentInvocationId ?? generateSessionId();
+const agentName = entry.token.subAgentName ?? 'Github Copilot Chat';
 ```
 
 ### 4. MCP Tool Tracking
