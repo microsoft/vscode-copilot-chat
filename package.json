@@ -4000,7 +4000,8 @@
 						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.enabled%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.agent.largeToolResultsToDisk.thresholdBytes": {
@@ -4009,7 +4010,8 @@
 						"markdownDescription": "%github.copilot.config.agent.largeToolResultsToDisk.thresholdBytes%",
 						"tags": [
 							"advanced",
-							"experimental"
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.instantApply.shortContextModelName": {
