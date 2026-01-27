@@ -354,7 +354,6 @@ export class GhostTextComputer {
 			recordPerformance('strategy');
 
 			let choices = this.instantiationService.invokeFunction(getLocalInlineSuggestion, prefix, originalPrompt, ghostTextStrategy.requestMultiline);
-			let isFromCache = choices !== undefined;
 			recordPerformance('cache');
 			const repoInfo = this.instantiationService.invokeFunction(extractRepoInfoInBackground, completionState.textDocument.uri);
 			const requestContext: RequestContext = {
@@ -399,7 +398,6 @@ export class GhostTextComputer {
 				!ghostTextOptions.isCycling &&
 				this.asyncCompletionManager.shouldWaitForAsyncCompletions(prefix, prompt.prompt)
 			) {
-				isFromCache = false;
 				const choice = await this.asyncCompletionManager.getFirstMatchingRequestWithTimeout(
 					ourRequestId,
 					prefix,
@@ -441,7 +439,7 @@ export class GhostTextComputer {
 					.filter(c => c !== undefined);
 			}
 
-			if (isFromCache) {
+			if (choices && choices[1] === ResultType.Cache) {
 				telemetryBuilder.setIsFromCache();
 			}
 
