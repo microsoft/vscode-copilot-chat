@@ -46,7 +46,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Advanced.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId)) {
+			if (e.affectsConfiguration(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId)) {
 				this._onDidChangeChatSessionProviderOptions.fire();
 			}
 		}));
@@ -111,7 +111,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		];
 
 		// Add bypass permissions option if enabled via setting
-		if (this.configurationService.getConfig(ConfigKey.Advanced.ClaudeAgentAllowDangerouslySkipPermissions)) {
+		if (this.configurationService.getConfig(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions)) {
 			permissionModeItems.push({ id: 'bypassPermissions', name: l10n.t('Bypass all permissions') });
 		}
 
