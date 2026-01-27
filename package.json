@@ -2153,6 +2153,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+				"title": "%github.copilot.command.cli.sessions.openWorktreeInNewWindow%",
+				"icon": "$(folder-opened)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
+				"title": "%github.copilot.command.cli.sessions.openWorktreeInTerminal%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -4542,6 +4554,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
 				},
@@ -4880,19 +4900,29 @@
 			],
 			"chat/chatSessions": [
 				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
-					"group": "inline@0"
+					"group": "1_edit@10"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@1"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@2"
 				},
 				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
 					"when": "chatSessionType == copilotcli",
-					"group": "inline@1"
+					"group": "2_open@3"
 				},
 				{
-					"command": "github.copilot.cli.sessions.delete",
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "chatSessionType == copilotcli",
-					"group": "1_edit@10"
+					"group": "3_apply@0"
 				},
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",

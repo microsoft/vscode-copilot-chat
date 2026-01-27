@@ -1401,6 +1401,28 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
 	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.openWorktreeInNewWindow', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const worktreePath = copilotCLIWorktreeManagerService.getWorktreePath(id);
+		if (worktreePath) {
+			await vscode.commands.executeCommand('vscode.openFolder', worktreePath, { forceNewWindow: true });
+		}
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.openWorktreeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (!sessionItem?.resource) {
+			return;
+		}
+
+		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const worktreePath = copilotCLIWorktreeManagerService.getWorktreePath(id);
+		if (worktreePath) {
+			vscode.window.createTerminal({ cwd: worktreePath }).show();
+		}
+	}));
 	// Command to open a folder picker and select a repository for untitled workspaces
 	disposableStore.add(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, async (sessionItemResource?: vscode.Uri) => {
 		if (!sessionItemResource) {
