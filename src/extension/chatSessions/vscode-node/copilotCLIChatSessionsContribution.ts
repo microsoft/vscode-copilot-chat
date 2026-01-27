@@ -77,6 +77,8 @@ const listOfKnownRepos = new ResourceSet();
 
 const untrustedFolderMessage = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
 
+let lastUsedFolderIdInUntitledWorkspace: string | undefined;
+
 export class CopilotCLISessionIsolationManager {
 	constructor(@IChatSessionWorktreeService private readonly worktreeManagerService: IChatSessionWorktreeService) { }
 
@@ -305,13 +307,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				// For new untitled sessions in untitled workspaces, auto-select the first last-used repo if available
 				const lastUsedRepos = await this.getRepositoryOptionItemsForUntitledWorkspace();
 				if (lastUsedRepos.length > 0) {
-					const firstRepo = lastUsedRepos[0];
-					options[REPOSITORY_OPTION_ID] = firstRepo.id;
-					if (listOfKnownRepos.has(URI.file(firstRepo.id))) {
-						await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo.id);
+					const firstRepo = (lastUsedFolderIdInUntitledWorkspace && lastUsedRepos.find(repo => repo.id === lastUsedFolderIdInUntitledWorkspace)?.id) ?? lastUsedRepos[0].id;
+					options[REPOSITORY_OPTION_ID] = firstRepo;
+					if (listOfKnownRepos.has(URI.file(firstRepo))) {
+						await this.copilotCLIWorktreeManagerService.setSessionRepository(copilotcliSessionId, firstRepo);
 						await this.workspaceFolderService.deleteTrackedWorkspaceFolder(copilotcliSessionId);
 					} else {
-						await this.workspaceFolderService.trackSessionWorkspaceFolder(copilotcliSessionId, firstRepo.id);
+						await this.workspaceFolderService.trackSessionWorkspaceFolder(copilotcliSessionId, firstRepo);
 						await this.copilotCLIWorktreeManagerService.deleteSessionRepository(copilotcliSessionId);
 					}
 				}
@@ -569,6 +571,9 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					await this.selectAgentModel(resource, agent, token);
 				}
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string') {
+				if (this.isUntitledWorkspace()) {
+					lastUsedFolderIdInUntitledWorkspace = update.value;
+				}
 				// Track based on whether selection is a git repo or workspace folder without git
 				if (await this.isWorkspaceFolderWithoutRepo(URI.file(update.value))) {
 					await Promise.all([
