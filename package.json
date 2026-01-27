@@ -5434,6 +5434,9 @@
 			},
 			{
 				"path": "./assets/prompts/plan.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/init.prompt.md"
 			}
 		]
 	},

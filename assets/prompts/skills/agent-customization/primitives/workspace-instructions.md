@@ -17,34 +17,47 @@ Single file at workspace root that applies to every chat request automatically.
 
 **Location**: `.github/copilot-instructions.md`
 
-### Template
-
-```markdown
-# Project Guidelines
-
-## Code Style
-- Use TypeScript strict mode
-- Prefer functional components in React
-- Follow existing patterns in the codebase
-
-## Architecture
-- Services use dependency injection
-- All public APIs need JSDoc documentation
-
-## Testing
-- Write unit tests for business logic
-- Use integration tests for API endpoints
-```
-
 ### Cross-Editor Support
 
 This file is also detected by GitHub Copilot in Visual Studio and GitHub.com, enabling shared instructions across editors.
 
 ## AGENTS.md
 
-Instructions for projects using multiple AI agents. Placed at workspace root or in subfolders.
+Open standard for guiding AI coding agents ([agents.md](https://agents.md/)). Standard markdown—no required fields.
 
-**Location**: Workspace root, or subfolders. Use `AGENTS.md` files in subfolders for different parts of your project (e.g., frontend vs backend).
+**Location**: Workspace root, or subfolders for monorepos. Agents automatically read the nearest file in the directory tree, so the closest one takes precedence:
+
+```
+/AGENTS.md              # Root-level defaults
+/frontend/AGENTS.md     # Frontend-specific (overrides root)
+/backend/AGENTS.md      # Backend-specific (overrides root)
+```
+
+## Template
+
+Both file types use the same markdown format. Only include sections the workspace benefits from—skip any that don't apply:
+
+```markdown
+# Project Guidelines
+
+## Code Style
+{Language and formatting preferences - reference key files that exemplify patterns}
+
+## Architecture
+{Major components, service boundaries, data flows, the "why" behind structural decisions}
+
+## Build and Test
+{Commands to install, build, test - agents will attempt to run these automatically}
+
+## Project Conventions
+{Patterns that differ from common practices - include specific examples from the codebase}
+
+## Integration Points
+{External dependencies and cross-component communication}
+
+## Security
+{Sensitive areas and auth patterns}
+```
 
 ## When to Use
 
@@ -97,33 +110,40 @@ If one exists, update it rather than creating a second file. Workspaces should o
 
 ### 4. Structure Content
 
-Research existing guidelines and conventions in the workspace using a subagent as needed.
+Research existing guidelines and conventions in the workspace using a subagent as needed. Focus on essential knowledge that helps an AI agent be immediately productive:
 
-```markdown
-# Project Guidelines
+- **Architecture**: Major components, service boundaries, data flows, the "why" behind structural decisions
+- **Developer workflows**: Build, test, debug commands not obvious from file inspection
+- **Project conventions**: Patterns that differ from common practices
+- **Integration points**: External dependencies and cross-component communication
 
-## Code Style
-<Language and formatting preferences>
-
-## Architecture
-<Patterns and structure conventions>
-
-## Testing
-<Coverage and testing requirements>
-```
+Use the Template above.
 
 ## Core Principles
 
-1. **Concise and actionable**: Every line should guide behavior—remove filler prose
-2. **Project-specific focus**: Include conventions not obvious from reading the code
-3. **Link, don't duplicate**: Reference READMEs, ADRs, and docs instead of copying
-4. **Keep current**: Update when practices change—stale instructions cause confusion
+1. **Minimal by default**: Include only what's relevant to *every* task. Every extra line dilutes focus.
+2. **Concise and actionable**: Every line should guide behavior—remove filler prose
+3. **Project-specific focus**: Include conventions not obvious from reading the code or enforced by linters
+4. **Link, don't embed**: Reference docs instead of copying content. Use `See docs/TYPESCRIPT.md for conventions`
+5. **Capabilities over paths**: Describe what systems do, not where files live. File paths go stale; domain concepts stay stable
+6. **Keep current**: Update when practices change—stale instructions actively poison agent context
+
+## Progressive Disclosure
+
+For large repos, reference separate docs instead of embedding everything. Agents navigate doc hierarchies efficiently—language-specific rules load only when relevant.
+
+```markdown
+## Conventions
+For TypeScript patterns, see docs/TYPESCRIPT.md
+For testing guidelines, see docs/TESTING.md
+```
 
 ## Anti-patterns
 
 - **Using both file types**: Having both `copilot-instructions.md` and `AGENTS.md` in the same workspace
+- **Kitchen sink**: Trying to include every possible guideline instead of focusing on what matters most
 - **Duplicating project docs**: Copying README or CONTRIBUTING content instead of linking to them
 - **Obvious instructions**: Stating conventions already enforced by linters or obvious from code
 - **Verbose prose**: Long explanations instead of clear, scannable guidelines
-- **Stale content**: Instructions that no longer match actual project practices
-- **Kitchen sink**: Trying to include every possible guideline instead of focusing on what matters most
+- **Auto-generated files**: Scripts prioritize comprehensiveness over restraint—never auto-generate
+- **Contradictory rules**: Different developers adding conflicting opinions without reconciliation
