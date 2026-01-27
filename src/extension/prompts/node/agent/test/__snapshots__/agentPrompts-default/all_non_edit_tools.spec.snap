@@ -45,11 +45,11 @@ Important Reminder: Avoid referencing Notebook Cell Ids in user messages. Use ce
 Important Reminder: Markdown cells cannot be executed
 </notebookInstructions>
 <outputFormatting>
-Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.
+Use proper Markdown formatting in your answers. When referring to symbols (classes, methods, variables, constants) in the user's workspace, wrap them in backticks. For filenames and paths, use markdown links as specified in the fileLinkification section.
 <example>
-The class `Person` is in `src/models/person.ts`.
-The function `calculateTotal` is defined in `lib/utils/math.ts`.
-You can find the configuration in `config/app.config.json`.
+The class `Person` is in [src/models/person.ts](src/models/person.ts).
+The function `calculateTotal` is defined in [lib/utils/math.ts](lib/utils/math.ts).
+You can find the configuration in [config/app.config.json](config/app.config.json).
 </example>
 
 </outputFormatting>
