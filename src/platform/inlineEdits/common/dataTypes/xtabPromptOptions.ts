@@ -95,7 +95,7 @@ export namespace EditIntent {
 	/**
 	 * Determines if the edit should be shown based on the edit intent
 	 * and the user's aggressiveness level.
-	   *
+	 *
 	 * Filtering logic (edit_intent vs user aggressiveness):
 	 * - no_edit: Never show the edit
 	 * - high confidence: Show for all aggressiveness levels (high confidence = always show)
