@@ -27,9 +27,24 @@ Folders of instructions, scripts, and resources that agents loads when relevant 
 
 ```yaml
 ---
-name: skill-name      # Lowercase, hyphens, max 64 chars
+name: skill-name      # Must match parent folder name
 description: 'What the skill does and when to use it. For on-demand discovery. Max 1024 chars.'
 ---
+```
+
+#### `name` field rules
+
+- **Must match the parent directory name** (e.g., `pdf-processing/SKILL.md` requires `name: pdf-processing`)
+- 1-64 characters
+- Lowercase alphanumeric and hyphens only (`a-z`, `0-9`, `-`)
+- Must not start or end with `-`
+- Must not contain consecutive hyphens (`--`)
+
+#### Optional frontmatter fields
+
+```yaml
+license: Apache-2.0                           # License name or bundled file reference
+compatibility: Requires git, docker, jq       # Environment requirements (max 500 chars)
 ```
 
 ### Body
@@ -71,9 +86,11 @@ description: 'Test web applications using Playwright. Use when verifying fronten
 
 Skills use three-level loading for efficient context:
 
-1. **Discovery**: Agent reads `name` and `description` from frontmatter (always available)
-2. **Instructions**: When description matches current task, loads `SKILL.md` body
-3. **Resources**: Additional files (scripts, examples) load only when referenced
+1. **Discovery** (~100 tokens): Agent reads `name` and `description` from frontmatter (always available)
+2. **Instructions** (<5000 tokens recommended): When description matches current task, loads `SKILL.md` body
+3. **Resources** (as needed): Additional files (scripts, examples) load only when referenced
+
+Keep file references one level deep from `SKILL.md`. Avoid deeply nested reference chains.
 
 ## When to Use
 
@@ -162,3 +179,4 @@ Create supporting files as needed, referencing them from SKILL.md with relative 
 - **Missing procedures**: Descriptions of what but not how—skills need step-by-step guidance
 - **Untested scripts**: Including scripts without verifying they work in the target environment
 - **Duplicate content**: Copying reference content into SKILL.md instead of linking
+- **Name mismatch**: Folder name doesn't match the `name` field in frontmatter
