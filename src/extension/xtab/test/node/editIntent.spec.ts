@@ -63,13 +63,9 @@ describe('EditIntent.fromString', () => {
 describe('EditIntent.fromShortName', () => {
 	it.each([
 		['N', EditIntent.NoEdit],
-		['n', EditIntent.NoEdit],
 		['L', EditIntent.Low],
-		['l', EditIntent.Low],
 		['M', EditIntent.Medium],
-		['m', EditIntent.Medium],
 		['H', EditIntent.High],
-		['h', EditIntent.High],
 	])('should return %s for "%s"', (input, expected) => {
 		expect(EditIntent.fromShortName(input)).toBe(expected);
 	});
@@ -79,6 +75,13 @@ describe('EditIntent.fromShortName', () => {
 		expect(EditIntent.fromShortName('')).toBeUndefined();
 		expect(EditIntent.fromShortName('X')).toBeUndefined();
 		expect(EditIntent.fromShortName('low')).toBeUndefined();
+	});
+
+	it('should return undefined for lowercase letters', () => {
+		expect(EditIntent.fromShortName('n')).toBeUndefined();
+		expect(EditIntent.fromShortName('l')).toBeUndefined();
+		expect(EditIntent.fromShortName('m')).toBeUndefined();
+		expect(EditIntent.fromShortName('h')).toBeUndefined();
 	});
 });
 
@@ -242,13 +245,9 @@ describe('parseEditIntentFromStream (ShortName mode)', () => {
 	describe('successful parsing', () => {
 		it.each([
 			['N', EditIntent.NoEdit],
-			['n', EditIntent.NoEdit],
 			['L', EditIntent.Low],
-			['l', EditIntent.Low],
 			['M', EditIntent.Medium],
-			['m', EditIntent.Medium],
 			['H', EditIntent.High],
-			['h', EditIntent.High],
 		])('should parse %s short name', async (shortName, expectedIntent) => {
 			const inputLines = [shortName, 'line1', 'line2'];
 			const linesStream = AsyncIterableObject.fromArray(inputLines);

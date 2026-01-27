@@ -685,9 +685,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			cleanedLinesStream = linesStream;
-		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
-			// Parse the edit_intent tag from the response
-			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, tracer);
+		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent ||
+			opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
+			// Determine parse mode based on response format
+			const parseMode = opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort
+				? EditIntentParseMode.ShortName
+				: EditIntentParseMode.Tags;
+
+			// Parse the edit_intent from the response
+			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, tracer, parseMode);
 
 			// Log the edit intent for telemetry
 			telemetryBuilder.setEditIntent(editIntent);
@@ -1122,6 +1128,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
+			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
@@ -1174,6 +1181,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
 			// For EditWindowWithIntent, we predict the edit intent as high (most likely case) followed by the code
 			return ['<|edit_intent|>high<|/edit_intent|>', ...editWindowLines].join('\n');
+		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
+			// For EditWindowWithIntentShort, we predict 'H' (high) followed by the code
+			return ['H', ...editWindowLines].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
 			return ['```', ...editWindowLines, '```'].join('\n');
 		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {

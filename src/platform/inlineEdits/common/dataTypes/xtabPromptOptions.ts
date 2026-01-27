@@ -94,10 +94,11 @@ export namespace EditIntent {
 
 	/**
 	 * Converts a short name (N, L, M, H) to EditIntent enum.
+	 * Only uppercase letters are accepted.
 	 * Returns undefined for invalid values.
 	 */
 	export function fromShortName(value: string): EditIntent | undefined {
-		switch (value.toUpperCase()) {
+		switch (value) {
 			case 'N':
 				return EditIntent.NoEdit;
 			case 'L':
@@ -173,6 +174,12 @@ export enum PromptingStrategy {
 	 * followed by the edit window content.
 	 */
 	Xtab275EditIntent = 'xtab275EditIntent',
+	/**
+	 * Xtab275-based strategy with short edit intent parsing.
+	 * Response format: N|L|M|H (single character on first line)
+	 * followed by the edit window content.
+	 */
+	Xtab275EditIntentShort = 'xtab275EditIntentShort',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -185,6 +192,7 @@ export enum ResponseFormat {
 	EditWindowOnly = 'editWindowOnly',
 	CustomDiffPatch = 'customDiffPatch',
 	EditWindowWithEditIntent = 'editWindowWithEditIntent',
+	EditWindowWithEditIntentShort = 'editWindowWithEditIntentShort',
 }
 
 export namespace ResponseFormat {
@@ -201,6 +209,8 @@ export namespace ResponseFormat {
 				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.Xtab275EditIntent:
 				return ResponseFormat.EditWindowWithEditIntent;
+			case PromptingStrategy.Xtab275EditIntentShort:
+				return ResponseFormat.EditWindowWithEditIntentShort;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
