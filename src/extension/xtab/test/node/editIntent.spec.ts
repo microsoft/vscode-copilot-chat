@@ -291,26 +291,26 @@ describe('parseEditIntentFromStream (ShortName mode)', () => {
 			expect(parseError).toBe('emptyResponse');
 		});
 
-		it('should return invalidShortName error when first line is not a valid short name', async () => {
+		it('should return unknownIntentValue error when first line is not a valid short name', async () => {
 			const inputLines = ['const x = 1;', 'const y = 2;'];
 			const linesStream = AsyncIterableObject.fromArray(inputLines);
 
 			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, createMockLogger(), EditIntentParseMode.ShortName);
 
 			expect(editIntent).toBe(EditIntent.High);
-			expect(parseError).toBe('invalidShortName:const x = 1;');
+			expect(parseError).toBe('unknownIntentValue:const x = 1;');
 			// All original lines should be preserved
 			expect(await collectStream(remainingLinesStream)).toEqual(['const x = 1;', 'const y = 2;']);
 		});
 
-		it('should return invalidShortName error for multi-character first line', async () => {
+		it('should return unknownIntentValue error for multi-character first line', async () => {
 			const inputLines = ['low', 'const x = 1;'];
 			const linesStream = AsyncIterableObject.fromArray(inputLines);
 
 			const { editIntent, remainingLinesStream, parseError } = await parseEditIntentFromStream(linesStream, createMockLogger(), EditIntentParseMode.ShortName);
 
 			expect(editIntent).toBe(EditIntent.High);
-			expect(parseError).toBe('invalidShortName:low');
+			expect(parseError).toBe('unknownIntentValue:low');
 			expect(await collectStream(remainingLinesStream)).toEqual(['low', 'const x = 1;']);
 		});
 	});
