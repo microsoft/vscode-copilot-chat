@@ -7,7 +7,7 @@ Guidelines that automatically apply to all chat requests across your entire work
 Workspaces should have **only one** of these files—not both:
 
 | File | Purpose |
-|------|---------||
+|------|---------|
 | `.github/copilot-instructions.md` | Project-wide coding standards and preferences (Recommended) |
 | `AGENTS.md` | Same, but using an open standard |
 
