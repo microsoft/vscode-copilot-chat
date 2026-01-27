@@ -751,10 +751,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// Show confirmation prompt
 					return this.generateUncommittedChangesConfirmation(request, context, stream, true);
 				}
-				// Check if user cancelled
-				if (uncommittedChangesAction === 'cancel') {
-					return {};
-				}
+			}
+			// Check if user cancelled
+			if (isUntitled && uncommittedChangesAction === 'cancel') {
+				return {};
 			}
 
 			const [modelId, agent] = await Promise.all([
