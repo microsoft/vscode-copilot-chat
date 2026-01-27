@@ -5387,9 +5387,10 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"name": "savePrompt",
-				"path": "./assets/prompts/savePrompt.prompt.md",
-				"description": "Generalize the current discussion into a reusable prompt and save it as a file"
+				"path": "./assets/prompts/savePrompt.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/plan.prompt.md"
 			}
 		]
 	},
