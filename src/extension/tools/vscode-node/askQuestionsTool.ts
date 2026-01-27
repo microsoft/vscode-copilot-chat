@@ -159,7 +159,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 					value: opt.label
 				})),
 				defaultValue,
-				allowFreeformInput: question.allowFreeformInput
+				allowFreeformInput: question.allowFreeformInput ?? false
 			}
 		);
 	}
