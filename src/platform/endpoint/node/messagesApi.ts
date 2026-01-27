@@ -402,13 +402,32 @@ export class AnthropicMessagesProcessor {
 		const citations: IIPCodeCitation[] = [];
 
 		for (const citation of annotations.IPCodeCitations) {
-			if (citation.citations?.url && !seenUrls.has(citation.citations.url)) {
-				seenUrls.add(citation.citations.url);
+			const citationDetails = citation.citations;
+			if (!citationDetails) {
+				continue;
+			}
+
+			const { url, license, snippet } = citationDetails;
+
+			if (typeof url !== 'string' || url.trim() === '') {
+				continue;
+			}
+
+			if (typeof license !== 'string' || license.trim() === '') {
+				continue;
+			}
+
+			if (typeof snippet !== 'string' || snippet.trim() === '') {
+				continue;
+			}
+
+			if (!seenUrls.has(url)) {
+				seenUrls.add(url);
 				citations.push({
 					citations: {
-						url: citation.citations.url,
-						license: citation.citations.license,
-						snippet: citation.citations.snippet,
+						url,
+						license,
+						snippet,
 					}
 				});
 			}
