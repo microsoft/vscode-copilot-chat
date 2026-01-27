@@ -113,6 +113,8 @@ import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManag
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ToolsService } from '../../tools/vscode-node/toolsService';
+import { IMidSessionSteeringService } from '../../steering/common/midSessionSteeringService';
+import { MidSessionSteeringService } from '../../steering/node/midSessionSteeringService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
 import { IWorkspaceListenerService } from '../../workspaceRecorder/common/workspaceListenerService';
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
@@ -221,6 +223,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
+	builder.define(IMidSessionSteeringService, new SyncDescriptor(MidSessionSteeringService));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

@@ -42,6 +42,7 @@ import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
+import { IMidSessionSteeringService } from '../../steering/common/midSessionSteeringService';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -530,8 +531,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
+		@IMidSessionSteeringService steeringService: IMidSessionSteeringService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, steeringService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {

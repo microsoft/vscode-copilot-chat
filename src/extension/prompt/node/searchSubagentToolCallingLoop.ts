@@ -16,6 +16,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
+import { IMidSessionSteeringService } from '../../steering/common/midSessionSteeringService';
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
@@ -44,8 +45,9 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IMidSessionSteeringService steeringService: IMidSessionSteeringService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, steeringService);
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {

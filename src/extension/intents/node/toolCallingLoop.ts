@@ -40,6 +40,7 @@ import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartS
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
+import { IMidSessionSteeringService } from '../../steering/common/midSessionSteeringService';
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
@@ -121,6 +122,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
+		@IMidSessionSteeringService private readonly _steeringService: IMidSessionSteeringService,
 	) {
 		super();
 	}
@@ -176,58 +178,65 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
-		let i = 0;
-		let lastResult: IToolCallSingleResult | undefined;
-		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		const sessionId = this.options.conversation.sessionId;
+		this._steeringService.registerLoop(sessionId, this.turn.id);
 
-		while (true) {
-			if (lastResult && i++ >= this.options.toolCallLimit) {
-				lastResult = this.hitToolCallLimit(outputStream, lastResult);
-				break;
-			}
+		try {
+			let i = 0;
+			let lastResult: IToolCallSingleResult | undefined;
+			let lastRequestMessagesStartingIndexForRun: number | undefined;
 
-			try {
-				const result = await this.runOne(outputStream, i, token);
-				if (lastRequestMessagesStartingIndexForRun === undefined) {
-					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
-				}
-				lastResult = {
-					...result,
-					hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
-				};
-
-				this.toolCallRounds.push(result.round);
-				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-					lastResult = lastResult;
-					break;
-				}
-			} catch (e) {
-				if (isCancellationError(e) && lastResult) {
-					lastResult = lastResult;
+			while (true) {
+				if (lastResult && i++ >= this.options.toolCallLimit) {
+					lastResult = this.hitToolCallLimit(outputStream, lastResult);
 					break;
 				}
 
-				throw e;
+				try {
+					const result = await this.runOne(outputStream, i, token);
+					if (lastRequestMessagesStartingIndexForRun === undefined) {
+						lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
+					}
+					lastResult = {
+						...result,
+						hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
+					};
+
+					this.toolCallRounds.push(result.round);
+					if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+						lastResult = lastResult;
+						break;
+					}
+				} catch (e) {
+					if (isCancellationError(e) && lastResult) {
+						lastResult = lastResult;
+						break;
+					}
+
+					throw e;
+				}
 			}
-		}
 
-		this.emitReadFileTrajectories().catch(err => {
-			this._logService.error('Error emitting read file trajectories', err);
-		});
+			this.emitReadFileTrajectories().catch(err => {
+				this._logService.error('Error emitting read file trajectories', err);
+			});
 
-		const toolCallRoundsToDisplay = lastResult.lastRequestMessages.slice(lastRequestMessagesStartingIndexForRun ?? 0).filter((m): m is Raw.ToolChatMessage => m.role === Raw.ChatRole.Tool);
-		for (const toolRound of toolCallRoundsToDisplay) {
-			const result = this.toolCallResults[toolRound.toolCallId];
-			if (result instanceof LanguageModelToolResult2) {
-				for (const part of result.content) {
-					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
-						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
-						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
+			const toolCallRoundsToDisplay = lastResult.lastRequestMessages.slice(lastRequestMessagesStartingIndexForRun ?? 0).filter((m): m is Raw.ToolChatMessage => m.role === Raw.ChatRole.Tool);
+			for (const toolRound of toolCallRoundsToDisplay) {
+				const result = this.toolCallResults[toolRound.toolCallId];
+				if (result instanceof LanguageModelToolResult2) {
+					for (const part of result.content) {
+						if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
+							const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
+							outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
+						}
 					}
 				}
 			}
+			return { ...lastResult, toolCallRounds: this.toolCallRounds, toolCallResults: this.toolCallResults };
+		} finally {
+			this._steeringService.unregisterLoop(sessionId);
 		}
-		return { ...lastResult, toolCallRounds: this.toolCallRounds, toolCallResults: this.toolCallResults };
 	}
 
 	private async emitReadFileTrajectories() {
@@ -347,8 +356,37 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
+		const sessionId = this.options.conversation.sessionId;
+
+		// Update loop status at start
+		this._steeringService.updateLoopStatus(sessionId, {
+			iterationNumber,
+			isProcessing: true,
+		});
+
+		try {
+			return await this.runOneInternal(outputStream, iterationNumber, token);
+		} finally {
+			this._steeringService.updateLoopStatus(sessionId, {
+				isProcessing: false,
+			});
+		}
+	}
+
+	private async runOneInternal(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
+		const sessionId = this.options.conversation.sessionId;
+
+		// Consume any pending steering messages
+		const steeringMessages = this._steeringService.consumeSteeringMessages(sessionId);
+
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
+
+		// Inject steering messages into context
+		if (steeringMessages.length > 0) {
+			(context as Mutable<IBuildPromptContext>).steeringMessages = steeringMessages;
+		}
+
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
 		await this.throwIfCancelled(token);
@@ -698,6 +736,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		if (buildPromptResult.metadata.getAll(ToolResultMetadata).some(r => r.isCancelled)) {
 			throw new CancellationError();
+		}
+
+		// Inject steering messages as user messages at the end
+		if (buildPromptContext.steeringMessages?.length) {
+			const steeringUserMessages: Raw.ChatMessage[] = buildPromptContext.steeringMessages.map(msg => ({
+				role: Raw.ChatRole.User,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: `[User Steering]: ${msg.content}` }]
+			}));
+
+			return {
+				...buildPromptResult,
+				messages: [...buildPromptResult.messages, ...steeringUserMessages]
+			};
 		}
 
 		return buildPromptResult;

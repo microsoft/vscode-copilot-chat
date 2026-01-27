@@ -11,6 +11,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
+import { ISteeringMessage } from '../../steering/common/midSessionSteeringService';
 import { getToolName } from '../../tools/common/toolNames';
 import { IToolGrouping } from '../../tools/common/virtualTools/virtualToolTypes';
 import { ChatVariablesCollection } from './chatVariablesCollection';
@@ -94,6 +95,12 @@ export interface IBuildPromptContext {
 	readonly request?: ChatRequest;
 	readonly stream?: vscode.ChatResponseStream;
 	readonly isContinuation?: boolean;
+
+	/**
+	 * Mid-session steering messages injected by external callers.
+	 * These should be incorporated into the prompt to redirect the agent's focus.
+	 */
+	readonly steeringMessages?: readonly ISteeringMessage[];
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');

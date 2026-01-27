@@ -15,6 +15,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
+import { IMidSessionSteeringService } from '../../steering/common/midSessionSteeringService';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IBuildPromptResult } from '../../prompt/node/intents';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -38,8 +39,9 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IMidSessionSteeringService steeringService: IMidSessionSteeringService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, steeringService);
 	}
 
 	private async getEndpoint(request: ChatRequest) {
