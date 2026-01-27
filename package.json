@@ -1199,7 +1199,7 @@
 											]
 										}
 									},
-									"allowFreeFormInput": {
+									"allowFreeformInput": {
 										"type": "boolean",
 										"description": "When true, allows user to enter free-form text in addition to selecting options. Use when the user's opinion or custom input would be valuable.",
 										"default": false
