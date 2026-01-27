@@ -60,7 +60,11 @@ export class GhostText {
 		}
 
 		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext, telemetryBuilder);
-		if (result.type !== 'success') { return result; }
+
+		if (result.type !== 'success') {
+			return result;
+		}
+
 		const [resultArray, resultType] = result.value;
 
 		if (token.isCancellationRequested) {
