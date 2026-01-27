@@ -55,12 +55,12 @@ Why this is required:
 
 <regexPatternSyntax>
 Construct regex patterns using Python's re.search() syntax. Common patterns:
-- `^mcp__github__` - matches tools starting with "mcp__github__"
+- `^mcp_github_` - matches tools starting with "mcp_github_"
 - `issue|pull_request` - matches tools containing "issue" OR "pull_request"
 - `create.*branch` - matches tools with "create" followed by "branch"
-- `mcp__.*__list` - matches MCP tools ending with "list"
+- `mcp_.*list` - matches MCP tools with "list" in it.
 
-The pattern is matched case-insensitively against tool names.
+The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.
 
 </regexPatternSyntax>
 
@@ -210,6 +210,8 @@ When using the insert_edit_into_file tool, avoid repeating existing code, instea
 When using the replace_string_in_file tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.
 For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using multi_replace_string_in_file tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").
 It is much faster to edit using the replace_string_in_file or multi_replace_string_in_file tools. Prefer the replace_string_in_file or multi_replace_string_in_file tools for making edits and only fall back to insert_edit_into_file if it fails.Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.
+
+IMPORTANT: Before calling any deferred tool that was not previously returned by tool_search_tool_regex, you MUST first use tool_search_tool_regex to load it. Calling a deferred tool without first loading it will fail. Tools returned by tool_search_tool_regex are automatically expanded and immediately available - do not search for them again.
 
 </reminderInstructions>
 <userRequest>
