@@ -1,7 +1,7 @@
 ---
 name: init
 description: Generate or update workspace instructions file for AI coding agents
-tools: ['read/readFile', 'agent', 'edit', 'search', 'web/githubRepo', 'todo']
+argument-hint: Optionally specify a focus area or pattern to document for agents
 agent: agent
 ---
 Related skill: `agent-customization`.
@@ -12,7 +12,7 @@ Generate or update workspace instructions (`.github/copilot-instructions.md` as 
 
 Search for existing AI conventions using this glob pattern: `**/{.github/copilot-instructions.md,AGENT.md,AGENTS.md,CLAUDE.md,.cursorrules,.windsurfrules,.clinerules,.cursor/rules/**,.windsurf/rules/**,.clinerules/**,README.md}`
 
-Start a subagent to research essential knowledge that helps an AI agent be immediately productive. Only include sections the workspace benefits from—skip any that don't apply:
+Then, start a subagent to research essential knowledge that helps an AI agent be immediately productive. Only include sections the workspace benefits from—skip any that don't apply:
 
 ```markdown
 # Project Guidelines
