@@ -8,7 +8,7 @@ import { ChatExtendedRequestHandler } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 
 // Import the tool permission handlers
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
@@ -44,19 +44,21 @@ export class ClaudeChatSessionParticipant {
 		};
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
-			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
-			const modelId = await this.contentProvider.getModelIdForSession(sessionId);
-			const permissionMode = this.contentProvider.getPermissionModeForSession(sessionId);
+			const sessionId = this.sessionItemProvider.getSessionId(chatSessionContext.chatSessionItem.resource);
+			const modelId = sessionId ? await this.contentProvider.getModelIdForSession(sessionId) : undefined;
+			const permissionMode = sessionId ? this.contentProvider.getPermissionModeForSession(sessionId) : undefined;
 
-			if (chatSessionContext.isUntitled) {
+			if (chatSessionContext.isUntitled || !sessionId) {
 				/* New, empty session */
 				const claudeSessionId = await create(modelId, permissionMode);
 				if (claudeSessionId) {
-					// Tell UI to replace with claude-backed session
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-						resource: ClaudeSessionUri.forSessionId(claudeSessionId),
-						label: request.prompt ?? 'Claude Code'
-					});
+					// Add the new session directly to the controller
+					this.sessionItemProvider.addSession(
+						claudeSessionId,
+						request.prompt,
+						new Date(),
+						chatSessionContext.chatSessionItem.resource
+					);
 				}
 				return {};
 			}

@@ -36,6 +36,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	// Track the last known option values for each session to detect actual changes
 	private readonly _lastKnownOptions = new Map<string, { modelId?: string; permissionMode?: PermissionMode }>();
 
+	private _sessionIdResolver: ((resource: vscode.Uri) => string | undefined) | undefined;
+
 	constructor(
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
@@ -80,6 +82,30 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	public override dispose(): void {
 		this._lastKnownOptions.clear();
 		super.dispose();
+	}
+
+	/**
+	 * Sets the resolver function for mapping resources to Claude session IDs.
+	 * This is needed to handle overridden resources (e.g., untitled sessions).
+	 */
+	public setSessionIdResolver(resolver: (resource: vscode.Uri) => string | undefined): void {
+		this._sessionIdResolver = resolver;
+	}
+
+	/**
+	 * Resolves a resource to a Claude session ID.
+	 * Uses the custom resolver if set, otherwise falls back to ClaudeSessionUri.getId.
+	 */
+	private _resolveSessionId(resource: vscode.Uri): string | undefined {
+		if (this._sessionIdResolver) {
+			return this._sessionIdResolver(resource);
+		}
+		// Fallback to direct URI parsing
+		try {
+			return ClaudeSessionUri.getId(resource);
+		} catch {
+			return undefined;
+		}
 	}
 
 	/**
@@ -134,7 +160,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
-		const sessionId = ClaudeSessionUri.getId(resource);
+		const sessionId = this._resolveSessionId(resource);
+		if (!sessionId) {
+			return;
+		}
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Update last known first so the event listener won't fire back to UI
@@ -150,7 +179,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const sessionId = ClaudeSessionUri.getId(sessionResource);
+		const sessionId = this._resolveSessionId(sessionResource);
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const toolContext = this._createToolContext();
 		const history = existingSession ?
@@ -158,8 +187,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			[];
 
 		// Get model and permission mode from state service (queries session if active)
-		const model = await this.sessionStateService.getModelIdForSession(sessionId);
-		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
+		const model = sessionId ? await this.sessionStateService.getModelIdForSession(sessionId) : undefined;
+		const permissionMode = sessionId ? this.sessionStateService.getPermissionModeForSession(sessionId) : 'default';
 
 		const options: Record<string, string> = {};
 		if (model) {
