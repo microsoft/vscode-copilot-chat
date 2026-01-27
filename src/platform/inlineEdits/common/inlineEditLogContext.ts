@@ -605,7 +605,7 @@ export class InlineEditRequestLogContext {
 			logs: this._logs,
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
-			diagnostics: this._getDiagnosticsForTrackedFiles(),
+			diagnostics: this._getDiagnosticsForTrackedFiles()
 		};
 	}
 }
