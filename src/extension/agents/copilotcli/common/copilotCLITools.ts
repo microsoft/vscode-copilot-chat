@@ -413,6 +413,10 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				}
 				break;
 			}
+			case 'session.error': {
+				currentResponseParts.push(new ChatResponseMarkdownPart(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`));
+				break;
+			}
 			case 'assistant.message': {
 				if (event.data.content && !processedMessages.has(event.data.messageId)) {
 					processAssistantMessage(event.data.content);
