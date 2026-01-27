@@ -173,6 +173,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
 		try {
+			item.telemetryBuilder.setAsShown();
 			this.copilotCompletionFeedbackTracker.trackItem(item);
 			return this.ghostTextProvider.handleDidShowCompletionItem(item);
 		} catch (e) {
