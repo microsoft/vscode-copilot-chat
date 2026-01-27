@@ -92,6 +92,21 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 		this.logService.trace(`[ChatSessionWorkspaceFolderService] Cleaned up old entries, kept ${entriesToKeep.length}`);
 	}
 
+	public getRecentFolders(): { folder: vscode.Uri; lastAccessTime: number }[] {
+		const data = this.extensionContext.globalState.get<Record<string, WorkspaceFolderEntry>>(CHAT_SESSION_WORKSPACE_FOLDER_MEMENTO_KEY, {});
+		const recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
+		for (const entry of Object.values(data)) {
+			if (typeof entry === 'string') {
+				continue;
+			}
+			if (isUntitledSessionId(entry.folderPath)) {
+				continue; // Skip untitled sessions that may have been saved.
+			}
+			recentFolders.push({ folder: vscode.Uri.file(entry.folderPath), lastAccessTime: entry.timestamp });
+		}
+		recentFolders.sort((a, b) => b.lastAccessTime - a.lastAccessTime);
+		return recentFolders;
+	}
 	async deleteTrackedWorkspaceFolder(sessionId: string): Promise<void> {
 		this._sessionWorkspaceFolders.delete(sessionId);
 		const data = this.extensionContext.globalState.get<Record<string, WorkspaceFolderEntry>>(CHAT_SESSION_WORKSPACE_FOLDER_MEMENTO_KEY, {});

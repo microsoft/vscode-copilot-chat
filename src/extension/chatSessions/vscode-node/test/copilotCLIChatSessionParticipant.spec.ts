@@ -19,7 +19,6 @@ import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/wo
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { ISettableObservable, observableValue } from '../../../../util/vs/base/common/observableInternal';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -73,14 +72,9 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 }
 
 class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>() {
-	override readonly isWorktreeSupportedObs: ISettableObservable<boolean>;
 	private _selectedRepository: RepoContext | undefined;
-	constructor(_isSupported: boolean = false) {
+	constructor() {
 		super();
-		this.isWorktreeSupportedObs = observableValue(this, _isSupported);
-	}
-	setSupported(supported: boolean) {
-		this.isWorktreeSupportedObs.set(supported, undefined);
 	}
 	setSelectedRepository(repo: RepoContext | undefined) {
 		this._selectedRepository = repo;
@@ -241,7 +235,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}
 		}();
 		participant = new CopilotCLIChatSessionParticipant(
-			isolationManager,
 			contentProvider,
 			promptResolver,
 			itemProvider,
@@ -282,8 +275,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
-		worktree.setSupported(true);
 		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
+		worktree.setSelectedRepository({ rootUri: Uri.file(`${sep}repo`) } as RepoContext);
 		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
 			autoCommit: true,
 			baseCommit: 'deadbeef',
@@ -309,7 +302,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
-		worktree.setSupported(true);
 		(isolationManager.getIsolationPreference as unknown as ReturnType<typeof vi.fn>).mockReturnValue(true);
 		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
@@ -383,7 +375,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('handles /delegate command from another chat (has worktree support)', async () => {
 		expect(manager.sessions.size).toBe(0);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
-		worktree.setSupported(true);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
 		const parts: vscode.ExtendedChatResponsePart[] = [];
@@ -396,10 +387,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
 	});
 
-	it('handles /delegate command from another chat (no worktree support)', async () => {
+	it('handles /delegate command from another chat without active repositor', async () => {
 		expect(manager.sessions.size).toBe(0);
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
-		worktree.setSupported(false);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
 		const parts: vscode.ExtendedChatResponsePart[] = [];
@@ -521,7 +510,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('shows confirmation prompt for untitled session with uncommitted changes', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Fix the bug');
@@ -543,7 +531,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses original prompt from confirmation metadata when user accepts', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Copy Changes');
@@ -571,7 +558,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses original prompt for session label when swapping untitled session', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Move Changes');
@@ -596,7 +582,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('returns empty when user cancels untitled session confirmation', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Cancel');
@@ -621,7 +606,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('does not show confirmation for untitled session without uncommitted changes', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Fix the bug');
@@ -642,7 +626,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const sessionId = 'existing-123';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Continue work');
@@ -660,7 +643,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('reuses untitled session without uncommitted changes instead of creating new session', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		// First request creates the session
@@ -690,7 +672,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('reuses untitled session after confirmation without creating new session', async () => {
-		worktree.setSupported(true);
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		// First request shows confirmation

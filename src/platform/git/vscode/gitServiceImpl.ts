@@ -20,7 +20,7 @@ import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository } from './git';
+import { API, APIState, Change, Commit, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -35,7 +35,6 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	private _onDidFinishInitialRepositoryDiscovery = new Emitter<void>();
 	readonly onDidFinishInitialization: Event<void> = this._onDidFinishInitialRepositoryDiscovery.event;
 	private _isInitialized = observableValue(this, false);
-
 	constructor(
 		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
 		@ILogService private readonly logService: ILogService
@@ -98,6 +97,14 @@ export class GitServiceImpl extends Disposable implements IGitService {
 
 	get isInitialized(): boolean {
 		return this._isInitialized.get();
+	}
+
+	public getRecentRepositories(): Iterable<RepositoryAccessDetails> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		if (!gitAPI) {
+			return [];
+		}
+		return gitAPI.recentRepositories;
 	}
 
 	async getRepository(uri: URI, forceOpen = true): Promise<RepoContext | undefined> {

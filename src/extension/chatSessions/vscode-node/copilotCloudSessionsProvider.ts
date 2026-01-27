@@ -63,6 +63,13 @@ const DEFAULT_REPOSITORY_ID = '___vscode_repository_default___';
 const ACTIVE_SESSION_POLL_INTERVAL_MS = 5 * 1000; // 5 seconds
 const SEEN_DELEGATION_PROMPT_KEY = 'seenDelegationPromptBefore';
 const OPEN_REPOSITORY_COMMAND_ID = 'github.copilot.chat.cloudSessions.openRepository';
+const USER_SELECTED_REPOS_KEY = 'userSelectedRepositories';
+const USER_SELECTED_REPOS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+
+interface UserSelectedRepository {
+	name: string;
+	timestamp: number;
+}
 
 // TODO: No API from GH yet.
 const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string }[] = [
@@ -339,6 +346,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const selected = quickPick.selectedItems[0];
 				if (selected && sessionItemResource) {
 					this.sessionRepositoryMap.set(sessionItemResource, selected.label);
+					// Save user-selected repo so it appears in the recent repos list
+					this.saveUserSelectedRepository(selected.label);
 					this._onDidChangeChatSessionOptions.fire({
 						resource: sessionItemResource,
 						updates: [{
@@ -630,6 +639,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					} catch (error) {
 						this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
 					}
+
+					// Add user-selected repos that aren't already in the list
+					const userSelectedRepos = this.getUserSelectedRepositories();
+					const existingIds = new Set(items.map(item => item.id));
+					for (const repo of userSelectedRepos) {
+						if (!existingIds.has(repo.name)) {
+							items.push({
+								id: repo.name,
+								name: repo.name,
+								icon: new vscode.ThemeIcon('repo'),
+							});
+						}
+					}
 				}
 			} else {
 				const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
@@ -683,6 +705,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			} else if (update.optionId === REPOSITORIES_OPTION_GROUP_ID) {
 				if (update.value) {
 					this.sessionRepositoryMap.set(resource, update.value);
+					// Refresh timestamp for user-selected repos when selected from the picker
+					this.saveUserSelectedRepository(update.value);
 					this.logService.info(`Repository changed for session ${resource}: ${update.value}`);
 				} else {
 					this.sessionRepositoryMap.delete(resource);
@@ -771,19 +795,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				}
 
 				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pr);
-				const changes = multiDiffPart
-					? multiDiffPart.value
-						.map(change => new vscode.ChatSessionChangedFile2(
-							change.goToFileUri!,
-							change.originalUri,
-							change.modifiedUri,
-							change.added ?? 0,
-							change.removed ?? 0))
-					: {
-						files: pr.files.totalCount,
-						insertions: pr.additions,
-						deletions: pr.deletions
-					};
+				const changes = multiDiffPart?.value?.map(change => new vscode.ChatSessionChangedFile2(
+					change.goToFileUri!,
+					change.originalUri,
+					change.modifiedUri,
+					change.added ?? 0,
+					change.removed ?? 0));
 
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
@@ -1369,6 +1386,39 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.logService.debug(`[resetWorkspaceContext] ${key}`);
 			this._extensionContext.workspaceState.update(key, undefined);
 		}
+	}
+
+	/**
+	 * Saves a user-selected repository to global state with current timestamp.
+	 * If the repo already exists, the timestamp is refreshed.
+	 */
+	private saveUserSelectedRepository(repoName: string): void {
+		const repos = this.getUserSelectedRepositories();
+		const existingIndex = repos.findIndex(r => r.name === repoName);
+		if (existingIndex >= 0) {
+			repos[existingIndex].timestamp = Date.now();
+		} else {
+			repos.push({ name: repoName, timestamp: Date.now() });
+		}
+		this._extensionContext.globalState.update(USER_SELECTED_REPOS_KEY, repos);
+		this._onDidChangeChatSessionProviderOptions.fire();
+	}
+
+	/**
+	 * Gets user-selected repositories, filtering out expired entries (older than 1 week).
+	 * Expired entries are automatically cleaned up.
+	 */
+	private getUserSelectedRepositories(): UserSelectedRepository[] {
+		const repos = this._extensionContext.globalState.get<UserSelectedRepository[]>(USER_SELECTED_REPOS_KEY, []);
+		const now = Date.now();
+		const validRepos = repos.filter(r => (now - r.timestamp) < USER_SELECTED_REPOS_EXPIRY_MS);
+
+		// Clean up expired repos if any were filtered out
+		if (validRepos.length !== repos.length) {
+			this._extensionContext.globalState.update(USER_SELECTED_REPOS_KEY, validRepos);
+		}
+
+		return validRepos;
 	}
 
 	private async detectedUncommittedChanges(): Promise<boolean> {

@@ -418,42 +418,65 @@ export class AnthropicMessagesProcessor {
 				} else if (chunk.content_block?.type === 'tool_search_tool_result' && chunk.index !== undefined) {
 					const toolSearchResult = chunk.content_block as ToolSearchToolResult;
 					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
-						const toolNames = toolSearchResult.content.tool_references.map(ref => ref.tool_name);
+						const toolReferences = toolSearchResult.content.tool_references;
+						const toolNames = toolReferences.map(ref => ref.tool_name);
 
 						this.logService.trace(`[messagesAPI] Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
 
+						// Get the original server tool call to pair with this result
 						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
-						if (serverToolCall) {
-							let query: string | undefined;
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
 							try {
-								const parsed = JSON.parse(serverToolCall.arguments);
-								query = parsed.query;
+								parsedArgs = JSON.parse(serverToolCall.arguments);
 							} catch {
-								// Ignore parse errors
+								parsedArgs = serverToolCall.arguments;
 							}
-							this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
-							return onProgress({
-								text: '',
-								serverToolCalls: [{
-									id: serverToolCall.id,
-									name: serverToolCall.name,
-									arguments: JSON.stringify({ query, discovered_tools: toolNames }),
-									isServer: true,
-								}],
-							});
-						} else {
-							return onProgress({
-								text: '',
-								serverToolCalls: [{
-									id: toolSearchResult.tool_use_id,
-									name: 'tool_search_result',
-									arguments: JSON.stringify({ discovered_tools: toolNames }),
-									isServer: true,
-								}],
-							});
 						}
+
+						// Report combined entry with both args and result (like regular tools)
+						return onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { tool_references: toolReferences },
+							}],
+						});
 					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
 						this.logService.warn(`[messagesAPI] Tool search error: ${toolSearchResult.content.error_code}`);
+
+						// Get the original server tool call to pair with this error result
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
+							try {
+								parsedArgs = JSON.parse(serverToolCall.arguments);
+							} catch {
+								parsedArgs = serverToolCall.arguments;
+							}
+						}
+
+						// Report server tool call with error result for logging
+						onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { error: toolSearchResult.content.error_code },
+							}],
+						});
+
 						return onProgress({
 							text: '',
 							copilotErrors: [{
@@ -544,7 +567,7 @@ export class AnthropicMessagesProcessor {
 						});
 						this.toolCallAccumulator.delete(chunk.index);
 					}
-					// Handle server tool call completion (tool search) - store for later combination with result
+					// Handle server tool call completion (tool search) - store for result pairing
 					const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
 					if (serverToolCall) {
 						// Store completed server tool call by ID, waiting for tool_search_tool_result

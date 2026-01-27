@@ -12,7 +12,6 @@ import { IGitService, RepoContext } from '../../../platform/git/common/gitServic
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { derived, IObservable } from '../../../util/vs/base/common/observable';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
@@ -22,8 +21,6 @@ const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
 export class ChatSessionWorktreeService extends Disposable implements IChatSessionWorktreeService {
 	declare _serviceBrand: undefined;
-
-	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile2[] | undefined> = new Map();
@@ -37,11 +34,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	) {
 		super();
 		this.loadWorktreeProperties();
-
-		this.isWorktreeSupportedObs = derived(reader => {
-			const activeRepository = this.gitService.activeRepository.read(reader);
-			return activeRepository !== undefined;
-		});
 	}
 
 	private loadWorktreeProperties(): void {

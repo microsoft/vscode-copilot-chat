@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FileSystem, NotebookData, NotebookDocument, TextDocument, Uri, window, workspace, WorkspaceFolder, type WorkspaceEdit } from 'vscode';
+import { FileSystem, NotebookData, NotebookDocument, ResourceTrustRequestOptions, TextDocument, Uri, window, workspace, WorkspaceFolder, WorkspaceTrustRequestOptions, type WorkspaceEdit } from 'vscode';
 import { findNotebook } from '../../../util/common/notebooks';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
@@ -108,5 +108,14 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 			return window.showWorkspaceFolderPick();
 		}
 		return;
+	}
+
+
+	override requestResourceTrust(options: ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return workspace.requestResourceTrust(options);
+	}
+
+	override requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+		return workspace.requestWorkspaceTrust(options);
 	}
 }

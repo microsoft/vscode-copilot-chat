@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponsePart, ChatResponseStream, ChatVulnerability, ThinkingDelta, Uri } from 'vscode';
+import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, ChatResponsePart, ChatResponseStream, ChatVulnerability, ThinkingDelta, Uri } from 'vscode';
 
 import { createFilepathRegexp, mdCodeBlockLangToLanguageId } from '../../../util/common/markdown';
 import { CharCode } from '../../../util/vs/base/common/charCode';
@@ -124,6 +124,11 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
 	beginToolInvocation = this.forward(this._wrapped.beginToolInvocation.bind(this._wrapped));
 	updateToolInvocation = this.forward(this._wrapped.updateToolInvocation.bind(this._wrapped));
+
+	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
+		this._codeBlockProcessor.flush();
+		return this._wrapped.questionCarousel(questions, allowSkip);
+	}
 }
 
 

@@ -3,16 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Event, FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, TextDocument, TextDocumentChangeEvent, TextEditorSelectionChangeEvent, Uri, WorkspaceEdit, WorkspaceFolder, WorkspaceFoldersChangeEvent } from 'vscode';
+import type { Event, FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, ResourceTrustRequestOptions, TextDocument, TextDocumentChangeEvent, TextEditorSelectionChangeEvent, Uri, WorkspaceEdit, WorkspaceFolder, WorkspaceFoldersChangeEvent, WorkspaceTrustRequestOptions } from 'vscode';
 import { findNotebook } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Emitter } from '../../../util/vs/base/common/event';
+import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { extUriBiasedIgnorePathCase, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { NotebookDocumentSnapshot } from '../../editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../editing/common/textDocumentSnapshot';
-import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { Emitter } from '../../../util/vs/base/common/event';
 
 export const IWorkspaceService = createServiceIdentifier<IWorkspaceService>('IWorkspaceService');
 
@@ -49,6 +49,8 @@ export interface IWorkspaceService {
 	 * has been downloaded before we can use them.
 	 */
 	ensureWorkspaceIsFullyLoaded(): Promise<void>;
+	requestResourceTrust(options: ResourceTrustRequestOptions): Thenable<boolean | undefined>;
+	requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Thenable<boolean | undefined>;
 }
 
 export abstract class AbstractWorkspaceService implements IWorkspaceService {
@@ -73,6 +75,9 @@ export abstract class AbstractWorkspaceService implements IWorkspaceService {
 	abstract showWorkspaceFolderPicker(): Promise<WorkspaceFolder | undefined>;
 	abstract getWorkspaceFolderName(workspaceFolderUri: URI): string;
 	abstract applyEdit(edit: WorkspaceEdit): Thenable<boolean>;
+	abstract requestResourceTrust(options: ResourceTrustRequestOptions): Thenable<boolean | undefined>;
+	abstract requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Thenable<boolean | undefined>;
+
 	asRelativePath(pathOrUri: string | Uri, includeWorkspaceFolder?: boolean): string {
 		// Copied from the implementation in vscode/extHostWorkspace.ts
 		let resource: URI | undefined;
@@ -222,5 +227,13 @@ export class NullWorkspaceService extends AbstractWorkspaceService implements ID
 
 	public dispose() {
 		this.disposables.dispose();
+	}
+
+	override requestResourceTrust(options: ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
+
+	override requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
 	}
 }

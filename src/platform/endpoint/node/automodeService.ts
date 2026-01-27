@@ -153,7 +153,9 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			throw new Error('No auto mode endpoints provided.');
 		}
 
-		const usingRouterModel = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
+		// Only use router model for panel chat to avoid latency penalty in inline chat
+		const isPanelChat = !chatRequest?.location || chatRequest?.location === ChatLocation.Panel;
+		const usingRouterModel = isPanelChat && this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AutoModeRouterUrl, this._expService) !== undefined;
 		if (usingRouterModel) {
 			return this._resolveWithRouterModel(chatRequest, knownEndpoints);
 		}

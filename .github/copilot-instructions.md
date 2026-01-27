@@ -75,7 +75,6 @@ You MUST check compilation output before running ANY script or declaring work co
 - **`intents/`**: Chat participant/slash command implementations
 - **`prompts/`**: Prompt engineering and template system
 - **`prompt/`**: Common prompt utilities
-- **`relatedFiles/`**: Related file discovery and context gathering
 - **`typescriptContext/`**: TypeScript-specific context and analysis
 
 **Search & Discovery:**
@@ -302,7 +301,6 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **Context resolution changes**: Check `src/extension/context/` and `src/extension/typescriptContext/`
 - **Prompt engineering**: Update `src/extension/prompts/` and `src/extension/prompt/`
 - **Intent detection**: Modify `src/extension/intents/` for user intent classification
-- **Related files discovery**: Edit `src/extension/relatedFiles/` for context gathering
 
 **Search & Discovery:**
 - **Search functionality**: Update `src/extension/search/` for general search
