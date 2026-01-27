@@ -24,7 +24,7 @@ export interface IQuestion {
 	question: string;
 	multiSelect?: boolean;
 	options?: IQuestionOption[];
-	allowFreeFormInput?: boolean;
+	allowFreeformInput?: boolean;
 }
 
 export interface IAskQuestionsParams {
