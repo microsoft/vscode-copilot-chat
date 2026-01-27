@@ -336,8 +336,10 @@ export class DefaultIntentRequestHandler {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
 			result.chatResult ??= {};
-			if ((result.chatResult.metadata as IResultMetadata)?.maxToolCallsExceeded) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, 'maxToolCalls');
+			const metadata = result.chatResult.metadata as IResultMetadata | undefined;
+			if (metadata?.maxToolCallsExceeded) {
+				const responseType = metadata.toolCallExitReason === 'loopDetected' ? 'toolLoop' : 'maxToolCalls';
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, responseType);
 			}
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
