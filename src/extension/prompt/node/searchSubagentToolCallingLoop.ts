@@ -62,23 +62,32 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
+	// get the endpoint to use for the search subagent
 	private async getEndpoint(request: ChatRequest) {
-		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily;
-		let endpoint = await this.endpointProvider.getChatEndpoint(modelName);
-		if (!endpoint.supportsToolCalls) {
+		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
+
+		let endpoint;
+		if (!modelName) {
 			endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+		} else {
+			endpoint = await this.endpointProvider.getChatEndpoint(modelName);
+			if (!endpoint.supportsToolCalls) {
+				endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+			}
 		}
 		return endpoint;
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
 		const endpoint = await this.getEndpoint(this.options.request);
+		const maxSearchTurns = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolCallLimit, this._experimentationService);
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
 			SearchSubagentPrompt,
 			{
-				promptContext: buildPromptContext
+				promptContext: buildPromptContext,
+				maxSearchTurns
 			}
 		);
 		return await renderer.render(progress, token);
