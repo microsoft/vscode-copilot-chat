@@ -145,5 +145,4 @@ For testing guidelines, see docs/TESTING.md
 - **Duplicating project docs**: Copying README or CONTRIBUTING content instead of linking to them
 - **Obvious instructions**: Stating conventions already enforced by linters or obvious from code
 - **Verbose prose**: Long explanations instead of clear, scannable guidelines
-- **Auto-generated files**: Scripts prioritize comprehensiveness over restraint—never auto-generate
 - **Contradictory rules**: Different developers adding conflicting opinions without reconciliation
