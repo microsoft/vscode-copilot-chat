@@ -93,6 +93,25 @@ export namespace EditIntent {
 	}
 
 	/**
+	 * Converts a short name (N, L, M, H) to EditIntent enum.
+	 * Returns undefined for invalid values.
+	 */
+	export function fromShortName(value: string): EditIntent | undefined {
+		switch (value.toUpperCase()) {
+			case 'N':
+				return EditIntent.NoEdit;
+			case 'L':
+				return EditIntent.Low;
+			case 'M':
+				return EditIntent.Medium;
+			case 'H':
+				return EditIntent.High;
+			default:
+				return undefined;
+		}
+	}
+
+	/**
 	 * Determines if the edit should be shown based on the edit intent
 	 * and the user's aggressiveness level.
 	   *

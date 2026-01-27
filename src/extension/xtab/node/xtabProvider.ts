@@ -1259,15 +1259,103 @@ export interface ParseEditIntentResult {
 }
 
 /**
- * Parses the edit_intent tag from the first line of the response stream.
- * The edit_intent tag MUST be on the first line, otherwise it's treated as not provided.
+ * Mode for parsing edit intent from the model response.
+ */
+export enum EditIntentParseMode {
+	/** Parse using XML-style tags: <|edit_intent|>value<|/edit_intent|> */
+	Tags = 'tags',
+	/** Parse using short names on the first line: N|L|M|H */
+	ShortName = 'shortName',
+}
+
+/**
+ * Parses the edit_intent from the first line of the response stream.
+ * The edit_intent MUST be on the first line, otherwise it's treated as not provided.
  * Returns the parsed EditIntent and a new stream with the remaining content.
  *
- * Expected format (first line only):
- * <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
- * ... rest of edited code ...
+ * Supports two modes:
+ * - Tags (default): <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
+ * - ShortName: N|L|M|H on the first line
+ *
+ * @param linesStream The stream of lines from the model response
+ * @param tracer Logger for tracing
+ * @param mode The parse mode (Tags or ShortName), defaults to Tags
  */
 export async function parseEditIntentFromStream(
+	linesStream: AsyncIterableObject<string>,
+	tracer: ILogger,
+	mode: EditIntentParseMode = EditIntentParseMode.Tags,
+): Promise<ParseEditIntentResult> {
+	if (mode === EditIntentParseMode.ShortName) {
+		return parseEditIntentFromStreamShortName(linesStream, tracer);
+	}
+
+	return parseEditIntentFromStreamTags(linesStream, tracer);
+}
+
+/**
+ * Parses the edit_intent using short name format (N|L|M|H on first line).
+ */
+async function parseEditIntentFromStreamShortName(
+	linesStream: AsyncIterableObject<string>,
+	tracer: ILogger,
+): Promise<ParseEditIntentResult> {
+	let editIntent: xtabPromptOptions.EditIntent = xtabPromptOptions.EditIntent.High; // Default to high (always show) if no short name found
+	let parseError: string | undefined;
+
+	const linesIter = linesStream[Symbol.asyncIterator]();
+	const firstLineResult = await linesIter.next();
+
+	if (firstLineResult.done) {
+		// Empty stream
+		parseError = 'emptyResponse';
+		tracer.warn(`Empty response stream, no edit_intent short name found`);
+		const remainingLinesStream = new AsyncIterableObject<string>(async () => { });
+		return { editIntent, remainingLinesStream, parseError };
+	}
+
+	const firstLine = firstLineResult.value.trim();
+
+	// Check if the first line is a single character short name
+	const parsedIntent = xtabPromptOptions.EditIntent.fromShortName(firstLine);
+
+	if (parsedIntent !== undefined) {
+		editIntent = parsedIntent;
+		tracer.trace(`Parsed edit_intent short name from first line: "${firstLine}" -> ${editIntent}`);
+
+		// Create a new stream with the remaining lines (excluding the short name line)
+		const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+			let next = await linesIter.next();
+			while (!next.done) {
+				emitter.emitOne(next.value);
+				next = await linesIter.next();
+			}
+		});
+
+		return { editIntent, remainingLinesStream, parseError };
+	}
+
+	// Short name not found or invalid
+	parseError = `invalidShortName:${firstLine}`;
+	tracer.warn(`Invalid edit_intent short name: "${firstLine}", defaulting to High`);
+
+	// Return the first line plus the rest of the stream
+	const remainingLinesStream = new AsyncIterableObject<string>(async (emitter) => {
+		emitter.emitOne(firstLineResult.value); // Use original value, not trimmed
+		let next = await linesIter.next();
+		while (!next.done) {
+			emitter.emitOne(next.value);
+			next = await linesIter.next();
+		}
+	});
+
+	return { editIntent, remainingLinesStream, parseError };
+}
+
+/**
+ * Parses the edit_intent tag from the first line of the response stream (original tag-based format).
+ */
+async function parseEditIntentFromStreamTags(
 	linesStream: AsyncIterableObject<string>,
 	tracer: ILogger,
 ): Promise<ParseEditIntentResult> {
