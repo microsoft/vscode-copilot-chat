@@ -62,7 +62,9 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
-	// get the endpoint to use for the search subagent
+	/**
+	 * Get the endpoint to use for the search subagent
+	 */
 	private async getEndpoint(request: ChatRequest) {
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
 

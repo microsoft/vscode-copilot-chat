@@ -4237,10 +4237,8 @@
 						]
 					},
 					"github.copilot.chat.searchSubagent.model": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": "string",
+						"default": "",
 						"markdownDescription": "%github.copilot.config.searchSubagent.model%",
 						"tags": [
 							"advanced",
