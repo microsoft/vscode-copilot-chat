@@ -174,6 +174,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// Warn if trying to view repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use view on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -349,6 +357,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameters: path, old_str' };
 		}
 
+		// Warn if trying to str_replace repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use str_replace on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -404,6 +420,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameters: path, insert_line' };
 		}
 
+		// Warn if trying to insert into repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use insert on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -444,6 +468,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// Warn if trying to delete repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use delete on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -472,6 +504,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameters: old_path, new_path' };
 		}
 
+		// Warn if trying to rename repo memories when Copilot Memory is enabled
+		if (oldPath.startsWith(MemoryTool.REPO_PATH_PREFIX) || newPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use rename on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const oldFullPath = this.validatePath(oldPath, sessionId);
 		const newFullPath = this.validatePath(newPath, sessionId);
 
@@ -493,7 +533,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 ToolRegistry.registerModelSpecificTool(
 	{
-		name: 'memory',
+		name: 'copilot_memory',
 		toolReferenceName: 'memory',
 		displayName: 'Memory',
 		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',
