@@ -536,7 +536,11 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			data: [result]
 		});
 		statistics.setLastResolution(providerId, 'full');
-		return bags ? [...bags, result] : [result];
+		if (bags === undefined) {
+			return [result];
+		}
+		bags.push(result);
+		return bags;
 	}
 }
 
