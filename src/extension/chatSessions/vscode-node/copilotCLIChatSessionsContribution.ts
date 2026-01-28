@@ -1469,7 +1469,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			// Pick up new git state
 			copilotcliSessionItemProvider.notifySessionsChange();
 		} catch (error) {
-			vscode.window.showErrorMessage(l10n.t('Failed to apply changes to the current workspace. Please stash or commit your changes in the current workspace and try again.'), { modal: true });
+			vscode.window.showErrorMessage(l10n.t('Failed to apply changes to the current workspace. Please stage or commit your changes in the current workspace and try again.'), { modal: true });
 		}
 	};
 
