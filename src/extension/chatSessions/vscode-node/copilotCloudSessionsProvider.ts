@@ -995,14 +995,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const resolvePartnerAgent = (sessions: SessionInfo[]): { id: string; name: string; at?: string | undefined } | undefined => {
+			const getDefault = () => {
+				return HARDCODED_PARTNER_AGENTS.find(agent => agent.id === DEFAULT_PARTNER_AGENT_ID) ?? undefined;
+			};
 			const agentId = sessions.find(s => s.agent_id)?.agent_id;
 			if (!agentId) {
-				return;
+				return getDefault();
 			}
 			// See if this matches any of the known partner agents
 			// TODO: Currently hardcoded, no API from GitHub.
 			const match = HARDCODED_PARTNER_AGENTS.find(agent => Number(agent.id) === agentId);
-			return match;
+			return match ?? getDefault();
 		};
 
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString(), { createIfNone: true });
