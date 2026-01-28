@@ -13,7 +13,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
+import { CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -176,6 +176,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService);
 
 	private _partnerAgentsAvailableCache: Map<string, { id: string; name: string; at?: string }[]> | undefined;
+
+	// Cache for CCA enabled status per repository (key: "owner/repo")
+	private _ccaEnabledCache: Map<string, CCAEnabledResult> | undefined;
 
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
@@ -393,7 +396,57 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.activeSessionIds.clear();
 		this.stopActiveSessionPolling();
 		this._partnerAgentsAvailableCache = undefined;
+		this._ccaEnabledCache = undefined;
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	/**
+	 * Checks if the Copilot cloud agent is enabled for a repository.
+	 * Results are cached per repository until refresh() is called.
+	 * @param owner Repository owner
+	 * @param repo Repository name
+	 * @returns CCAEnabledResult with enabled status and optional status code
+	 */
+	private async checkCCAEnabled(owner: string, repo: string): Promise<CCAEnabledResult> {
+		const cacheKey = `${owner}/${repo}`;
+
+		if (!this._ccaEnabledCache) {
+			this._ccaEnabledCache = new Map();
+		}
+
+		const cached = this._ccaEnabledCache.get(cacheKey);
+		if (cached !== undefined) {
+			this.logService.trace(`copilotCloudSessionsProvider#checkCCAEnabled: using cached CCA enabled status for ${owner}/${repo}: ${cached.enabled}`);
+			return cached;
+		}
+
+		const result = await this._octoKitService.isCCAEnabled(owner, repo, { createIfNone: false });
+		this._ccaEnabledCache.set(cacheKey, result);
+
+		this.telemetry.sendTelemetryEvent('copilot.codingAgent.CCAIsEnabledCheck', { microsoft: true, github: false }, {
+			enabled: String(result.enabled),
+			statusCode: String(result.statusCode ?? 'none'),
+			cacheHit: 'false',
+		});
+
+		this.logService.trace(`copilotCloudSessionsProvider#checkCCAEnabled: fetched CCA enabled status for ${owner}/${repo}: ${result.enabled}`);
+		return result;
+	}
+
+	/**
+	 * Gets user-friendly error message for disabled CCA status.
+	 * @param result The CCAEnabledResult to get message for
+	 * @returns User-friendly error message
+	 */
+	private getCCADisabledMessage(result: CCAEnabledResult): string {
+		if (result.statusCode === 422) {
+			return vscode.l10n.t('Cloud agent is unable to create pull requests in this repository. Please verify repository rules allow this operation.');
+		}
+		if (result.statusCode === 401) {
+			return vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.');
+		}
+		// Default to 403 'disabled' message
+		return vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', 'https://github.com/settings/copilot/coding_agent');
 	}
 
 	private stopActiveSessionPolling(): void {
@@ -575,6 +628,20 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const optionGroups: vscode.ChatSessionProviderOptionGroup[] = [];
 		const repoIds = await getRepoId(this._gitService);
 		const repoId = repoIds?.[0];
+
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		const isSingleRepoWorkspace = workspaceFolders?.length === 1 && repoIds?.length === 1;
+		let ccaEnabledResult: { enabled?: boolean; statusCode?: number } | undefined;
+		let isCcaEnabled = true;
+		if (isSingleRepoWorkspace && repoId) {
+			ccaEnabledResult = await this.checkCCAEnabled(repoId.org, repoId.repo);
+			isCcaEnabled = ccaEnabledResult.enabled !== false;
+		}
+		if (!isCcaEnabled && repoId) {
+			this.logService.trace(`copilotCloudSessionsProvider#provideChatSessionProviderOptions: CCA disabled for ${repoId.org}/${repoId.repo}, statusCode: ${ccaEnabledResult?.statusCode}`);
+			// Return empty options to disable the feature in the UI
+			return { optionGroups: [] };
+		}
 
 		try {
 			// Fetch agents (requires repo), models (global), and partner agents in parallel
@@ -2154,6 +2221,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			repoOwner = repoId.org;
 			repoName = repoId.repo;
+		}
+
+		// Check if CCA is enabled before posting job
+		const ccaEnabled = await this.checkCCAEnabled(repoOwner, repoName);
+		if (ccaEnabled.enabled === false) {
+			throw new Error(this.getCCADisabledMessage(ccaEnabled));
 		}
 
 		if (isTruncated) {
