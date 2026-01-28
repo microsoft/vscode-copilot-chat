@@ -33,5 +33,11 @@ export class CapturingToken {
 		 */
 		public readonly subAgentInvocationId?: string,
 		public readonly subAgentName?: string,
+		/**
+		 * Optional VS Code chat session ID for trajectory tracking.
+		 * When set, this ID is used directly as the trajectory session ID for the main chat,
+		 * providing a 1:1 mapping between chat sessions and trajectories.
+		 */
+		public readonly chatSessionId?: string,
 	) { }
 }

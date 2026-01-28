@@ -77,9 +77,11 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			// Get or create session for this token
 			let sessionId = this.sessionMap.get(entry.token);
 			if (!sessionId) {
-				// Use the token's pre-assigned subAgentInvocationId if present (for explicit subagent linking),
-				// otherwise generate a new one
-				sessionId = entry.token.subAgentInvocationId ?? this.generateSessionId(entry.token.label);
+				// Use the following priority for session ID:
+				// 1. subAgentInvocationId for explicit subagent linking
+				// 2. chatSessionId for main chat sessions (provides 1:1 mapping with VS Code chat)
+				// 3. Generate a new one as fallback
+				sessionId = entry.token.subAgentInvocationId ?? entry.token.chatSessionId ?? this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
 				this.tokenToSessionId.set(entry.token, sessionId);
 				// Use subAgentName as agent name for subagent trajectories
@@ -325,7 +327,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForSubagentTool(entry);
 			if (resolvedSubagentSessionId) {
 				const subagentDescription = this.extractSubagentDescription(entry);
-				const trajectoryPath = `subagent-${this.sanitizeSubagentDescriptionForFilename(subagentDescription)}-${resolvedSubagentSessionId}${TRAJECTORY_FILE_EXTENSION}`;
+				const trajectoryPath = `${this.sanitizeSubagentDescriptionForFilename(subagentDescription)}-${resolvedSubagentSessionId}${TRAJECTORY_FILE_EXTENSION}`;
 				stepContext.addSubagentReference(entry.id, {
 					session_id: resolvedSubagentSessionId,
 					trajectory_path: trajectoryPath

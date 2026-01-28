@@ -130,6 +130,7 @@ export class DefaultIntentRequestHandler {
 
 			// For subagent requests, use the subAgentInvocationId as the session ID.
 			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
+			// For main requests, use the VS Code chat sessionId directly as the trajectory session ID.
 			const capturingToken = new CapturingToken(
 				this.request.prompt,
 				'comment',
@@ -137,6 +138,7 @@ export class DefaultIntentRequestHandler {
 				false,
 				this.request.subAgentInvocationId,
 				this.request.subAgentName,
+				this.request.sessionId,
 			);
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
