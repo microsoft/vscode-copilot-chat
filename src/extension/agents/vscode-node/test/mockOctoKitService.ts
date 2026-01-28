@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
+import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -36,6 +36,7 @@ export class MockOctoKitService implements IOctoKitService {
 	getRecentlyCommittedRepositories = async () => [];
 	getCopilotAgentModels = async () => [];
 	getAssignableActors = async () => [];
+	isCCAEnabled = async (): Promise<CCAEnabledResult> => ({ enabled: true });
 
 	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }) => this.userOrganizations;
 	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];

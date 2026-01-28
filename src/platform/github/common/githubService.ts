@@ -88,6 +88,20 @@ export interface IOctoKitUser {
 	avatar_url: string;
 }
 
+/**
+ * Result of checking if Copilot cloud agent is enabled for a repository.
+ */
+export interface CCAEnabledResult {
+	/**
+	 * Whether the cloud agent is enabled. `undefined` if unable to determine.
+	 */
+	enabled: boolean | undefined;
+	/**
+	 * The HTTP status code when the cloud agent is disabled (401, 403, or 422).
+	 */
+	statusCode?: 401 | 403 | 422;
+}
+
 export interface IOctoKitSessionInfo {
 	name: string;
 	owner_id: number;
@@ -383,6 +397,20 @@ export interface IOctoKitService {
 	 * @returns An array of assignable actors with their login names
 	 */
 	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;
+
+	/**
+	 * Checks if the Copilot cloud agent is enabled for a repository.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param authOptions - Authentication options. By default, uses silent auth.
+	 * @returns An object indicating enabled status and status code if disabled.
+	 *          - 200: enabled = true
+	 *          - 401: enabled = false, statusCode = 401
+	 *          - 403: enabled = false, statusCode = 403
+	 *          - 422: enabled = false, statusCode = 422
+	 *          - Other errors: enabled = undefined
+	 */
+	isCCAEnabled(owner: string, repo: string, authOptions: AuthOptions): Promise<CCAEnabledResult>;
 }
 
 /**

@@ -31,7 +31,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 		});
 
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart(JSON.stringify({ success: true, agentName }))
+			new LanguageModelTextPart(`Switched to ${agentName} agent. You are now the ${agentName} agent. This tool may no longer be available in the new agent.`)
 		]);
 	}
 

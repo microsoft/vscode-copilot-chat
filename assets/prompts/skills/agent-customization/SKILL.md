@@ -1,6 +1,6 @@
 ---
 name: agent-customization
-description: 'Work with VS Code agent customization files (.instructions.md, .prompt.md, .agent.md, SKILL.md, copilot-instructions.md, AGENTS.md). Use when asked to: create, update, review, fix, or debug instructions/prompts/agents/skills; save coding preferences or conventions; understand how customization files work; troubleshoot why instructions/skills are not applying or being ignored; compare customization approaches; migrate or refactor existing customizations; set up project guidelines; configure applyTo patterns; define tool restrictions; create reusable workflows; build custom agent modes or personas; package domain knowledge; add frontmatter; fix YAML syntax; or share team standards.'
+description: 'Create, update, review, fix, or debug VS Code agent customization files (.instructions.md, .prompt.md, .agent.md, SKILL.md, copilot-instructions.md, AGENTS.md). Use for: saving coding preferences; troubleshooting why instructions/skills/agents are ignored or not invoked; configuring applyTo patterns; defining tool restrictions; creating custom agent modes or specialized workflows; packaging domain knowledge; fixing YAML frontmatter syntax.'
 ---
 
 # Agent Customization
@@ -24,7 +24,7 @@ Consult the reference docs for templates, domain examples, advanced frontmatter 
 |------|------|----------|-----------|---------|
 | Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | N/A (always applies) | [Link](./primitives/workspace-instructions.md) |
 | File Instructions | `*.instructions.md` | `.github/instructions/` | `applyTo` (explicit), `description` (on-demand) | [Link](./primitives/instructions.md) |
-| Prompts | `*.prompt.md` | `.github/prompts/` | `description` (required) | [Link](./primitives/prompts.md) |
+| Prompts | `*.prompt.md` | `.github/prompts/` | `description` (user-invoked) | [Link](./primitives/prompts.md) |
 | Custom Agents | `*.agent.md` | `.github/agents/` | `description` (on-demand), `infer` (subagent) | [Link](./primitives/agents.md) |
 | Skills | `SKILL.md` | `.github/skills/<name>/` | `description` (on-demand) | [Link](./primitives/skills.md) |
 

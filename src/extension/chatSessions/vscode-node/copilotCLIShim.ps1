@@ -171,29 +171,10 @@ function Test-AndLaunchCopilot {
         }
     }
 
-    if (-not $version) {
-        Write-Host "Error: Unable to parse copilot version from: $versionOutput"
-        $answer = Read-Host "Reinstall GitHub Copilot CLI? (y/N)"
-        if ($answer -eq "y" -or $answer -eq "Y") {
-            try {
-                Invoke-NpmGlobalCommand -Command 'install' -Package $PackageName
-                if ($LASTEXITCODE -eq 0) {
-                    Test-AndLaunchCopilot $Arguments
-                    return
-                } else {
-                    Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
-                    return
-                }
-            } catch {
-                Read-Host "Reinstallation failed. Please check your npm configuration and try again (or run: npm install -g @github/copilot)."
-                return
-            }
-        } else {
-            exit 0
-        }
-    }
+    # Command succeeded - assume CLI is installed even if we can't parse the version
 
-    if (-not (Test-VersionCompatibility $version)) {
+    # Only check version compatibility if we have a valid version
+    if ($version -and -not (Test-VersionCompatibility $version)) {
         Write-Host "GitHub Copilot CLI version $version is not compatible."
         Write-Host "Version $RequiredVersion or later is required."
         $answer = Read-Host "Update GitHub Copilot CLI? (y/N)"

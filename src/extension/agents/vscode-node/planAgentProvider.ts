@@ -32,6 +32,8 @@ interface PlanAgentConfig {
 	tools: string[];
 	model?: string;
 	target?: string;
+	infer?: string;
+	agents?: string[];
 	handoffs: PlanAgentHandoff[];
 	body: string;
 }
@@ -45,6 +47,8 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
+	infer: 'user',
+	agents: [],
 	tools: [
 		'agent',
 		'search',
@@ -93,12 +97,21 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	if (config.target) {
 		lines.push(`target: ${config.target}`);
 	}
+	if (config.infer) {
+		lines.push(`infer: ${config.infer}`);
+	}
 
 	// Tools array - flow style for readability
 	// Escape single quotes by doubling them (YAML spec)
 	if (config.tools.length > 0) {
 		const quotedTools = config.tools.map(t => `'${t.replace(/'/g, '\'\'')}'`).join(', ');
 		lines.push(`tools: [${quotedTools}]`);
+	}
+
+	// Agents array - same format as tools (empty array = no subagents allowed)
+	if (config.agents) {
+		const quotedAgents = config.agents.map(a => `'${a.replace(/'/g, '\'\'')}'`).join(', ');
+		lines.push(`agents: [${quotedAgents}]`);
 	}
 
 	// Handoffs - block style for complex nested objects
@@ -228,6 +241,7 @@ MANDATORY: Instruct the subagent to work autonomously following <research_instru
 <research_instructions>
 - Research the user's task comprehensively using read-only tools.
 - Start with high-level code searches before reading specific files.
+- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
 - Identify missing information, conflicting requirements, or technical unknowns.
 - DO NOT draft a full plan yet — focus on discovery and feasibility.
 </research_instructions>

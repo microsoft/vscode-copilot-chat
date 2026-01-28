@@ -20,6 +20,7 @@ import { createLibTestingContext } from './context';
 import { createFakeCompletionResponse, StaticFetcher } from './fetcher';
 import { withInMemoryTelemetry } from './telemetry';
 import { createTextDocument } from './textDocument';
+import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 
 suite('getInlineCompletions()', function () {
 	function setupCompletion(
@@ -38,7 +39,8 @@ suite('getInlineCompletions()', function () {
 		function requestInlineCompletions(textDoc = doc, pos = position) {
 			const instaService = accessor.get(IInstantiationService);
 			const ghostText = instaService.createInstance(GhostText);
-			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined));
+			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder);
 		}
 
 		return {
