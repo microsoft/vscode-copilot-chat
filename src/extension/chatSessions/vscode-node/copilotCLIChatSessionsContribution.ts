@@ -799,7 +799,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
-		// If we have repo then its trusted, lets get the latest information again by requesting the repo again.
+		// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 		if (cachedRepo) {
 			const repository = await this.gitService.getRepository(repoPath, true);
 			return { repository, trusted: true };
