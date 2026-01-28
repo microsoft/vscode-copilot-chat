@@ -10,11 +10,10 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
+import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
-import { ImplementAgentProvider } from './implementAgentProvider';
 import { PlanAgentProvider } from './planAgentProvider';
-import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -37,10 +36,6 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Plan agent provider for dynamic settings-based customization
 			const planProvider = instantiationService.createInstance(PlanAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
-
-			// Register Implement agent provider for dynamic settings-based customization
-			const implementProvider = instantiationService.createInstance(ImplementAgentProvider);
-			this._register(vscode.chat.registerCustomAgentProvider(implementProvider));
 		}
 
 		// Register instructions provider
