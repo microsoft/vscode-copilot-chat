@@ -795,7 +795,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private async getCachedRepository(repoPath: Uri): Promise<{ repository: RepoContext | undefined; trusted: boolean }> {
 		if (this.workspaceService.getWorkspaceFolders().length) {
 			const repository = await this.gitService.getRepository(repoPath, true);
-			return { repository: repository, trusted: true };
+			return { repository, trusted: true };
 		}
 
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
