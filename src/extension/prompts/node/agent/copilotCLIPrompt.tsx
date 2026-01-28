@@ -32,7 +32,6 @@ export interface AgentUserMessageProps extends BasePromptElementProps {
 	readonly sessionId?: string;
 }
 
-
 /**
  * Is sent with each user message. Includes the user message and also any ambient context that we want to update with each request.
  * Uses frozen content if available, for prompt caching and to avoid being updated by any agent action below this point in the conversation.
