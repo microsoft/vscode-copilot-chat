@@ -22,10 +22,11 @@ export function setupCompletionsExperimentationService(accessor: ServicesAccesso
 	const authService = accessor.get(IAuthenticationService);
 	const instantiationService = accessor.get(IInstantiationService);
 
-	const disposable = authService.onDidAccessTokenChange(() => {
-		authService.getCopilotToken()
-			.then(t => instantiationService.invokeFunction(updateCompletionsFilters, t))
-			.catch(err => { });
+	// Use onDidAuthenticationChange instead of deprecated onDidAccessTokenChange.
+	// onDidAuthenticationChange fires AFTER CopilotToken is minted and stored,
+	// ensuring copilotTrackingId is available for experiment assignment.
+	const disposable = authService.onDidAuthenticationChange(() => {
+		instantiationService.invokeFunction(updateCompletionsFilters, authService.copilotToken);
 	});
 
 	updateCompletionsFilters(accessor, authService.copilotToken);

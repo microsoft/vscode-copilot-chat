@@ -175,8 +175,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const chatEndpoints = (await this._endpointProvider.getAllChatEndpoints()).filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
-		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
+		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
+		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
 		let defaultChatEndpoint: IChatEndpoint | undefined;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');

@@ -21,7 +21,7 @@ export async function getDiagnosticsFromContextItems(
 
 	// Set expectations for the diagnostics provided.
 	for (const item of diagnosticBags) {
-		setupExpectationsForDiagnostics(accessor, completionId, item.data, item.providerId);
+		setupExpectationsForDiagnosticBags(accessor, completionId, item.data, item.providerId);
 	}
 
 	// Flatten and sort the traits by importance.
@@ -69,10 +69,10 @@ export async function getDiagnosticsFromContextItems(
 	return filteredDiagnosticBags.sort((a, b) => (a.importance ?? 0) - (b.importance ?? 0));
 }
 
-function setupExpectationsForDiagnostics(accessor: ServicesAccessor, completionId: string, diagnostics: DiagnosticBagWithId[], providerId: string) {
+function setupExpectationsForDiagnosticBags(accessor: ServicesAccessor, completionId: string, bags: DiagnosticBagWithId[], providerId: string) {
 	const statistics = accessor.get(ICompletionsContextProviderService).getStatisticsForCompletion(completionId);
 
-	diagnostics.forEach(t => {
-		statistics.addExpectations(providerId, [[t, 'included']]);
+	bags.forEach(bag => {
+		statistics.addExpectations(providerId, [[bag, 'included']]);
 	});
 }

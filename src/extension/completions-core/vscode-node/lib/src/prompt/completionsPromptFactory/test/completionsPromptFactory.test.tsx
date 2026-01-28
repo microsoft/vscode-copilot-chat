@@ -22,7 +22,7 @@ import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt'
 import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
 import { CodeSnippet, ContextProvider, SupportedContextItem, Trait, type DiagnosticBag } from '../../../../../types/src';
 import { ICompletionsObservableWorkspace } from '../../../completionsObservableWorkspace';
-import { createCompletionState } from '../../../completionState';
+import { createCompletionState, type CompletionState } from '../../../completionState';
 import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../../config';
 import { ICompletionsFeaturesService } from '../../../experiments/featuresService';
 import { TelemetryWithExp } from '../../../telemetry';
@@ -34,7 +34,8 @@ import { ICompletionsTextDocumentManagerService } from '../../../textDocumentMan
 import { CompletionsContext } from '../../components/completionsContext';
 import { ICompletionsContextProviderBridgeService } from '../../components/contextProviderBridge';
 import { CurrentFile } from '../../components/currentFile';
-import { ContextProviderTelemetry, ICompletionsContextProviderRegistryService } from '../../contextProviderRegistry';
+import { ContextProviderTelemetry, ICompletionsContextProviderRegistryService, type DefaultDiagnosticSettings, type ResolvedContextItem } from '../../contextProviderRegistry';
+import type { DiagnosticBagWithId } from '../../contextProviders/contextItemSchemas';
 import { _contextTooShort, _promptCancelled, _promptError } from '../../prompt';
 import { FullRecentEditsProvider, ICompletionsRecentEditsProviderService } from '../../recentEdits/recentEditsProvider';
 import { NeighborSource } from '../../similarFiles/neighborFiles';
@@ -927,9 +928,19 @@ suite('Completions Prompt Factory', function () {
 });
 
 suite('getDefaultDiagnostics', function () {
+	type PromptFactoryWithDiagnostic = IPromptFactory & {
+		addDefaultDiagnosticBag(
+			resolvedContextItems: ResolvedContextItem[],
+			bags: DiagnosticBagWithId[] | undefined,
+			completionId: string,
+			completionState: CompletionState,
+			settings: DefaultDiagnosticSettings
+		): DiagnosticBagWithId[] | undefined;
+	};
 	let accessor: ServicesAccessor;
 	let serviceCollection: TestingServiceCollection;
-	let promptFactory: any;
+	let promptFactory: PromptFactoryWithDiagnostic;
+	const completionId = 'test-completion-id';
 
 	setup(function () {
 		serviceCollection = createLibTestingContext();
@@ -945,13 +956,13 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		// Set empty diagnostics
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), []);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings);
 		assert.strictEqual(result, undefined);
 	});
 
@@ -959,7 +970,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const bags = [{
 			type: 'DiagnosticBag' as const,
@@ -968,8 +979,8 @@ suite('getDefaultDiagnostics', function () {
 			id: 'test-id'
 		}];
 
-		const result = promptFactory.getDefaultDiagnostics(bags, completionState, settings);
-		assert.strictEqual(result, undefined);
+		const result = promptFactory.addDefaultDiagnosticBag([], bags, completionId, completionState, settings);
+		assert.strictEqual(result, bags);
 	});
 
 	test('should filter out diagnostics outside maxLineDistance', function () {
@@ -983,7 +994,7 @@ suite('getDefaultDiagnostics', function () {
 		`);
 		const position = Position.create(2, 0); // At line 2
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 1, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 1, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1011,7 +1022,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 2);
 		assert.strictEqual(result!.values[0].message, 'Error at line 1');
@@ -1022,7 +1033,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'no' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1040,7 +1051,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 1);
 		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
@@ -1050,7 +1061,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1068,7 +1079,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 2);
 		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
@@ -1079,7 +1090,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yesIfNoErrors' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1097,7 +1108,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 1);
 		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
@@ -1107,7 +1118,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yesIfNoErrors' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1125,7 +1136,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 2);
 		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Warning);
@@ -1136,7 +1147,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 10, maxDiagnostics: 2 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 2 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1164,7 +1175,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 2);
 	});
@@ -1180,7 +1191,7 @@ suite('getDefaultDiagnostics', function () {
 		`);
 		const position = Position.create(2, 0); // At line 2
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 5, maxDiagnostics: 10 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 5, maxDiagnostics: 10 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1208,7 +1219,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.values.length, 4);
 		// Should be sorted by distance: 0, 1, 2, 3
@@ -1222,7 +1233,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'no' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1240,7 +1251,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings);
 		assert.strictEqual(result, undefined);
 	});
 
@@ -1248,7 +1259,7 @@ suite('getDefaultDiagnostics', function () {
 		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
 		const position = Position.create(0, 10);
 		const completionState = createCompletionState(document, position);
-		const settings = { warnings: 'yes' as const, maxLineDistance: 10, maxDiagnostics: 5 };
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
 
 		const diagnostics: Diagnostic[] = [
 			{
@@ -1261,7 +1272,7 @@ suite('getDefaultDiagnostics', function () {
 		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
 		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
 
-		const result = promptFactory.getDefaultDiagnostics(undefined, completionState, settings);
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
 		assert.notStrictEqual(result, undefined);
 		assert.strictEqual(result!.type, 'DiagnosticBag');
 		assert.strictEqual(result!.uri.toString(), URI.parse(document.uri).toString());

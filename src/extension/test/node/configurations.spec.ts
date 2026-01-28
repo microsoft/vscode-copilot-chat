@@ -95,6 +95,10 @@ describe('Configurations', () => {
 		// Validate advanced settings in code are in the advanced section of package.json
 		advancedPublicKeys.forEach(key => {
 			expect(key, 'Advanced settings must not start wih github.copilot.chat.advanced.').not.toMatch(/^github\.copilot\.chat\.advanced\./);
+			if (key === ConfigKey.Advanced.DebugGitHubAuthFailWith.fullyQualifiedId) {
+				// This setting should be internal, but can't be made TeamInternal because we lose the team and internal flags as part of its testing.
+				return;
+			}
 			expect(advancedConfigurationsInPackageJson, `Advanced setting ${key} should be defined in the advanced section of package.json`).toContain(key);
 		});
 

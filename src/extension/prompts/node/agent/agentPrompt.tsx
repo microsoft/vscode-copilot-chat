@@ -28,6 +28,7 @@ import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMes
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { RepoMemoryContextPrompt, RepoMemoryInstructionsPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
@@ -102,6 +103,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<SafetyRules />
 			</SystemMessage>
 			{instructions}
+			<SystemMessage>
+				<RepoMemoryInstructionsPrompt />
+			</SystemMessage>
 		</>;
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
@@ -148,14 +152,12 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getSystemPrompt(customizations: AgentPromptCustomizations) {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
-		const isNewChat = this.props.promptContext.history?.length === 1;
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 			return <AlternateGPTPrompt
 				availableTools={this.props.promptContext.tools?.availableTools}
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
-				isNewChat={isNewChat}
 			/>;
 		}
 
@@ -164,7 +166,6 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			availableTools={this.props.promptContext.tools?.availableTools}
 			modelFamily={modelFamily}
 			codesearchMode={this.props.codesearchMode}
-			isNewChat={isNewChat}
 		/>;
 	}
 
@@ -198,9 +199,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
+		const isNewChat = this.props.promptContext.history?.length === 0;
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -215,7 +217,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
+		const isNewChat = this.props.promptContext.history?.length === 0;
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
 			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
@@ -227,6 +230,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly availableTools?: readonly LanguageModelToolInformation[];
+	readonly isNewChat?: boolean;
 }
 
 /**
@@ -247,6 +251,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
 			<UserPreferences flexGrow={7} priority={800} />
+			{this.props.isNewChat && <RepoMemoryContextPrompt />}
 			{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 		</UserMessage>;
 	}

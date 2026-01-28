@@ -17,8 +17,10 @@ import {
 	TextDocument,
 	workspace
 } from 'vscode';
+import { ILogger, ILogService, LogTarget } from '../../../../../platform/log/common/logService';
 import { softAssert } from '../../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../../../util/vs/base/common/stopwatch';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { TextEdit, TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
@@ -37,12 +39,12 @@ import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from 
 import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostTextProvider';
 
-const logger = new Logger('inlineCompletionItemProvider');
-
 function quickSuggestionsDisabled() {
 	const qs = workspace.getConfiguration('editor.quickSuggestions');
 	return qs.get('other') !== 'on' && qs.get('comments') !== 'on' && qs.get('strings') !== 'on';
 }
+
+const myLogger = new Logger('CopilotInlineCompletionItemProvider');
 
 export function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
@@ -71,16 +73,20 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	public onDidChange = undefined;
 
+	private readonly logger: ILogger;
+
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
 		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
+		@ILogService logService: ILogService,
 	) {
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
 		this.inlineEditLogger = this.instantiationService.createInstance(InlineEditLogger);
 		this.telemetrySender = this.instantiationService.createInstance(TelemetrySender);
+		this.logger = logService.createSubLogger(['Ghost', 'CopilotInlineCompletionItemProvider']);
 	}
 
 	async provideInlineCompletionItems(
@@ -100,13 +106,21 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			}
 		}
 
+		const sw = new StopWatch();
+
 		const logContext = new GhostTextLogContext(doc.uri.toString(), doc.version, context);
+
+		const logger = this.logger.createSubLogger('provideInlineCompletionItems').withExtraTarget(LogTarget.fromCallback((_level, msg) => {
+			logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
+		}));
+
+		logger.trace('Started providing inline completion items');
 
 		const telemetryBuilder = this.createTelemetryBuilder();
 		telemetryBuilder.setOpportunityId(context.requestUuid);
 
 		try {
-			return await this._provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, token);
+			return await this._provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, logger, token);
 		} catch (e) {
 			logContext.setError(e);
 			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
@@ -125,7 +139,8 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		telemetryBuilder: NextEditProviderTelemetryBuilder,
 		logContext: GhostTextLogContext,
-		token: CancellationToken
+		parentLogger: ILogger,
+		token: CancellationToken,
 	): Promise<GhostTextCompletionList> {
 
 		const copilotConfig = workspace.getConfiguration(CopilotConfigPrefix);
@@ -142,7 +157,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
 
 		try {
-			const list = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, token);
+			const list = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, parentLogger, token);
 
 			telemetryBuilder.nesBuilder.setHasNextEdit(list !== undefined && list.items.length > 0);
 
@@ -164,7 +179,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '._provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '._provideInlineCompletionItems', myLogger);
 			logContext.setError(e);
 		}
 
@@ -173,10 +188,11 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 
 	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
 		try {
+			item.telemetryBuilder.setAsShown();
 			this.copilotCompletionFeedbackTracker.trackItem(item);
 			return this.ghostTextProvider.handleDidShowCompletionItem(item);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleDidShowCompletionItem', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidShowCompletionItem', myLogger);
 		}
 	}
 
@@ -187,7 +203,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem(item, acceptedLengthOrInfo);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleDidPartiallyAcceptCompletionItem', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidPartiallyAcceptCompletionItem', myLogger);
 		}
 	}
 
@@ -195,7 +211,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.ghostTextProvider.handleEndOfLifetime(completionItem, reason);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', myLogger);
 		}
 	}
 

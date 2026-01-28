@@ -160,7 +160,7 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 		maxOutputTokens: capabilities.maxOutputTokens,
 		maxInputTokens: capabilities.maxInputTokens,
 		detail: providerName,
-		family: providerName,
+		family: id,
 		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
 		capabilities: {
 			toolCalling: capabilities.toolCalling,

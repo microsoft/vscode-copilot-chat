@@ -94,7 +94,7 @@ export interface FetchOptions {
 	 * the `Content-Type` header set to `application/json`.
 	 */
 	json?: unknown;
-	method?: 'GET' | 'POST';
+	method?: 'GET' | 'POST' | 'PUT';
 	signal?: IAbortSignal;
 	retryFallbacks?: boolean;
 	expectJSON?: boolean;

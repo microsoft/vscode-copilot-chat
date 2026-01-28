@@ -236,6 +236,13 @@ declare module 'vscode' {
 		changes?: readonly ChatSessionChangedFile[] | readonly ChatSessionChangedFile2[];
 
 		/**
+		 * Arbitrary metadata for the chat session. Can be anything, but must be JSON-stringifyable.
+		 *
+		 * To update the metadata you must re-set this property.
+		 */
+		metadata?: { readonly [key: string]: any };
+
+		/**
 		 * Optional repository information for the chat session.
 		 * Used to identify which repository the session is associated with.
 		 */

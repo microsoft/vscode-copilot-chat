@@ -110,13 +110,13 @@ class ScmContextResolver implements Copilot.ContextResolver<Copilot.SupportedCon
 		// Build commit message guidelines based on configuration
 		const guidelines: string[] = [
 			'This is a git commit message input field.',
+			'The commit message should accurately describe the changes being committed in less than a sentence.',
 			'Only provide a completion if you are confident you understand the intent of the user\'s commit based on the staged changes.',
 			'Write in natural human language, not code or technical syntax.',
 			'Use imperative mood (e.g., "Add feature" not "Added feature").',
 			`Keep the first line (subject) under ${inputValidationSubjectLength} characters.`,
 			`Keep all lines under ${inputValidationLength} characters.`,
-			'If the user continues to a second line, add a more detailed description of the change.',
-			'If the changes are unclear or ambiguous, do not provide a completion.'
+			'If the changes are unclear or ambiguous, do not complete the commit message.'
 		];
 
 		yield {

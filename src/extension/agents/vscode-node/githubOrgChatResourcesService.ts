@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -92,6 +93,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
 
 	constructor(
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@IGitService private readonly gitService: IGitService,
@@ -140,6 +142,16 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		const workspaceOrg = await this.getWorkspaceRepositoryOrganization();
 		if (workspaceOrg && userOrganizations.includes(workspaceOrg)) {
 			return workspaceOrg;
+		}
+
+		// Check if user has Copilot access through an organization (Business/Enterprise subscription)
+		// and prefer that organization if available
+		const copilotOrganizations = this.authService.copilotToken?.organizationLoginList ?? [];
+		for (const copilotOrg of copilotOrganizations) {
+			if (userOrganizations.includes(copilotOrg)) {
+				this.logService.trace(`[GitHubOrgChatResourcesService] Using Copilot sign-in organization: ${copilotOrg}`);
+				return copilotOrg;
+			}
 		}
 
 		// Fall back to the first organization the user belongs to

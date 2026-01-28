@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, Position, Range } from 'vscode-languageserver-protocol';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../common/ghostTextContext';
 import { CompletionState, createCompletionState } from './completionState';
 import { completionsFromGhostTextResults, CopilotCompletion } from './ghostText/copilotCompletion';
@@ -34,10 +36,12 @@ export class GhostText {
 		token: CancellationToken,
 		options: Exclude<Partial<GetInlineCompletionsOptions>, 'promptOnly'> = {},
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
+		parentLogger: ILogger,
 	): Promise<CopilotCompletion[] | undefined> {
 		logCompletionLocation(this.logTargetService, textDocument, position);
 
-		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext);
+		const result = await this.getInlineCompletionsResult(createCompletionState(textDocument, position), token, options, logContext, telemetryBuilder, parentLogger);
 		return this.instantiationService.invokeFunction(handleGhostTextResultTelemetry, result);
 	}
 
@@ -46,6 +50,8 @@ export class GhostText {
 		token: CancellationToken,
 		options: GetInlineCompletionsOptions = {},
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
+		parentLogger: ILogger,
 	): Promise<GhostTextResultWithTelemetry<CopilotCompletion[]>> {
 		let lineLengthIncrease = 0;
 		// The golang.go extension (and quite possibly others) uses snippets for function completions, which collapse down
@@ -56,8 +62,12 @@ export class GhostText {
 			lineLengthIncrease = completionState.position.character - options.selectedCompletionInfo.range.end.character;
 		}
 
-		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext);
-		if (result.type !== 'success') { return result; }
+		const result = await this.instantiationService.invokeFunction(getGhostText, completionState, token, options, logContext, telemetryBuilder, parentLogger);
+
+		if (result.type !== 'success') {
+			return result;
+		}
+
 		const [resultArray, resultType] = result.value;
 
 		if (token.isCancellationRequested) {
@@ -95,7 +105,7 @@ export class GhostText {
 
 			// Cache speculative request to be triggered when telemetryShown is called
 			const specOpts = { isSpeculative: true, opportunityId: options.opportunityId };
-			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts, logContext);
+			const fn = () => this.instantiationService.invokeFunction(getGhostText, completionState, undefined, specOpts, logContext, telemetryBuilder, parentLogger);
 			this.speculativeRequestCache.set(completions[0].clientCompletionId, fn);
 		}
 
