@@ -8,10 +8,10 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
-import { IAgentStepContext, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
+import { IAgentStepContext, type IObservationResult, type IStepMetrics, type IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
 import { IToolDefinition, TRAJECTORY_FILE_EXTENSION } from '../common/trajectoryTypes';
 
-const AGENT_NAME = 'Github Copilot Chat';
+const AGENT_NAME = 'GitHub Copilot Chat';
 
 /**
  * Function type for rendering PromptTsx parts to strings.

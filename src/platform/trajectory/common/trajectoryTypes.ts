@@ -172,6 +172,8 @@ export interface IFinalMetrics {
 	readonly total_cost_usd?: number;
 	/** Total number of steps */
 	readonly total_steps?: number;
+	/** Total number of tool calls across all steps */
+	readonly total_tool_calls?: number;
 	/** Custom aggregate metrics */
 	readonly extra?: Record<string, unknown>;
 }

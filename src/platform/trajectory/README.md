@@ -93,8 +93,6 @@ interface IToolCall {
   tool_call_id: string;             // Unique identifier
   function_name: string;            // Tool name (e.g., "read_file")
   arguments: Record<string, unknown>; // Tool arguments
-  mcp_server?: string;              // MCP server context (if applicable)
-  execution_mode?: 'sequential' | 'parallel'; // Execution mode
 }
 ```
 
@@ -109,10 +107,6 @@ interface IObservationResult {
   source_call_id?: string;          // Corresponding tool_call_id
   content?: string;                 // Result content
   subagent_trajectory_ref?: ISubagentTrajectoryRef[]; // Subagent reference
-  error?: {
-    message: string;
-    code?: string;
-  };
 }
 ```
 

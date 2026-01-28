@@ -11,7 +11,6 @@ import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajector
 import { TRAJECTORY_FILE_EXTENSION, type IAgentTrajectory, type IObservationResult, type ITrajectoryStep } from '../../../platform/trajectory/common/trajectoryTypes';
 import { TrajectoryLoggerAdapter } from '../../../platform/trajectory/node/trajectoryLoggerAdapter';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { renderToolResultToStringNoBudget } from '../../prompt/vscode-node/requestLoggerToolResult';
 
@@ -28,7 +27,6 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 	constructor(
 		@ITrajectoryLogger private readonly trajectoryLogger: ITrajectoryLogger,
 		@IRequestLogger requestLogger: IRequestLogger,
-		@IInstantiationService _instantiationService: IInstantiationService
 	) {
 		super();
 		// Initialize adapter to bridge RequestLogger to TrajectoryLogger
@@ -123,8 +121,6 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 				}
 			}
 
-			let successCount = 0;
-
 			for (const [trajSessionId, trajectory] of trajectoriesToExport) {
 				const referencedPath = sessionIdToTrajectoryPath.get(trajSessionId);
 				const filename = referencedPath
@@ -134,7 +130,6 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 
 				const content = JSON.stringify(trajectory, null, 2);
 				await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
-				successCount++;
 			}
 
 			const subagentCount = trajectoriesToExport.size - 1;
@@ -229,8 +224,6 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 				}
 			}
 
-			let successCount = 0;
-
 			for (const [sessionId, trajectory] of trajectories) {
 				const referencedPath = sessionIdToTrajectoryPath.get(sessionId);
 				const filename = referencedPath
@@ -240,12 +233,11 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 
 				const content = JSON.stringify(trajectory, null, 2);
 				await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
-				successCount++;
 			}
 
 			const revealAction = 'Reveal in Explorer';
 			const result = await vscode.window.showInformationMessage(
-				`Successfully exported ${successCount} trajectories to ${saveDir.fsPath}`,
+				`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
 				revealAction
 			);
 
