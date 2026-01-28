@@ -661,7 +661,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				} else {
 					// Existing session, get worktree repository, and no need to migrate changes.
 				}
-			} else {
+			} else if (this.workspaceService.getWorkspaceFolders().length === 1) {
 				selectedRepository = this.gitService.activeRepository.get();
 			}
 			const hasUncommittedChanges = selectedRepository?.changes
@@ -906,7 +906,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Check for uncommitted changes
-		const currentRepository = this.gitService.activeRepository.get();
+		const worktree = this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
+		const currentRepository = worktree ? await this.gitService.getRepository(Uri.file(worktree.repositoryPath), true) : undefined;
 		const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
 
 		if (hasChanges) {
@@ -1135,7 +1136,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		// Migrate changes from active repository to worktree (only if we have a worktree, not for workspace folders without git)
 		if (worktreeProperties?.worktreePath && !isWorkspaceFolderWithoutRepo && (uncommittedChangesAction === 'move' || uncommittedChangesAction === 'copy')) {
-			await this.moveOrCopyChangesToWorkTree(Uri.file(worktreeProperties.worktreePath), uncommittedChangesAction, stream, token);
+			await this.moveOrCopyChangesToWorkTree(Uri.file(worktreeProperties.repositoryPath), Uri.file(worktreeProperties.worktreePath), uncommittedChangesAction, stream, token);
 		}
 
 		// If we failed to create a worktree or isolation is disabled, then isolation is false
@@ -1143,13 +1144,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async moveOrCopyChangesToWorkTree(
+		repositoryRoot: Uri,
 		worktreePath: Uri,
 		moveOrCopyChanges: 'move' | 'copy',
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
 		// Migrate changes from active repository to worktree
-		const activeRepository = this.gitService.activeRepository.get();
+		const activeRepository = await this.gitService.getRepository(repositoryRoot, true);
 		if (!activeRepository) {
 			return;
 		}
@@ -1301,6 +1303,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
 			const id = SessionIdForCLI.parse(sessionItem.resource);
+			const worktree = copilotCLIWorktreeManagerService.getWorktreeProperties(id);
 			const worktreePath = copilotCLIWorktreeManagerService.getWorktreePath(id);
 
 			const confirmMessage = worktreePath
@@ -1320,7 +1323,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 				if (worktreePath) {
 					try {
-						const repository = gitService.activeRepository.get();
+						const repository = worktree ? await gitService.getRepository(vscode.Uri.file(worktree.repositoryPath), true) : undefined;
 						if (!repository) {
 							throw new Error(l10n.t('No active repository found to delete worktree.'));
 						}

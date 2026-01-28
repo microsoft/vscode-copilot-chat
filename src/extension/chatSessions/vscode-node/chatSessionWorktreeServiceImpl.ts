@@ -15,6 +15,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
@@ -29,6 +30,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
 		this.loadWorktreeProperties();
@@ -150,7 +152,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			const activeRepository = worktreeProperties?.repositoryPath
 				? await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath))
-				: this.gitService.activeRepository.get();
+				: this.workspaceService.getWorkspaceFolders().length === 1 ? this.gitService.activeRepository.get() : undefined;
 
 			if (!activeRepository) {
 				return;
