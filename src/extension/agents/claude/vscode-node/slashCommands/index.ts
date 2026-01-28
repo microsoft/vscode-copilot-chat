@@ -9,6 +9,7 @@
 import './agentsCommand';
 import './hooksCommand';
 import './memoryCommand';
+import './terminalCommand';
 
 // Future commands can be added here:
 // import './settingsCommand';

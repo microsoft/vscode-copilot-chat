@@ -242,8 +242,10 @@ Slash commands often need to present choices or gather input from users. When do
 The `show*` APIs are sufficient for most slash command use cases and result in cleaner, more maintainable code. Only use `create*` APIs when you need advanced features like dynamic item updates, multi-step wizards, or custom event handling.
 
 **Current Slash Commands:**
-- `/hooks` - Display information about registered hooks (from `hooksCommand.ts`)
-- `/memory` - Memory management commands (from `memoryCommand.ts`)
+- `/hooks` - Configure Claude Agent hooks for tool execution and events (from `hooksCommand.ts`)
+- `/memory` - Open memory files (CLAUDE.md) for editing (from `memoryCommand.ts`)
+- `/agents` - Create and manage specialized Claude agents (from `agentsCommand.ts`)
+- `/terminal` - Create a terminal with Claude CLI configured to use Copilot Chat endpoints (from `terminalCommand.ts`)
 
 ### Tool Permission Handlers
 
@@ -260,7 +262,7 @@ Tool permission handlers control what actions Claude can take without user confi
 - **Common handlers** (`common/toolPermissionHandlers/`):
   - `bashToolHandler.ts` - Controls bash/shell command execution
   - `exitPlanModeHandler.ts` - Manages plan mode transitions
-  
+
 - **Node handlers** (`node/toolPermissionHandlers/`):
   - `editToolHandler.ts` - Handles file edit operations (Edit, Write, MultiEdit)
 

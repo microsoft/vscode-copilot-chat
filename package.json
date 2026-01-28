@@ -2136,6 +2136,11 @@
 				"category": "Claude Agent"
 			},
 			{
+				"command": "copilot.claude.terminal",
+				"title": "%github.copilot.command.claude.terminal%",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -5346,6 +5351,10 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
+					},
+					{
+						"name": "terminal",
+						"description": "Launch Claude Code CLI using your GitHub Copilot subscription"
 					}
 				]
 			},

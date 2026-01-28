@@ -120,11 +120,23 @@ export class ClaudeLanguageModelServer extends Disposable {
 	}
 
 	/**
-	 * Verify nonce
+	 * Verify nonce from x-api-key or Authorization header
 	 */
 	private async isAuthTokenValid(req: http.IncomingMessage): Promise<boolean> {
-		const authHeader = req.headers['x-api-key'];
-		return authHeader === this.config.nonce;
+		// Check x-api-key header (used by SDK)
+		const apiKeyHeader = req.headers['x-api-key'];
+		if (apiKeyHeader === this.config.nonce) {
+			return true;
+		}
+
+		// Check Authorization header with Bearer prefix (used by CLI with ANTHROPIC_AUTH_TOKEN)
+		const authHeader = req.headers['authorization'];
+		if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+			const token = authHeader.slice(7); // Remove "Bearer " prefix
+			return token === this.config.nonce;
+		}
+
+		return false;
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
