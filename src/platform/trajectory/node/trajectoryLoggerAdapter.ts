@@ -8,7 +8,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
-import { IAgentInfo, IAgentStepContext, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
+import { IAgentStepContext, IObservationResult, IStepMetrics, IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
 import { IToolDefinition, TRAJECTORY_FILE_EXTENSION } from '../common/trajectoryTypes';
 
 const AGENT_NAME = 'Github Copilot Chat';
@@ -45,16 +45,6 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		this._register(this.requestLogger.onDidChangeRequests(() => {
 			this.syncTrajectories();
 		}));
-	}
-
-	/**
-	 * Start tracking trajectory for a capturing token context
-	 */
-	public startTrajectory(token: CapturingToken, agentInfo: IAgentInfo): string {
-		const sessionId = this.generateSessionId(token.label);
-		this.sessionMap.set(token, sessionId);
-		this.trajectoryLogger.startTrajectory(sessionId, agentInfo);
-		return sessionId;
 	}
 
 	/**
@@ -515,13 +505,6 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		}
 
 		return definitions.length > 0 ? definitions : undefined;
-	}
-
-	/**
-	 * Get all tracked trajectories
-	 */
-	public getAllTrajectories() {
-		return this.trajectoryLogger.getAllTrajectories();
 	}
 
 	/**
