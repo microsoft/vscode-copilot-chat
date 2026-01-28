@@ -181,7 +181,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return this._sessionCache.get(projectDirUri) || null;
 		} catch (e) {
 			// Directory read failed, invalidate cache
-			this._logService.error(e, `[ClaudeCodeSessionLoader] Failed to check cache validity for: ${projectDirUri}`);
+			if (e.code !== 'FileNotFound') {
+				this._logService.error(e, `[ClaudeCodeSessionLoader] Failed to check cache validity for: ${projectDirUri}`);
+			} else {
+				this._logService.trace(`[ClaudeCodeSessionService] Claude session directory not found during cache check: ${projectDirUri}`);
+			}
 			return null;
 		}
 	}
@@ -196,6 +200,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		} catch (e) {
 			if (e.code !== 'FileNotFound') {
 				this._logService.error(e, `[ClaudeChatSessionItemProvider] ${e.code} Failed to read directory: ${projectDirUri}`);
+			} else {
+				this._logService.trace(`[ClaudeCodeSessionService] Claude session directory not found: ${projectDirUri}`);
 			}
 			return [];
 		}

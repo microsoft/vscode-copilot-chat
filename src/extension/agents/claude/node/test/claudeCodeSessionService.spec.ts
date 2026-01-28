@@ -208,6 +208,20 @@ describe('ClaudeCodeSessionService', () => {
 		expect(sessions).toHaveLength(0);
 	});
 
+	it('logs trace and returns empty array when directory does not exist', async () => {
+		// Mock a FileNotFound error for the directory
+		const fileNotFoundError = new Error('ENOENT: no such file or directory') as Error & { code: string };
+		fileNotFoundError.code = 'FileNotFound';
+		mockFs.mockError(dirUri, fileNotFoundError);
+		
+		const sessions = await service.getAllSessions(CancellationToken.None);
+
+		// Should return empty array without throwing
+		expect(sessions).toHaveLength(0);
+		// Note: We can't easily verify trace logging without a mock log service,
+		// but we verify the behavior is correct (no error thrown, empty array returned)
+	});
+
 	it('filters out non-jsonl files', async () => {
 		const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
 		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
