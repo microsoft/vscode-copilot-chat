@@ -788,7 +788,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	private readonly _repositoryCacheInEmptyWorkspace = new ResourceMap<{ repository: RepoContext | undefined; trusted: boolean }>();
 	/**
 	 * When using `getRepository` in an empty workspace, that requires special care.
-	 * We shouldn't call that too often, as it results in displaying the Trust diaglog.
+	 * We shouldn't call that too often, as it results in displaying the Trust dialog.
 	 * And if user doesn't trust, then we can't proceed. But if we call that multiple times, that results in multiple trust dialogs.
 	 * Hence in the case of empty workspace, we cache the repository info.
 	 */
