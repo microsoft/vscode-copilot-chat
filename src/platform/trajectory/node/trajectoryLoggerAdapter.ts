@@ -25,8 +25,8 @@ export type PromptTsxRenderer = (part: LanguageModelPromptTsxPart) => Promise<st
  */
 export class TrajectoryLoggerAdapter extends Disposable {
 	private sessionMap = new WeakMap<CapturingToken, string>();
-	// Also maintain a strong reference map for lookup by token reference
-	private tokenToSessionId = new Map<CapturingToken, string>();
+	// Also maintain a map for lookup by token reference without preventing GC of tokens
+	private tokenToSessionId = new WeakMap<CapturingToken, string>();
 	private processedEntries = new Set<string>();
 	private processedToolCalls = new Set<string>(); // Track processed tool calls by their ID
 	private lastUserMessageBySession = new Map<string, string>();
