@@ -266,11 +266,12 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const workingDirectory = workingDirectoryValue ? workingDirectoryValue : undefined;
 		const isolationEnabled = workingDirectoryValue ? true : false; // If theres' a worktree, that means isolation was enabled.
 
-		const [defaultModel, sessionAgent, defaultAgent, existingSession] = await Promise.all([
+		const [defaultModel, sessionAgent, defaultAgent, existingSession, repositories] = await Promise.all([
 			this.copilotCLIModels.getDefaultModel(),
 			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
 			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve(undefined) : this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token),
+			this.isUntitledWorkspace() ? this.getRepositoryOptionItemsForUntitledWorkspace() : Promise.resolve(this.getRepositoryOptionItems())
 		]);
 
 		// If we have session in _sessionModel, use that (faster as its in memory), else get from existing session.
@@ -285,57 +286,43 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			options[MODELS_OPTION_ID] = model;
 		}
 
-		// Handle repository options based on workspace type
-		if (this.isUntitledWorkspace()) {
-			// For untitled workspaces, check if session already has a repository selected
-			const repository = await this.copilotCLIWorktreeManagerService.getWorktreeRepository(copilotcliSessionId);
-			const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(copilotcliSessionId);
+		const worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(copilotcliSessionId);
+		const repository = worktreeProperties ? Uri.file(worktreeProperties.repositoryPath) : undefined;
+		const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(copilotcliSessionId);
 
-			if (repository) {
-				options[REPOSITORY_OPTION_ID] = toRepositoryOptionItem(repository).id;
-			} else if (sessionWorkspaceFolder) {
-				options[REPOSITORY_OPTION_ID] = toWorkspaceFolderOptionItem(sessionWorkspaceFolder, basename(sessionWorkspaceFolder)).id;
-			} else if (isUntitledSessionId(copilotcliSessionId)) {
-				// For new untitled sessions in untitled workspaces, auto-select the first last-used repo if available
-				const lastUsedRepos = await this.getRepositoryOptionItemsForUntitledWorkspace();
-				if (lastUsedRepos.length > 0) {
-					const firstRepo = (lastUsedFolderIdInUntitledWorkspace && lastUsedRepos.find(repo => repo.id === lastUsedFolderIdInUntitledWorkspace)?.id) ?? lastUsedRepos[0].id;
-					options[REPOSITORY_OPTION_ID] = firstRepo;
-					await trackSelectedFolderOrRepo(copilotcliSessionId, firstRepo, this.workspaceFolderService, this.copilotCLIWorktreeManagerService);
-				}
+		if (repository) {
+			if (isUntitledSessionId(copilotcliSessionId)) {
+				options[REPOSITORY_OPTION_ID] = repository.fsPath;
+			} else {
+				options[REPOSITORY_OPTION_ID] = {
+					...toRepositoryOptionItem(repository),
+					locked: true
+				};
+			}
+		} else if (sessionWorkspaceFolder) {
+			if (isUntitledSessionId(copilotcliSessionId)) {
+				options[REPOSITORY_OPTION_ID] = sessionWorkspaceFolder.fsPath;
+			} else {
+				const folderName = this.workspaceService.getWorkspaceFolderName(sessionWorkspaceFolder) || basename(sessionWorkspaceFolder);
+				options[REPOSITORY_OPTION_ID] = {
+					...toWorkspaceFolderOptionItem(sessionWorkspaceFolder, folderName),
+					locked: true
+				};
+			}
+		} else if (isUntitledSessionId(copilotcliSessionId)) {
+			if (repositories.length) {
+				const firstRepo = (lastUsedFolderIdInUntitledWorkspace && repositories.find(repo => repo.id === lastUsedFolderIdInUntitledWorkspace)?.id) ?? repositories[0].id;
+				options[REPOSITORY_OPTION_ID] = firstRepo;
+				await trackSelectedFolderOrRepo(copilotcliSessionId, firstRepo, this.workspaceFolderService, this.copilotCLIWorktreeManagerService);
 			}
 		} else {
-			const repositories = this.getRepositoryOptionItems();
-			if (repositories.length > 1) {
-				// Check if this session has a workspace folder tracked (for folders without git repos)
-				const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(copilotcliSessionId);
-				const repository = await this.copilotCLIWorktreeManagerService.getWorktreeRepository(copilotcliSessionId);
-
-				if (repository) {
-					options[REPOSITORY_OPTION_ID] = {
-						...toRepositoryOptionItem(repository),
-						locked: true
-					};
-				} else if (sessionWorkspaceFolder) {
-					const folderName = this.workspaceService.getWorkspaceFolderName(sessionWorkspaceFolder);
-					options[REPOSITORY_OPTION_ID] = {
-						...toWorkspaceFolderOptionItem(sessionWorkspaceFolder, folderName),
-						locked: true
-					};
-				} else if (isUntitledSessionId(copilotcliSessionId)) {
-					const firstOption = repositories[0];
-					options[REPOSITORY_OPTION_ID] = firstOption.id;
-					await trackSelectedFolderOrRepo(copilotcliSessionId, firstOption.id, this.workspaceFolderService, this.copilotCLIWorktreeManagerService);
-				} else {
-					// This is an existing session without a worktree, display current workspace folder.
-					options[REPOSITORY_OPTION_ID] = {
-						id: '',
-						name: this.workspaceService.getWorkspaceFolders().length === 1 ? this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]) : l10n.t('Current Workspace'),
-						icon: new vscode.ThemeIcon('repo'),
-						locked: true
-					};
-				}
-			}
+			// This is an existing session without a worktree, display current workspace folder.
+			options[REPOSITORY_OPTION_ID] = {
+				id: '',
+				name: this.workspaceService.getWorkspaceFolders().length === 1 ? this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]) : l10n.t('Current Workspace'),
+				icon: new vscode.ThemeIcon('repo'),
+				locked: true
+			};
 		}
 
 		const history = existingSession?.object?.getChatHistory() || [];
@@ -443,10 +430,20 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		return repoItems.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
+	private _repositoryOptionItemsForUntitledWorkspace: Promise<ChatSessionProviderOptionItem[]> | undefined;
+
 	/**
 	 * Get repository option items for untitled workspaces using last used repositories.
 	 */
 	private async getRepositoryOptionItemsForUntitledWorkspace(): Promise<ChatSessionProviderOptionItem[]> {
+		const currentValue = this._repositoryOptionItemsForUntitledWorkspace;
+		// Re-query in case some folders changed or new items have been added.
+		this._repositoryOptionItemsForUntitledWorkspace = this.getRepositoryOptionItemsForUntitledWorkspaceImpl();
+		// Always return cached value for faster loading.
+		return currentValue ?? this._repositoryOptionItemsForUntitledWorkspace;
+	}
+
+	private async getRepositoryOptionItemsForUntitledWorkspaceImpl(): Promise<ChatSessionProviderOptionItem[]> {
 		const latestReposAndFolders: { uri: Uri; type: 'repo' | 'folder'; lastUsed: number }[] = [];
 		const seenUris = new ResourceSet();
 
