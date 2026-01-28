@@ -208,7 +208,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	}
 
 	validateToolInput(name: string, input: string): IToolValidationResult {
-		const tool = this.tools.find(tool => tool.name === name);
+		const tool = this.getTool(name);
 		if (!tool) {
 			return { error: `ERROR: The tool "${name}" does not exist` };
 		}
@@ -247,7 +247,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	}
 
 	validateToolName(name: string): string | undefined {
-		const tool = this.tools.find(tool => tool.name === name);
+		const tool = this.getTool(name);
 		if (!tool) {
 			return name.replace(/[^\w-]/g, '_');
 		}

@@ -11,7 +11,7 @@ import * as extpath from '../../../util/vs/base/common/extpath';
 import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { IAgentMemoryService, isRepoMemoryEntry, MEMORY_DIR_NAME } from '../common/agentMemoryService';
+import { IAgentMemoryService, isRepoMemoryEntry, MEMORY_DIR_NAME, RepoMemoryEntry } from '../common/agentMemoryService';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface IMemoryParams {
@@ -232,13 +232,24 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			}
 			return { error: `Path not found: ${memoryPath}` };
 		} catch {
+			if (memoryPath === '/memories' || memoryPath === '/memories/') {
+				return { success: `Directory: ${memoryPath}\n(empty - no memories created yet)` };
+			}
+			if (memoryPath === '/memories/repo' || memoryPath === '/memories/repo/') {
+				return { success: `Directory: ${memoryPath}\n(empty - no repository memories created yet)` };
+			}
+			if (memoryPath === '/memories/session' || memoryPath.startsWith('/memories/session/')) {
+				return { success: `Directory: ${memoryPath}\n(empty - no session memories created yet)` };
+			}
 			return { error: `Path not found: ${memoryPath}` };
 		}
 	}
 
 	/**
 	 * Create or overwrite a file.
-	 * For files in /memories/repo, also syncs parsed memory entries to CAPI if enabled.
+	 * For files in /memories/repo:
+	 * - If Copilot Memory (CAPI) is enabled, stores to CAPI only (no local file)
+	 * - Otherwise, stores to local filesystem only
 	 */
 	private async _create(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
@@ -248,6 +259,12 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// For repo memory files, use exclusive strategy
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			return this._createRepoMemory(memoryPath, fileText);
+		}
+
+		// For session and other memory files, always use local filesystem
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const parentDir = URI.joinPath(fullPath, '..');
@@ -256,14 +273,6 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			const content = new TextEncoder().encode(fileText);
 			await this.fileSystem.writeFile(fullPath, content);
 
-			// If this is a repo memory file, try to sync entries to CAPI
-			if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
-				this.syncRepoMemoriesToCAPI(fileText).catch(err => {
-					// Don't fail the operation if CAPI sync fails
-					console.warn(`[MemoryTool] Failed to sync memories to CAPI: ${err}`);
-				});
-			}
-
 			return { success: `File created successfully at ${memoryPath}` };
 		} catch (error) {
 			return { error: `Cannot create file ${memoryPath}: ${error.message}` };
@@ -271,23 +280,61 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	}
 
 	/**
-	 * Parse JSONL content and sync memory entries to CAPI.
-	 * This is called asynchronously and doesn't block the create operation.
+	 * Create repo memory using Copilot Memory service (CAPI).
+	 * Returns error if Copilot Memory is not enabled.
 	 */
-	private async syncRepoMemoriesToCAPI(fileText: string): Promise<void> {
+	private async _createRepoMemory(memoryPath: string, fileText: string): Promise<MemoryResult> {
+		try {
+			// Check if Copilot Memory is enabled
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (!isEnabled) {
+				return { error: 'Copilot Memory is not enabled for this repository. Repository memories require Copilot Memory to be enabled.' };
+			}
+
+			// Parse JSONL content and store each memory entry
+			const entries = this.parseMemoryEntries(fileText);
+			if (entries.length === 0) {
+				return { error: 'No valid memory entries found in the provided content' };
+			}
+
+			let storedCount = 0;
+			for (const entry of entries) {
+				const success = await this.agentMemoryService.storeRepoMemory(entry);
+				if (success) {
+					storedCount++;
+				}
+			}
+
+			if (storedCount === 0) {
+				return { error: 'Failed to store any memory entries' };
+			}
+
+			return { success: `Successfully stored ${storedCount} memory ${storedCount === 1 ? 'entry' : 'entries'}` };
+		} catch (error) {
+			return { error: `Cannot create memory: ${error.message}` };
+		}
+	}
+
+	/**
+	 * Parse JSONL content into memory entries.
+	 */
+	private parseMemoryEntries(fileText: string): RepoMemoryEntry[] {
 		const lines = fileText.split('\n').filter(line => line.trim());
+		const entries: RepoMemoryEntry[] = [];
 
 		for (const line of lines) {
 			try {
 				const entry = JSON.parse(line) as unknown;
 				if (isRepoMemoryEntry(entry)) {
-					await this.agentMemoryService.storeMemoryToCAPI(entry);
+					entries.push(entry);
 				}
-			} catch (err) {
+			} catch {
 				// Skip invalid JSON lines
 				continue;
 			}
 		}
+
+		return entries;
 	}
 
 	/**
@@ -446,7 +493,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 ToolRegistry.registerModelSpecificTool(
 	{
-		name: 'copilot_memory',
+		name: 'memory',
 		toolReferenceName: 'memory',
 		displayName: 'Memory',
 		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',

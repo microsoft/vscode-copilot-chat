@@ -12,8 +12,8 @@ export interface RepoMemoryContextPromptProps extends BasePromptElementProps {
 
 /**
  * A wrapper prompt element that provides repo memory context.
- * Fetches memories from both CAPI (if enabled) and local filesystem,
- * merging and deduplicating them with CAPI as the source of truth.
+ * If Copilot Memory (CAPI) is enabled, fetches from CAPI exclusively.
+ * Otherwise, falls back to local filesystem storage.
  */
 export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextPromptProps> {
 	constructor(
@@ -24,8 +24,8 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 	}
 
 	async render() {
-		// Fetch from both CAPI and local, merge and deduplicate
-		const memories = await this.fetchAndMergeMemories();
+		// Fetch from CAPI if enabled, otherwise from local filesystem
+		const memories = await this.fetchMemories();
 		if (!memories || memories.length === 0) {
 			return null;
 		}
@@ -47,56 +47,11 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 	}
 
 	/**
-	 * Fetch memories from both CAPI and local filesystem, merge them, and deduplicate.
-	 * CAPI memories take precedence over local memories in case of conflicts.
+	 * Fetch repo memories from Copilot Memory service.
+	 * Returns undefined if Copilot Memory is not enabled.
 	 */
-	private async fetchAndMergeMemories(): Promise<RepoMemoryEntry[] | undefined> {
-		try {
-			// Fetch from CAPI first (returns undefined if disabled or unavailable)
-			const capiMemories = await this.agentMemoryService.fetchMemoriesFromCAPI();
-
-			// Fetch from local filesystem
-			const localMemories = await this.agentMemoryService.getRepoMemoryContext();
-
-			// If neither source has memories, return undefined
-			if ((!capiMemories || capiMemories.length === 0) &&
-				(!localMemories || localMemories.length === 0)) {
-				return undefined;
-			}
-
-			// Merge and deduplicate
-			const allMemories = [
-				...(capiMemories ?? []),
-				...(localMemories ?? [])
-			];
-
-			return this.deduplicateMemories(allMemories);
-		} catch (error) {
-			// On error, fallback to local memories only
-			console.warn(`[RepoMemoryContextPrompt] Error fetching memories: ${error}`);
-			return await this.agentMemoryService.getRepoMemoryContext();
-		}
-	}
-
-	/**
-	 * Deduplicate memories by (subject, fact) tuple.
-	 * Keeps the first occurrence (CAPI memories are added first, so they take precedence).
-	 */
-	private deduplicateMemories(memories: RepoMemoryEntry[]): RepoMemoryEntry[] {
-		const seen = new Set<string>();
-		const deduplicated: RepoMemoryEntry[] = [];
-
-		for (const memory of memories) {
-			// Create unique key from subject and fact (case-insensitive)
-			const key = `${memory.subject.toLowerCase()}|${memory.fact.toLowerCase()}`;
-
-			if (!seen.has(key)) {
-				seen.add(key);
-				deduplicated.push(memory);
-			}
-		}
-
-		return deduplicated;
+	private async fetchMemories(): Promise<RepoMemoryEntry[] | undefined> {
+		return this.agentMemoryService.getRepoMemories();
 	}
 
 	private formatMemories(memories: RepoMemoryEntry[]): string {

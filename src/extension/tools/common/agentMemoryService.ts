@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -90,8 +91,12 @@ export function normalizeCitations(citations: string | string[] | undefined): st
 }
 
 /**
- * Service for managing agent memory lifecycle, including cleanup of old session memories
- * and synchronization with Copilot Memory CAPI endpoints.
+ * Service for managing agent memory lifecycle.
+ *
+ * Memory types:
+ * - /repo memories: Backed exclusively by Copilot Memory service (CAPI).
+ *   Only available when copilot memory is enabled for the repository.
+ * - /session memories: Backed by local filesystem storage.
  */
 export interface IAgentMemoryService {
 	readonly _serviceBrand: undefined;
@@ -102,29 +107,25 @@ export interface IAgentMemoryService {
 	cleanupSessions(): Promise<void>;
 
 	/**
-	 * Get the repo memory entries from local filesystem.
-	 * Returns undefined if no memories exist for the repo.
-	 */
-	getRepoMemoryContext(): Promise<RepoMemoryEntry[] | undefined>;
-
-	/**
-	 * Check if Copilot Memory sync is enabled for the current repository.
+	 * Check if Copilot Memory is enabled for the current repository.
 	 * Makes a lightweight API call to the enablement check endpoint.
-	 * Returns false if CAPI sync is disabled or if the check fails.
+	 * Returns false if not enabled or if the check fails.
 	 */
 	checkMemoryEnabled(): Promise<boolean>;
 
 	/**
-	 * Fetch memories from the Copilot Memory CAPI endpoint.
-	 * Returns undefined if CAPI sync is disabled, not enabled for this repo, or if the request fails.
+	 * Get repo memories from Copilot Memory service.
+	 * Returns undefined if Copilot Memory is not enabled or if fetching fails.
+	 * Note: /repo memories are only available when Copilot Memory is enabled.
 	 */
-	fetchMemoriesFromCAPI(limit?: number): Promise<RepoMemoryEntry[] | undefined>;
+	getRepoMemories(limit?: number): Promise<RepoMemoryEntry[] | undefined>;
 
 	/**
-	 * Store a memory to the Copilot Memory CAPI endpoint.
-	 * Does nothing if CAPI sync is disabled or not enabled for this repo.
+	 * Store a repo memory to Copilot Memory service.
+	 * Returns true if stored successfully, false if Copilot Memory is not enabled or if storing fails.
+	 * Note: /repo memories are only available when Copilot Memory is enabled.
 	 */
-	storeMemoryToCAPI(memory: RepoMemoryEntry): Promise<void>;
+	storeRepoMemory(memory: RepoMemoryEntry): Promise<boolean>;
 }
 
 export const IAgentMemoryService = createServiceIdentifier<IAgentMemoryService>('IAgentMemoryService');
@@ -138,13 +139,6 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 	declare readonly _serviceBrand: undefined;
 
 	private static readonly SESSIONS_DIR_NAME = 'sessions';
-	private static readonly REPO_DIR_NAME = 'repo';
-
-	/**
-	 * Session-scoped cache for CAPI enablement checks, keyed by repository NWO.
-	 * Prevents redundant API calls within the same session.
-	 */
-	private readonly capiEnabledCache = new Map<string, boolean>();
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -154,7 +148,8 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 		@IGitService private readonly gitService: IGitService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IConfigurationService private readonly configService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
 	}
@@ -239,112 +234,6 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 		return URI.joinPath(storageUri, MEMORY_DIR_NAME, AgentMemoryService.SESSIONS_DIR_NAME);
 	}
 
-	async getRepoMemoryContext(): Promise<RepoMemoryEntry[] | undefined> {
-		try {
-			const repoDir = this.getRepoDir();
-			if (!repoDir) {
-				return undefined;
-			}
-
-			// Check if repo directory exists
-			try {
-				const stat = await this.fileSystem.stat(repoDir);
-				if (stat.type !== FileType.Directory) {
-					return undefined;
-				}
-			} catch {
-				// Directory doesn't exist
-				return undefined;
-			}
-
-			// Read all memory files in the repo directory
-			const memories = await this.readMemoriesRecursively(repoDir, '');
-			if (memories.length === 0) {
-				return undefined;
-			}
-
-			// Sort by mtime descending and take last 10 memories
-			memories.sort((a, b) => b.mtime - a.mtime);
-			const recentMemories = memories.slice(0, 10);
-
-			// Parse JSONL content and extract memory entries
-			const entries: RepoMemoryEntry[] = [];
-			for (const memory of recentMemories) {
-				const parsed = this.parseMemoryContent(memory.content);
-				entries.push(...parsed);
-			}
-
-			return entries.length > 0 ? entries : undefined;
-		} catch (error) {
-			this.logService.warn(`[AgentMemoryService] Error reading repo memories: ${error}`);
-			return undefined;
-		}
-	}
-
-	private parseMemoryContent(content: string): RepoMemoryEntry[] {
-		const lines = content.split('\n').filter(line => line.trim());
-		const entries: RepoMemoryEntry[] = [];
-
-		for (const line of lines) {
-			try {
-				const entry = JSON.parse(line) as unknown;
-				if (isRepoMemoryEntry(entry)) {
-					entries.push(entry);
-				}
-			} catch {
-				// Not valid JSON, skip this line
-				continue;
-			}
-		}
-
-		return entries;
-	}
-
-	private async readMemoriesRecursively(baseDir: URI, relativePath: string): Promise<Array<{ path: string; content: string; mtime: number }>> {
-		const memories: Array<{ path: string; content: string; mtime: number }> = [];
-		const currentDir = relativePath ? URI.joinPath(baseDir, relativePath) : baseDir;
-
-		try {
-			const entries = await this.fileSystem.readDirectory(currentDir);
-
-			for (const [name, type] of entries) {
-				if (name.startsWith('.')) {
-					continue; // Skip hidden files
-				}
-
-				const entryPath = relativePath ? `${relativePath}/${name}` : name;
-
-				if (type === FileType.Directory) {
-					// Recursively read subdirectories
-					const subMemories = await this.readMemoriesRecursively(baseDir, entryPath);
-					memories.push(...subMemories);
-				} else if (type === FileType.File) {
-					try {
-						const fileUri = URI.joinPath(baseDir, entryPath);
-						const stat = await this.fileSystem.stat(fileUri);
-						const content = await this.fileSystem.readFile(fileUri);
-						const text = new TextDecoder('utf-8').decode(content);
-						memories.push({ path: `/memories/repo/${entryPath}`, content: text, mtime: stat.mtime });
-					} catch (error) {
-						this.logService.debug(`[AgentMemoryService] Failed to read memory file ${entryPath}: ${error}`);
-					}
-				}
-			}
-		} catch (error) {
-			this.logService.debug(`[AgentMemoryService] Failed to read directory ${relativePath}: ${error}`);
-		}
-
-		return memories;
-	}
-
-	private getRepoDir(): URI | undefined {
-		const storageUri = this.extensionContext.storageUri;
-		if (!storageUri) {
-			return undefined;
-		}
-		return URI.joinPath(storageUri, MEMORY_DIR_NAME, AgentMemoryService.REPO_DIR_NAME);
-	}
-
 	/**
 	 * Get the GitHub repository NWO (name with owner) for the current workspace.
 	 * Returns the NWO in lowercase format (e.g., "microsoft/vscode").
@@ -396,39 +285,47 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				return false;
 			}
 
-			// Check cache first
-			if (this.capiEnabledCache.has(repoNwo)) {
-				return this.capiEnabledCache.get(repoNwo)!;
+			// Get OAuth token for API call
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for memory enablement check');
+				return false;
 			}
 
 			// Make API call to check enablement
-			const response = await this.capiClientService.makeRequest<{ enabled: boolean }>({
-				method: 'GET'
+			const response = await this.capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
 				repo: repoNwo,
 				action: 'enabled'
 			});
 
-			const enabled = response?.enabled ?? false;
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Memory enablement check failed: ${response.statusText}`);
+				return false;
+			}
 
-			// Cache the result for this session
-			this.capiEnabledCache.set(repoNwo, enabled);
+			const data = await response.json() as { enabled?: boolean };
+			const enabled = data?.enabled ?? false;
 
-			this.logService.info(`[AgentMemoryService] CAPI memory enabled for ${repoNwo}: ${enabled}`);
+			this.logService.info(`[AgentMemoryService] Copilot Memory enabled for ${repoNwo}: ${enabled}`);
 			return enabled;
 		} catch (error) {
 			this.logService.warn(`[AgentMemoryService] Failed to check memory enablement: ${error}`);
-			// On error, don't cache and return false
 			return false;
 		}
 	}
 
-	async fetchMemoriesFromCAPI(limit: number = 10): Promise<RepoMemoryEntry[] | undefined> {
+	async getRepoMemories(limit: number = 10): Promise<RepoMemoryEntry[] | undefined> {
 		try {
-			// Check if CAPI sync is enabled
+			// Check if Copilot Memory is enabled
 			const enabled = await this.checkMemoryEnabled();
 			if (!enabled) {
+				this.logService.debug('[AgentMemoryService] Copilot Memory not enabled, skipping repo memory fetch');
 				return undefined;
 			}
 
@@ -437,15 +334,19 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				return undefined;
 			}
 
-			// Fetch memories from CAPI
-			const response = await this.capiClientService.makeRequest<Array<{
-				subject: string;
-				fact: string;
-				citations?: string[];
-				reason?: string;
-				category?: string;
-			}>>({
-				method: 'GET'
+			// Get OAuth token for API call
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for fetching memories');
+				return undefined;
+			}
+
+			// Fetch memories from Copilot Memory service
+			const response = await this.capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
 				repo: repoNwo,
@@ -453,12 +354,25 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				limit
 			});
 
-			if (!response || !Array.isArray(response)) {
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Failed to fetch memories: ${response.statusText}`);
+				return undefined;
+			}
+
+			const data = await response.json() as Array<{
+				subject: string;
+				fact: string;
+				citations?: string[];
+				reason?: string;
+				category?: string;
+			}>;
+
+			if (!data || !Array.isArray(data)) {
 				return undefined;
 			}
 
 			// Transform response to RepoMemoryEntry format
-			const memories: RepoMemoryEntry[] = response
+			const memories: RepoMemoryEntry[] = data
 				.filter(isRepoMemoryEntry)
 				.map(entry => ({
 					subject: entry.subject,
@@ -468,33 +382,44 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 					category: entry.category
 				}));
 
-			this.logService.info(`[AgentMemoryService] Fetched ${memories.length} memories from CAPI for ${repoNwo}`);
+			this.logService.info(`[AgentMemoryService] Fetched ${memories.length} repo memories for ${repoNwo}`);
 			return memories.length > 0 ? memories : undefined;
 		} catch (error) {
-			this.logService.warn(`[AgentMemoryService] Failed to fetch memories from CAPI: ${error}`);
+			this.logService.warn(`[AgentMemoryService] Failed to fetch repo memories: ${error}`);
 			return undefined;
 		}
 	}
 
-	async storeMemoryToCAPI(memory: RepoMemoryEntry): Promise<void> {
+	async storeRepoMemory(memory: RepoMemoryEntry): Promise<boolean> {
 		try {
-			// Check if CAPI sync is enabled
+			// Check if Copilot Memory is enabled
 			const enabled = await this.checkMemoryEnabled();
 			if (!enabled) {
-				return;
+				this.logService.debug('[AgentMemoryService] Copilot Memory not enabled, skipping repo memory store');
+				return false;
 			}
 
 			const repoNwo = await this.getRepoNwo();
 			if (!repoNwo) {
-				return;
+				return false;
 			}
 
 			// Normalize citations to array format for CAPI
 			const citations = normalizeCitations(memory.citations) ?? [];
 
-			// Store memory to CAPI
-			await this.capiClientService.makeRequest({
-				method: 'POST',
+			// Get OAuth token for API call
+			const session = await this.authenticationService.getGitHubSession('any', { silent: true });
+			if (!session) {
+				this.logService.warn('[AgentMemoryService] No GitHub session available for storing memory');
+				return false;
+			}
+
+			// Store memory to Copilot Memory service
+			const response = await this.capiClientService.makeRequest<Response>({
+				method: 'PUT',
+				headers: {
+					'Authorization': `Bearer ${session.accessToken}`
+				},
 				json: {
 					subject: memory.subject,
 					fact: memory.fact,
@@ -507,10 +432,16 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				repo: repoNwo
 			});
 
-			this.logService.info(`[AgentMemoryService] Stored memory to CAPI for ${repoNwo}: ${memory.subject}`);
+			if (!response.ok) {
+				this.logService.warn(`[AgentMemoryService] Failed to store memory: ${response.statusText}`);
+				return false;
+			}
+
+			this.logService.info(`[AgentMemoryService] Stored repo memory for ${repoNwo}: ${memory.subject}`);
+			return true;
 		} catch (error) {
-			this.logService.warn(`[AgentMemoryService] Failed to store memory to CAPI: ${error}`);
-			// Don't throw - allow local storage to succeed even if CAPI fails
+			this.logService.warn(`[AgentMemoryService] Failed to store repo memory: ${error}`);
+			return false;
 		}
 	}
 }
