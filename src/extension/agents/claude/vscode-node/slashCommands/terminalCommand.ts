@@ -11,7 +11,7 @@ import { ITerminalService } from '../../../../../platform/terminal/common/termin
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeLanguageModelServer } from '../../node/claudeLanguageModelServer';
-import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
+import { IClaudeSlashCommandHandler } from './claudeSlashCommandRegistry';
 
 const execFileAsync = promisify(execFile);
 
@@ -152,5 +152,6 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	}
 }
 
+// TODO: Re-enable after legal review is complete
 // Self-register the terminal command
-registerClaudeSlashCommand(TerminalSlashCommand);
+// registerClaudeSlashCommand(TerminalSlashCommand);

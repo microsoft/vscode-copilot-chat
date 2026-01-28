@@ -245,7 +245,7 @@ The `show*` APIs are sufficient for most slash command use cases and result in c
 - `/hooks` - Configure Claude Agent hooks for tool execution and events (from `hooksCommand.ts`)
 - `/memory` - Open memory files (CLAUDE.md) for editing (from `memoryCommand.ts`)
 - `/agents` - Create and manage specialized Claude agents (from `agentsCommand.ts`)
-- `/terminal` - Create a terminal with Claude CLI configured to use Copilot Chat endpoints (from `terminalCommand.ts`)
+- `/terminal` - Create a terminal with Claude CLI configured to use Copilot Chat endpoints (from `terminalCommand.ts`) _Temporarily disabled pending legal review_
 
 ### Tool Permission Handlers
 
