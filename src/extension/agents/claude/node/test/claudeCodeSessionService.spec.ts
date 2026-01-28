@@ -213,7 +213,7 @@ describe('ClaudeCodeSessionService', () => {
 		const fileNotFoundError = new Error('ENOENT: no such file or directory') as Error & { code: string };
 		fileNotFoundError.code = 'FileNotFound';
 		mockFs.mockError(dirUri, fileNotFoundError);
-		
+
 		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		// Should return empty array without throwing
