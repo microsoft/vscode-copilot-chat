@@ -515,6 +515,60 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
+	/**
+	 * Scans local .github/agents/ directory and categorizes agent files.
+	 * Returns two groups:
+	 * - matches: local files that correlate with remote agents (name exists in both)
+	 * - localOnly: local files that don't have a corresponding remote agent
+	 */
+	private async getLocalCustomAgentFiles(remoteAgents: { name: string }[]): Promise<{
+		matches: Set<string>;
+		localOnly: { name: string; path: string }[];
+	}> {
+		const matches = new Set<string>();
+		const localOnly: { name: string; path: string }[] = [];
+		const remoteAgentNames = new Set(remoteAgents.map(a => a.name.toLowerCase()));
+
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			return { matches, localOnly };
+		}
+
+		// Only check the first workspace folder (consistent with how we query GitHub for custom agents)
+		// TODO: Expand to multi-root workspaces, etc...
+		const folder = workspaceFolders[0];
+		try {
+			// Find all .md files in .github/agents/
+			const pattern = new vscode.RelativePattern(folder, '.github/agents/*.md');
+			const files = await vscode.workspace.findFiles(pattern);
+
+			for (const file of files) {
+				// Extract agent name from filename (e.g., "my-agent.md" -> "my-agent" or "myagent.agent.md" -> "myagent")
+				const fileName = pathLib.basename(file.fsPath);
+				const agentName = fileName.replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
+
+				if (!agentName) {
+					continue;
+				}
+
+				if (remoteAgentNames.has(agentName.toLowerCase())) {
+					// This local file matches a remote agent
+					matches.add(agentName.toLowerCase());
+				} else {
+					// This local file has no corresponding remote agent
+					localOnly.push({
+						name: agentName,
+						path: vscode.workspace.asRelativePath(file)
+					});
+				}
+			}
+		} catch (error) {
+			this.logService.warn(`Error scanning for local agents in ${folder.uri.fsPath}: ${error}`);
+		}
+
+		return { matches, localOnly };
+	}
+
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
 		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
 
@@ -548,13 +602,33 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 			}
 
-			if (customAgents.status === 'fulfilled' && customAgents.value.length > 0) {
+			// Find local agent files and categorize them
+			const { matches, localOnly } = await this.getLocalCustomAgentFiles(
+				customAgents.status === 'fulfilled' ? customAgents.value : []
+			);
+
+			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || localOnly.length > 0) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-					{ id: DEFAULT_CUSTOM_AGENT_ID, default: true, name: vscode.l10n.t('Default'), icon: new vscode.ThemeIcon('file-text') },
-					...customAgents.value.map(agent => ({
+					{
+						id: DEFAULT_CUSTOM_AGENT_ID,
+						default: true,
+						name: vscode.l10n.t('Agent'),
+						description: vscode.l10n.t('Default'),
+						icon: new vscode.ThemeIcon('file-text')
+					},
+					...(customAgents.status === 'fulfilled' ? customAgents.value.map(agent => ({
 						id: agent.name,
-						name: agent.display_name || agent.name
-					}))
+						name: agent.display_name || agent.name,
+						...(matches.has(agent.name.toLowerCase()) && { description: `${agent.name}.md` })
+					})) : []),
+					// Add local-only agents as disabled items with "push to remote" hint
+					...localOnly.map(localAgent => ({
+						id: localAgent.name,
+						name: localAgent.name,
+						description: vscode.l10n.t('Missing from {0}', repoId ? `${repoId.org}/${repoId.repo}` : 'remote repository'),
+						locked: true,
+						icon: new vscode.ThemeIcon('warning')
+					}) satisfies vscode.ChatSessionProviderOptionItem)
 				];
 				optionGroups.push({
 					id: CUSTOM_AGENTS_OPTION_GROUP_ID,
@@ -922,14 +996,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const resolvePartnerAgent = (sessions: SessionInfo[]): { id: string; name: string; at?: string | undefined } | undefined => {
+			const getDefault = () => {
+				return HARDCODED_PARTNER_AGENTS.find(agent => agent.id === DEFAULT_PARTNER_AGENT_ID) ?? undefined;
+			};
 			const agentId = sessions.find(s => s.agent_id)?.agent_id;
 			if (!agentId) {
-				return;
+				return getDefault();
 			}
 			// See if this matches any of the known partner agents
 			// TODO: Currently hardcoded, no API from GitHub.
 			const match = HARDCODED_PARTNER_AGENTS.find(agent => Number(agent.id) === agentId);
-			return match;
+			return match ?? getDefault();
 		};
 
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString(), { createIfNone: true });

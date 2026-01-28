@@ -85,7 +85,8 @@
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
 		"onCustomAgentProvider",
-		"onInstructionsProvider"
+		"onInstructionsProvider",
+		"onSkillProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -2153,6 +2154,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+				"title": "%github.copilot.command.cli.sessions.openWorktreeInNewWindow%",
+				"icon": "$(folder-opened)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
+				"title": "%github.copilot.command.cli.sessions.openWorktreeInTerminal%",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -4196,11 +4209,21 @@
 					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
 							"experimental"
+						]
+					},
+					"github.copilot.chat.agentCustomizationSkill.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.agentCustomizationSkill.enabled%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
 						]
 					},
 					"github.copilot.chat.searchSubagent.enabled": {
@@ -4340,7 +4363,7 @@
 				},
 				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
-					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
 				}
 			],
@@ -4561,6 +4584,14 @@
 				},
 				{
 					"command": "github.copilot.cli.sessions.openRepository",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
 					"when": "false"
 				},
 				{
@@ -4902,19 +4933,29 @@
 			],
 			"chat/chatSessions": [
 				{
-					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
+					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
-					"group": "inline@0"
+					"group": "1_edit@10"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInNewWindow",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@1"
+				},
+				{
+					"command": "github.copilot.cli.sessions.openWorktreeInTerminal",
+					"when": "chatSessionType == copilotcli",
+					"group": "2_open@2"
 				},
 				{
 					"command": "github.copilot.cli.sessions.resumeInTerminal",
 					"when": "chatSessionType == copilotcli",
-					"group": "inline@1"
+					"group": "2_open@3"
 				},
 				{
-					"command": "github.copilot.cli.sessions.delete",
+					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 					"when": "chatSessionType == copilotcli",
-					"group": "1_edit@10"
+					"group": "3_apply@0"
 				},
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
@@ -5284,7 +5325,7 @@
 				"type": "claude-code",
 				"name": "claude",
 				"displayName": "Claude Agent",
-				"icon": "$(sparkle)",
+				"icon": "$(code)",
 				"welcomeTitle": "Claude Agent",
 				"welcomeMessage": "Powered by the same agent as Claude Code",
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
@@ -5416,6 +5457,9 @@
 			},
 			{
 				"path": "./assets/prompts/plan.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/init.prompt.md"
 			}
 		]
 	},

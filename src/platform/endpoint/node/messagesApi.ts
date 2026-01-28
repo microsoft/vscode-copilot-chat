@@ -13,13 +13,27 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
-import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+
+/** IP Code Citation annotation from Messages API copilot_annotations */
+interface AnthropicIPCodeCitation {
+	id: number;
+	start_offset: number;
+	end_offset: number;
+	details: Record<string, unknown>;
+	citations: {
+		snippet: string;
+		url: string;
+		ip_type?: string;
+		license: string;
+	};
+}
 
 interface AnthropicStreamEvent {
 	type: string;
@@ -51,6 +65,9 @@ interface AnthropicStreamEvent {
 		signature?: string;
 		stop_reason?: string;
 		stop_sequence?: string;
+	};
+	copilot_annotations?: {
+		IPCodeCitations?: AnthropicIPCodeCitation[];
 	};
 	usage?: {
 		output_tokens: number;
@@ -372,6 +389,57 @@ export class AnthropicMessagesProcessor {
 		@ILogService private readonly logService: ILogService,
 	) { }
 
+	/**
+	 * Extract IP code citations from copilot_annotations and convert to IIPCodeCitation format
+	 */
+	private extractIPCodeCitations(annotations?: { IPCodeCitations?: AnthropicIPCodeCitation[] }): IIPCodeCitation[] {
+		if (!annotations?.IPCodeCitations?.length) {
+			return [];
+		}
+
+		// Deduplicate by URL since the same citation can appear multiple times
+		const seenUrls = new Set<string>();
+		const citations: IIPCodeCitation[] = [];
+
+		for (const citation of annotations.IPCodeCitations) {
+			const citationDetails = citation.citations;
+			if (!citationDetails) {
+				continue;
+			}
+
+			const { url, license, snippet } = citationDetails;
+
+			if (typeof url !== 'string' || url.trim() === '') {
+				continue;
+			}
+
+			if (typeof license !== 'string' || license.trim() === '') {
+				continue;
+			}
+
+			if (typeof snippet !== 'string' || snippet.trim() === '') {
+				continue;
+			}
+
+			if (!seenUrls.has(url)) {
+				seenUrls.add(url);
+				citations.push({
+					citations: {
+						url,
+						license,
+						snippet,
+					}
+				});
+			}
+		}
+
+		if (citations.length > 0) {
+			this.logService.trace(`[messagesAPI] IP code citations found: ${citations.length} unique citations`);
+		}
+
+		return citations;
+	}
+
 	public push(chunk: AnthropicStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
 		const onProgress = (delta: IResponseDelta): undefined => {
 			this.textAccumulator += delta.text;
@@ -513,6 +581,10 @@ export class AnthropicMessagesProcessor {
 			case 'content_block_delta':
 				if (chunk.delta) {
 					if (chunk.delta.type === 'text_delta' && chunk.delta.text) {
+						const ipCitations = this.extractIPCodeCitations(chunk.copilot_annotations);
+						if (ipCitations.length > 0) {
+							return onProgress({ text: chunk.delta.text, ipCitations });
+						}
 						return onProgress({ text: chunk.delta.text });
 					} else if (chunk.delta.type === 'thinking_delta' && chunk.delta.thinking && chunk.index !== undefined) {
 						const thinking = this.thinkingAccumulator.get(chunk.index);

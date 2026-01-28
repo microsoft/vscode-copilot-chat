@@ -84,6 +84,10 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		const carouselAnswers = await stream.questionCarousel(chatQuestions, true);
 		this._logService.trace(`[AskQuestionsTool] Raw carousel answers: ${JSON.stringify(carouselAnswers)}`);
 
+		// Immediately show progress to address the long pause after carousel submission
+		// This provides visual feedback while answers are processed and the LLM generates a response
+		stream.progress(vscode.l10n.t('Analyzing your answers...'));
+
 		// Convert carousel answers back to IAnswerResult format
 		const result = this._convertCarouselAnswers(questions, carouselAnswers);
 		this._logService.trace(`[AskQuestionsTool] Converted result: ${JSON.stringify(result)}`);

@@ -376,8 +376,10 @@
 	"github.copilot.config.inlineEdits.renameSymbolSuggestions": "Enable rename symbol suggestions in inline edits.",
 	"github.copilot.config.nextEditSuggestions.preferredModel": "Preferred model for next edit suggestions.",
 	"github.copilot.command.deleteAgentSession": "Delete...",
-	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Terminal",
+	"github.copilot.command.cli.sessions.resumeInTerminal": "Resume in Integrated Terminal",
 	"github.copilot.command.cli.sessions.openRepository": "Open Repository",
+	"github.copilot.command.cli.sessions.openWorktreeInNewWindow": "Open Worktree in New Window",
+	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Integrated Terminal",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
@@ -396,4 +398,5 @@
 	"github.copilot.config.searchSubagent.enabled": "Enable the search subagent tool for iterative code exploration in the workspace.",
 	"github.copilot.config.searchSubagent.model": "Model to use for the search subagent. Leave empty to use the default model.",
 	"github.copilot.config.searchSubagent.toolCallLimit": "Maximum number of tool calls the search subagent can make during exploration."
+	"github.copilot.config.agentCustomizationSkill.enabled": "Enable the built-in agent customization skill."
 }
