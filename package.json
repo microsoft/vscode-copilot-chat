@@ -84,9 +84,7 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentProvider",
-		"onInstructionsProvider",
-		"onSkillProvider"
+		"onCustomAgentProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
