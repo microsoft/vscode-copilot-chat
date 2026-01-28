@@ -138,15 +138,3 @@ export interface IAgentStepContext {
 	 */
 	complete(): void;
 }
-
-/**
- * Options for exporting trajectories
- */
-export interface ITrajectoryExportOptions {
-	/** Whether to include subagent trajectories inline */
-	includeSubagents?: boolean;
-	/** Whether to pretty-print the JSON output */
-	prettyPrint?: boolean;
-	/** Optional notes to include in the trajectory */
-	notes?: string;
-}
