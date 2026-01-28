@@ -6,7 +6,6 @@
 import type * as vscode from 'vscode';
 import { RepoContext } from '../../../platform/git/common/gitService';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { IObservable } from '../../../util/vs/base/common/observable';
 
 export interface ChatSessionWorktreeData {
 	readonly data: string;
@@ -28,13 +27,7 @@ export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionW
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
 
-	readonly isWorktreeSupportedObs: IObservable<boolean>;
-
-	getSessionRepository(sessionId: string): RepoContext | undefined;
-	setSessionRepository(sessionId: string, repositoryPath: string): Promise<void>;
-	deleteSessionRepository(sessionId: string): Promise<void>;
-
-	createWorktree(sessionId: string | undefined, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;

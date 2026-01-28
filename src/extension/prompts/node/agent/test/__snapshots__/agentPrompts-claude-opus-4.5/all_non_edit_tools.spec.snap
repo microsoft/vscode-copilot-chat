@@ -56,12 +56,12 @@ Why this is required:
 
 <regexPatternSyntax>
 Construct regex patterns using Python's re.search() syntax. Common patterns:
-- `^mcp__github__` - matches tools starting with "mcp__github__"
+- `^mcp_github_` - matches tools starting with "mcp_github_"
 - `issue|pull_request` - matches tools containing "issue" OR "pull_request"
 - `create.*branch` - matches tools with "create" followed by "branch"
-- `mcp__.*__list` - matches MCP tools ending with "list"
+- `mcp_.*list` - matches MCP tools with "list" in it.
 
-The pattern is matched case-insensitively against tool names.
+The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.
 
 </regexPatternSyntax>
 
@@ -206,6 +206,8 @@ This is the state of the context at this point in the conversation. The view of 
 </context>
 <reminderInstructions>
 Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.
+
+IMPORTANT: Before calling any deferred tool that was not previously returned by tool_search_tool_regex, you MUST first use tool_search_tool_regex to load it. Calling a deferred tool without first loading it will fail. Tools returned by tool_search_tool_regex are automatically expanded and immediately available - do not search for them again.
 
 </reminderInstructions>
 <userRequest>

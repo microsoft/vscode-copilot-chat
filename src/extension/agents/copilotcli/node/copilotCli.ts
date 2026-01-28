@@ -124,6 +124,10 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		@ILogService private readonly logService: ILogService,
 	) {
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
+		// Eagerly fetch available models so that they're ready when needed.
+		this._availableModels.value.catch((error) => {
+			this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+		});
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();

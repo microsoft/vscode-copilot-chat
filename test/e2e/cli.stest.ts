@@ -12,7 +12,7 @@ import * as path from 'path';
 import type { ChatPromptReference } from 'vscode';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../src/extension/agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, CopilotCLISessionOptions, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../src/extension/agents/copilotcli/node/copilotCli';
-import { CopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../src/extension/agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../src/extension/agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../src/extension/agents/copilotcli/node/copilotcliSession';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../src/extension/agents/copilotcli/node/copilotcliSessionService';
@@ -26,6 +26,7 @@ import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointPr
 import { IFileSystemService } from '../../src/platform/filesystem/common/fileSystemService';
 import { NodeFileSystemService } from '../../src/platform/filesystem/node/fileSystemServiceImpl';
 import { ILogService } from '../../src/platform/log/common/logService';
+import { IMcpService, NullMcpService } from '../../src/platform/mcp/common/mcpService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
 import { IQualifiedFile, SimulationWorkspace } from '../../src/platform/test/node/simulationWorkspace';
 import { createServiceIdentifier } from '../../src/util/common/services';
@@ -40,7 +41,6 @@ import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest, ChatSessionStatus, Diagnostic, DiagnosticSeverity, Location, Range, Uri } from '../../src/vscodeTypes';
 import { ssuite, stest } from '../base/stest';
-import { IMcpService, NullMcpService } from '../../src/platform/mcp/common/mcpService';
 
 const keys = ['COPILOT_ENABLE_ALT_PROVIDERS', 'COPILOT_AGENT_MODEL', 'GH_TOKEN', 'COPILOT_API_URL', 'GITHUB_COPILOT_API_TOKEN'];
 const originalValues: Record<string, string | undefined> = {};
@@ -210,6 +210,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	testingServiceCollection.define(ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler));
 	testingServiceCollection.define(IMcpService, new SyncDescriptor(NullMcpService));
 	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport));
 	testingServiceCollection.define(IChatDelegationSummaryService, delegatingSummarizerProvider);
 	const simulationWorkspace = new SimulationWorkspace();
 	simulationWorkspace.setupServices(testingServiceCollection);
@@ -218,8 +219,7 @@ function registerChatServices(testingServiceCollection: TestingServiceCollection
 	const copilotCLISessionService = accessor.get(ICopilotCLISessionService);
 	const sdk = accessor.get(ICopilotCLISDK);
 	instaService = accessor.get(IInstantiationService);
-	const imageSupport = instaService.createInstance(CopilotCLIImageSupport);
-	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver, imageSupport);
+	const promptResolver = instaService.createInstance(CopilotCLIPromptResolver);
 
 	async function populateWorkspaceFiles(workingDirectory: string) {
 		const fileLanguages = new Map<string, string>([

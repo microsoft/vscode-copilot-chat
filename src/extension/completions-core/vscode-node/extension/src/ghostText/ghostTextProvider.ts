@@ -83,6 +83,7 @@ export class GhostTextProvider {
 				opportunityId,
 			},
 			logContext,
+			telemetryBuilder.nesBuilder,
 		);
 
 		if (!rawCompletions) {

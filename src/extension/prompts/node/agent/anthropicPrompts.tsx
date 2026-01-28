@@ -74,12 +74,12 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 			<br />
 			<Tag name='regexPatternSyntax'>
 				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
-				- `^mcp__github__` - matches tools starting with "mcp__github__"<br />
+				- `^mcp_github_` - matches tools starting with "mcp_github_"<br />
 				- `issue|pull_request` - matches tools containing "issue" OR "pull_request"<br />
 				- `create.*branch` - matches tools with "create" followed by "branch"<br />
-				- `mcp__.*__list` - matches MCP tools ending with "list"<br />
+				- `mcp_.*list` - matches MCP tools with "list" in it.<br />
 				<br />
-				The pattern is matched case-insensitively against tool names.<br />
+				The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.<br />
 			</Tag>
 			<br />
 			<Tag name='incorrectUsagePatterns'>
@@ -334,6 +334,11 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) { }
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		const normalizedModel = endpoint.model?.replace(/\./g, '-');
 		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
@@ -345,6 +350,9 @@ class AnthropicPromptResolver implements IAgentPrompt {
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		if (isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)) {
+			return Claude45ToolSearchToolUseReminder;
+		}
 		return AnthropicReminderInstructions;
 	}
 }
@@ -354,6 +362,16 @@ class AnthropicReminderInstructions extends PromptElement<ReminderInstructionsPr
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br />
+		</>;
+	}
+}
+
+class Claude45ToolSearchToolUseReminder extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			<AnthropicReminderInstructions {...this.props} />
+			<br />
+			IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
 		</>;
 	}
 }

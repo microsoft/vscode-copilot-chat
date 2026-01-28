@@ -662,4 +662,44 @@ describe('ClaudeCodeSessionService', () => {
 			expect(spaceSlug).toBe('-Users-test-my-project');
 		});
 	});
+
+	describe('directory read error handling', () => {
+		function createErrorWithCode(code: string): Error {
+			const error = new Error(`Directory error: ${code}`);
+			(error as Error & { code: string }).code = code;
+			return error;
+		}
+
+		it('returns empty sessions when directory throws ENOENT error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('ENOENT'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions when directory throws FileNotFound error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('FileNotFound'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions when directory throws DirectoryNotFound error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('DirectoryNotFound'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions and logs error for unexpected directory errors', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('EACCES'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+	});
 });

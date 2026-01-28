@@ -8,6 +8,7 @@ import { ITelemetryService } from '../../../../../../platform/telemetry/common/t
 import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
@@ -145,6 +146,7 @@ export class GhostTextComputer {
 		token: ICancellationToken | undefined,
 		options: Partial<GetGhostTextOptions>,
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 		const id = generateUuid();
 		this.currentGhostText.currentRequestId = id;
@@ -164,7 +166,7 @@ export class GhostTextComputer {
 				options
 			);
 			this.notifierService.notifyRequest(completionState, id, telemetryData, token, options);
-			const result = await this.getGhostTextWithoutAbortHandling(completionState, id, telemetryData, token, options, logContext);
+			const result = await this.getGhostTextWithoutAbortHandling(completionState, id, telemetryData, token, options, logContext, telemetryBuilder);
 			const statistics = this.contextproviderStatistics.getStatisticsForCompletion(id);
 			const opportunityId = options?.opportunityId ?? 'unknown';
 			for (const [providerId, statistic] of statistics.getAllUsageStatistics()) {
@@ -219,6 +221,7 @@ export class GhostTextComputer {
 		cancellationToken: ICancellationToken | undefined,
 		options: Partial<GetGhostTextOptions>,
 		logContext: GhostTextLogContext,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 		let start = preIssuedTelemetryDataWithExp.issuedTime; // Start before getting exp assignments
 		const performanceMetrics: [string, number][] = [];
@@ -436,6 +439,10 @@ export class GhostTextComputer {
 					.filter(c => c !== undefined);
 			}
 
+			if (choices && choices[1] === ResultType.Cache) {
+				telemetryBuilder.setIsFromCache();
+			}
+
 			if (choices !== undefined && choices[0].length === 0) {
 				this.logger.debug(`Found empty inline suggestions locally via ${resultTypeToString(choices[1])}`);
 				return {
@@ -632,10 +639,11 @@ export async function getGhostText(
 	token: ICancellationToken | undefined,
 	options: Partial<GetGhostTextOptions>,
 	logContext: GhostTextLogContext,
+	telemetryBuilder: LlmNESTelemetryBuilder,
 ): Promise<GhostTextResultWithTelemetry<[CompletionResult[], ResultType]>> {
 	const instaService = accessor.get(IInstantiationService);
 	const ghostTextComputer = instaService.createInstance(GhostTextComputer);
-	return ghostTextComputer.getGhostText(completionState, token, options, logContext);
+	return ghostTextComputer.getGhostText(completionState, token, options, logContext, telemetryBuilder);
 }
 
 /**

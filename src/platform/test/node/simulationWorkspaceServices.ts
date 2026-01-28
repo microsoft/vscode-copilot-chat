@@ -29,7 +29,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
 import { IGitService, RepoContext } from '../../git/common/gitService';
-import { Change, CommitShortStat, DiffChange, Ref, RefQuery } from '../../git/vscode/git';
+import { Change, CommitShortStat, DiffChange, Ref, RefQuery, RepositoryAccessDetails } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { ILogService } from '../../log/common/logService';
@@ -121,6 +121,14 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	}
 
 	override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
+		return Promise.resolve(true);
+	}
+
+	override requestResourceTrust(options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return Promise.resolve(true);
+	}
+
+	override requestWorkspaceTrust(options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
 		return Promise.resolve(true);
 	}
 }
@@ -685,6 +693,10 @@ export class TestingGitService implements IGitService {
 
 	getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
 		return Promise.resolve(undefined);
+	}
+
+	getRecentRepositories(): Iterable<RepositoryAccessDetails> {
+		return [];
 	}
 
 	async initialize() {
