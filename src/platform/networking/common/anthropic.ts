@@ -288,11 +288,11 @@ export function buildContextManagement(
  */
 export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
 	triggerType: 'input_tokens',
-	triggerValue: 40000,
+	triggerValue: 80000,
 	keepCount: 3,
-	clearAtLeastTokens: undefined,
+	clearAtLeastTokens: 10000,
 	excludeTools: [],
-	clearInputs: false,
+	clearInputs: true,
 	thinkingKeepTurns: 1,
 };
 
