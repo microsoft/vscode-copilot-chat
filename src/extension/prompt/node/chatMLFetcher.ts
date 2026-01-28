@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import type { OpenAI } from 'openai';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
@@ -798,10 +799,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				let messagesToLog: CAPIChatMessage[] = request.messages ?? [];
 				if (messagesToLog.length === 0 && request.input) {
 					try {
-						const rawMessages = responseApiInputToRawMessagesForLogging(request as any);
+						const rawMessages = responseApiInputToRawMessagesForLogging(request as OpenAI.Responses.ResponseCreateParams);
 						messagesToLog = rawMessages.map(m => rawMessageToCAPI(m));
-					} catch {
-						this._logService.warn('[TELEMETRY] Failed to convert Responses API input to messages for logging');
+					} catch (e) {
+						this._logService.warn(`[TELEMETRY] Failed to convert Responses API input to messages for logging: ${e}`);
 					}
 				}
 				sendEngineMessagesTelemetry(this._telemetryService, messagesToLog, telemetryData, false, this._logService);
