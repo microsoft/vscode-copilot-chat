@@ -97,9 +97,9 @@ export interface CCAEnabledResult {
 	 */
 	enabled: boolean | undefined;
 	/**
-	 * The HTTP status code if disabled (401, 403, or 422).
+	 * The HTTP status code when the cloud agent is disabled (401, 403, or 422).
 	 */
-	statusCode?: 200 | 401 | 403 | 422;
+	statusCode?: 401 | 403 | 422;
 }
 
 export interface IOctoKitSessionInfo {
