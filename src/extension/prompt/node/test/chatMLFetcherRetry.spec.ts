@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
 import { IFetchMLOptions } from '../../../../platform/chat/common/chatMLFetcher';
@@ -241,6 +241,66 @@ describe('ChatMLFetcherImpl retry logic', () => {
 
 			// Should fail because connectivity check never succeeded
 			expect(result.type).toBe(ChatFetchResponseType.Failed);
+		});
+	});
+
+	describe('Responses API telemetry logging', () => {
+		it('converts Responses API input to messages for telemetry', async () => {
+			// Create a new telemetry service instance to spy on
+			const telemetryService = new NullTelemetryService();
+			const telemetrySpy = vi.spyOn(telemetryService, 'sendEnhancedGHTelemetryEvent');
+
+			// Setup endpoint that creates Responses API body with `input` instead of `messages`
+			const responsesApiEndpoint = createMockEndpoint();
+			responsesApiEndpoint.createRequestBody = () => ({
+				model: 'test-model',
+				input: [{ role: 'user', content: [{ type: 'input_text', text: 'Hello from Responses API' }] }],
+				stream: true
+			});
+
+			// Create a new fetcher with the spied telemetry service
+			const testFetcher = new ChatMLFetcherImpl(
+				mockFetcherService as unknown as IFetcherService,
+				telemetryService,
+				new NullRequestLogger(),
+				new TestLogService(),
+				new TestAuthenticationService() as unknown as IAuthenticationService,
+				createMockInteractionService(),
+				createMockChatQuotaService(),
+				new TestCAPIClientService() as unknown as ICAPIClientService,
+				createMockConversationOptions(),
+				configurationService,
+				new NullExperimentationService(),
+			);
+			testFetcher.connectivityCheckDelays = [0, 0, 0];
+
+			mockFetcherService.queueResponse(createSuccessResponse('Hello!'));
+
+			const opts: IFetchMLOptions = {
+				debugName: 'test-responses-api',
+				messages: [{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: 'Hello' }] }],
+				endpoint: responsesApiEndpoint,
+				location: ChatLocation.Panel,
+				enableRetryOnError: false,
+				requestOptions: {},
+				finishedCb: undefined,
+			};
+
+			await testFetcher.fetchMany(opts, cancellationTokenSource.token);
+
+			// Find the engine.messages telemetry call
+			const engineMessagesCall = telemetrySpy.mock.calls.find(call => call[0] === 'engine.messages');
+			expect(engineMessagesCall).toBeDefined();
+
+			// Verify telemetry received non-empty messages
+			const properties = engineMessagesCall![1];
+			expect(properties).toBeDefined();
+			expect(properties!.messagesJson).toBeDefined();
+			expect(properties!.messagesJson).not.toBe('[]');
+
+			// Parse and verify the messages contain expected content
+			const messages = JSON.parse(properties!.messagesJson as string);
+			expect(messages.length).toBeGreaterThan(0);
 		});
 	});
 });

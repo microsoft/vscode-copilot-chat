@@ -17,11 +17,12 @@ import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../plat
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpoint/node/responsesApi';
 import { collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
-import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
+import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
@@ -793,7 +794,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				throw error;
 			})
 			.finally(() => {
-				sendEngineMessagesTelemetry(this._telemetryService, request.messages ?? [], telemetryData, false, this._logService);
+				// For Responses API, messages are in request.input, not request.messages
+				let messagesToLog: CAPIChatMessage[] = request.messages ?? [];
+				if (messagesToLog.length === 0 && request.input) {
+					try {
+						const rawMessages = responseApiInputToRawMessagesForLogging(request as any);
+						messagesToLog = rawMessages.map(m => rawMessageToCAPI(m));
+					} catch {
+						this._logService.warn('[TELEMETRY] Failed to convert Responses API input to messages for logging');
+					}
+				}
+				sendEngineMessagesTelemetry(this._telemetryService, messagesToLog, telemetryData, false, this._logService);
 			});
 	}
 
