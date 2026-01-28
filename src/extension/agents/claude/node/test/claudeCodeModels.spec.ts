@@ -9,7 +9,7 @@ import { IChatEndpoint } from '../../../../../platform/networking/common/network
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { ClaudeCodeModels } from '../claudeCodeModels';
+import { ClaudeCodeModels, NoClaudeModelsAvailableError } from '../claudeCodeModels';
 
 /**
  * Creates a minimal mock IChatEndpoint with required properties for testing
@@ -20,7 +20,10 @@ function createMockEndpoint(overrides: {
 	family: string;
 	showInModelPicker?: boolean;
 	multiplier?: number;
+	apiType?: string;
 }): IChatEndpoint {
+	// Default to Messages API for Claude models
+	const isClaude = overrides.family?.toLowerCase().includes('claude') || overrides.model?.toLowerCase().includes('claude');
 	return {
 		model: overrides.model,
 		name: overrides.name,
@@ -28,6 +31,7 @@ function createMockEndpoint(overrides: {
 		version: '1.0',
 		showInModelPicker: overrides.showInModelPicker ?? true,
 		multiplier: overrides.multiplier,
+		apiType: overrides.apiType ?? (isClaude ? 'messages' : 'chatCompletions'),
 		// Required properties with sensible defaults
 		maxOutputTokens: 4096,
 		supportsToolCalls: true,
@@ -207,12 +211,10 @@ describe('ClaudeCodeModels', () => {
 			expect(defaultModel).toBeDefined();
 		});
 
-		it('returns undefined if no models available', async () => {
+		it('throws NoClaudeModelsAvailableError if no models available', async () => {
 			const service = createServiceWithEndpoints([]);
 
-			const defaultModel = await service.getDefaultModel();
-
-			expect(defaultModel).toBeUndefined();
+			await expect(service.getDefaultModel()).rejects.toThrow(NoClaudeModelsAvailableError);
 		});
 	});
 
@@ -268,8 +270,8 @@ describe('ClaudeCodeModels', () => {
 		});
 	});
 
-	describe('fallback behavior', () => {
-		it('falls back to all models when no Claude models found', async () => {
+	describe('no models available', () => {
+		it('returns empty array when no Claude models with Messages API found', async () => {
 			const service = createServiceWithEndpoints([
 				createMockEndpoint({ model: 'gpt-4o', name: 'GPT-4o', family: 'gpt-4' }),
 				createMockEndpoint({ model: 'gpt-4o-mini', name: 'GPT-4o Mini', family: 'gpt-4-mini' }),
@@ -277,8 +279,7 @@ describe('ClaudeCodeModels', () => {
 
 			const models = await service.getModels();
 
-			expect(models).toHaveLength(2);
-			expect(models.map(m => m.id).sort()).toEqual(['gpt-4o', 'gpt-4o-mini']);
+			expect(models).toHaveLength(0);
 		});
 
 		it('respects showInModelPicker filter', async () => {

@@ -6,10 +6,19 @@
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 
 const CLAUDE_CODE_MODEL_MEMENTO_KEY = 'github.copilot.claudeCode.sessionModel';
+
+/** Error thrown when no Claude models with Messages API are available */
+export class NoClaudeModelsAvailableError extends Error {
+	constructor() {
+		super('Claude Code is not available. No Claude models with Messages API support were found.');
+		this.name = 'NoClaudeModelsAvailableError';
+	}
+}
 
 export interface ClaudeCodeModelInfo {
 	id: string;
@@ -20,7 +29,11 @@ export interface ClaudeCodeModelInfo {
 export interface IClaudeCodeModels {
 	readonly _serviceBrand: undefined;
 	resolveModel(modelId: string): Promise<string | undefined>;
-	getDefaultModel(): Promise<string | undefined>;
+	/**
+	 * Gets the default Claude model.
+	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
+	 */
+	getDefaultModel(): Promise<string>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
 	getModels(): Promise<ClaudeCodeModelInfo[]>;
 }
@@ -45,10 +58,10 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 		return models.find(m => m.id.toLowerCase() === normalizedId || m.name.toLowerCase() === normalizedId)?.id;
 	}
 
-	public async getDefaultModel(): Promise<string | undefined> {
+	public async getDefaultModel(): Promise<string> {
 		const models = await this.getModels();
 		if (!models.length) {
-			return undefined;
+			throw new NoClaudeModelsAvailableError();
 		}
 
 		// Get preferred model from stored preference
@@ -61,9 +74,9 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 			}
 		}
 
-		// Return the latest Sonnet as the default model
+		// Return the latest Sonnet as the default model, or fall back to the first available model
 		const defaultModel = models.find(m => m.id.toLowerCase().includes('sonnet') || m.name.toLowerCase().includes('sonnet'));
-		return defaultModel?.id ?? models[0]?.id;
+		return defaultModel?.id ?? models[0].id;
 	}
 
 	public async setDefaultModel(modelId: string | undefined): Promise<void> {
@@ -80,22 +93,21 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
 
 			// Filter for Claude/Anthropic models that are available in the model picker
+			// and use the Messages API (required for Claude Code)
 			const claudeEndpoints = endpoints.filter(e =>
 				e.showInModelPicker &&
-				(e.family?.toLowerCase().includes('claude') || e.model?.toLowerCase().includes('claude'))
+				(e.family?.toLowerCase().includes('claude') || e.model?.toLowerCase().includes('claude')) &&
+				e.apiType === 'messages'
 			);
 
 			if (claudeEndpoints.length === 0) {
-				this.logService.trace('[ClaudeCodeModels] No Claude models found, returning all available models');
-				// Fall back to all available models if no Claude-specific ones
-				return endpoints
-					.filter(e => e.showInModelPicker)
-					.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }));
+				this.logService.trace('[ClaudeCodeModels] No Claude models with Messages API found');
+				return [];
 			}
 
 			// Filter to only include the latest version of each model family
 			// Parse version from family string (e.g., "claude-opus-4.5" or "claude-opus-41")
-			const familyMap = new Map<string, { endpoint: typeof claudeEndpoints[0]; version: number }>();
+			const familyMap = new Map<string, { endpoint: IChatEndpoint; version: number }>();
 
 			for (const endpoint of claudeEndpoints) {
 				const parsed = this._parseFamilyString(endpoint.family);

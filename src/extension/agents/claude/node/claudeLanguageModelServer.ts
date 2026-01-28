@@ -151,10 +151,12 @@ export class ClaudeLanguageModelServer extends Disposable {
 			const lastMessage = requestBody.messages?.at(-1);
 			const isUserInitiatedMessage = lastMessage?.role === 'user';
 
-			const endpoints = await this.endpointProvider.getAllChatEndpoints();
+			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+			// Filter to only endpoints that support the Messages API
+			const endpoints = allEndpoints.filter(e => e.apiType === 'messages');
 			if (endpoints.length === 0) {
-				this.error('No language models available');
-				this.sendErrorResponse(res, 404, 'not_found_error', 'No language models available');
+				this.error('No Claude models with Messages API available');
+				this.sendErrorResponse(res, 404, 'not_found_error', 'No Claude models with Messages API available');
 				return;
 			}
 

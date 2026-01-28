@@ -13,7 +13,7 @@
 # NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
 
 # Minimum required Copilot CLI version
-$RequiredVersion = "0.0.342"
+$RequiredVersion = "0.0.394"
 $PackageName = "@github/copilot"
 
 function Invoke-NpmGlobalCommand {
