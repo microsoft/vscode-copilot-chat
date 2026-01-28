@@ -184,13 +184,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
+		// Metadata
+		const metadata = {
+			branchName: worktreeProperties?.branchName,
+			repositoryPath: worktreeProperties?.repositoryPath,
+			worktreePath: worktreeProperties?.worktreePath
+		} satisfies { readonly [key: string]: unknown };
+
 		return {
 			resource,
 			label,
 			badge,
 			timing: session.timing,
 			changes,
-			status
+			status,
+			metadata
 		} satisfies vscode.ChatSessionItem;
 	}
 
