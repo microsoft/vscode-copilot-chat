@@ -66,6 +66,9 @@ export class TrajectoryLoggerAdapter extends Disposable {
 
 			// Get or create session for this token
 			let sessionId = this.sessionMap.get(entry.token);
+			// Use subAgentName as agent name for subagent trajectories
+			const agentName = entry.token.subAgentName ?? AGENT_NAME;
+
 			if (!sessionId) {
 				// Use the following priority for session ID:
 				// 1. subAgentInvocationId for explicit subagent linking
@@ -74,19 +77,10 @@ export class TrajectoryLoggerAdapter extends Disposable {
 				sessionId = entry.token.subAgentInvocationId ?? entry.token.chatSessionId ?? this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
 				this.tokenToSessionId.set(entry.token, sessionId);
-				// Use subAgentName as agent name for subagent trajectories
-				const agentName = entry.token.subAgentName ?? AGENT_NAME;
-				this.trajectoryLogger.startTrajectory(sessionId, {
-					name: agentName,
-					version: '1.0.0',
-					tool_definitions: this.extractToolDefinitionsFromEntry(entry)
-				});
 			}
 
-			// Switch active session before processing the entry. This avoids the
-			// "last started wins" behavior where subagent sessions overwrite main.
-			// Use subAgentName as agent name for subagent trajectories
-			const agentName = entry.token.subAgentName ?? AGENT_NAME;
+			// Start or switch to the trajectory for this session. This ensures the correct
+			// trajectory is active before processing the entry, and updates agent info if needed.
 			this.trajectoryLogger.startTrajectory(sessionId, {
 				name: agentName,
 				version: '1.0.0',
