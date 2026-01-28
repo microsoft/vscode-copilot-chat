@@ -30,7 +30,6 @@ import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claude
  * - The terminal inherits the environment with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY set
  * - The language model server runs on localhost with a random available port
  */
- */
 export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	readonly commandName = 'terminal';
 	readonly description = 'Create terminal with Claude CLI using Copilot Chat endpoints';
@@ -68,7 +67,10 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 			// Show the terminal
 			terminal.show();
 
-			stream?.markdown(vscode.l10n.t('Terminal created. Run `claude` to start Claude Code with Copilot Chat endpoints.'));
+			// Send the claude command to the terminal
+			terminal.sendText('claude');
+
+			stream?.markdown(vscode.l10n.t('Terminal created and Claude Code started with Copilot Chat endpoints.'));
 
 			this.logService.info(`[TerminalSlashCommand] Created terminal with Claude CLI configured on port ${config.port}`);
 		} catch (error) {

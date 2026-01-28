@@ -27,6 +27,7 @@ describe('TerminalSlashCommand', () => {
 		// Create mock terminal
 		mockTerminal = {
 			show: vi.fn(),
+			sendText: vi.fn(),
 			dispose: vi.fn(),
 		} as any;
 
@@ -119,6 +120,21 @@ describe('TerminalSlashCommand', () => {
 			expect(mockTerminal.show).toHaveBeenCalled();
 		});
 
+		it('sends claude command to terminal', async () => {
+			const mockStream = {
+				markdown: vi.fn(),
+			} as any;
+
+			const mockToken = {
+				isCancellationRequested: false,
+				onCancellationRequested: () => ({ dispose: () => { } }),
+			} as any;
+
+			await terminalCommand.handle('', mockStream, mockToken);
+
+			expect(mockTerminal.sendText).toHaveBeenCalledWith('claude');
+		});
+
 		it('sends markdown messages to stream', async () => {
 			const mockStream = {
 				markdown: vi.fn(),
@@ -132,7 +148,7 @@ describe('TerminalSlashCommand', () => {
 			await terminalCommand.handle('', mockStream, mockToken);
 
 			expect(mockStream.markdown).toHaveBeenCalledWith('Creating Claude CLI terminal...');
-			expect(mockStream.markdown).toHaveBeenCalledWith('Terminal created. Run `claude` to start Claude Code with Copilot Chat endpoints.');
+			expect(mockStream.markdown).toHaveBeenCalledWith('Terminal created and Claude Code started with Copilot Chat endpoints.');
 		});
 
 		it('handles undefined stream gracefully', async () => {
