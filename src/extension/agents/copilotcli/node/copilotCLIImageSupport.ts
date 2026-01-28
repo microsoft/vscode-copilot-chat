@@ -18,6 +18,18 @@ export interface ICopilotCLIImageSupport {
 	isTrustedImage(imageUri: URI): boolean;
 }
 
+export function isImageMimeType(mimeType: string): boolean {
+	const map: Record<string, string> = {
+		'image/png': '.png',
+		'image/jpeg': '.jpg',
+		'image/jpg': '.jpg',
+		'image/gif': '.gif',
+		'image/webp': '.webp',
+		'image/bmp': '.bmp',
+	};
+	return mimeType.toLowerCase() in map;
+}
+
 export const ICopilotCLIImageSupport = createServiceIdentifier<ICopilotCLIImageSupport>('ICopilotCLIImageSupport');
 
 export class CopilotCLIImageSupport implements ICopilotCLIImageSupport {
@@ -54,7 +66,7 @@ export class CopilotCLIImageSupport implements ICopilotCLIImageSupport {
 		const randomId = Math.random().toString(36).substring(2, 10);
 		const extension = this.getExtension(mimeType);
 		const filename = `${timestamp}-${randomId}${extension}`;
-		const imageUri = URI.joinPath(this.storageDir, filename);
+		const imageUri = URI.file(URI.joinPath(this.storageDir, filename).fsPath);
 
 		await fs.writeFile(imageUri.fsPath, imageData);
 		this.trustedImages.add(imageUri);

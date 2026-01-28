@@ -19,7 +19,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
-import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
+import { ICopilotCLIImageSupport, isImageMimeType } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
 	constructor(
@@ -65,7 +65,9 @@ export class CopilotCLIPromptResolver {
 			const variableRef = await this.translateWorkspaceRefToWorkingDirectoryRef(variable.reference, isIsolationEnabled, workingDirectory, token);
 			// Images will be attached using regular attachments via Copilot CLI SDK.
 			if (variableRef.value instanceof ChatReferenceBinaryData) {
-				validReferences.push(variableRef);
+				if (!isImageMimeType(variableRef.value.mimeType)) {
+					validReferences.push(variableRef);
+				}
 				fileFolderReferences.push(variableRef);
 				return;
 			}
@@ -91,21 +93,38 @@ export class CopilotCLIPromptResolver {
 			validReferences.push(variableRef);
 		}));
 
+		const [attachments, imageAttachments] = await this.constructFileOrFolderAttachments(fileFolderReferences, token);
+		// Re-add the images after we've copied them to the image store.
+		imageAttachments.forEach(img => {
+			validReferences.push({
+				name: img.displayName,
+				value: URI.file(img.path),
+				id: img.path,
+			});
+		});
 		variables = new ChatVariablesCollection(validReferences);
-		const attachments = await this.constructFileOrFolderAttachments(fileFolderReferences, token);
 		return [variables, attachments];
 	}
 
 
-	private async constructFileOrFolderAttachments(fileOrFolderReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<Attachment[]> {
+	private async constructFileOrFolderAttachments(fileOrFolderReferences: vscode.ChatPromptReference[], token: vscode.CancellationToken): Promise<[Attachment[], image: Attachment[]]> {
 		const attachments: Attachment[] = [];
+		const images: Attachment[] = [];
 		await Promise.all(fileOrFolderReferences.map(async ref => {
 			if (ref.value instanceof ChatReferenceBinaryData) {
+				if (!isImageMimeType(ref.value.mimeType)) {
+					return;
+				}
 				// Handle image attachments
 				try {
 					const buffer = await ref.value.data();
 					const uri = await this.imageSupport.storeImage(buffer, ref.value.mimeType);
 					attachments.push({
+						type: 'file',
+						displayName: path.basename(uri.fsPath),
+						path: uri.fsPath
+					});
+					images.push({
 						type: 'file',
 						displayName: path.basename(uri.fsPath),
 						path: uri.fsPath
@@ -145,7 +164,7 @@ export class CopilotCLIPromptResolver {
 			}
 		}));
 
-		return attachments;
+		return [attachments, images];
 	}
 
 	private async translateWorkspaceRefToWorkingDirectoryRef(ref: vscode.ChatPromptReference, isIsolationEnabled: boolean, workingDirectory: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<vscode.ChatPromptReference> {
