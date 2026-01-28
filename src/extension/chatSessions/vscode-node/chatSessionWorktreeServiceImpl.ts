@@ -15,7 +15,6 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { isUntitledSessionId } from '../common/utils';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
@@ -24,13 +23,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
 	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile2[] | undefined> = new Map();
-	private _sessionRepositories = new Map<string, RepoContext | undefined>();
 
 	constructor(
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
 		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 		this.loadWorktreeProperties();
@@ -54,33 +52,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	getSessionRepository(sessionId: string): RepoContext | undefined {
-		// For untitled sessions, if we have just one repo, then return that as the selected repo
-		if (!this._sessionRepositories.get(sessionId) && isUntitledSessionId(sessionId) &&
-			this.gitService.repositories
-				.filter(repository => repository.kind !== 'worktree').length === 1) {
-			return this.gitService.activeRepository.get();
-		}
-		return this._sessionRepositories.get(sessionId);
-	}
-
-	async deleteSessionRepository(sessionId: string) {
-		this._sessionRepositories.delete(sessionId);
-	}
-
-	async setSessionRepository(sessionId: string, repositoryPath: string) {
-		const repository = await this.gitService.getRepository(vscode.Uri.file(repositoryPath));
-		this._sessionRepositories.set(sessionId, repository);
-	}
-
-	async createWorktree(sessionId: string | undefined, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> {
+	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> {
 		if (!stream) {
-			return this._createWorktree(sessionId);
+			return this._createWorktree(repositoryPath);
 		}
 
 		return new Promise<ChatSessionWorktreeProperties | undefined>((resolve) => {
 			stream.progress(l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
-				const result = await this._createWorktree(sessionId, progress);
+				const result = await this._createWorktree(repositoryPath, progress);
 				resolve(result);
 				if (result) {
 					return l10n.t('Created isolated worktree at {0}', basename(vscode.Uri.file(result.worktreePath)));
@@ -90,9 +69,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
-	private async _createWorktree(sessionId: string | undefined, progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
+	private async _createWorktree(repositoryPath: vscode.Uri, progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
-			const activeRepository = sessionId ? this.getSessionRepository(sessionId) : this.gitService.activeRepository.get();
+			const activeRepository = await this.gitService.getRepository(repositoryPath);
 			if (!activeRepository) {
 				progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 				this.logService.error('[ChatSessionWorktreeService][_createWorktree] No active repository found to create worktree for isolation.');
