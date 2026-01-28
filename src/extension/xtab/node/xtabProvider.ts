@@ -49,6 +49,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
+import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -220,13 +221,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
 		// check if there's any non-whitespace character after the cursor in the line
 		const isCursorAtEndOfLine = cursorLine.substring(cursorPosition.column - 1).match(/^\s*$/) !== null;
-		if (isCursorAtEndOfLine) {
+		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
+
+		// Apply extra debounce based on cursor position - only one applies
+		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
+		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
+
+		const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+		if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+			tracer.trace('Debouncing for inline suggestion position');
+			delaySession.setExtraDebounce(inlineSuggestionDebounce);
+		} else if (isCursorAtEndOfLine) {
 			tracer.trace('Debouncing for cursor at end of line');
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		} else {
-			tracer.trace('Debouncing for cursor NOT at end of line');
+			tracer.trace('No extra debounce applied');
 		}
-		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
@@ -256,8 +266,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			XtabProvider.computeTokens,
 			{
 				includeLineNumbers: {
-					areaAroundCodeToEdit: false,
-					currentFileContent: promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness || promptOptions.promptingStrategy === PromptingStrategy.PatchBased,
+					areaAroundCodeToEdit: xtabPromptOptions.IncludeLineNumbersOption.None,
+					currentFileContent: promptOptions.currentFile.includeLineNumbers,
 				}
 			}
 		);
@@ -764,7 +774,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
-			emitFastCursorLineChange: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService),
+			emitFastCursorLineChange: ResponseProcessor.mapEmitFastCursorLineChange(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderEmitFastCursorLineChange, this.expService)),
 			nLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNNonSignificantLinesToConverge, this.expService),
 			nSignificantLinesToConverge: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNSignificantLinesToConverge, this.expService),
 		};
@@ -1035,12 +1045,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
-		const sourcedModelConfig = {
+		const sourcedModelConfig: ModelConfig = {
 			modelName: undefined,
 			promptingStrategy: undefined,
 			currentFile: {
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
 				includeTags: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+				includeLineNumbers: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeLineNumbersInCurrentFile, this.expService),
+				includeCursorTag: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeCursorTagInCurrentFile, this.expService),
 				prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
 			},
 			pagedClipping: {
@@ -1050,7 +1062,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
 				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeViewedFiles, this.expService),
-				includeLineNumbers: false, // Line numbers are only used for next cursor prediction
+				includeLineNumbers: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedIncludeLineNumbers, this.expService),
 			},
 			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
@@ -1099,6 +1111,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.PatchBased:
+			case xtabPromptOptions.PromptingStrategy.PatchBased01:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
 				return xtab275SystemPrompt;

@@ -43,6 +43,8 @@ export interface ICopilotCLISessionService {
 
 	onDidChangeSessions: Event<void>;
 
+	getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined>;
+
 	// Session metadata querying
 	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
@@ -92,11 +94,30 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
 	}
 
+	async getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined> {
+		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+		if (token.isCancellationRequested) {
+			return;
+		}
+		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
+		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
+		const cwd = metadata?.context?.gitRoot ?? metadata?.context?.cwd;
+		// Give preference to the git root if available.
+		// Found while testing that cwd can be users root directory in some cases.
+		if (!cwd || !(await checkPathExists(URI.file(cwd), this.fileSystem))) {
+			return;
+		}
+
+		return URI.file(cwd);
+	}
+
 	protected monitorSessionFiles() {
 		try {
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
 			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '**/*.jsonl')));
 			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
+			this._register(watcher.onDidChange(() => this._onDidChangeSessions.fire()));
+			this._register(watcher.onDidDelete(() => this._onDidChangeSessions.fire()));
 		} catch (error) {
 			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
 		}
@@ -477,5 +498,14 @@ export class RefCountedSession extends RefCountedDisposable implements IReferenc
 	}
 	dispose(): void {
 		this.release();
+	}
+}
+
+async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+	try {
+		await fileSystem.stat(filePath);
+		return true;
+	} catch (error) {
+		return false;
 	}
 }

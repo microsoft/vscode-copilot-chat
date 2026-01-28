@@ -311,6 +311,7 @@ export interface IStatelessNextEditTelemetry {
 	/* general info */
 	readonly statelessNextEditProviderDuration: number;
 	readonly isCursorAtEndOfLine: boolean | undefined;
+	readonly isInlineSuggestion: boolean | undefined;
 	readonly nLinesOfCurrentFileInPrompt: number | undefined;
 	readonly modelName: string | undefined;
 
@@ -423,6 +424,7 @@ export class StatelessNextEditTelemetryBuilder {
 			promptLineCount,
 			promptCharCount,
 			isCursorAtEndOfLine: this._isCursorAtLineEnd,
+			isInlineSuggestion: this._isInlineSuggestion,
 			debounceTime: this._debounceTime,
 			artificialDelay: this._artificialDelay,
 			fetchStartedAt: this._fetchStartedAt,
@@ -478,6 +480,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _isCursorAtLineEnd: boolean | undefined;
 	public setIsCursorAtLineEnd(isCursorAtLineEnd: boolean): this {
 		this._isCursorAtLineEnd = isCursorAtLineEnd;
+		return this;
+	}
+
+	private _isInlineSuggestion: boolean | undefined;
+	public setIsInlineSuggestion(isInlineSuggestion: boolean): this {
+		this._isInlineSuggestion = isInlineSuggestion;
 		return this;
 	}
 

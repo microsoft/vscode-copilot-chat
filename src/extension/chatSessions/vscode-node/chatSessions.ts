@@ -94,7 +94,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const slashCommandService = this._register(claudeAgentInstaService.createInstance(ClaudeSlashCommandService));
 		const claudeChatSessionParticipant = new ClaudeChatSessionParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider, chatSessionContentProvider, slashCommandService);
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeChatSessionParticipant.createHandler());
-		chatParticipant.iconPath = new vscode.ThemeIcon('code');
+		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider, chatParticipant));
 
 		// #endregion

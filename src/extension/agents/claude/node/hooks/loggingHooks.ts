@@ -18,6 +18,7 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../../platform/requestLogger/common/capturingToken';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
 import { registerClaudeHook } from './claudeHookRegistry';
+import { VSCODE_USER_INITIATED_MESSAGE_MARKER } from '../claudeLanguageModelServer';
 
 /**
  * Logging hook for Notification events.
@@ -60,7 +61,15 @@ export class UserPromptSubmitLoggingHook implements HookCallbackMatcher {
 		// Create a capturing token for this request to group tool calls under the request
 		const capturingToken = new CapturingToken(hookInput.prompt, 'sparkle', false);
 		this.sessionStateService.setCapturingTokenForSession(hookInput.session_id, capturingToken);
-		return { continue: true };
+
+		return {
+			continue: true,
+			// Mark this message as user-initiated for downstream processing of PRUs
+			hookSpecificOutput: {
+				hookEventName: 'UserPromptSubmit',
+				additionalContext: VSCODE_USER_INITIATED_MESSAGE_MARKER
+			}
+		};
 	}
 }
 registerClaudeHook('UserPromptSubmit', UserPromptSubmitLoggingHook);

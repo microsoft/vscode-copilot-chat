@@ -189,6 +189,8 @@ export type IChatRequestTelemetryProperties = {
 	connectivityTestError?: string;
 	connectivityTestErrorGitHubRequestId?: string;
 	retryAfterFilterCategory?: string;
+	/** A subtype for categorizing the request with a messageSource- eg subagent */
+	subType?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
