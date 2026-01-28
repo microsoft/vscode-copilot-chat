@@ -479,7 +479,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// Filter out items that no longer exist.
 		const latest10ReposAndFolders: { uri: Uri; type: 'repo' | 'folder'; lastUsed: number }[] = [];
 		await Promise.all(latestReposAndFolders.slice(0, 20).map(async (repoAccess) => {
-			if (await checkFileExists(repoAccess.uri, this.fileSystem)) {
+			if (await checkPathExists(repoAccess.uri, this.fileSystem)) {
 				latest10ReposAndFolders.push(repoAccess);
 			}
 		}));
@@ -528,7 +528,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		for (const workspaceFolder of this.workspaceService.getWorkspaceFolders()) {
 			const agentFile = URI.joinPath(workspaceFolder, '.github', 'agents', agent.name + '.agent.md');
 			try {
-				if (!(await checkFileExists(agentFile, this.fileSystem))) {
+				if (!(await checkPathExists(agentFile, this.fileSystem))) {
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
@@ -562,7 +562,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 }
 
-async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
 	try {
 		await fileSystem.stat(filePath);
 		return true;
@@ -656,12 +656,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// Possible user selected a folder, and its possible the folder is a git repo
 					const folder = this.workspaceFolderService.getSessionWorkspaceFolder(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 					if (folder) {
-						selectedRepository = await this.gitService.getRepository(folder, true);
+						const { repository, trusted } = await this.getCachedRepository(folder);
+						if (!trusted) {
+							stream.warning(l10n.t('The selected folder is not trusted.'));
+							return {};
+						}
+						selectedRepository = repository;
 					}
 				} else {
 					// Existing session, get worktree repository, and no need to migrate changes.
 				}
-			} else {
+			} else if (this.workspaceService.getWorkspaceFolders().length === 1) {
 				selectedRepository = this.gitService.activeRepository.get();
 			}
 			const hasUncommittedChanges = selectedRepository?.changes
@@ -779,6 +784,39 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 			disposables.dispose();
 		}
+	}
+
+	private readonly _repositoryCacheInEmptyWorkspace = new ResourceMap<{ repository: RepoContext | undefined; trusted: boolean }>();
+	/**
+	 * When using `getRepository` in an empty workspace, that requires special care.
+	 * We shouldn't call that too often, as it results in displaying the Trust diaglog.
+	 * And if user doesn't trust, then we can't proceed. but if we call that multiple times, that results in multiple trust dialogs.
+	 * Hence in the case of empty workspace, we cache the repository info.
+	 */
+	private async getCachedRepository(repoPath: Uri): Promise<{ repository: RepoContext | undefined; trusted: boolean }> {
+		if (this.workspaceService.getWorkspaceFolders().length) {
+			const repository = await this.gitService.getRepository(repoPath, true);
+			return { repository: repository, trusted: true };
+		}
+
+		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
+		// If we have repo then its trusted, lets get the latest information again by requesting the repo again.
+		if (cachedRepo) {
+			const repository = await this.gitService.getRepository(repoPath, true);
+			return { repository, trusted: true };
+		}
+		// Ask the user if they trust the folder before we look for repos.
+		const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
+		if (!trusted) {
+			// User didn't trust, we can't proceed.
+			const result = { repository: undefined, trusted: false };
+			this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+			return result;
+		}
+		const repository = await this.gitService.getRepository(repoPath, true);
+		const result = repository ? { repository, trusted: true } : { repository: undefined, trusted: true };
+		this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+		return result;
 	}
 
 	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
@@ -906,8 +944,10 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Check for uncommitted changes
-		const currentRepository = this.gitService.activeRepository.get();
-		const hasChanges = (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0);
+		const worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(session.sessionId);
+		const repositoryPath = worktreeProperties?.repositoryPath ? Uri.file(worktreeProperties.repositoryPath) : session.options.workingDirectory;
+		const repository = repositoryPath ? await this.gitService.getRepository(repositoryPath) : undefined;
+		const hasChanges = (repository?.changes?.indexChanges && repository.changes.indexChanges.length > 0);
 
 		if (hasChanges) {
 			stream.warning(l10n.t('You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them.'));
@@ -1063,22 +1103,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			if (!selectedRepository && sessionWorkspaceFolder) {
-				// Possible we now have a git repo in this folder, check again.
-				selectedRepository = (await this.gitService.getRepository(sessionWorkspaceFolder, true))?.rootUri;
-				if (!(selectedRepository)) {
-					// If this folder is a git repo, then this means user hasn't trusted it.
-					// Hence no point in trying to even use this as a folder without git (i.e. pointless asking user twice whether they trust the folder)
-					if (await checkFileExists(URI.joinPath(sessionWorkspaceFolder, '.git'), this.fileSystemService)) {
-						stream.warning(l10n.t('The selected folder is not trusted.'));
-						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: true };
-					}
 
-					// Verify this folder is trusted.
-					const isTrusted = await this.workspaceService.requestResourceTrust({ uri: sessionWorkspaceFolder, message: untrustedFolderMessage });
-					if (!isTrusted) {
-						stream.warning(l10n.t('The selected folder is not trusted.'));
-						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: true };
-					}
+				// Possible we now have a git repo in this folder, check again.
+				const { repository, trusted } = await this.getCachedRepository(sessionWorkspaceFolder);
+				if (!trusted) {
+					stream.warning(l10n.t('The selected folder is not trusted.'));
+					return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: true };
+				}
+				selectedRepository = repository?.rootUri;
+				if (!(selectedRepository)) {
 					// Workspace folder without git repo - no worktree can be created, use folder directly
 					return { workingDirectory: sessionWorkspaceFolder, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: false };
 				}
@@ -1135,7 +1168,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		// Migrate changes from active repository to worktree (only if we have a worktree, not for workspace folders without git)
 		if (worktreeProperties?.worktreePath && !isWorkspaceFolderWithoutRepo && (uncommittedChangesAction === 'move' || uncommittedChangesAction === 'copy')) {
-			await this.moveOrCopyChangesToWorkTree(Uri.file(worktreeProperties.worktreePath), uncommittedChangesAction, stream, token);
+			await this.moveOrCopyChangesToWorkTree(Uri.file(worktreeProperties.repositoryPath), Uri.file(worktreeProperties.worktreePath), uncommittedChangesAction, stream, token);
 		}
 
 		// If we failed to create a worktree or isolation is disabled, then isolation is false
@@ -1143,13 +1176,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async moveOrCopyChangesToWorkTree(
+		repositoryPath: Uri,
 		worktreePath: Uri,
 		moveOrCopyChanges: 'move' | 'copy',
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
-		// Migrate changes from active repository to worktree
-		const activeRepository = this.gitService.activeRepository.get();
+		// Migrate changes from repository to worktree
+		const activeRepository = await this.gitService.getRepository(repositoryPath);
 		if (!activeRepository) {
 			return;
 		}
