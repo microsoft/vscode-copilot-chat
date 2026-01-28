@@ -7,7 +7,6 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { ITerminalService } from '../../../../../platform/terminal/common/terminalService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeLanguageModelServer } from '../../node/claudeLanguageModelServer';
 import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
@@ -20,7 +19,7 @@ import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claude
  * and creates a new terminal with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY environment
  * variables set to proxy requests through Copilot Chat's chat endpoints.
  */
-export class TerminalSlashCommand extends Disposable implements IClaudeSlashCommandHandler {
+export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	readonly commandName = 'terminal';
 	readonly description = 'Create terminal with Claude CLI using Copilot Chat endpoints';
 	readonly commandId = 'copilot.claude.terminal';
@@ -31,9 +30,7 @@ export class TerminalSlashCommand extends Disposable implements IClaudeSlashComm
 		@ILogService private readonly logService: ILogService,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) {
-		super();
-	}
+	) { }
 
 	async handle(
 		_args: string,
@@ -73,18 +70,11 @@ export class TerminalSlashCommand extends Disposable implements IClaudeSlashComm
 
 	private async _getLanguageModelServer(): Promise<ClaudeLanguageModelServer> {
 		if (!this._langModelServer) {
-			this._langModelServer = this._register(
-				this.instantiationService.createInstance(ClaudeLanguageModelServer)
-			);
+			this._langModelServer = this.instantiationService.createInstance(ClaudeLanguageModelServer);
 			await this._langModelServer.start();
 		}
 
 		return this._langModelServer;
-	}
-
-	override dispose(): void {
-		super.dispose();
-		this._langModelServer = undefined;
 	}
 }
 

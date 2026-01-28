@@ -7,23 +7,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../../../platform/log/common/logService';
 import { ITerminalService } from '../../../../../../platform/terminal/common/terminalService';
-import { DisposableStore } from '../../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
 import { ClaudeLanguageModelServer } from '../../../node/claudeLanguageModelServer';
 import { TerminalSlashCommand } from '../terminalCommand';
 
 describe('TerminalSlashCommand', () => {
-	let store: DisposableStore;
 	let terminalCommand: TerminalSlashCommand;
 	let mockTerminalService: ITerminalService;
 	let mockTerminal: vscode.Terminal;
 	let instantiationService: IInstantiationService;
 	let mockLogService: ILogService;
+	let mockLanguageModelServer: ClaudeLanguageModelServer;
+
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
 	beforeEach(() => {
-		store = new DisposableStore();
-
 		// Create mock terminal
 		mockTerminal = {
 			show: vi.fn(),
@@ -35,22 +35,37 @@ describe('TerminalSlashCommand', () => {
 			createTerminal: vi.fn().mockReturnValue(mockTerminal),
 		} as any;
 
+		// Create mock language model server
+		mockLanguageModelServer = {
+			start: vi.fn().mockResolvedValue(undefined),
+			getConfig: vi.fn().mockReturnValue({
+				port: 12345,
+				nonce: 'test-nonce-123',
+			}),
+		} as any;
+
 		// Create testing services
 		const serviceCollection = store.add(createExtensionUnitTestingServices(store));
 		serviceCollection.set(ITerminalService, mockTerminalService);
 
 		const accessor = serviceCollection.createTestingAccessor();
-		instantiationService = accessor.get(IInstantiationService);
+		const realInstantiationService = accessor.get(IInstantiationService);
 		mockLogService = accessor.get(ILogService);
 
-		// Spy on ClaudeLanguageModelServer methods
-		vi.spyOn(ClaudeLanguageModelServer.prototype, 'start').mockResolvedValue();
-		vi.spyOn(ClaudeLanguageModelServer.prototype, 'getConfig').mockReturnValue({
-			port: 12345,
-			nonce: 'test-nonce-123',
-		});
+		// Create a wrapper instantiation service that returns our mock server
+		instantiationService = {
+			...realInstantiationService,
+			createInstance: vi.fn().mockImplementation((ctor: any, ...args: any[]) => {
+				if (ctor === ClaudeLanguageModelServer) {
+					return mockLanguageModelServer;
+				}
+				return realInstantiationService.createInstance(ctor, ...args);
+			}),
+		} as any;
 
-		terminalCommand = store.add(instantiationService.createInstance(TerminalSlashCommand));
+		terminalCommand = realInstantiationService.createInstance(TerminalSlashCommand);
+		// Replace the instantiation service in the command with our mock
+		(terminalCommand as any).instantiationService = instantiationService;
 	});
 
 	describe('command properties', () => {
@@ -203,11 +218,9 @@ describe('TerminalSlashCommand', () => {
 				onCancellationRequested: () => ({ dispose: () => { } }),
 			} as any;
 
-			const startSpy = vi.spyOn(ClaudeLanguageModelServer.prototype, 'start');
-
 			await terminalCommand.handle('', mockStream, mockToken);
 
-			expect(startSpy).toHaveBeenCalled();
+			expect(mockLanguageModelServer.start).toHaveBeenCalled();
 		});
 
 		it('reuses the same server instance for multiple calls', async () => {
@@ -220,14 +233,12 @@ describe('TerminalSlashCommand', () => {
 				onCancellationRequested: () => ({ dispose: () => { } }),
 			} as any;
 
-			const startSpy = vi.spyOn(ClaudeLanguageModelServer.prototype, 'start');
-
 			// Call handle twice
 			await terminalCommand.handle('', mockStream, mockToken);
 			await terminalCommand.handle('', mockStream, mockToken);
 
 			// Server should only be started once
-			expect(startSpy).toHaveBeenCalledTimes(1);
+			expect(mockLanguageModelServer.start).toHaveBeenCalledTimes(1);
 			// But terminal should be created twice
 			expect(mockTerminalService.createTerminal).toHaveBeenCalledTimes(2);
 		});
