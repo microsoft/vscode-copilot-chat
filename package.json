@@ -4341,7 +4341,7 @@
 				},
 				{
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
-					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated",
+					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
 				}
 			],
