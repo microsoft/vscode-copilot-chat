@@ -222,6 +222,7 @@ class TrajectoryBuilder {
 		let totalCompletionTokens = 0;
 		let totalCachedTokens = 0;
 		let totalCostUsd = 0;
+		let totalToolCalls = 0;
 
 		for (const step of this.steps) {
 			const metrics = step.metrics;
@@ -247,12 +248,20 @@ class TrajectoryBuilder {
 			}
 		}
 
-		const finalMetrics = hasAnyStepMetrics ? {
+		// Count total tool calls across all steps
+		for (const step of this.steps) {
+			if (step.tool_calls) {
+				totalToolCalls += step.tool_calls.length;
+			}
+		}
+
+		const finalMetrics = hasAnyStepMetrics || totalToolCalls > 0 ? {
 			...(sawPromptTokens ? { total_prompt_tokens: totalPromptTokens } : undefined),
 			...(sawCompletionTokens ? { total_completion_tokens: totalCompletionTokens } : undefined),
 			...(sawCachedTokens ? { total_cached_tokens: totalCachedTokens } : undefined),
 			...(sawCostUsd ? { total_cost_usd: totalCostUsd } : undefined),
-			total_steps: this.steps.length
+			total_steps: this.steps.length,
+			...(totalToolCalls > 0 ? { total_tool_calls: totalToolCalls } : undefined)
 		} : undefined;
 
 		const agent = inferredModelName ? { ...this.agentInfo, model_name: inferredModelName } : this.agentInfo;

@@ -14,7 +14,7 @@ The trajectory format is inspired by the [Harbor ATIF (Agent Trajectory Intercha
 
 ## Schema Version
 
-Current schema version: `VSCode-Copilot-Trajectory-v1.0`
+Current schema version: `ATIF-v1.5`
 
 File extension: `.trajectory.json`
 
@@ -46,7 +46,7 @@ When an agent delegates work to a subagent (e.g., search subagent), the subagent
 
 ```typescript
 interface IAgentTrajectory {
-  schema_version: string;           // "VSCode-Copilot-Trajectory-v1.0"
+  schema_version: string;           // "ATIF-v1.5"
   session_id: string;               // Unique session identifier
   agent: IAgentInfo;                // Agent configuration
   steps: ITrajectoryStep[];         // Sequential execution steps
@@ -223,8 +223,8 @@ The trajectory format follows the Harbor ATIF token accounting model:
 **Cost calculation:**
 ```
 non_cached_tokens = prompt_tokens - cached_tokens
-cost = (non_cached_tokens × input_price) + 
-       (cached_tokens × cached_price) + 
+cost = (non_cached_tokens × input_price) +
+       (cached_tokens × cached_price) +
        (completion_tokens × output_price)
 ```
 
@@ -305,7 +305,7 @@ MCP (Model Context Protocol) tool calls include server context:
 
 ```json
 {
-  "schema_version": "VSCode-Copilot-Trajectory-v1.0",
+  "schema_version": "ATIF-v1.5",
   "session_id": "main-agent-1234567890",
   "agent": {
     "name": "copilot-agent",

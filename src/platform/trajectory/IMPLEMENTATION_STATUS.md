@@ -16,7 +16,7 @@ A complete type system inspired by Harbor's ATIF specification:
 - `ISubagentTrajectoryRef` - Hierarchical subagent linking
 
 **Key Features:**
-- Schema version: `VSCode-Copilot-Trajectory-v1.0`
+- Schema version: `ATIF-v1.5`
 - File extension: `.trajectory.json`
 - Supports hierarchical agent structures
 - Tracks parallel tool calling

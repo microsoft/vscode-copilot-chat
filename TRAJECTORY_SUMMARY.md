@@ -29,7 +29,7 @@ A complete agent trajectory format system inspired by Harbor's ATIF specificatio
 
 ```json
 {
-  "schema_version": "VSCode-Copilot-Trajectory-v1.0",
+  "schema_version": "ATIF-v1.5",
   "session_id": "main-agent-1234567890",
   "agent": {
     "name": "copilot-agent",

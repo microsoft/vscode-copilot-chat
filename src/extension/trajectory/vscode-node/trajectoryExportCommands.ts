@@ -150,7 +150,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 				await vscode.commands.executeCommand('revealFileInOS', saveDir);
 			}
 		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to export trajectory: ${error}`);
+			vscode.window.showErrorMessage(`Failed to export trajectory: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -253,7 +253,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 				await vscode.commands.executeCommand('revealFileInOS', saveDir);
 			}
 		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to export trajectories: ${error}`);
+			vscode.window.showErrorMessage(`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
