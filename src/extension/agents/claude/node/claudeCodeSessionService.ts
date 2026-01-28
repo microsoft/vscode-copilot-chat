@@ -181,9 +181,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return this._sessionCache.get(projectDirUri) || null;
 		} catch (e) {
 			// Directory read failed, invalidate cache
-			if (e.code !== 'FileNotFound') {
-				this._logService.error(e, `[ClaudeCodeSessionService] Failed to check cache validity for: ${projectDirUri}`);
-			} else {
+			if (typeof e === 'object' && e !== null && 'code' in e && e.code !== 'FileNotFound') {
+				this._logService.error(e as Error, `[ClaudeCodeSessionService] Failed to check cache validity for: ${projectDirUri}`);
+			} else if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'FileNotFound') {
 				this._logService.trace(`[ClaudeCodeSessionService] Claude session directory not found during cache check: ${projectDirUri}`);
 			}
 			return null;
@@ -198,9 +198,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		try {
 			entries = await this._fileSystem.readDirectory(projectDirUri);
 		} catch (e) {
-			if (e.code !== 'FileNotFound') {
-				this._logService.error(e, `[ClaudeCodeSessionService] ${e.code} Failed to read directory: ${projectDirUri}`);
-			} else {
+			if (typeof e === 'object' && e !== null && 'code' in e && e.code !== 'FileNotFound') {
+				this._logService.error(e as Error, `[ClaudeCodeSessionService] ${(e as { code: string }).code} Failed to read directory: ${projectDirUri}`);
+			} else if (typeof e === 'object' && e !== null && 'code' in e && e.code === 'FileNotFound') {
 				this._logService.trace(`[ClaudeCodeSessionService] Claude session directory not found: ${projectDirUri}`);
 			}
 			return [];
