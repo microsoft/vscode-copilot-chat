@@ -4209,7 +4209,7 @@
 					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.mcp.enabled%",
 						"tags": [
 							"advanced",
