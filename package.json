@@ -2719,12 +2719,6 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.cloudAgent.enabled%"
 					},
-					"github.copilot.chat.copilotMemory.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.copilotMemory.enabled%",
-						"scope": "application"
-					},
 					"github.copilot.chat.codeGeneration.useInstructionFiles": {
 						"type": "boolean",
 						"default": true,
@@ -3010,6 +3004,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.copilotMemory.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.copilotMemory.enabled%",
 						"tags": [
 							"preview"
 						]
