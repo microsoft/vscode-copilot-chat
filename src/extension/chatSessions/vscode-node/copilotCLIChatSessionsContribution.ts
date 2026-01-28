@@ -726,12 +726,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
-			if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
-				const workspaceFolder = this.workspaceService.getWorkspaceFolder(session.object.options.workingDirectory);
-				if (workspaceFolder) {
-					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workspaceFolder.fsPath);
-				}
-			}
 			if (isUntitled) {
 				_untitledSessionIdMap.set(session.object.sessionId, id);
 				disposables.add(toDisposable(() => _untitledSessionIdMap.delete(session.object.sessionId)));
@@ -901,9 +895,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		this.logService.info(`Using Copilot CLI session: ${session.object.sessionId} (isNewSession: ${isNewSession}, isolationEnabled: ${isolationEnabled}, workingDirectory: ${workingDirectory}, worktreePath: ${worktreeProperties?.worktreePath}, changesAction: ${uncommitedChangesAction})`);
 		if (isNewSession) {
 			this.untitledSessionIdMapping.set(id, session.object.sessionId);
-		}
-		if (isNewSession && worktreeProperties) {
-			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+			if (worktreeProperties) {
+				void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+			}
+			if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
+				const workspaceFolder = this.workspaceService.getWorkspaceFolder(session.object.options.workingDirectory);
+				if (workspaceFolder) {
+					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workspaceFolder.fsPath);
+				} else {
+					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, basename(session.object.options.workingDirectory));
+				}
+			}
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
