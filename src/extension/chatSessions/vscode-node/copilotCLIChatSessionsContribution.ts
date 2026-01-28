@@ -1073,7 +1073,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					// Hence no point in trying to even use this as a folder without git (i.e. pointless asking user twice whether they trust the folder)
 					if (await checkFileExists(URI.joinPath(sessionWorkspaceFolder, '.git'), this.fileSystemService)) {
 						stream.warning(l10n.t('The selected folder is not trusted.'));
-						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true };
+						return { workingDirectory: undefined, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: true };
 					}
 
 					// Verify this folder is trusted.
