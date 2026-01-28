@@ -1649,6 +1649,11 @@
 								]
 							}
 						]
+					},
+					{
+						"name": "compact",
+						"description": "%copilot.workspace.compact.description%",
+						"sampleRequest": "%copilot.workspace.compact.sampleRequest%"
 					}
 				]
 			},
