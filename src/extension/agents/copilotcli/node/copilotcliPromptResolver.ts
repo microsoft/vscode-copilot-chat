@@ -121,12 +121,12 @@ export class CopilotCLIPromptResolver {
 					const uri = await this.imageSupport.storeImage(buffer, ref.value.mimeType);
 					attachments.push({
 						type: 'file',
-						displayName: path.basename(uri.fsPath),
+						displayName: ref.name,
 						path: uri.fsPath
 					});
 					images.push({
 						type: 'file',
-						displayName: path.basename(uri.fsPath),
+						displayName: ref.name,
 						path: uri.fsPath
 					});
 				} catch (error) {
