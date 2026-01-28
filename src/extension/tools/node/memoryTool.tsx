@@ -11,7 +11,7 @@ import * as extpath from '../../../util/vs/base/common/extpath';
 import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { MEMORY_DIR_NAME } from '../common/agentMemoryService';
+import { IAgentMemoryService, isRepoMemoryEntry, MEMORY_DIR_NAME } from '../common/agentMemoryService';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface IMemoryParams {
@@ -38,10 +38,12 @@ interface MemoryResult {
  */
 class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	private static readonly SESSION_PATH_PREFIX = '/memories/session';
+	private static readonly REPO_PATH_PREFIX = '/memories/repo';
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IFileSystemService private readonly fileSystem: IFileSystemService
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
@@ -236,6 +238,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 	/**
 	 * Create or overwrite a file.
+	 * For files in /memories/repo, also syncs parsed memory entries to CAPI if enabled.
 	 */
 	private async _create(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
@@ -253,9 +256,37 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			const content = new TextEncoder().encode(fileText);
 			await this.fileSystem.writeFile(fullPath, content);
 
+			// If this is a repo memory file, try to sync entries to CAPI
+			if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+				this.syncRepoMemoriesToCAPI(fileText).catch(err => {
+					// Don't fail the operation if CAPI sync fails
+					console.warn(`[MemoryTool] Failed to sync memories to CAPI: ${err}`);
+				});
+			}
+
 			return { success: `File created successfully at ${memoryPath}` };
 		} catch (error) {
 			return { error: `Cannot create file ${memoryPath}: ${error.message}` };
+		}
+	}
+
+	/**
+	 * Parse JSONL content and sync memory entries to CAPI.
+	 * This is called asynchronously and doesn't block the create operation.
+	 */
+	private async syncRepoMemoriesToCAPI(fileText: string): Promise<void> {
+		const lines = fileText.split('\n').filter(line => line.trim());
+
+		for (const line of lines) {
+			try {
+				const entry = JSON.parse(line) as unknown;
+				if (isRepoMemoryEntry(entry)) {
+					await this.agentMemoryService.storeMemoryToCAPI(entry);
+				}
+			} catch (err) {
+				// Skip invalid JSON lines
+				continue;
+			}
 		}
 	}
 
