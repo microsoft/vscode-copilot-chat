@@ -2569,12 +2569,12 @@
 			{
 				"command": "github.copilot.chat.debug.exportTrajectories",
 				"title": "Export Agent Trajectories",
-				"category": "Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.debug.exportSingleTrajectory",
 				"title": "Export Trajectory...",
-				"category": "Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.nes.captureExpected.start",
@@ -4370,6 +4370,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.chat.debug.exportSingleTrajectory",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.chat.triggerPermissiveSignIn",
 					"when": "false"
