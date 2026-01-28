@@ -1444,29 +1444,33 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		// Apply changes
-		const sessionId = SessionIdForCLI.parse(resource);
-		await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
+		try {
+			// Apply changes
+			const sessionId = SessionIdForCLI.parse(resource);
+			await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
 
-		// Close the multi-file diff editor if it's open
-		const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-		const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
+			// Close the multi-file diff editor if it's open
+			const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
 
-		if (worktreePath) {
-			// Select the tabs to close
-			const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
-				.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
-					extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
-					extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
+			if (worktreePath) {
+				// Select the tabs to close
+				const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
+					.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
+						extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
+						extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
 
-			if (multiDiffTabToClose.length > 0) {
-				// Close the tabs
-				await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+				if (multiDiffTabToClose.length > 0) {
+					// Close the tabs
+					await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+				}
 			}
-		}
 
-		// Pick up new git state
-		copilotcliSessionItemProvider.notifySessionsChange();
+			// Pick up new git state
+			copilotcliSessionItemProvider.notifySessionsChange();
+		} catch (error) {
+			vscode.window.showErrorMessage(l10n.t('Failed to apply changes to the current workspace. Please stash or commit your changes in the current workspace and try again.'), { modal: true });
+		}
 	};
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
