@@ -256,12 +256,12 @@ class TrajectoryBuilder {
 		}
 
 		const finalMetrics = hasAnyStepMetrics || totalToolCalls > 0 ? {
-			...(sawPromptTokens ? { total_prompt_tokens: totalPromptTokens } : undefined),
-			...(sawCompletionTokens ? { total_completion_tokens: totalCompletionTokens } : undefined),
-			...(sawCachedTokens ? { total_cached_tokens: totalCachedTokens } : undefined),
-			...(sawCostUsd ? { total_cost_usd: totalCostUsd } : undefined),
+			...(sawPromptTokens ? { total_prompt_tokens: totalPromptTokens } : {}),
+			...(sawCompletionTokens ? { total_completion_tokens: totalCompletionTokens } : {}),
+			...(sawCachedTokens ? { total_cached_tokens: totalCachedTokens } : {}),
+			...(sawCostUsd ? { total_cost_usd: totalCostUsd } : {}),
 			total_steps: this.steps.length,
-			...(totalToolCalls > 0 ? { total_tool_calls: totalToolCalls } : undefined)
+			...(totalToolCalls > 0 ? { total_tool_calls: totalToolCalls } : {})
 		} : undefined;
 
 		const agent = inferredModelName ? { ...this.agentInfo, model_name: inferredModelName } : this.agentInfo;
