@@ -123,9 +123,12 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 
 			for (const [trajSessionId, trajectory] of trajectoriesToExport) {
 				const referencedPath = sessionIdToTrajectoryPath.get(trajSessionId);
-				const filename = referencedPath
+				const rawFilename = referencedPath
 					? this.sanitizeFilename(referencedPath)
-					: `${this.sanitizeFilename(trajSessionId)}${TRAJECTORY_FILE_EXTENSION}`;
+					: this.sanitizeFilename(trajSessionId);
+				const filename = rawFilename.endsWith(TRAJECTORY_FILE_EXTENSION)
+					? rawFilename
+					: `${rawFilename}${TRAJECTORY_FILE_EXTENSION}`;
 				const fileUri = vscode.Uri.joinPath(saveDir, filename);
 
 				const content = JSON.stringify(trajectory, null, 2);
