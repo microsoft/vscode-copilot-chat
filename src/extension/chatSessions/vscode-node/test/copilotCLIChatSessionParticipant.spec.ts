@@ -244,7 +244,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
 			workspaceService,
-			new MockFileSystemService()
 		);
 	});
 
