@@ -19,6 +19,7 @@ tools: ["search", "fetch"]   # Optional: built-in, MCP (<server>/*), extension
 model: "Claude Sonnet 4"     # Optional, uses picker default
 argument-hint: "Task..."     # Optional, input guidance
 infer: true                  # Optional, enable on-demand subagent discovery (default: true)
+agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
 handoffs: [...]              # Optional, transitions to other agents
 ---
 ```
