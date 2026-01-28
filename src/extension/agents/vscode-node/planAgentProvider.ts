@@ -140,8 +140,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 
 		// Listen for settings changes to refresh agents
 		// Note: When settings change, we fire onDidChangeCustomAgents which causes VS Code to re-fetch
-		// the agent definition. However, handoff buttons already rendered it may not work so
-		// these capture capture the model at render time.
+		// the agent definition. However, handoff buttons already rendered may not work as
+		// these capture the model at render time.
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
