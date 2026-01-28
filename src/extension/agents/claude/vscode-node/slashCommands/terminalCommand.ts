@@ -18,6 +18,18 @@ import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claude
  * This command starts a ClaudeLanguageModelServer instance (if not already running)
  * and creates a new terminal with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY environment
  * variables set to proxy requests through Copilot Chat's chat endpoints.
+ *
+ * ## Usage
+ * 1. In a Claude Agent chat session, type `/terminal`
+ * 2. A new terminal will be created with the environment variables configured
+ * 3. Run `claude` in the terminal to start Claude Code
+ * 4. Claude Code will use Copilot Chat's endpoints for all LLM requests
+ *
+ * ## Requirements
+ * - Claude CLI (`claude`) must be installed and available in PATH
+ * - The terminal inherits the environment with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY set
+ * - The language model server runs on localhost with a random available port
+ */
  */
 export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	readonly commandName = 'terminal';
