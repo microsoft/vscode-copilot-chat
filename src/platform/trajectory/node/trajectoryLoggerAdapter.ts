@@ -25,6 +25,8 @@ export type PromptTsxRenderer = (part: LanguageModelPromptTsxPart) => Promise<st
  */
 export class TrajectoryLoggerAdapter extends Disposable {
 	private sessionMap = new WeakMap<CapturingToken, string>();
+	// Also maintain a strong reference map for lookup by token reference
+	private tokenToSessionId = new Map<CapturingToken, string>();
 	private processedEntries = new Set<string>();
 	private processedToolCalls = new Set<string>(); // Track processed tool calls by their ID
 	private lastUserMessageBySession = new Map<string, string>();
@@ -79,6 +81,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 				// otherwise generate a new one
 				sessionId = entry.token.subAgentInvocationId ?? this.generateSessionId(entry.token.label);
 				this.sessionMap.set(entry.token, sessionId);
+				this.tokenToSessionId.set(entry.token, sessionId);
 				// Use subAgentName as agent name for subagent trajectories
 				const agentName = entry.token.subAgentName ?? AGENT_NAME;
 				this.trajectoryLogger.startTrajectory(sessionId, {
@@ -517,5 +520,14 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	 */
 	public getAllTrajectories() {
 		return this.trajectoryLogger.getAllTrajectories();
+	}
+
+	/**
+	 * Get the session ID associated with a capturing token
+	 * @param token The capturing token to look up
+	 * @returns The session ID or undefined if not found
+	 */
+	public getSessionIdForToken(token: CapturingToken): string | undefined {
+		return this.tokenToSessionId.get(token);
 	}
 }

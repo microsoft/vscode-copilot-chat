@@ -2569,7 +2569,12 @@
 			{
 				"command": "github.copilot.chat.debug.exportTrajectories",
 				"title": "Export Agent Trajectories",
-				"category": "GitHub Copilot"
+				"category": "Copilot"
+			},
+			{
+				"command": "github.copilot.chat.debug.exportSingleTrajectory",
+				"title": "Export Trajectory...",
+				"category": "Copilot"
 			},
 			{
 				"command": "github.copilot.nes.captureExpected.start",
@@ -4660,6 +4665,11 @@
 					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
 					"when": "view == copilot-chat && viewItem == chatprompt",
 					"group": "export@3"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportSingleTrajectory",
+					"when": "view == copilot-chat && viewItem == chatprompt",
+					"group": "export@4"
 				}
 			],
 			"searchPanel/aiResults/commands": [
