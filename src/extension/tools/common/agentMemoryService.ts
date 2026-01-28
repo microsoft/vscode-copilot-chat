@@ -270,7 +270,7 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 	 * Uses experiment-based configuration for gradual rollout.
 	 */
 	private isCAPIMemorySyncConfigEnabled(): boolean {
-		return this.configService.getExperimentBasedConfig(ConfigKey.CopilotMemory.Enabled, this.experimentationService);
+		return this.configService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 	}
 
 	async checkMemoryEnabled(): Promise<boolean> {

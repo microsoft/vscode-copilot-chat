@@ -722,14 +722,6 @@ export namespace ConfigKey {
 	}
 
 	/**
-	 * Copilot Memory service integration settings
-	 */
-	export namespace CopilotMemory {
-		/** Enable syncing memory tool data with GitHub Copilot Memory service */
-		export const Enabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
-	}
-
-	/**
 	 * Internal settings those only team members can configure
 	 * Features should only be in this list temporarily, moving on to experimental to be accessible to early adopters.
 	*/
@@ -961,6 +953,8 @@ export namespace ConfigKey {
 
 	/** Model override for Implement agent (empty = use default) */
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
+
+	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
 }
 
 export function getAllConfigKeys(): string[] {
