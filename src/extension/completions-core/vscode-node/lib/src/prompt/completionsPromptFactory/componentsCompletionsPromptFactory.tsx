@@ -41,7 +41,8 @@ import {
 	matchContextItems,
 	ResolvedContextItem,
 	telemetrizeContextItems,
-	useContextProviderAPI
+	useContextProviderAPI,
+	type DefaultDiagnosticSettings
 } from '../contextProviderRegistry';
 import { getCodeSnippetsFromContextItems } from '../contextProviders/codeSnippets';
 import {
@@ -362,7 +363,8 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 				matchedContextItems
 			);
 		}
-		diagnosticBags = this.addDefaultDiagnosticBag(resolvedContextItems, diagnosticBags, completionId, completionState);
+		const settings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
+		diagnosticBags = this.addDefaultDiagnosticBag(resolvedContextItems, diagnosticBags, completionId, completionState, settings);
 		return { traits, codeSnippets, diagnostics: diagnosticBags, turnOffSimilarFiles, resolvedContextItems };
 	}
 
@@ -478,8 +480,8 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		return new promptInfo.renderer();
 	}
 
-	private addDefaultDiagnosticBag(resolvedContextItems: ResolvedContextItem[], bags: DiagnosticBagWithId[] | undefined, completionId: string, completionState: CompletionState): DiagnosticBagWithId[] | undefined {
-		const settings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
+	/** Public for testing */
+	public addDefaultDiagnosticBag(resolvedContextItems: ResolvedContextItem[], bags: DiagnosticBagWithId[] | undefined, completionId: string, completionState: CompletionState, settings: DefaultDiagnosticSettings | undefined): DiagnosticBagWithId[] | undefined {
 		if (settings === undefined) {
 			return bags;
 		}
