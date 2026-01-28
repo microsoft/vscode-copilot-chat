@@ -903,7 +903,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				if (workspaceFolder) {
 					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workspaceFolder.fsPath);
 				} else {
-					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, basename(session.object.options.workingDirectory));
+					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, session.object.options.workingDirectory.fsPath);
 				}
 			}
 		}
