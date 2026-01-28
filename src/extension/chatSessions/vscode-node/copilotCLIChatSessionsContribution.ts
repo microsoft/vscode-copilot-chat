@@ -1175,14 +1175,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 
 	private async moveOrCopyChangesToWorkTree(
-		repositoryRoot: Uri,
+		repositoryPath: Uri,
 		worktreePath: Uri,
 		moveOrCopyChanges: 'move' | 'copy',
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
 		// Migrate changes from active repository to worktree
-		const activeRepository = await this.gitService.getRepository(repositoryRoot, true);
+		const activeRepository = await this.gitService.getRepository(repositoryPath);
 		if (!activeRepository) {
 			return;
 		}
