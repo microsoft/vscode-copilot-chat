@@ -21,6 +21,9 @@ import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 
+/** Sentinel value indicating no Claude models with Messages API are available */
+export const UNAVAILABLE_MODEL_ID = '__unavailable__';
+
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
 	pendingToolInvocations: Map<string, vscode.ChatToolInvocationPart>;
@@ -83,9 +86,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	/**
-	 * Gets the model ID for a session, delegating to state service
+	 * Gets the model ID for a session, delegating to state service.
+	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
 	 */
-	public async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+	public async getModelIdForSession(sessionId: string): Promise<string> {
 		return this.sessionStateService.getModelIdForSession(sessionId);
 	}
 
@@ -98,11 +102,22 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const models = await this.claudeCodeModels.getModels();
-		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
-			id: model.id,
-			name: model.name,
-			description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
-		}));
+		let modelItems: vscode.ChatSessionProviderOptionItem[];
+
+		if (models.length === 0) {
+			// No Claude models with Messages API available - show unavailable placeholder
+			modelItems = [{
+				id: UNAVAILABLE_MODEL_ID,
+				name: l10n.t('Unavailable'),
+				description: l10n.t('No Claude models with Messages API found'),
+			}];
+		} else {
+			modelItems = models.map(model => ({
+				id: model.id,
+				name: model.name,
+				description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
+			}));
+		}
 
 		const permissionModeItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: 'default', name: l10n.t('Ask before edits') },
@@ -137,6 +152,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		const sessionId = ClaudeSessionUri.getId(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
+				// Ignore the unavailable placeholder - it's not a real model
+				if (update.value === UNAVAILABLE_MODEL_ID) {
+					continue;
+				}
 				// Update last known first so the event listener won't fire back to UI
 				this._updateLastKnown(sessionId, { modelId: update.value });
 				void this.claudeCodeModels.setDefaultModel(update.value);
@@ -158,7 +177,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			[];
 
 		// Get model and permission mode from state service (queries session if active)
-		const model = await this.sessionStateService.getModelIdForSession(sessionId);
+		const availableModels = await this.claudeCodeModels.getModels();
+		const model = availableModels.length === 0
+			? UNAVAILABLE_MODEL_ID
+			: await this.sessionStateService.getModelIdForSession(sessionId);
 		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string> = {};
