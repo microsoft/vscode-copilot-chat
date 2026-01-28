@@ -7,12 +7,24 @@ import * as fs from 'fs/promises';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
 
-export class CopilotCLIImageSupport {
+export interface ICopilotCLIImageSupport {
+	readonly _serviceBrand: undefined;
+	storeImage(imageData: Uint8Array, mimeType: string): Promise<URI>;
+	isTrustedImage(imageUri: URI): boolean;
+}
+
+export const ICopilotCLIImageSupport = createServiceIdentifier<ICopilotCLIImageSupport>('ICopilotCLIImageSupport');
+
+export class CopilotCLIImageSupport implements ICopilotCLIImageSupport {
+	readonly _serviceBrand: undefined;
 	private readonly storageDir: URI;
 	private readonly initialized: Lazy<Promise<void>>;
+	private readonly trustedImages = new ResourceSet();
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
@@ -32,6 +44,10 @@ export class CopilotCLIImageSupport {
 		}
 	}
 
+	isTrustedImage(imageUri: URI): boolean {
+		return this.trustedImages.has(imageUri);
+	}
+
 	async storeImage(imageData: Uint8Array, mimeType: string): Promise<URI> {
 		await this.initialized.value;
 		const timestamp = Date.now();
@@ -41,6 +57,7 @@ export class CopilotCLIImageSupport {
 		const imageUri = URI.joinPath(this.storageDir, filename);
 
 		await fs.writeFile(imageUri.fsPath, imageData);
+		this.trustedImages.add(imageUri);
 		return imageUri;
 	}
 

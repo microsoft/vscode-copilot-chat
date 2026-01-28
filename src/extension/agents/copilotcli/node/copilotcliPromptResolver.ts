@@ -19,11 +19,11 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, FileType, Location } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, isPromptInstruction, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
 import { generateUserPrompt } from '../../../prompts/node/agent/copilotCLIPrompt';
-import { CopilotCLIImageSupport } from './copilotCLIImageSupport';
+import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 
 export class CopilotCLIPromptResolver {
 	constructor(
-		private readonly imageSupport: CopilotCLIImageSupport,
+		@ICopilotCLIImageSupport private readonly imageSupport: ICopilotCLIImageSupport,
 		@ILogService private readonly logService: ILogService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
