@@ -66,9 +66,6 @@ export class TerminalSlashCommand extends Disposable implements IClaudeSlashComm
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			this.logService.error('[TerminalSlashCommand] Error creating terminal:', error);
 			stream?.markdown(vscode.l10n.t('Error creating terminal: {0}', errorMessage));
-			vscode.window.showErrorMessage(
-				vscode.l10n.t('Error creating Claude CLI terminal: {0}', errorMessage)
-			);
 		}
 
 		return {};
