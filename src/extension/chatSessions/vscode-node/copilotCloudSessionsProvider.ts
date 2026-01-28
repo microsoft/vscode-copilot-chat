@@ -541,7 +541,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const files = await vscode.workspace.findFiles(pattern);
 
 				for (const file of files) {
-					// Extract agent name from filename (e.g., "my-agent.md" or 'myagent.agent.md -> "my-agent")
+					// Extract agent name from filename (e.g., "my-agent.md" -> "my-agent" or "myagent.agent.md" -> "myagent")
 					const fileName = file.path.split('/').pop() || '';
 					const agentName = fileName.replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
 
