@@ -79,7 +79,8 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			'search',
 			false,
 			false,
-			subAgentInvocationId
+			subAgentInvocationId,
+			'search'  // subAgentName for trajectory tracking
 		);
 
 		// Wrap the loop execution in captureInvocation with the new token
@@ -92,7 +93,8 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			query: options.input.query,
 			description: options.input.description,
 			// The subAgentInvocationId links this tool call to the subagent's trajectory
-			subAgentInvocationId: subAgentInvocationId
+			subAgentInvocationId: subAgentInvocationId,
+			agentName: 'search'
 		};
 
 		let subagentResponse = '';

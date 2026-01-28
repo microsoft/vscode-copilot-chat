@@ -319,13 +319,15 @@ export class TrajectoryLoggerAdapter extends Disposable {
 
 		// Check if this is a subagent tool call (runSubagent or search_subagent)
 		if (entry.name === 'runSubagent' || entry.name === 'search_subagent') {
-			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForSubagentTool(entry, sessionId);
-			const subagentDescription = this.extractSubagentDescription(entry);
-			const trajectoryPath = `subagent-${this.sanitizeSubagentDescriptionForFilename(subagentDescription)}-${resolvedSubagentSessionId}${TRAJECTORY_FILE_EXTENSION}`;
-			stepContext.addSubagentReference(entry.id, {
-				session_id: resolvedSubagentSessionId,
-				trajectory_path: trajectoryPath
-			});
+			const resolvedSubagentSessionId = this.resolveSubagentSessionIdForSubagentTool(entry);
+			if (resolvedSubagentSessionId) {
+				const subagentDescription = this.extractSubagentDescription(entry);
+				const trajectoryPath = `subagent-${this.sanitizeSubagentDescriptionForFilename(subagentDescription)}-${resolvedSubagentSessionId}${TRAJECTORY_FILE_EXTENSION}`;
+				stepContext.addSubagentReference(entry.id, {
+					session_id: resolvedSubagentSessionId,
+					trajectory_path: trajectoryPath
+				});
+			}
 		}
 
 		// Only complete when all tool calls from this request are processed
@@ -338,13 +340,13 @@ export class TrajectoryLoggerAdapter extends Disposable {
 		}
 	}
 
-	private resolveSubagentSessionIdForSubagentTool(entry: ILoggedToolCall, currentSessionId: string): string {
+	private resolveSubagentSessionIdForSubagentTool(entry: ILoggedToolCall): string | undefined {
 		const cached = this.runSubagentToolCallToSessionId.get(entry.id);
 		if (cached) {
 			return cached;
 		}
 
-		// First, check if toolMetadata contains subAgentInvocationId (set at capture time)
+		// Use subAgentInvocationId from toolMetadata (set at capture time)
 		// This is the principled approach: the subagent session ID is captured when
 		// the subagent is launched and attached to the tool result metadata
 		const metadata = entry.toolMetadata as { subAgentInvocationId?: string } | undefined;
@@ -353,13 +355,17 @@ export class TrajectoryLoggerAdapter extends Disposable {
 			return metadata.subAgentInvocationId;
 		}
 
-		const resolved = `subagent-${entry.id}`;
-		this.runSubagentToolCallToSessionId.set(entry.id, resolved);
-		return resolved;
+		return undefined;
 	}
 
 	private extractSubagentDescription(entry: ILoggedToolCall): string {
-		const metadata = entry.toolMetadata as { description?: unknown } | undefined;
+		const metadata = entry.toolMetadata as { agentName?: unknown; description?: unknown } | undefined;
+
+		// Prefer agentName for consistent naming
+		if (metadata && typeof metadata.agentName === 'string' && metadata.agentName.trim().length > 0) {
+			return metadata.agentName;
+		}
+
 		if (metadata && typeof metadata.description === 'string' && metadata.description.trim().length > 0) {
 			return metadata.description;
 		}
