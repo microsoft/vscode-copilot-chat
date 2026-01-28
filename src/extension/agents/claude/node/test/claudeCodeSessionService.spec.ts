@@ -694,10 +694,12 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('propagates unexpected errors during directory read', async () => {
+		it('returns empty sessions and logs error for unexpected directory errors', async () => {
 			mockFs.mockError(dirUri, createErrorWithCode('EACCES'));
 
-			await expect(service.getAllSessions(CancellationToken.None)).rejects.toThrow('EACCES');
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
 		});
 	});
 });
