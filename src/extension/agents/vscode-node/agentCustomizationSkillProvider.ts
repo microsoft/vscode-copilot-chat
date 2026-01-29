@@ -59,7 +59,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 		this._register(vscode.workspace.registerFileSystemProvider(SKILL_SCHEME, this, { isReadonly: true }));
 
 		// Watch for configuration changes that affect the skill content
-		this._register(vscode.workspace.onDidChangeConfiguration(e => {
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (this._affectsSkillContent(e)) {
 				this._invalidateCache();
 			}
