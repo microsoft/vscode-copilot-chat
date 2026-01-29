@@ -78,6 +78,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 	 */
 	private _invalidateCache(): void {
 		this._cachedContent = undefined;
+		this._onDidChangeFile.fire([{ type: vscode.FileChangeType.Changed, uri: this._skillContentUri }]);
 		this._onDidChangeSkills.fire();
 		this.logService.trace('[AgentCustomizationSkillProvider] Cache invalidated due to configuration change');
 	}
