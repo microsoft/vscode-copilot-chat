@@ -193,19 +193,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	private buildCustomizedConfig(): PlanAgentConfig {
-		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
-
-		// Check askQuestions config first (needed for both tools and body)
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
-
-		// Start with base config, using dynamic body based on askQuestions setting
-		const config: PlanAgentConfig = {
-			...BASE_PLAN_AGENT_CONFIG,
-			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
-			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
-			body: `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
+	static buildAgentBody(askQuestionsEnabled: boolean): string {
+		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
 Your job: research the codebase → clarify with the user → produce a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
 
@@ -290,7 +279,22 @@ Rules:
 - NO code blocks — describe changes, link to files/symbols
 - NO questions at the end${askQuestionsEnabled ? ' — ask during workflow via #tool:vscode/askQuestions' : ''}
 - Keep scannable
-</plan_style_guide>`,
+</plan_style_guide>`;
+	}
+
+	private buildCustomizedConfig(): PlanAgentConfig {
+		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
+		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+
+		// Check askQuestions config first (needed for both tools and body)
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+
+		// Start with base config, using dynamic body based on askQuestions setting
+		const config: PlanAgentConfig = {
+			...BASE_PLAN_AGENT_CONFIG,
+			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
+			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
+			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
 		};
 
 		// Collect tools to add
