@@ -1354,8 +1354,7 @@
 					"runCommand",
 					"askQuestions",
 					"switchAgent",
-					"vscodeAPI",
-					"memory"
+					"vscodeAPI"
 				]
 			},
 			{
