@@ -45,6 +45,70 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		}));
 	}
 
+	/**
+	 * Build a mapping from sessionId to trajectory_path by scanning subagent refs
+	 */
+	private buildTrajectoryPathMapping(trajectories: Map<string, IAgentTrajectory>): Map<string, string> {
+		const mapping = new Map<string, string>();
+		for (const trajectory of trajectories.values()) {
+			const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
+			for (const step of steps) {
+				const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
+				for (const r of results) {
+					for (const ref of r.subagent_trajectory_ref ?? []) {
+						if (ref.session_id && ref.trajectory_path && !mapping.has(ref.session_id)) {
+							mapping.set(ref.session_id, ref.trajectory_path);
+						}
+					}
+				}
+			}
+		}
+		return mapping;
+	}
+
+	/**
+	 * Get the filename for a trajectory, using referenced path if available
+	 */
+	private getTrajectoryFilename(sessionId: string, pathMapping: Map<string, string>): string {
+		const referencedPath = pathMapping.get(sessionId);
+		const rawFilename = referencedPath
+			? this.sanitizeFilename(referencedPath)
+			: this.sanitizeFilename(sessionId);
+		return rawFilename.endsWith(TRAJECTORY_FILE_EXTENSION)
+			? rawFilename
+			: `${rawFilename}${TRAJECTORY_FILE_EXTENSION}`;
+	}
+
+	/**
+	 * Write multiple trajectories to a folder
+	 */
+	private async writeTrajectoriesToFolder(
+		trajectories: Map<string, IAgentTrajectory>,
+		saveDir: vscode.Uri,
+		pathMapping: Map<string, string>
+	): Promise<void> {
+		for (const [sessionId, trajectory] of trajectories) {
+			const filename = this.getTrajectoryFilename(sessionId, pathMapping);
+			const fileUri = vscode.Uri.joinPath(saveDir, filename);
+			const content = JSON.stringify(trajectory, null, 2);
+			await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
+		}
+	}
+
+	/**
+	 * Prompt user for folder selection
+	 */
+	private async promptForFolder(title: string): Promise<vscode.Uri | undefined> {
+		const dialogResult = await vscode.window.showOpenDialog({
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			title,
+			defaultUri: vscode.Uri.file(os.homedir())
+		});
+		return dialogResult?.[0];
+	}
+
 	private async exportTrajectories(savePath?: string): Promise<void> {
 		const trajectories = this.trajectoryLogger.getAllTrajectories();
 
@@ -53,8 +117,30 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 			return;
 		}
 
-		// Always export as separate files (one per trajectory)
-		await this.exportMultipleTrajectories(trajectories, savePath);
+		const saveDir = savePath
+			? vscode.Uri.file(savePath)
+			: await this.promptForFolder('Select Folder to Export Trajectories');
+
+		if (!saveDir) {
+			return; // User cancelled
+		}
+
+		try {
+			const pathMapping = this.buildTrajectoryPathMapping(trajectories);
+			await this.writeTrajectoriesToFolder(trajectories, saveDir, pathMapping);
+
+			const revealAction = 'Reveal in Explorer';
+			const result = await vscode.window.showInformationMessage(
+				`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
+				revealAction
+			);
+
+			if (result === revealAction) {
+				await vscode.commands.executeCommand('revealFileInOS', saveDir);
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`);
+		}
 	}
 
 	/**
@@ -89,63 +175,58 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 			return;
 		}
 
-		// Show save dialog
-		const dialogResult = await vscode.window.showOpenDialog({
-			canSelectFiles: false,
-			canSelectFolders: true,
-			canSelectMany: false,
-			title: 'Select folder to export trajectory',
-			defaultUri: vscode.Uri.file(os.homedir())
-		});
+		const pathMapping = this.buildTrajectoryPathMapping(trajectoriesToExport);
+		const isSingleFile = trajectoriesToExport.size === 1;
 
-		if (!dialogResult || dialogResult.length === 0) {
-			return; // User cancelled
-		}
+		let saveDir: vscode.Uri;
+		let singleFileUri: vscode.Uri | undefined;
 
-		const saveDir = dialogResult[0];
+		if (isSingleFile) {
+			// Use showSaveDialog with predetermined filename for single file export
+			const suggestedFilename = this.getTrajectoryFilename(sessionId, pathMapping);
+			const saveResult = await vscode.window.showSaveDialog({
+				title: 'Export Trajectory',
+				defaultUri: vscode.Uri.joinPath(vscode.Uri.file(os.homedir()), suggestedFilename),
+				filters: { 'Trajectory Files': [TRAJECTORY_FILE_EXTENSION.slice(1)] }
+			});
 
-		try {
-			// Build sessionId -> trajectory_path mapping from subagent refs
-			const sessionIdToTrajectoryPath = new Map<string, string>();
-			for (const trajectory of trajectoriesToExport.values()) {
-				const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
-				for (const step of steps) {
-					const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
-					for (const r of results) {
-						for (const ref of r.subagent_trajectory_ref ?? []) {
-							if (ref.session_id && ref.trajectory_path && !sessionIdToTrajectoryPath.has(ref.session_id)) {
-								sessionIdToTrajectoryPath.set(ref.session_id, ref.trajectory_path);
-							}
-						}
-					}
-				}
+			if (!saveResult) {
+				return; // User cancelled
 			}
 
-			for (const [trajSessionId, trajectory] of trajectoriesToExport) {
-				const referencedPath = sessionIdToTrajectoryPath.get(trajSessionId);
-				const rawFilename = referencedPath
-					? this.sanitizeFilename(referencedPath)
-					: this.sanitizeFilename(trajSessionId);
-				const filename = rawFilename.endsWith(TRAJECTORY_FILE_EXTENSION)
-					? rawFilename
-					: `${rawFilename}${TRAJECTORY_FILE_EXTENSION}`;
-				const fileUri = vscode.Uri.joinPath(saveDir, filename);
+			singleFileUri = saveResult;
+			saveDir = vscode.Uri.joinPath(saveResult, '..');
+		} else {
+			// Use folder selection for multiple files
+			const folderUri = await this.promptForFolder('Select Folder to Export Trajectories');
+			if (!folderUri) {
+				return; // User cancelled
+			}
+			saveDir = folderUri;
+		}
 
+		try {
+			if (isSingleFile && singleFileUri) {
+				// Export single file using the user-specified path
+				const [, trajectory] = [...trajectoriesToExport][0];
 				const content = JSON.stringify(trajectory, null, 2);
-				await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
+				await vscode.workspace.fs.writeFile(singleFileUri, Buffer.from(content, 'utf8'));
+			} else {
+				await this.writeTrajectoriesToFolder(trajectoriesToExport, saveDir, pathMapping);
 			}
 
 			const subagentCount = trajectoriesToExport.size - 1;
 			const subagentMsg = subagentCount > 0 ? ` (including ${subagentCount} subagent ${subagentCount === 1 ? 'trajectory' : 'trajectories'})` : '';
+			const exportPath = isSingleFile && singleFileUri ? singleFileUri.fsPath : saveDir.fsPath;
 
 			const revealAction = 'Reveal in Explorer';
 			const result = await vscode.window.showInformationMessage(
-				`Successfully exported trajectory${subagentMsg} to ${saveDir.fsPath}`,
+				`Successfully exported trajectory${subagentMsg} to ${exportPath}`,
 				revealAction
 			);
 
 			if (result === revealAction) {
-				await vscode.commands.executeCommand('revealFileInOS', saveDir);
+				await vscode.commands.executeCommand('revealFileInOS', singleFileUri ?? saveDir);
 			}
 		} catch (error) {
 			vscode.window.showErrorMessage(`Failed to export trajectory: ${error instanceof Error ? error.message : String(error)}`);
@@ -186,70 +267,6 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 
 		collect(mainTrajectory);
 		return result;
-	}
-
-	private async exportMultipleTrajectories(
-		trajectories: Map<string, IAgentTrajectory>,
-		savePath?: string
-	): Promise<void> {
-		let saveDir: vscode.Uri;
-
-		if (savePath && typeof savePath === 'string') {
-			saveDir = vscode.Uri.file(savePath);
-		} else {
-			const dialogResult = await vscode.window.showOpenDialog({
-				canSelectFiles: false,
-				canSelectFolders: true,
-				canSelectMany: false,
-				title: 'Select folder to export trajectories',
-				defaultUri: vscode.Uri.file(os.homedir())
-			});
-
-			if (!dialogResult || dialogResult.length === 0) {
-				return; // User cancelled
-			}
-			saveDir = dialogResult[0];
-		}
-
-		try {
-			const sessionIdToTrajectoryPath = new Map<string, string>();
-			for (const trajectory of trajectories.values()) {
-				const steps: ITrajectoryStep[] = Array.isArray(trajectory?.steps) ? trajectory.steps : [];
-				for (const step of steps) {
-					const results: IObservationResult[] = Array.isArray(step.observation?.results) ? step.observation.results : [];
-					for (const r of results) {
-						for (const ref of r.subagent_trajectory_ref ?? []) {
-							if (ref.session_id && ref.trajectory_path && !sessionIdToTrajectoryPath.has(ref.session_id)) {
-								sessionIdToTrajectoryPath.set(ref.session_id, ref.trajectory_path);
-							}
-						}
-					}
-				}
-			}
-
-			for (const [sessionId, trajectory] of trajectories) {
-				const referencedPath = sessionIdToTrajectoryPath.get(sessionId);
-				const filename = referencedPath
-					? this.sanitizeFilename(referencedPath)
-					: `${this.sanitizeFilename(sessionId)}${TRAJECTORY_FILE_EXTENSION}`;
-				const fileUri = vscode.Uri.joinPath(saveDir, filename);
-
-				const content = JSON.stringify(trajectory, null, 2);
-				await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
-			}
-
-			const revealAction = 'Reveal in Explorer';
-			const result = await vscode.window.showInformationMessage(
-				`Successfully exported ${trajectories.size} trajectories to ${saveDir.fsPath}`,
-				revealAction
-			);
-
-			if (result === revealAction) {
-				await vscode.commands.executeCommand('revealFileInOS', saveDir);
-			}
-		} catch (error) {
-			vscode.window.showErrorMessage(`Failed to export trajectories: ${error instanceof Error ? error.message : String(error)}`);
-		}
 	}
 
 	private sanitizeFilename(name: string): string {
