@@ -541,6 +541,7 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		username: 'testuser',
 		isVscodeTeamMember: false,
 		copilot_plan: 'free',
+		organization_login_list: [],
 		// Apply overrides
 		...overrides,
 	};
