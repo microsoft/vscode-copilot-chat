@@ -32,6 +32,10 @@ export class CapturingToken {
 		 * enabling explicit linking between parent tool calls and subagent trajectories.
 		 */
 		public readonly subAgentInvocationId?: string,
+		/**
+		 * Optional name of the subagent being invoked.
+		 * Used alongside subAgentInvocationId to identify the subagent in trajectory tracking.
+		 */
 		public readonly subAgentName?: string,
 		/**
 		 * Optional VS Code chat session ID for trajectory tracking.
