@@ -25,6 +25,8 @@ export class NotSignedUpError extends Error { }
 export class SubscriptionExpiredError extends Error { }
 export class ContactSupportError extends Error { }
 export class EnterpriseManagedError extends Error { }
+export class InvalidTokenError extends Error { }
+export class RateLimitedError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
@@ -115,7 +117,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 				shown401Message = true;
 				window.showWarningMessage(message);
 			}
-			throw Error(message);
+			throw new InvalidTokenError(message);
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'GitHubLoginFailed') {
@@ -123,7 +125,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'RateLimited') {
-			throw Error(`Your account has exceeded GitHub's API rate limit. Please try again later.`);
+			throw new RateLimitedError(`Your account has exceeded GitHub's API rate limit. Please try again later.`);
 		}
 
 		if (tokenResult.kind === 'failure') {

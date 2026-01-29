@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { commands, extensions, window } from 'vscode';
 import { IAuthenticationService, MinimalModeError } from '../../../platform/authentication/common/authentication';
-import { ContactSupportError, EnterpriseManagedError, NotSignedUpError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+import { ContactSupportError, EnterpriseManagedError, InvalidTokenError, NotSignedUpError, RateLimitedError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -23,6 +23,8 @@ const welcomeViewContextKeys = {
 	IndividualExpired: 'github.copilot.interactiveSession.individual.expired',
 	ContactSupport: 'github.copilot.interactiveSession.contactSupport',
 	EnterpriseDisabled: 'github.copilot.interactiveSession.enterprise.disabled',
+	InvalidToken: 'github.copilot.interactiveSession.invalidToken',
+	RateLimited: 'github.copilot.interactiveSession.rateLimited',
 };
 
 const chatQuotaExceededContextKey = 'github.copilot.chat.quotaExceeded';
@@ -138,6 +140,10 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.EnterpriseDisabled;
 		} else if (error instanceof ContactSupportError) {
 			key = welcomeViewContextKeys.ContactSupport;
+		} else if (error instanceof InvalidTokenError) {
+			key = welcomeViewContextKeys.InvalidToken;
+		} else if (error instanceof RateLimitedError) {
+			key = welcomeViewContextKeys.RateLimited;
 		} else if (error) {
 			if (!extensions.getExtension(EXTENSION_ID)?.isActive) {
 				key = welcomeViewContextKeys.Offline;

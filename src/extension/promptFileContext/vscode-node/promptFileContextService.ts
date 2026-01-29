@@ -224,9 +224,9 @@ export class PromptFileContextContribution extends Disposable {
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
+		this.logService.info('Copilot extension found');
 		try {
 			const api = await copilotExtension.activate();
 			return api.getContextProviderAPI('v1');

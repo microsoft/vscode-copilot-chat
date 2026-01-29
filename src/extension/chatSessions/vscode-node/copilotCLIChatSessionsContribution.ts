@@ -184,13 +184,21 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
+		// Metadata
+		const metadata = {
+			branchName: worktreeProperties?.branchName,
+			repositoryPath: worktreeProperties?.repositoryPath,
+			worktreePath: worktreeProperties?.worktreePath
+		} satisfies { readonly [key: string]: unknown };
+
 		return {
 			resource,
 			label,
 			badge,
 			timing: session.timing,
 			changes,
-			status
+			status,
+			metadata
 		} satisfies vscode.ChatSessionItem;
 	}
 
@@ -528,7 +536,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		for (const workspaceFolder of this.workspaceService.getWorkspaceFolders()) {
 			const agentFile = URI.joinPath(workspaceFolder, '.github', 'agents', agent.name + '.agent.md');
 			try {
-				if (!(await checkPathExists(agentFile, this.fileSystem))) {
+				if (!(await checkFileExists(agentFile, this.fileSystem))) {
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
@@ -564,8 +572,17 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
 	try {
-		await fileSystem.stat(filePath);
-		return true;
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.Directory;
+	} catch (error) {
+		return false;
+	}
+}
+
+async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+	try {
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.File;
 	} catch (error) {
 		return false;
 	}
@@ -718,12 +735,6 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);
-			if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
-				const workspaceFolder = this.workspaceService.getWorkspaceFolder(session.object.options.workingDirectory);
-				if (workspaceFolder) {
-					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workspaceFolder.fsPath);
-				}
-			}
 			if (isUntitled) {
 				_untitledSessionIdMap.set(session.object.sessionId, id);
 				disposables.add(toDisposable(() => _untitledSessionIdMap.delete(session.object.sessionId)));
@@ -893,9 +904,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		this.logService.info(`Using Copilot CLI session: ${session.object.sessionId} (isNewSession: ${isNewSession}, isolationEnabled: ${isolationEnabled}, workingDirectory: ${workingDirectory}, worktreePath: ${worktreeProperties?.worktreePath}, changesAction: ${uncommitedChangesAction})`);
 		if (isNewSession) {
 			this.untitledSessionIdMapping.set(id, session.object.sessionId);
-		}
-		if (isNewSession && worktreeProperties) {
-			void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+			if (worktreeProperties) {
+				void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
+			}
+			if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
+				const workspaceFolder = this.workspaceService.getWorkspaceFolder(session.object.options.workingDirectory);
+				if (workspaceFolder) {
+					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, workspaceFolder.fsPath);
+				} else {
+					void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, session.object.options.workingDirectory.fsPath);
+				}
+			}
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
@@ -1436,29 +1455,33 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			return;
 		}
 
-		// Apply changes
-		const sessionId = SessionIdForCLI.parse(resource);
-		await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
+		try {
+			// Apply changes
+			const sessionId = SessionIdForCLI.parse(resource);
+			await copilotCLIWorktreeManagerService.applyWorktreeChanges(sessionId);
 
-		// Close the multi-file diff editor if it's open
-		const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
-		const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
+			// Close the multi-file diff editor if it's open
+			const worktreeProperties = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+			const worktreePath = worktreeProperties ? Uri.file(worktreeProperties.worktreePath) : undefined;
 
-		if (worktreePath) {
-			// Select the tabs to close
-			const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
-				.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
-					extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
-					extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
+			if (worktreePath) {
+				// Select the tabs to close
+				const multiDiffTabToClose = vscode.window.tabGroups.all.flatMap(g => g.tabs)
+					.filter(({ input }) => input instanceof vscode.TabInputTextMultiDiff && input.textDiffs.some(input =>
+						extUri.isEqualOrParent(vscode.Uri.file(input.original.fsPath), worktreePath, true) ||
+						extUri.isEqualOrParent(vscode.Uri.file(input.modified.fsPath), worktreePath, true)));
 
-			if (multiDiffTabToClose.length > 0) {
-				// Close the tabs
-				await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+				if (multiDiffTabToClose.length > 0) {
+					// Close the tabs
+					await vscode.window.tabGroups.close(multiDiffTabToClose, true);
+				}
 			}
-		}
 
-		// Pick up new git state
-		copilotcliSessionItemProvider.notifySessionsChange();
+			// Pick up new git state
+			copilotcliSessionItemProvider.notifySessionsChange();
+		} catch (error) {
+			vscode.window.showErrorMessage(l10n.t('Failed to apply changes to the current workspace. Please stage or commit your changes in the current workspace and try again.'), { modal: true });
+		}
 	};
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));

@@ -38,8 +38,8 @@ export abstract class BaseFetchFetcher implements IFetcher {
 		}
 
 		const method = options.method || 'GET';
-		if (method !== 'GET' && method !== 'POST') {
-			throw new Error(`Illegal arguments! 'method' must be either 'GET' or 'POST'!`);
+		if (method !== 'GET' && method !== 'POST' && method !== 'PUT') {
+			throw new Error(`Illegal arguments! 'method' must be 'GET', 'POST', or 'PUT'!`);
 		}
 
 		const signal = options.signal ?? new AbortController().signal;
@@ -81,7 +81,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 		return items;
 	}
 
-	private async _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	private async _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
 		const resp = await this._fetchImpl(url, { method, headers, body, signal });
 		return new Response(
 			resp.status,

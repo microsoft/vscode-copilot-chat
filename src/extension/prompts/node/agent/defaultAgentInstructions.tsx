@@ -43,7 +43,6 @@ export interface DefaultAgentPromptProps extends BasePromptElementProps {
 	readonly availableTools: readonly LanguageModelToolInformation[] | undefined;
 	readonly modelFamily: string | undefined;
 	readonly codesearchMode: boolean | undefined;
-	readonly isNewChat: boolean | undefined;
 }
 
 export interface ToolReferencesHintProps extends BasePromptElementProps {

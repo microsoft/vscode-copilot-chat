@@ -11,11 +11,11 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
@@ -192,6 +192,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		try {
 			// Apply patch
 			await this.gitService.applyPatch(vscode.Uri.file(worktreeProperties.repositoryPath), patchFilePath);
+		} catch (error) {
+			this.logService.error(`[ChatSessionWorktreeService][applyWorktreeChanges] Error applying patch file ${patchFilePath} to repository ${worktreeProperties.repositoryPath}: `, error);
+			throw error;
 		} finally {
 			await vscode.workspace.fs.delete(patchFileUri);
 		}
