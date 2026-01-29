@@ -27,6 +27,7 @@ export class ContactSupportError extends Error { }
 export class EnterpriseManagedError extends Error { }
 export class InvalidTokenError extends Error { }
 export class RateLimitedError extends Error { }
+export class GitHubLoginFailedError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
@@ -131,7 +132,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'GitHubLoginFailed') {
-			throw Error('GitHubLoginFailed');
+			throw new GitHubLoginFailedError('GitHubLoginFailed');
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'RateLimited') {

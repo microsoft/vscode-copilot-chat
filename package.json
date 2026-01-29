@@ -2151,6 +2151,12 @@
 			{
 				"icon": "$(chat-sparkle)",
 				"title": "%copilot.title%",
+				"content": "%github.copilot.viewsWelcome.gitHubLoginFailed%",
+				"when": "github.copilot.interactiveSession.gitHubLoginFailed"
+			},
+			{
+				"icon": "$(chat-sparkle)",
+				"title": "%copilot.title%",
 				"content": "%github.copilot.viewsWelcome.contactSupport%",
 				"when": "github.copilot.interactiveSession.contactSupport"
 			},
@@ -5202,7 +5208,7 @@
 						"id": "copilot.setup.signIn",
 						"title": "%github.copilot.walkthrough.setup.signIn.title%",
 						"description": "%github.copilot.walkthrough.setup.signIn.description%",
-						"when": "chatEntitlementSignedOut && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited",
+						"when": "chatEntitlementSignedOut && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
 							"video": {
 								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
@@ -5217,7 +5223,7 @@
 						"id": "copilot.setup.signInNoAction",
 						"title": "%github.copilot.walkthrough.setup.signIn.title%",
 						"description": "%github.copilot.walkthrough.setup.noAction.description%",
-						"when": "chatEntitlementSignedOut && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited",
+						"when": "chatEntitlementSignedOut && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.disabled && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
 							"video": {
 								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
@@ -5232,7 +5238,7 @@
 						"id": "copilot.setup.signUp",
 						"title": "%github.copilot.walkthrough.setup.signUp.title%",
 						"description": "%github.copilot.walkthrough.setup.signUp.description%",
-						"when": "chatPlanCanSignUp && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited",
+						"when": "chatPlanCanSignUp && !view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
 							"video": {
 								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",
@@ -5247,7 +5253,7 @@
 						"id": "copilot.setup.signUpNoAction",
 						"title": "%github.copilot.walkthrough.setup.signUp.title%",
 						"description": "%github.copilot.walkthrough.setup.noAction.description%",
-						"when": "chatPlanCanSignUp && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited",
+						"when": "chatPlanCanSignUp && view.workbench.panel.chat.view.copilot.visible && !github.copilot-chat.activated && !github.copilot.offline && (github.copilot.interactiveSession.individual.disabled || github.copilot.interactiveSession.individual.expired) && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.invalidToken && !github.copilot.interactiveSession.rateLimited && !github.copilot.interactiveSession.gitHubLoginFailed",
 						"media": {
 							"video": {
 								"dark": "https://vscodewalkthroughs.z1.web.core.windows.net/v0.26/workspace.mp4",

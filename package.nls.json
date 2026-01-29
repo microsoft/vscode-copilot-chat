@@ -62,6 +62,15 @@
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
 	},
+	"github.copilot.viewsWelcome.gitHubLoginFailed": {
+		"message": "GitHub login failed. Please sign in to your GitHub account to use Copilot.\n\n[Retry](command:github.copilot.refreshToken)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:github.copilot.refreshToken)'}",
+			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
+			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
+		]
+	},
 	"github.copilot.viewsWelcome.contactSupport": {
 		"message": "There seems to be a problem with your account. Please contact GitHub support.\n\n[Contact Support](https://support.github.com/?editor=vscode)",
 		"comment": [
