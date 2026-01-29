@@ -4292,6 +4292,26 @@
 							"experimental",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.searchSubagent.model": {
+						"type": "string",
+						"default": "",
+						"markdownDescription": "%github.copilot.config.searchSubagent.model%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.searchSubagent.toolCallLimit": {
+						"type": "number",
+						"default": 4,
+						"markdownDescription": "%github.copilot.config.searchSubagent.toolCallLimit%",
+						"tags": [
+							"advanced",
+							"experimental",
+							"onExp"
+						]
 					}
 				}
 			}
