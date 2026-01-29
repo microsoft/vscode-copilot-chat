@@ -1244,23 +1244,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private getPullRequestBadge(pr: PullRequestSearchItem): vscode.MarkdownString {
-		let badgeText: string;
-		switch (pr.state) {
-			case 'failed':
-				badgeText = vscode.l10n.t('$(git-pull-request) Failed in {0}', `#${pr.number}`);
-				break;
-			case 'in_progress':
-				badgeText = vscode.l10n.t('$(git-pull-request) Running in {0}', `#${pr.number}`);
-				break;
-			case 'queued':
-				badgeText = vscode.l10n.t('$(git-pull-request) Queued in {0}', `#${pr.number}`);
-				break;
-			default:
-				badgeText = vscode.l10n.t('$(git-pull-request) {0}', `#${pr.number}`);
-				break;
-		}
-
-		const badge = new vscode.MarkdownString(badgeText);
+		const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
+		const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
 		badge.supportThemeIcons = true;
 		return badge;
 	}

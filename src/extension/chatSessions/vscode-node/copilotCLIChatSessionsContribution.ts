@@ -174,7 +174,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
 		if (worktreeProperties?.branchName) {
-			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties.branchName}`);
+			const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+			badge = new vscode.MarkdownString(`$(repo) ${basename(repositoryPathUri)}`);
 			badge.supportThemeIcons = true;
 		}
 
