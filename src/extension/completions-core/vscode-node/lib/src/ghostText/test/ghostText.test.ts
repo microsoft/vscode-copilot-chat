@@ -7,9 +7,11 @@ import { Position } from 'shiki/core';
 import dedent from 'ts-dedent';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { ILogService } from '../../../../../../../platform/log/common/logService';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { ServicesAccessor } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../../common/ghostTextContext';
 import { initializeTokenizers } from '../../../../prompt/src/tokenization';
 import { CompletionState, createCompletionState } from '../../completionState';
@@ -34,7 +36,6 @@ import { ICompletionsCurrentGhostText } from '../current';
 import { getGhostText, GhostCompletion } from '../ghostText';
 import { ResultType } from '../resultType';
 import { mkBasicResultTelemetry } from '../telemetry';
-import { LlmNESTelemetryBuilder } from '../../../../../../inlineEdits/node/nextEditProviderTelemetry';
 
 // Unit tests for ghostText that do not require network connectivity. For other
 // tests, see lib/e2e/src/ghostText.test.ts.
@@ -68,7 +69,8 @@ suite('Isolated GhostText tests', function () {
 		// Setup closures with the state as default
 		function requestGhostText(completionState = state) {
 			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
-			return getGhostText(accessor, completionState, token, {}, new GhostTextLogContext(filePath, doc.version, undefined), telemetryBuilder);
+			const logService = accessor.get(ILogService);
+			return getGhostText(accessor, completionState, token, {}, new GhostTextLogContext(filePath, doc.version, undefined), telemetryBuilder, logService);
 		}
 		async function requestPrompt(completionState = state) {
 			const telemExp = TelemetryWithExp.createEmptyConfigForTesting();
@@ -656,7 +658,8 @@ suite('Isolated GhostText tests', function () {
 		currentGhostText.hasAcceptedCurrentCompletion = () => true;
 
 		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
-		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true }, new GhostTextLogContext('file:///fizzbuzz.go', doc.version, undefined), telemetryBuilder);
+		const logService = accessor.get(ILogService);
+		const response = await getGhostText(accessor, state, undefined, { isSpeculative: true }, new GhostTextLogContext('file:///fizzbuzz.go', doc.version, undefined), telemetryBuilder, logService);
 
 		assert.strictEqual(response.type, 'success');
 		assert.strictEqual(response.value[0].length, 1);
