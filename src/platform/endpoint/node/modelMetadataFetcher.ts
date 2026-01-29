@@ -97,9 +97,9 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
-			// Auth changed so next fetch should be forced to get a new list
-			this._familyMap.clear();
-			this._completionsFamilyMap.clear();
+			// Auth changed so next fetch should be forced to get a new list.
+			// Do NOT clear the last-known-good cache here: doing so creates a transient
+			// "no models" window that can race with back-to-back chat.open requests.
 			this._lastFetchTime = 0;
 		}));
 	}
@@ -264,24 +264,33 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
 			}
 
-			this._familyMap.clear();
-
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
+
+			// Build new maps and swap them in only once we have a fully-hydrated model list.
+			// This avoids a transient empty-model window during refresh.
+			const nextFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
+			const nextCompletionsFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
+			let nextCopilotBaseModel: IModelAPIResponse | undefined;
+
 			for (let model of data) {
 				model = await this._hydrateResolvedModel(model);
 				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
 				if (model.is_chat_fallback && !isCompletionModel) {
-					this._copilotBaseModel = model;
+					nextCopilotBaseModel = model;
 				}
 				const family = model.capabilities.family;
-				const familyMap = isCompletionModel ? this._completionsFamilyMap : this._familyMap;
+				const familyMap = isCompletionModel ? nextCompletionsFamilyMap : nextFamilyMap;
 				if (!familyMap.has(family)) {
 					familyMap.set(family, []);
 				}
 				familyMap.get(family)?.push(model);
 			}
+
+			this._familyMap = nextFamilyMap;
+			this._completionsFamilyMap = nextCompletionsFamilyMap;
+			this._copilotBaseModel = nextCopilotBaseModel;
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
 
