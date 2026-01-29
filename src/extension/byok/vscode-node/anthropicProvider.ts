@@ -124,7 +124,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				},
 			});
 
-		let hasMemoryTool = false;
 
 		const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
 
@@ -142,14 +141,14 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory') {
-				hasMemoryTool = true;
-				tools.push({
-					name: 'memory',
-					type: 'memory_20250818'
-				} as Anthropic.Beta.BetaMemoryTool20250818);
-				continue;
-			}
+			// if (tool.name === 'memory') {
+			// 	hasMemoryTool = true;
+			// 	tools.push({
+			// 		name: 'memory',
+			// 		type: 'memory_20250818'
+			// 	} as Anthropic.Beta.BetaMemoryTool20250818);
+			// 	continue;
+			// }
 
 			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
 			const shouldDefer = toolSearchEnabled ? !nonDeferredToolNames.has(tool.name) : undefined;
@@ -231,7 +230,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		if (thinkingBudget) {
 			betas.push('interleaved-thinking-2025-05-14');
 		}
-		if (hasMemoryTool || contextManagement) {
+		if (contextManagement) {
 			betas.push('context-management-2025-06-27');
 		}
 		if (toolSearchEnabled) {
