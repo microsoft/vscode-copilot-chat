@@ -288,11 +288,11 @@ export function buildContextManagement(
  */
 export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
 	triggerType: 'input_tokens',
-	triggerValue: 80000,
+	triggerValue: 100000,
 	keepCount: 3,
-	clearAtLeastTokens: 10000,
+	clearAtLeastTokens: undefined,
 	excludeTools: [],
-	clearInputs: true,
+	clearInputs: false,
 	thinkingKeepTurns: 1,
 };
 
@@ -314,13 +314,13 @@ export function getContextManagementFromConfig(
 	}
 
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
-		triggerValue: userConfig.triggerValue ?? CONTEXT_EDITING_DEFAULTS.triggerValue,
-		keepCount: userConfig.keepCount ?? CONTEXT_EDITING_DEFAULTS.keepCount,
-		clearAtLeastTokens: userConfig.clearAtLeastTokens ?? CONTEXT_EDITING_DEFAULTS.clearAtLeastTokens,
-		excludeTools: userConfig.excludeTools ?? CONTEXT_EDITING_DEFAULTS.excludeTools,
-		clearInputs: userConfig.clearInputs ?? CONTEXT_EDITING_DEFAULTS.clearInputs,
-		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
+		triggerType: userConfig.triggerType ?? 'input_tokens',
+		triggerValue: userConfig.triggerValue ?? 100000,
+		keepCount: userConfig.keepCount ?? 3,
+		clearAtLeastTokens: userConfig.clearAtLeastTokens,
+		excludeTools: userConfig.excludeTools ?? [],
+		clearInputs: userConfig.clearInputs ?? false,
+		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? 1,
 	};
 
 	return buildContextManagement(contextEditingConfig, thinkingEnabled);
