@@ -182,6 +182,7 @@ export function prepareNesRename(result: PrepareNesRenameResult, session: Comput
 		result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
 		return;
 	}
+	token.throwIfCancellationRequested();
 	doPrepareNesRename(result, program, sourceFile, position, oldName, newName, token);
 }
 
@@ -200,6 +201,7 @@ function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: 
 	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
 
 	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		token.throwIfCancellationRequested();
 		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, oldPos, {});
 		if (!renameInfo.canRename) {
 			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);

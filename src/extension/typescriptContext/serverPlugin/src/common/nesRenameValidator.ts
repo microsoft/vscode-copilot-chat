@@ -137,6 +137,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 			const typeChecker = symbols.getTypeChecker();
 			const inScope = typeChecker.getSymbolsInScope(declarations[0], ts.SymbolFlags.BlockScopedVariable | ts.SymbolFlags.FunctionScopedVariable);
 			for (const inScopeSymbol of inScope) {
+				token.throwIfCancellationRequested();
 				if (inScopeSymbol === symbol) {
 					continue;
 				}
@@ -169,7 +170,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 			}
 		}
 	}
-
+	token.throwIfCancellationRequested();
 
 	const escapedNewName = ts.escapeLeadingUnderscores(newName);
 	// First see if the symbol has a parent. If so the new name must not conflict with existing members.
@@ -203,7 +204,7 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	}
 	token.throwIfCancellationRequested();
 	if (declarations !== undefined && declarations.length > 0) {
-		if (hasSameSymbolOnDeclarationSide(symbols, symbol, declarations, newName)) {
+		if (hasSameSymbolOnDeclarationSide(symbols, symbol, declarations, newName, token)) {
 			result.setCanRename(RenameKind.no, `A symbol with the name '${newName}' already exists in the scope`);
 			return;
 		} else {
@@ -216,11 +217,12 @@ export function validateNesRename(result: PrepareNesRenameResult, program: tt.Pr
 	}
 }
 
-function hasSameSymbolOnDeclarationSide(symbols: Symbols, _symbol: tt.Symbol, declarations: tt.Declaration[], newName: string): boolean {
+function hasSameSymbolOnDeclarationSide(symbols: Symbols, _symbol: tt.Symbol, declarations: tt.Declaration[], newName: string, token: tt.CancellationToken): boolean {
 	const typeChecker = symbols.getTypeChecker();
 	let inModule: boolean | undefined = undefined;
 	for (const declaration of declarations) {
 		const inScope = typeChecker.resolveName(newName, declaration, ts.SymbolFlags.All, /*excludeGlobals*/ false);
+		token.throwIfCancellationRequested();
 		if (inScope !== undefined) {
 			inModule = inModule ?? isInModule(symbols, declarations);
 			if (!inModule) {
