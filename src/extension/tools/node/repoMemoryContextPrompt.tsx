@@ -12,11 +12,6 @@ import { ToolName } from '../common/toolNames';
 export interface RepoMemoryContextPromptProps extends BasePromptElementProps {
 }
 
-/**
- * A wrapper prompt element that provides repo memory context.
- * If Copilot Memory (CAPI) is enabled, fetches from CAPI exclusively.
- * Otherwise, falls back to local filesystem storage.
- */
 export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextPromptProps> {
 	constructor(
 		props: any,
@@ -33,8 +28,7 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 			return null;
 		}
 
-		// Fetch from CAPI if enabled, otherwise from local filesystem
-		const memories = await this.fetchMemories();
+		const memories = await this.agentMemoryService.getRepoMemories();
 		if (!memories || memories.length === 0) {
 			return null;
 		}
@@ -53,14 +47,6 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 				If you come across a fact that's incorrect or outdated, you should use the {ToolName.Memory} tool to store a new fact that reflects the current reality.<br />
 			</Tag>
 		);
-	}
-
-	/**
-	 * Fetch repo memories from Copilot Memory service.
-	 * Returns undefined if Copilot Memory is not enabled.
-	 */
-	private async fetchMemories(): Promise<RepoMemoryEntry[] | undefined> {
-		return this.agentMemoryService.getRepoMemories();
 	}
 
 	private formatMemories(memories: RepoMemoryEntry[]): string {
