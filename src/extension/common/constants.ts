@@ -31,6 +31,7 @@ export const enum Intent {
 	SearchPanel = 'searchPanel',
 	SearchKeywords = 'searchKeywords',
 	AskAgent = 'askAgent',
+	Compact = 'compact',
 }
 
 export const GITHUB_PLATFORM_AGENT = 'github.copilot-dynamic.platform';
@@ -53,6 +54,9 @@ export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> =
 	},
 	[Intent.Terminal]: {
 		'explain': Intent.TerminalExplain
+	},
+	[Intent.Agent]: {
+		'compact': Intent.Compact,
 	},
 	[Intent.Editor]: {
 		'doc': Intent.Doc,
