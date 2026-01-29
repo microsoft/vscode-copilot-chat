@@ -99,11 +99,12 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 	/**
 	 * Collect messages from all sessions in all workspace folders.
-	 * - Read all .jsonl files in the .claude/projects/<folder> dir
-	 * - Create a map of all messages by uuid
-	 * - Find leaf nodes (messages that are never referenced as parents)
-	 * - Build message chains from leaf nodes
-	 * - These are the complete "sessions" that can be resumed
+	 * Process:
+	 * 1. Read all .jsonl files in the .claude/projects/<folder> directory
+	 * 2. Create a map of all messages indexed by uuid
+	 * 3. Find leaf nodes (messages that are never referenced as parents)
+	 * 4. Build message chains from leaf nodes by following parent pointers
+	 * 5. These complete chains are the "sessions" that can be resumed
 	 */
 	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
 		const folders = this._workspace.getWorkspaceFolders();
@@ -219,6 +220,12 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			if (!name.endsWith('.jsonl')) {
+				continue;
+			}
+
+			// Filter out agent-*.jsonl files which contain internal agent metadata and system logs,
+			// not user-visible conversation sessions.
+			if (name.startsWith('agent-')) {
 				continue;
 			}
 
@@ -406,14 +413,17 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 						}
 					}
 				} catch (parseError) {
-					this._logService.warn(`Failed to parse line in ${fileUri}: ${line} - ${parseError}`);
+					this._logService.warn(`[ClaudeCodeSessionService] Failed to parse line in ${fileUri.toString()}: ${parseError}`);
+					// Log a truncated version of the malformed line for debugging
+					const truncatedLine = line.length > 200 ? line.substring(0, 200) + '...' : line;
+					this._logService.debug(`[ClaudeCodeSessionService] Malformed line content: ${truncatedLine}`);
 				}
 			}
 
 			const messages = this._reviveStoredMessages(rawMessages);
 			return { messages, summaries };
 		} catch (e) {
-			this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to load session: ${fileUri}`);
+			this._logService.error(e, `[ClaudeCodeSessionService] Failed to load session file: ${fileUri.toString()}`);
 			return { messages: new Map(), summaries: new Map() };
 		}
 	}
@@ -444,10 +454,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 				content = strippedContent;
 			} else if (Array.isArray(strippedContent) && strippedContent.length > 0) {
 				// Extract text from the first text block in the content array
+				// Use explicit type guards for safer access
 				const firstUsefulText = strippedContent
 					.filter((block): block is Anthropic.TextBlockParam => block.type === 'text')
 					.map(block => block.text)
-					.find(text => text.trim().length > 0);
+					.find(text => text && typeof text === 'string' && text.trim().length > 0);
 				content = firstUsefulText;
 			}
 
