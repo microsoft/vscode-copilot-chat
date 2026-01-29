@@ -11,7 +11,7 @@ import * as extpath from '../../../util/vs/base/common/extpath';
 import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { MEMORY_DIR_NAME } from '../common/agentMemoryService';
+import { IAgentMemoryService, isRepoMemoryEntry, MEMORY_DIR_NAME, RepoMemoryEntry } from '../common/agentMemoryService';
 import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
 
 interface IMemoryParams {
@@ -38,10 +38,12 @@ interface MemoryResult {
  */
 class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	private static readonly SESSION_PATH_PREFIX = '/memories/session';
+	private static readonly REPO_PATH_PREFIX = '/memories/repo';
 
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IFileSystemService private readonly fileSystem: IFileSystemService
+		@IFileSystemService private readonly fileSystem: IFileSystemService,
+		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
@@ -172,6 +174,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// Warn if trying to view repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use view on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -230,12 +240,24 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			}
 			return { error: `Path not found: ${memoryPath}` };
 		} catch {
+			if (memoryPath === '/memories' || memoryPath === '/memories/') {
+				return { success: `Directory: ${memoryPath}\n(empty - no memories created yet)` };
+			}
+			if (memoryPath === '/memories/repo' || memoryPath === '/memories/repo/') {
+				return { success: `Directory: ${memoryPath}\n(empty - no repository memories created yet)` };
+			}
+			if (memoryPath === '/memories/session' || memoryPath.startsWith('/memories/session/')) {
+				return { success: `Directory: ${memoryPath}\n(empty - no session memories created yet)` };
+			}
 			return { error: `Path not found: ${memoryPath}` };
 		}
 	}
 
 	/**
 	 * Create or overwrite a file.
+	 * For files in /memories/repo:
+	 * - If Copilot Memory (CAPI) is enabled, stores to CAPI only (no local file)
+	 * - Otherwise, stores to local filesystem only
 	 */
 	private async _create(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
@@ -245,6 +267,12 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// For repo memory files, use exclusive strategy
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			return this._createRepoMemory(memoryPath, fileText);
+		}
+
+		// For session and other memory files, always use local filesystem
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const parentDir = URI.joinPath(fullPath, '..');
@@ -260,6 +288,64 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	}
 
 	/**
+	 * Create repo memory using Copilot Memory service (CAPI).
+	 * Returns error if Copilot Memory is not enabled.
+	 */
+	private async _createRepoMemory(memoryPath: string, fileText: string): Promise<MemoryResult> {
+		try {
+			// Check if Copilot Memory is enabled
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (!isEnabled) {
+				return { error: 'Copilot Memory is not enabled for this repository. Repository memories require Copilot Memory to be enabled.' };
+			}
+
+			// Parse JSONL content and store each memory entry
+			const entries = this.parseMemoryEntries(fileText);
+			if (entries.length === 0) {
+				return { error: 'No valid memory entries found in the provided content' };
+			}
+
+			let storedCount = 0;
+			for (const entry of entries) {
+				const success = await this.agentMemoryService.storeRepoMemory(entry);
+				if (success) {
+					storedCount++;
+				}
+			}
+
+			if (storedCount === 0) {
+				return { error: 'Failed to store any memory entries' };
+			}
+
+			return { success: `Successfully stored ${storedCount} memory ${storedCount === 1 ? 'entry' : 'entries'}` };
+		} catch (error) {
+			return { error: `Cannot create memory: ${error.message}` };
+		}
+	}
+
+	/**
+	 * Parse JSONL content into memory entries.
+	 */
+	private parseMemoryEntries(fileText: string): RepoMemoryEntry[] {
+		const lines = fileText.split('\n').filter(line => line.trim());
+		const entries: RepoMemoryEntry[] = [];
+
+		for (const line of lines) {
+			try {
+				const entry = JSON.parse(line) as unknown;
+				if (isRepoMemoryEntry(entry)) {
+					entries.push(entry);
+				}
+			} catch {
+				// Skip invalid JSON lines
+				continue;
+			}
+		}
+
+		return entries;
+	}
+
+	/**
 	 * Replace text in a file.
 	 */
 	private async _strReplace(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
@@ -269,6 +355,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 		if (!memoryPath || oldStr === undefined) {
 			return { error: 'Missing required parameters: path, old_str' };
+		}
+
+		// Warn if trying to str_replace repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use str_replace on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
 		}
 
 		const fullPath = this.validatePath(memoryPath, sessionId);
@@ -326,6 +420,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameters: path, insert_line' };
 		}
 
+		// Warn if trying to insert into repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use insert on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -366,6 +468,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 			return { error: 'Missing required parameter: path' };
 		}
 
+		// Warn if trying to delete repo memories when Copilot Memory is enabled
+		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use delete on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
+		}
+
 		const fullPath = this.validatePath(memoryPath, sessionId);
 		try {
 			const stat = await this.fileSystem.stat(fullPath);
@@ -392,6 +502,14 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 		if (!oldPath || !newPath) {
 			return { error: 'Missing required parameters: old_path, new_path' };
+		}
+
+		// Warn if trying to rename repo memories when Copilot Memory is enabled
+		if (oldPath.startsWith(MemoryTool.REPO_PATH_PREFIX) || newPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (isEnabled) {
+				return { error: 'Warning: Do not use rename on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
+			}
 		}
 
 		const oldFullPath = this.validatePath(oldPath, sessionId);

@@ -3005,6 +3005,14 @@
 						"tags": [
 							"preview"
 						]
+					},
+					"github.copilot.chat.copilotMemory.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.copilotMemory.enabled%",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},
