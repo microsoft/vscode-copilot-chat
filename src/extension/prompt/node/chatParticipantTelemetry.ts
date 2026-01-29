@@ -143,6 +143,7 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	responseId: string;
 	codeBlocks: string;
 	isParticipantDetected: string;
+	mode: string;
 };
 
 type RequestTelemetryMeasurements = {
@@ -657,7 +658,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
-				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -674,6 +676,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			apiType: this._endpoint.apiType,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
+			mode: this._getModeName(),
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,
