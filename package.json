@@ -3483,15 +3483,6 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.alternateZaiPrompt.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"description": "%github.copilot.config.alternateZaiPrompt.enabled%"
-					},
 					"github.copilot.chat.anthropic.useMessagesApi": {
 						"type": "boolean",
 						"default": true,
