@@ -8,6 +8,7 @@ import Sinon from 'sinon';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
 import { SyncDescriptor } from '../../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { ResultType } from '../ghostText/resultType';
 import { telemetryShown } from '../ghostText/telemetry';
@@ -20,7 +21,7 @@ import { createLibTestingContext } from './context';
 import { createFakeCompletionResponse, StaticFetcher } from './fetcher';
 import { withInMemoryTelemetry } from './telemetry';
 import { createTextDocument } from './textDocument';
-import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
+import { ILogService } from '../../../../../../platform/log/common/logService';
 
 suite('getInlineCompletions()', function () {
 	function setupCompletion(
@@ -40,7 +41,8 @@ suite('getInlineCompletions()', function () {
 			const instaService = accessor.get(IInstantiationService);
 			const ghostText = instaService.createInstance(GhostText);
 			const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
-			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder);
+			const logService = accessor.get(ILogService);
+			return ghostText.getInlineCompletions(textDoc, pos, CancellationToken.None, undefined, new GhostTextLogContext(textDoc.uri, textDoc.version, undefined), telemetryBuilder, logService);
 		}
 
 		return {
