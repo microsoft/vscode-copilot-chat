@@ -387,6 +387,7 @@ export class AnthropicMessagesProcessor {
 		private readonly requestId: string,
 		private readonly ghRequestId: string,
 		@ILogService private readonly logService: ILogService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
 
 	/**
@@ -491,6 +492,24 @@ export class AnthropicMessagesProcessor {
 
 						this.logService.trace(`[messagesAPI] Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
 
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
+							}
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'success', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model },
+							{ discoveredToolCount: toolNames.length }
+						);
+
 						// Get the original server tool call to pair with this result
 						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
 						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
@@ -518,6 +537,25 @@ export class AnthropicMessagesProcessor {
 						});
 					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
 						this.logService.warn(`[messagesAPI] Tool search error: ${toolSearchResult.content.error_code}`);
+
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
+							}
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'error', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model, errorCode: toolSearchResult.content.error_code },
+							{ discoveredToolCount: 0 }
+						);
 
 						// Get the original server tool call to pair with this error result
 						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
