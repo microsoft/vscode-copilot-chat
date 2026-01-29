@@ -151,9 +151,14 @@ export class ToolsService extends BaseToolsService {
 		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [typeof t === 'string' ? t : t.name, enabled]));
 
 		const modelSpecificOverrides = new Map(this.getToolOverridesForEndpoint(endpoint, tools));
+		const modelSpecificTools = this.getModelSpecificTools();
 
 		return tools
 			.filter(tool => {
+				// 0. If the tool was a model specific tool with an override, it'll be mixed in in the 'map' later.
+				if (modelSpecificTools.get(tool.name)?.tool.overridesTool) {
+					return false;
+				}
 
 				// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
 				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
@@ -222,7 +227,7 @@ export class ToolsService extends BaseToolsService {
 			}
 
 			if (modelSpecificTool.tool.overridesTool) {
-				yield [modelSpecificTool.tool.overridesTool, { info: modelSpecificTool.definition, tool: modelSpecificTool.tool }] as const;
+				yield [modelSpecificTool.tool.overridesTool, { info: tool, tool: modelSpecificTool.tool }] as const;
 			}
 		}
 	}

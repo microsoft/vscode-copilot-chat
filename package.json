@@ -538,8 +538,8 @@
 			{
 				"name": "copilot_memory",
 				"toolReferenceName": "memory",
-				"displayName": "Memory",
-				"userDescription": "Store facts about the codebase so they can be recalled in future conversations",
+				"displayName": "%copilot.tools.memory.name%",
+				"userDescription": "%copilot.tools.memory.description%",
 				"modelDescription": "Store a fact about the codebase in memory, so that it can be used in future code generation or review tasks. The fact should be a clear and concise statement about the codebase conventions, structure, logic, or usage. It may be based on the code itself, or on information provided by the user.",
 				"canBeReferencedInPrompt": true,
 				"when": "config.github.copilot.chat.copilotMemory.enabled",

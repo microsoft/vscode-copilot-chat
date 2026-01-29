@@ -5,12 +5,10 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
-import { ContributedToolName } from '../common/toolNames';
+import { ToolName } from '../common/toolNames';
 export interface RepoMemoryContextPromptProps extends BasePromptElementProps {
 }
 
@@ -51,8 +49,8 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 				<br />
 				Be sure to consider these stored facts carefully. Consider whether any are relevant to your current task. If they are, verify their current applicability before using them to inform your work.<br />
 				<br />
-				If you come across a memory that you're able to verify and that you find useful, you should use the {ContributedToolName.Memory} tool to store the same fact again. Only recent memories are retained, so storing the fact again will cause it to be retained longer.<br />
-				If you come across a fact that's incorrect or outdated, you should use the {ContributedToolName.Memory} tool to store a new fact that reflects the current reality.<br />
+				If you come across a memory that you're able to verify and that you find useful, you should use the {ToolName.Memory} tool to store the same fact again. Only recent memories are retained, so storing the fact again will cause it to be retained longer.<br />
+				If you come across a fact that's incorrect or outdated, you should use the {ToolName.Memory} tool to store a new fact that reflects the current reality.<br />
 			</Tag>
 		);
 	}
@@ -105,11 +103,8 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 			return null;
 		}
 
-		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
-		const isAnthropic = endpoint && isAnthropicFamily(endpoint);
-
 		return <Tag name='repoMemory'>
-			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the {ContributedToolName.Memory} tool to store it{isAnthropic ? ' at /memories/repo/' : ''}. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
+			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the {ToolName.Memory} tool to store it. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
 			- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
 			- Important information about the structure or logic of the codebase<br />
 			- Commands for linting, building, or running tests that have been verified through a successful run<br />
@@ -132,10 +127,6 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 				- Contain no secrets or sensitive data<br />
 			</Tag>
 			<br />
-			{isAnthropic && <>
-				ALWAYS use the {ContributedToolName.Memory}'s create command to store a new repo fact at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
-				Do NOT attempt to view, str_replace, insert, delete, or rename repo memories. Only use the create command for /memories/repo paths.<br />
-			</>}
 			Always include the reason and citations fields.<br />
 			Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
 		</Tag>;
