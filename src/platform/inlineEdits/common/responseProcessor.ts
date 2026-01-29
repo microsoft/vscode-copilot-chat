@@ -19,7 +19,7 @@ export namespace ResponseProcessor {
 	export const enum EmitFastCursorLineChange {
 		Off = 'off',
 		Always = 'always',
-		AdditiveOnly = 'additive-only',
+		AdditiveOnly = 'additiveOnly',
 	}
 
 	export type DiffParams = {
