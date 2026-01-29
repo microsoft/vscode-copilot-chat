@@ -56,6 +56,17 @@ export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSess
 
 /**
  * Service to load and manage Claude Code chat sessions from disk.
+ * 
+ * Sessions are stored in ~/.claude/projects/<encoded-path>/ where the path
+ * encoding replaces filesystem separators with dashes:
+ * - Unix: "/Users/name/project" -> "-Users-name-project"
+ * - Windows: "C:\Users\name\project" -> "C-Users-name-project"
+ * 
+ * The service reconstructs complete conversation sessions by:
+ * 1. Parsing JSONL files containing SDK messages with parent/child relationships
+ * 2. Handling meta messages (system entries) that maintain parent chains
+ * 3. Building conversation trees from leaf nodes upward
+ * 4. De-duplicating sessions when multiple branches exist
  */
 export interface IClaudeCodeSessionService {
 	readonly _serviceBrand: undefined;
@@ -370,6 +381,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 			// Parse each line and build message map
 			for (const line of lines) {
+				if (!line) {
+					continue;
+				}
+				
 				try {
 					const entry = JSON.parse(line) as ClaudeSessionFileEntry;
 
@@ -428,6 +443,12 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		}
 	}
 
+	/**
+	 * Compute a folder slug for the .claude/projects/ directory.
+	 * Encodes filesystem paths by replacing separators with dashes:
+	 * - Unix: "/Users/name/project" -> "-Users-name-project"
+	 * - Windows: "C:\Users\name\project" -> "C-Users-name-project"
+	 */
 	private _computeFolderSlug(folderUri: URI): string {
 		return folderUri.path
 			.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
@@ -534,11 +555,28 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		return messages;
 	}
 
+	/**
+	 * Resolve parent UUID by traversing through meta messages to find the nearest non-meta parent.
+	 * 
+	 * Claude session files contain system messages (type: 'system') that don't have a 'message' field
+	 * but are needed for maintaining parent chains. This method skips over those meta entries to
+	 * connect visible messages in the conversation.
+	 * 
+	 * Example chain:
+	 *   user (uuid-1) → assistant (uuid-2) → system [META] (uuid-3) → user (uuid-4)
+	 *   
+	 * When resolving uuid-4's parent (uuid-3), this returns uuid-2 (the last non-meta message).
+	 * 
+	 * @param parentUuid The direct parent UUID from the message
+	 * @param rawMessages Map of all parsed messages including meta entries
+	 * @returns The nearest non-meta parent UUID, or null if none exists
+	 */
 	private _resolveParentUuid(parentUuid: string | null, rawMessages: Map<string, ParsedSessionMessage>): string | null {
 		let current = parentUuid;
 		const visited = new Set<string>();
 
 		while (current) {
+			// Cycle detection
 			if (visited.has(current)) {
 				return current;
 			}
@@ -546,13 +584,16 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 			const candidate = rawMessages.get(current);
 			if (!candidate) {
+				// Parent not found in message map, use as-is
 				return current;
 			}
 
 			if (!candidate.isMeta) {
+				// Found a non-meta message, this is the resolved parent
 				return current;
 			}
 
+			// This is a meta message, continue traversing to its parent
 			current = candidate.raw.parentUuid ?? null;
 		}
 
