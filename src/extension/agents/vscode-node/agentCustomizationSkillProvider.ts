@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ILogService } from '../../../platform/log/common/logService';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 const SKILL_FOLDER_NAME = 'agent-customization';
 const SKILL_FILENAME = 'SKILL.md';
