@@ -674,7 +674,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				customAgents.status === 'fulfilled' ? customAgents.value : []
 			);
 
-			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || localOnly.length > 0) {
+			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || (repoIds?.length === 1 && localOnly.length > 0)) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 					{
 						id: DEFAULT_CUSTOM_AGENT_ID,
