@@ -199,7 +199,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
-		const isNewChat = this.props.promptContext.history?.length === 1;
+		const isNewChat = this.props.promptContext.history?.length === 0;
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
 			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} />;
@@ -217,7 +217,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		const isNewChat = this.props.promptContext.history?.length === 1;
+		const isNewChat = this.props.promptContext.history?.length === 0;
 		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
