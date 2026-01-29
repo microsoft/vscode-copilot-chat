@@ -154,7 +154,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let telemetry: ITelemetryService;
 	let tools: IToolsService;
 	let participant: CopilotCLIChatSessionParticipant;
-	let workspaceService: IWorkspaceService;
+	let workspaceService: TestWorkspaceService;
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
