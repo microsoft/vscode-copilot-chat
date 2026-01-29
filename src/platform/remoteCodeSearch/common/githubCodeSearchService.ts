@@ -18,6 +18,7 @@ import { IAuthenticationService } from '../../authentication/common/authenticati
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
@@ -26,7 +27,6 @@ import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { postRequest } from '../../networking/common/networking';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
@@ -116,7 +116,55 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-	) { }
+	) {
+		// Test custom endpoint on startup if configured
+		const customEndpoint = this._configurationService.getConfig(ConfigKey.Advanced.SemanticSearchEndpoint);
+		if (customEndpoint) {
+			this.testCustomEndpoint(customEndpoint).catch(() => { /* noop */ });
+		}
+	}
+
+	/**
+	 * Tests the custom semantic search endpoint on startup to validate connectivity.
+	 */
+	private async testCustomEndpoint(endpoint: string): Promise<void> {
+		this._logService.info(`GithubCodeSearchService: Testing custom semantic search endpoint: ${endpoint}`);
+
+		// Strip trailing slash to avoid double slashes in URL
+		const normalizedEndpoint = endpoint.replace(/\/+$/, '');
+		const searchUrl = `${normalizedEndpoint}/embeddings/code/search`;
+
+		// Use SWEBENCH_REPO env var if available, otherwise use a test repo
+		const repoNwo = env['SWEBENCH_REPO'] || 'test/test';
+		const testPayload = {
+			prompt: 'test query',
+			scoping_query: `repo:${repoNwo}`,
+			include_embeddings: false,
+			limit: 1,
+		};
+
+		this._logService.info(`GithubCodeSearchService: Custom endpoint test. Payload: ${JSON.stringify(testPayload)}`);
+
+		try {
+			const response = await this._fetcherService.fetch(searchUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify(testPayload),
+			});
+
+			if (response.ok) {
+				const body = await response.json();
+				this._logService.info(`GithubCodeSearchService: Custom endpoint test SUCCESS. Response: ${JSON.stringify(body)}`);
+			} else {
+				const text = await response.text();
+				this._logService.warn(`GithubCodeSearchService: Custom endpoint test FAILED. Status: ${response.status}, Response: ${text}`);
+			}
+		} catch (e) {
+			this._logService.error(`GithubCodeSearchService: Custom endpoint test ERROR: ${e}`);
+		}
+	}
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const repoNwo = toGithubNwo(githubRepoId);
@@ -401,12 +449,15 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 	): Promise<CodeSearchResult> {
 		this._logService.trace(`GithubCodeSearchService::searchCustomEndpoint. Using custom endpoint: ${endpoint}`);
 
-		const searchUrl = `${endpoint}/api/v1/search`;
+		// Strip trailing slash to avoid double slashes in URL
+		const normalizedEndpoint = endpoint.replace(/\/+$/, '');
+		// Use the same API path as blackbird tool: /embeddings/code/search
+		const searchUrl = `${normalizedEndpoint}/embeddings/code/search`;
 		const requestBody = {
 			prompt: truncateToMaxUtf8Length(searchQuery, 7800),
-			limit: maxResults,
-			embedding_model: embeddingType.id,
 			scoping_query: `repo:${toGithubNwo(repo.githubRepoId)}`,
+			include_embeddings: false,
+			limit: maxResults,
 		};
 
 		const response = await raceCancellationError(
