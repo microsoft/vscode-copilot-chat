@@ -227,6 +227,30 @@ describe('ClaudeCodeSessionService', () => {
 		expect(sessions[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
 	});
 
+	it('filters out agent-*.jsonl files', async () => {
+		const userSessionFile = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
+		const fixturePath = path.resolve(__dirname, 'fixtures', userSessionFile);
+		const fileContents = await readFile(fixturePath, 'utf8');
+
+		// Mock directory with both user session and agent files
+		mockFs.mockDirectory(dirUri, [
+			[userSessionFile, FileType.File],
+			['agent-internal.jsonl', FileType.File],
+			['agent-metadata.jsonl', FileType.File]
+		]);
+
+		mockFs.mockFile(URI.joinPath(dirUri, userSessionFile), fileContents);
+		// Agent files contain internal metadata, not user sessions
+		mockFs.mockFile(URI.joinPath(dirUri, 'agent-internal.jsonl'), '{"type":"internal"}');
+		mockFs.mockFile(URI.joinPath(dirUri, 'agent-metadata.jsonl'), '{"type":"metadata"}');
+
+		const sessions = await service.getAllSessions(CancellationToken.None);
+
+		// Should only return the user session, not the agent files
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
+	});
+
 	it('skips files that fail to read', async () => {
 		const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
 		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
