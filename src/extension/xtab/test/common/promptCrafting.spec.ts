@@ -5,11 +5,13 @@
 
 import { assert, describe, expect, it, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
-import { CurrentFileOptions, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { Result } from '../../../../util/common/result';
+import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { buildCodeSnippetsUsingPagedClipping, constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { CurrentDocument } from '../../common/xtabCurrentDocument';
 
 function nLines(n: number): StringText {
 	return new StringText(new Array(n).fill(0).map((_, i) => `${i + 1}`).join('\n'));
@@ -25,7 +27,7 @@ function computeTokens(s: string) {
  */
 function makeOpts(overrides: {
 	maxTokens?: number;
-	recentlyViewedFilesIncludeLineNumbers?: boolean;
+	recentlyViewedFilesIncludeLineNumbers?: IncludeLineNumbersOption;
 	includeViewedFiles?: boolean;
 	pageSize?: number;
 }): PromptOptions {
@@ -106,7 +108,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('includes line numbers starting from 0 when enabled and not truncated', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: nLines(4) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -125,7 +127,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('includes line numbers starting from 0 when truncated from beginning', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: nLines(10) }],
-				makeOpts({ maxTokens: 4, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 4, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -147,7 +149,7 @@ suite('Paged clipping - recently viewed files', () => {
 
 			const { snippets } = buildSnippets(
 				[{ id, content, visibleRanges }],
-				makeOpts({ maxTokens: 15, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 15, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			// Line numbers start from 4 (not 0) because lines 0-3 are truncated
@@ -171,7 +173,7 @@ suite('Paged clipping - recently viewed files', () => {
 
 			const { snippets } = buildSnippets(
 				[{ id, content, visibleRanges }],
-				makeOpts({ maxTokens: 50, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 5 }),
+				makeOpts({ maxTokens: 50, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 5 }),
 			);
 
 			// Line numbers start from 10 (page containing line 10)
@@ -192,7 +194,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('does not include line numbers when disabled', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: nLines(4) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: false, pageSize: 2 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.None, pageSize: 2 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -214,7 +216,7 @@ suite('Paged clipping - recently viewed files', () => {
 					{ id, content: nLines(3) },
 					{ id: id2, content: nLines(3) },
 				],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 10 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 10 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -241,7 +243,7 @@ suite('Paged clipping - recently viewed files', () => {
 					{ id, content: nLines(6) },
 					{ id: id2, content: nLines(4) },
 				],
-				makeOpts({ maxTokens: 10, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 10, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			// First file gets truncated, second file doesn't fit in budget
@@ -261,7 +263,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('handles empty content gracefully with line numbers enabled', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: new StringText('') }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			// Empty string content produces a single empty line
@@ -269,7 +271,7 @@ suite('Paged clipping - recently viewed files', () => {
 				[
 				  "<|recently_viewed_code_snippet|>
 				code_snippet_file_path: /src/first.txt
-				0| 
+				0|
 				<|/recently_viewed_code_snippet|>",
 				]
 			`);
@@ -278,7 +280,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('handles single line content with line numbers', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: new StringText('single line') }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 2 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 2 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -294,7 +296,7 @@ suite('Paged clipping - recently viewed files', () => {
 		test('line numbers are formatted correctly for double-digit line numbers', () => {
 			const { snippets } = buildSnippets(
 				[{ id, content: nLines(15) }],
-				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: true, pageSize: 20 }),
+				makeOpts({ maxTokens: 2000, recentlyViewedFilesIncludeLineNumbers: IncludeLineNumbersOption.WithSpaceAfter, pageSize: 20 }),
 			);
 
 			expect(snippets).toMatchInlineSnapshot(`
@@ -563,4 +565,281 @@ suite('Paged clipping - current file', () => {
 		`);
 	});
 
+});
+
+suite('constructTaggedFile', () => {
+
+	function createDocument(content: string, cursorLine: number, cursorColumn: number): CurrentDocument {
+		return new CurrentDocument(
+			new StringText(content),
+			new Position(cursorLine, cursorColumn)
+		);
+	}
+
+	const defaultPromptOptions: PromptOptions = {
+		...DEFAULT_OPTIONS,
+		currentFile: {
+			...DEFAULT_OPTIONS.currentFile,
+			maxTokens: 10000, // large budget to avoid clipping
+		}
+	};
+
+	suite('includeCursorTag option', () => {
+
+		test('cursor tag appears in current file content when includeCursorTag is true', () => {
+			const content = 'line1\nline2\nline3\nline4\nline5';
+			const doc = createDocument(content, 3, 3); // cursor at line 3, column 3
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(1, 4), // edit window: lines 2-4 (0-indexed)
+				new OffsetRange(0, 5), // area around: all lines
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: true, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.None } }
+			);
+
+			assert(result.isOk());
+			const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = result.val;
+
+			// Current file content should contain cursor tag
+			expect(clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"line1
+				line2
+				li<|cursor|>ne3
+				line4
+				line5"
+			`);
+
+			// Area around should always contain cursor tag
+			expect(areaAroundCodeToEdit).toMatchInlineSnapshot(`
+				"<|area_around_code_to_edit|>
+				line1
+				<|code_to_edit|>
+				line2
+				li<|cursor|>ne3
+				line4
+				<|/code_to_edit|>
+				line5
+				<|/area_around_code_to_edit|>"
+			`);
+		});
+
+		test('cursor tag does NOT appear in current file content when includeCursorTag is false', () => {
+			const content = 'line1\nline2\nline3\nline4\nline5';
+			const doc = createDocument(content, 3, 3); // cursor at line 3, column 3
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(1, 4), // edit window: lines 2-4 (0-indexed)
+				new OffsetRange(0, 5), // area around: all lines
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: false, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.None } }
+			);
+
+			assert(result.isOk());
+			const { clippedTaggedCurrentDoc, areaAroundCodeToEdit } = result.val;
+
+			// Current file content should NOT contain cursor tag
+			expect(clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"line1
+				line2
+				line3
+				line4
+				line5"
+			`);
+
+			// Area around should still contain cursor tag (preserves old behavior)
+			expect(areaAroundCodeToEdit).toMatchInlineSnapshot(`
+				"<|area_around_code_to_edit|>
+				line1
+				<|code_to_edit|>
+				line2
+				li<|cursor|>ne3
+				line4
+				<|/code_to_edit|>
+				line5
+				<|/area_around_code_to_edit|>"
+			`);
+		});
+
+		test('cursor tag appears correctly when cursor is at end of line', () => {
+			const content = 'line1\nline2\nline3';
+			const doc = createDocument(content, 2, 6); // cursor at end of line 2 (after "line2")
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(0, 3),
+				new OffsetRange(0, 3),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: true, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.None } }
+			);
+
+			assert(result.isOk());
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"line1
+				line2<|cursor|>
+				line3"
+			`);
+		});
+	});
+
+	suite('includeLineNumbers option for currentFileContent', () => {
+
+		test('includes line numbers with space when WithSpaceAfter', () => {
+			const content = 'line1\nline2\nline3';
+			const doc = createDocument(content, 2, 1);
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(0, 3),
+				new OffsetRange(0, 3),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: false, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.WithSpaceAfter } }
+			);
+
+			assert(result.isOk());
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"0| line1
+				1| line2
+				2| line3"
+			`);
+		});
+
+		test('includes line numbers without space when WithoutSpace', () => {
+			const content = 'line1\nline2\nline3';
+			const doc = createDocument(content, 2, 1);
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(0, 3),
+				new OffsetRange(0, 3),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: false, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.WithoutSpace } }
+			);
+
+			assert(result.isOk());
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"0|line1
+				1|line2
+				2|line3"
+			`);
+		});
+
+		test('no line numbers when None', () => {
+			const content = 'line1\nline2\nline3';
+			const doc = createDocument(content, 2, 1);
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(0, 3),
+				new OffsetRange(0, 3),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: false, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.None } }
+			);
+
+			assert(result.isOk());
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"line1
+				line2
+				line3"
+			`);
+		});
+	});
+
+	suite('combined options', () => {
+
+		test('line numbers and cursor tag together', () => {
+			const content = 'foo\nbar\nbaz';
+			const doc = createDocument(content, 2, 2); // cursor in "bar"
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(0, 3),
+				new OffsetRange(0, 3),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: true, includeTags: false }
+				},
+				computeTokens,
+				{ includeLineNumbers: { areaAroundCodeToEdit: IncludeLineNumbersOption.None, currentFileContent: IncludeLineNumbersOption.WithSpaceAfter } }
+			);
+
+			assert(result.isOk());
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"0| foo
+				1| b<|cursor|>ar
+				2| baz"
+			`);
+		});
+
+		test('different line number options for areaAround vs currentFile', () => {
+			const content = 'line1\nline2\nline3\nline4\nline5';
+			const doc = createDocument(content, 3, 1);
+
+			const result = constructTaggedFile(
+				doc,
+				new OffsetRange(1, 4),
+				new OffsetRange(0, 5),
+				{
+					...defaultPromptOptions,
+					currentFile: { ...defaultPromptOptions.currentFile, includeCursorTag: false, includeTags: false }
+				},
+				computeTokens,
+				{
+					includeLineNumbers: {
+						areaAroundCodeToEdit: IncludeLineNumbersOption.WithSpaceAfter,
+						currentFileContent: IncludeLineNumbersOption.WithoutSpace
+					}
+				}
+			);
+
+			assert(result.isOk());
+
+			// Area around uses WithSpaceAfter
+			expect(result.val.areaAroundCodeToEdit).toMatchInlineSnapshot(`
+				"<|area_around_code_to_edit|>
+				0| line1
+				<|code_to_edit|>
+				1| line2
+				2| <|cursor|>line3
+				3| line4
+				<|/code_to_edit|>
+				4| line5
+				<|/area_around_code_to_edit|>"
+			`);
+
+			// Current file uses WithoutSpace
+			expect(result.val.clippedTaggedCurrentDoc.lines.join('\n')).toMatchInlineSnapshot(`
+				"0|line1
+				1|line2
+				2|line3
+				3|line4
+				4|line5"
+			`);
+		});
+	});
 });
