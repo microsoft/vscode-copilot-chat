@@ -173,8 +173,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
-		if (worktreeProperties?.branchName) {
-			badge = new vscode.MarkdownString(`$(worktree) ${worktreeProperties.branchName}`);
+		if (worktreeProperties?.repositoryPath) {
+			const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+			badge = new vscode.MarkdownString(`$(repo) ${basename(repositoryPathUri)}`);
 			badge.supportThemeIcons = true;
 		}
 
@@ -536,7 +537,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		for (const workspaceFolder of this.workspaceService.getWorkspaceFolders()) {
 			const agentFile = URI.joinPath(workspaceFolder, '.github', 'agents', agent.name + '.agent.md');
 			try {
-				if (!(await checkPathExists(agentFile, this.fileSystem))) {
+				if (!(await checkFileExists(agentFile, this.fileSystem))) {
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
@@ -572,8 +573,17 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
 	try {
-		await fileSystem.stat(filePath);
-		return true;
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.Directory;
+	} catch (error) {
+		return false;
+	}
+}
+
+async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+	try {
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.File;
 	} catch (error) {
 		return false;
 	}
@@ -1103,7 +1113,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Check if the session has a workspace folder tracked (folder without git repo)
 			const sessionWorkspaceFolder = sessionId ? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId) : undefined;
 			let selectedRepository: vscode.Uri | undefined;
-			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository) : undefined;
+			const workingDirectory = (selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository) : sessionWorkspaceFolder) ?? sessionWorkspaceFolder;
 
 			// If user hasn't selected a repository, e.g. when delegating, then use the active repository.
 			// But don't do this in a untitled/empty workspace folder (its possible to have a repo opened as a side effect of getRepository, that doesn't necessaily mean user wants to use that)

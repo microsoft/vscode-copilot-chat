@@ -20,6 +20,7 @@ interface PlanAgentHandoff {
 	prompt: string;
 	send?: boolean;
 	showContinueOn?: boolean;
+	model?: string;
 }
 
 /**
@@ -60,21 +61,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 		'github.vscode-pull-request-github/issue_fetch',
 		'github.vscode-pull-request-github/activePullRequest'
 	],
-	handoffs: [
-		{
-			label: 'Start Implementation',
-			agent: 'Implement',
-			prompt: 'Start implementation',
-			send: true
-		},
-		{
-			label: 'Open in Editor',
-			agent: 'agent',
-			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
-			showContinueOn: false,
-			send: true
-		}
-	],
+	handoffs: [], // Handoffs are generated dynamically in buildCustomizedConfig
 	body: '' // Body is generated dynamically in buildCustomizedConfig
 };
 
@@ -128,6 +115,9 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 			if (handoff.showContinueOn !== undefined) {
 				lines.push(`    showContinueOn: ${handoff.showContinueOn}`);
 			}
+			if (handoff.model !== undefined) {
+				lines.push(`    model: ${handoff.model}`);
+			}
 		}
 	}
 
@@ -162,11 +152,14 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		super();
 
 		// Listen for settings changes to refresh agents
+		// Note: When settings change, we fire onDidChangeCustomAgents which causes VS Code to re-fetch
+		// the agent definition. However, handoff buttons already rendered may not work as
+		// these capture the model at render time.
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId)) {
-				this.logService.trace('[PlanAgentProvider] Settings changed, refreshing agent');
+				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -206,19 +199,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	private buildCustomizedConfig(): PlanAgentConfig {
-		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
-
-		// Check askQuestions config first (needed for both tools and body)
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
-
-		// Start with base config, using dynamic body based on askQuestions setting
-		const config: PlanAgentConfig = {
-			...BASE_PLAN_AGENT_CONFIG,
-			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
-			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
-			body: `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
+	static buildAgentBody(askQuestionsEnabled: boolean): string {
+		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
 Your job: research the codebase → clarify with the user → produce a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
 
@@ -304,7 +286,42 @@ Rules:
 - NO code blocks — describe changes, link to files/symbols
 - NO questions at the end${askQuestionsEnabled ? ' — ask during workflow via #tool:vscode/askQuestions' : ''}
 - Keep scannable
-</plan_style_guide>`,
+</plan_style_guide>`;
+	}
+
+	private buildCustomizedConfig(): PlanAgentConfig {
+		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
+		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+
+		// Check askQuestions config first (needed for both tools and body)
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+
+
+		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
+
+		// Build handoffs dynamically with model override
+		const startImplementationHandoff: PlanAgentHandoff = {
+			label: 'Start Implementation',
+			agent: 'agent',
+			prompt: 'Start implementation',
+			send: true,
+			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
+		};
+
+		const openInEditorHandoff: PlanAgentHandoff = {
+			label: 'Open in Editor',
+			agent: 'agent',
+			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
+			showContinueOn: false,
+			send: true
+		};
+
+		// Start with base config, using dynamic body based on askQuestions setting
+		const config: PlanAgentConfig = {
+			...BASE_PLAN_AGENT_CONFIG,
+			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
+			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],
+			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
 		};
 
 		// Collect tools to add
@@ -313,19 +330,16 @@ Rules:
 		// Add askQuestions tool if enabled
 		if (askQuestionsEnabled) {
 			toolsToAdd.push('vscode/askQuestions');
-			this.logService.trace(`[PlanAgentProvider] Adding askQuestions tool (enabled)`);
 		}
 
 		// Merge additional tools (deduplicated)
 		if (toolsToAdd.length > 0) {
 			config.tools = [...new Set([...config.tools, ...toolsToAdd])];
-			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${toolsToAdd.join(', ')}`);
 		}
 
 		// Apply model override
 		if (modelOverride) {
 			config.model = modelOverride;
-			this.logService.trace(`[PlanAgentProvider] Applied model override: ${modelOverride}`);
 		}
 
 		return config;
