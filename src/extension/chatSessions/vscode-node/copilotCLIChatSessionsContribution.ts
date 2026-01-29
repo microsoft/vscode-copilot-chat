@@ -1112,7 +1112,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Check if the session has a workspace folder tracked (folder without git repo)
 			const sessionWorkspaceFolder = sessionId ? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId) : undefined;
 			let selectedRepository: vscode.Uri | undefined;
-			const workingDirectory = selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository) : sessionWorkspaceFolder;
+			const workingDirectory = (selectedRepository ? this.workspaceService.getWorkspaceFolder(selectedRepository) : sessionWorkspaceFolder) ?? sessionWorkspaceFolder;
 
 			// If user hasn't selected a repository, e.g. when delegating, then use the active repository.
 			// But don't do this in a untitled/empty workspace folder (its possible to have a repo opened as a side effect of getRepository, that doesn't necessaily mean user wants to use that)
