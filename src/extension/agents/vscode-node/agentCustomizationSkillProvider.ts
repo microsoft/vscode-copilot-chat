@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ConfigKey } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
@@ -38,6 +39,8 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -262,7 +265,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
 		try {
-			if (token.isCancellationRequested) {
+			if (token.isCancellationRequested || !this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentCustomizationSkillEnabled, this.experimentationService)) {
 				return [];
 			}
 
