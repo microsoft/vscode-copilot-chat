@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ActionKind, getUserHappinessScore, getWindowWithIgnoredLimit, MAX_INTERACTIONS_CONSIDERED } from '../../common/userInteractionMonitor';
 
 /**
@@ -255,6 +255,49 @@ describe('UserHappinessScore', () => {
 
 			// Recent accepts should give higher score than recent rejects
 			expect(rejectsThenAccepts).toBeGreaterThan(acceptsThenRejects);
+		});
+	});
+
+	describe('configuration parsing', () => {
+		test('stringified default configuration parses correctly', () => {
+			const stringified = JSON.stringify(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+			const parsed = parseUserHappinessScoreConfigurationString(stringified);
+
+			expect(parsed).toEqual(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+		});
+
+		test('custom configuration string parses correctly', () => {
+			const configString = '{"acceptedScore": 1.0, "rejectedScore": 0.2, "ignoredScore": 0.5, "highThreshold": 0.6, "mediumThreshold": 0.4, "includeIgnored": true, "ignoredLimit": 5, "limitConsecutiveIgnored": false, "limitTotalIgnored": true}';
+			const parsed = parseUserHappinessScoreConfigurationString(configString);
+
+			expect(parsed).toEqual({
+				acceptedScore: 1.0,
+				rejectedScore: 0.2,
+				ignoredScore: 0.5,
+				highThreshold: 0.6,
+				mediumThreshold: 0.4,
+				includeIgnored: true,
+				ignoredLimit: 5,
+				limitConsecutiveIgnored: false,
+				limitTotalIgnored: true,
+			});
+		});
+
+		test('parsed configuration can be used for score calculation', () => {
+			const configString = '{"acceptedScore": 1.0, "rejectedScore": 0.2, "ignoredScore": 0.5, "highThreshold": 0.6, "mediumThreshold": 0.4, "includeIgnored": true, "ignoredLimit": 5, "limitConsecutiveIgnored": false, "limitTotalIgnored": true}';
+			const config = parseUserHappinessScoreConfigurationString(configString);
+
+			const actions = [
+				{ kind: 'accepted' as const },
+				{ kind: 'ignored' as const },
+				{ kind: 'rejected' as const },
+			];
+
+			const score = getUserHappinessScore(actions, config);
+			// Score should be a valid number
+			expect(typeof score).toBe('number');
+			expect(score).toBeGreaterThanOrEqual(0);
+			expect(score).toBeLessThanOrEqual(1);
 		});
 	});
 });
