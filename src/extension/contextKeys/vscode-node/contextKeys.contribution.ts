@@ -152,6 +152,7 @@ export class ContextKeysContribution extends Disposable {
 		}
 
 		if (key) {
+			this._logService.info(`[context keys] Setting context key: ${key}`);
 			commands.executeCommand('setContext', key, true);
 		}
 
