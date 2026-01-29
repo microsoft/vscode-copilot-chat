@@ -13,7 +13,6 @@ import { modelPrefersInstructionsAfterHistory } from '../../../../platform/endpo
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { filepathCodeBlockMarker } from '../../../../util/common/markdown';
 import { isLocation, isUri } from '../../../../util/common/types';
@@ -294,19 +293,16 @@ class EditCodeConversationHistory extends PromptElement<EditCodeConversationHist
 export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 	constructor(
 		props: EditCodePromptProps,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables, workingSet } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		return (
 			<>
 				<UserMessage>
-					{useProjectLabels && <ProjectLabels flexGrow={1} priority={600} />}
+					<ProjectLabels flexGrow={1} priority={600} />
 					<CustomInstructions flexGrow={6} priority={750} languageId={undefined} chatVariables={chatVariables} />
 					<NotebookFormat flexGrow={5} priority={810} chatVariables={workingSet} query={query} />
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
