@@ -46,6 +46,7 @@ export class ContextKeysContribution extends Disposable {
 	private _needsOfflineCheck = false;
 	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
+	private _lastContextKey: string | undefined;
 
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -157,7 +158,10 @@ export class ContextKeysContribution extends Disposable {
 		}
 
 		if (key) {
-			this._logService.info(`[context keys] Setting context key: ${key}`);
+			if (key !== this._lastContextKey) {
+				this._logService.info(`[context keys] Setting context key: ${key}`);
+				this._lastContextKey = key;
+			}
 			commands.executeCommand('setContext', key, true);
 		}
 

@@ -45,7 +45,7 @@
 		]
 	},
 	"github.copilot.viewsWelcome.invalidToken": {
-		"message": "Your GitHub token is invalid. Please sign out from your GitHub account and sign in again.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"message": "Your GitHub token is invalid. Please sign in again to refresh your authentication.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}",
