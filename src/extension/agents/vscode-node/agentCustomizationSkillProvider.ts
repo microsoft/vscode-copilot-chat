@@ -36,6 +36,9 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 	private readonly _onDidChangeFile = this._register(new Emitter<vscode.FileChangeEvent[]>());
 	readonly onDidChangeFile = this._onDidChangeFile.event;
 
+	private readonly _onDidChangeSkills = this._register(new Emitter<void>());
+	readonly onDidChangeSkills = this._onDidChangeSkills.event;
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
@@ -75,10 +78,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 	 */
 	private _invalidateCache(): void {
 		this._cachedContent = undefined;
-		this._onDidChangeFile.fire([{
-			type: vscode.FileChangeType.Changed,
-			uri: this._skillContentUri
-		}]);
+		this._onDidChangeSkills.fire();
 		this.logService.trace('[AgentCustomizationSkillProvider] Cache invalidated due to configuration change');
 	}
 
