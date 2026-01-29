@@ -27,6 +27,8 @@ export interface ISearchSubagentToolCallingLoopOptions extends IToolCallingLoopO
 	request: ChatRequest;
 	location: ChatLocation;
 	promptText: string;
+	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
+	subAgentInvocationId?: string;
 }
 
 export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubagentToolCallingLoopOptions> {
@@ -54,7 +56,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			context.tools = {
 				...context.tools,
 				toolReferences: [],
-				subAgentInvocationId: randomUUID(),
+				subAgentInvocationId: this.options.subAgentInvocationId ?? randomUUID(),
 				subAgentName: 'search'
 			};
 		}

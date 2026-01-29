@@ -26,5 +26,22 @@ export class CapturingToken {
 		 * excluded from the children list and its content is shown when clicking the parent.
 		 */
 		public readonly promoteMainEntry: boolean = false,
+		/**
+		 * Optional pre-assigned subAgentInvocationId as session id for trajectory tracking.
+		 * When set, the trajectory will use this ID instead of generating a new one,
+		 * enabling explicit linking between parent tool calls and subagent trajectories.
+		 */
+		public readonly subAgentInvocationId?: string,
+		/**
+		 * Optional name of the subagent being invoked.
+		 * Used alongside subAgentInvocationId to identify the subagent in trajectory tracking.
+		 */
+		public readonly subAgentName?: string,
+		/**
+		 * Optional VS Code chat session ID for trajectory tracking.
+		 * When set, this ID is used directly as the trajectory session ID for the main chat,
+		 * providing a 1:1 mapping between chat sessions and trajectories.
+		 */
+		public readonly chatSessionId?: string,
 	) { }
 }
