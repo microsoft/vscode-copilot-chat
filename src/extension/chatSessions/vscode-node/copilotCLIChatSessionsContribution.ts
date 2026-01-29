@@ -536,7 +536,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		for (const workspaceFolder of this.workspaceService.getWorkspaceFolders()) {
 			const agentFile = URI.joinPath(workspaceFolder, '.github', 'agents', agent.name + '.agent.md');
 			try {
-				if (!(await checkPathExists(agentFile, this.fileSystem))) {
+				if (!(await checkFileExists(agentFile, this.fileSystem))) {
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
@@ -572,8 +572,17 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
 	try {
-		await fileSystem.stat(filePath);
-		return true;
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.Directory;
+	} catch (error) {
+		return false;
+	}
+}
+
+async function checkFileExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+	try {
+		const stat = await fileSystem.stat(filePath);
+		return stat.type === vscode.FileType.File;
 	} catch (error) {
 		return false;
 	}
