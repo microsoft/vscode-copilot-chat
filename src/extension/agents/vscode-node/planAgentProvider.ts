@@ -296,11 +296,31 @@ Rules:
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 
+
+		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
+
+		// Build handoffs dynamically with model override
+		const startImplementationHandoff: PlanAgentHandoff = {
+			label: 'Start Implementation',
+			agent: 'agent',
+			prompt: 'Start implementation',
+			send: true,
+			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
+		};
+
+		const openInEditorHandoff: PlanAgentHandoff = {
+			label: 'Open in Editor',
+			agent: 'agent',
+			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
+			showContinueOn: false,
+			send: true
+		};
+
 		// Start with base config, using dynamic body based on askQuestions setting
 		const config: PlanAgentConfig = {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
-			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
+			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],
 			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
 		};
 
