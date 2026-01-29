@@ -16,6 +16,7 @@ import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullR
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -185,7 +186,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		models = new FakeModels();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
-		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
+		workspaceService = new TestWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
 		const logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
@@ -442,7 +443,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			'prompt',
 		).document;
 		workspaceService.textDocuments.push(promptDoc);
-		workspaceService.fs = new MockFileSystemService();
 		const promptFileReference: vscode.ChatPromptReference = {
 			id: `vscode.prompt.file__${promptFileUri.toString()}`,
 			name: 'prompt:plan.prompt.md',
