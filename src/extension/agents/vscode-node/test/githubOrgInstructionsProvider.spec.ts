@@ -8,6 +8,7 @@ import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import type { ExtensionContext } from 'vscode';
 import { INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -25,6 +26,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 	let mockGitService: MockGitService;
 	let mockWorkspaceService: MockWorkspaceService;
 	let mockExtensionContext: Partial<ExtensionContext>;
+	let mockAuthService: MockAuthenticationService;
 	let accessor: any;
 	let provider: GitHubOrgInstructionsProvider;
 	let resourcesService: GitHubOrgChatResourcesService;
@@ -44,6 +46,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		mockExtensionContext = {
 			globalStorageUri: storageUri,
 		};
+		mockAuthService = new MockAuthenticationService();
 
 		// Default: user is in 'testorg' and workspace belongs to 'testorg'
 		mockOctoKitService.setUserOrganizations(['testorg']);
@@ -67,6 +70,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 	function createProvider(): GitHubOrgInstructionsProvider {
 		// Create the real GitHubOrgChatResourcesService with mocked dependencies
 		resourcesService = new GitHubOrgChatResourcesService(
+			mockAuthService as any,
 			mockExtensionContext as any,
 			mockFileSystem,
 			mockGitService,

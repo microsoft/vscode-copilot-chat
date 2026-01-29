@@ -102,6 +102,14 @@ export class CopilotToken {
 		return this._info.organization_list || [];
 	}
 
+	/**
+	 * Returns the list of organization logins that provide Copilot access to the user.
+	 * These are the organizations through which the user has a Copilot subscription (Business/Enterprise).
+	 */
+	get organizationLoginList(): string[] {
+		return this._info.organization_login_list || [];
+	}
+
 	get enterpriseList(): number[] {
 		return this._info.enterprise_list || [];
 	}
@@ -505,7 +513,7 @@ export type ExtendedTokenInfo = TokenEnvelope & {
 	// Extended fields added by client
 	username: string;
 	isVscodeTeamMember: boolean;
-} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
+} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled' | 'organization_login_list'>;
 
 /**
  * Creates a minimal ExtendedTokenInfo for testing purposes.
@@ -533,6 +541,7 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		username: 'testuser',
 		isVscodeTeamMember: false,
 		copilot_plan: 'free',
+		organization_login_list: [],
 		// Apply overrides
 		...overrides,
 	};

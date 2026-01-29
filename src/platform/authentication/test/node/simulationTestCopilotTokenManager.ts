@@ -102,6 +102,7 @@ class SimulationTestCopilotTokenManagerFromGitHubToken {
 			username: 'NullUser',
 			copilot_plan: 'unknown',
 			isVscodeTeamMember: false,
+			organization_login_list: [],
 		};
 
 		setTimeout(() => {
