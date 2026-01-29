@@ -1,0 +1,45 @@
+{
+  "log": [
+    {
+      "kind": "meta",
+      "data": {
+        "kind": "log-origin",
+        "uuid": "bec45e92-a892-4874-aab9-722ad361f2d9",
+        "repoRootUri": "file:///Users/ulugbekna/code/tsq",
+        "opStart": 12571,
+        "opEndEx": 12577
+      }
+    },
+    {
+      "kind": "documentEncountered",
+      "id": 0,
+      "time": 1769530858126,
+      "relativePath": "src/treeTraversal.ts"
+    },
+    {
+      "kind": "setContent",
+      "id": 0,
+      "time": 1769530858126,
+      "content": "import Parser, { TreeCursor } from \"web-tree-sitter\";\n\ntype NodeProcessor = {\n\t/**\n\t * @remark can access current node using `cursor.currentNode()`; don't modify the cursor\n\t */\n\t(cursor: TreeCursor, depth: number): void;\n};\n\nexport function traverseDFPreOrder(node: Parser.SyntaxNode, fn: NodeProcessor) {\n\n\tconst cursor = node.walk();\n\tlet depth = 0;\n\tlet lastSeenDepth = 0;\n\n\t// depth-first pre-order tree traversal\n\twhile (depth >= 0) {\n\t\tconst isNodeUnexplored = lastSeenDepth <= depth;\n\n\t\tif (isNodeUnexplored) {\n\t\t\tfn(cursor, depth);\n\t\t}\n\n\t\tlastSeenDepth = depth;\n\n\t\tif (isNodeUnexplored && cursor.gotoFirstChild()) {\n\t\t\t++depth;\n\t\t\tcontinue;\n\t\t}\n\n\t\tif (cursor.gotoNextSibling()) {\n\t\t\tcontinue;\n\t\t}\n\n\t\tcursor.gotoParent();\n\t\t--depth;\n\t}\n}\n\nexport function traverseDFPostOrder(node: Parser.SyntaxNode, fn: NodeProcessor) {\n\n\tconst cursor = node.walk();\n\tlet depth = 0;\n\tlet lastSeenDepth = 0;\n\tlet justCameUp = false;\n\n\t// depth-first post-order tree traversal\n\twhile (depth >= 0) {\n\t\tconst isNodeUnexplored = lastSeenDepth <= depth;\n\n\t\tif (isNodeUnexplored && cursor.gotoFirstChild()) {\n\t\t\t++depth;\n\t\t\tjustCameUp = false;\n\t\t\tcontinue;\n\t\t}\n\n\t\tlastSeenDepth = depth;\n\n\t\tif (!justCameUp) {\n\t\t\tfn(cursor, depth);\n\t\t}\n\n\t\tif (cursor.gotoNextSibling()) {\n\t\t\tjustCameUp = false;\n\t\t\tcontinue;\n\t\t}\n\n\t\tcursor.gotoParent();\n\t\t--depth;\n\t\tjustCameUp = true;\n\t}\n}\n",
+      "v": 248
+    },
+    {
+      "kind": "changed",
+      "id": 0,
+      "time": 1769530858124,
+      "edit": [
+        [
+          1356,
+          1356,
+          "\n"
+        ]
+      ],
+      "v": 251
+    }
+  ],
+  "nextUserEdit": {
+    "edit": [],
+    "relativePath": "src/treeTraversal.ts",
+    "originalOpIdx": 12576
+  }
+}

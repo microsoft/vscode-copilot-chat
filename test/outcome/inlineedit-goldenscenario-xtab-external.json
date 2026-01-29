@@ -1,5 +1,11 @@
 [
 	{
+		"name": "InlineEdit GoldenScenario ([xtab]) [external] - RemovingLastLine",
+		"requests": [
+			"3a0f4939bb68d4e8060fb9c9e9d3bba45fd0b15f5c33cd7899e8ea61830593e6"
+		]
+	},
+	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [cpp] - [MustHave] 8-cppIndividual-1-point.cpp",
 		"requests": [
 			"3e83718b244169a245116a734ad684e399d6bda07c4048a0710a11bdae682f30"

@@ -113,6 +113,12 @@ for (const testConfig of testConfigs) {
 			})
 		));
 
+		stest('RemovingLastLine', collection => tester.runAndScoreTestFromRecording(collection,
+			loadFile({
+				filePath: inlineEditsFixture('RemovingLastLine/recording.w.json'),
+			})
+		));
+
 	});
 
 }
