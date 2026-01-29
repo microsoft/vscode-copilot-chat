@@ -4389,8 +4389,13 @@
 			"chat/editor/inlineGutter": [
 				{
 					"command": "github.copilot.chat.explain",
-					"when": "!github.copilot.interactiveSession.disabled",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection",
 					"group": "2_chat@2"
+				},
+				{
+					"command": "github.copilot.chat.review",
+					"when": "!github.copilot.interactiveSession.disabled && editor.hasSelection && config.github.copilot.chat.reviewSelection.enabled",
+					"group": "2_chat@3"
 				}
 			],
 			"chat/input/editing/sessionToolbar": [
