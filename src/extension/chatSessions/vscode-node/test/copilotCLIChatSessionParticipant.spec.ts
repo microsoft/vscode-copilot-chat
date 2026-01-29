@@ -15,7 +15,6 @@ import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/prom
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
@@ -243,7 +242,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			tools,
 			instantiationService,
 			logger,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(workspaceService),
 			delegationService,
 			workspaceService,
 		);
