@@ -1242,8 +1242,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
 		let summary: string | undefined;
+		let promptFileBody: string | undefined;
 		const requestPromptPromise = (async () => {
-			if (this.hasHistoryToSummarize(context.history)) {
+			const promptFile = await this.getPromptInfoFromRequest(request, token);
+			if (promptFile?.body?.getContent()) {
+				promptFileBody = promptFile.body.getContent().trim();
+			}
+			if (!promptFileBody && this.hasHistoryToSummarize(context.history)) {
 				stream.progress(l10n.t('Analyzing chat history'));
 				summary = await this.chatDelegationSummaryService.summarize(context, token);
 				summary = summary ? `**Summary**\n${summary}` : undefined;
@@ -1251,6 +1256,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			// Give priority to userPrompt if provided (e.g., from confirmation metadata)
 			userPrompt = userPrompt || request.prompt;
+			if (promptFileBody) {
+				return `${userPrompt}\n\n${promptFileBody}`;
+			}
 			return summary ? `${userPrompt}\n${summary}` : userPrompt;
 		})();
 
@@ -1264,7 +1272,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return {};
 		}
 
-		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, (otherReferences || []).concat([]), isolationEnabled, workingDirectory, token);
+		const initialReferences = (otherReferences || []).concat([]);
+		const { prompt, attachments, references } = await this.promptResolver.resolvePrompt(request, await requestPromptPromise, initialReferences, isolationEnabled, workingDirectory, token);
 
 		const session = await this.sessionService.createSession({ workingDirectory, isolationEnabled, agent, model }, token);
 		void this.copilotCLIAgents.trackSessionAgent(session.object.sessionId, agent?.name);

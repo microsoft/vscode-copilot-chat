@@ -17,6 +17,7 @@ import { NullTelemetryService } from '../../../../platform/telemetry/common/null
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { sep } from '../../../../util/vs/base/common/path';
@@ -431,6 +432,32 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toContain('Push this');
+	});
+
+	it('includes prompt file body when delegating from another chat', async () => {
+		const promptFileUri = URI.file('/workspace/plan.prompt.md');
+		const promptDoc = createTextDocumentData(
+			promptFileUri,
+			`---\nname: plan\n---\nPlan body text`,
+			'prompt',
+		).document;
+		workspaceService.textDocuments.push(promptDoc);
+		workspaceService.fs = new MockFileSystemService();
+		const promptFileReference: vscode.ChatPromptReference = {
+			id: `vscode.prompt.file__${promptFileUri.toString()}`,
+			name: 'prompt:plan.prompt.md',
+			value: promptFileUri
+		};
+		const request = new TestChatRequest('Start implementation', [promptFileReference]);
+		const context = { chatSessionContext: undefined, chatSummary: undefined, history: [] } as unknown as vscode.ChatContext;
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toContain('Plan body text');
 	});
 
 	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
