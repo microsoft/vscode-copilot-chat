@@ -260,7 +260,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService) ?? [];
+				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
 				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					this._stream?.push(responsePart);
 				}
@@ -341,7 +341,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService);
+		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
 	}
 
 	private async requestPermission(

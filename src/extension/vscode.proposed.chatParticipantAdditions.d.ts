@@ -280,6 +280,28 @@ declare module 'vscode' {
 		}>;
 	}
 
+	/**
+	 * Generic tool result data that displays input and output in collapsible sections.
+	 * Use plain strings for unformatted text or MarkdownString for formatted markdown.
+	 */
+	export interface ChatGenericToolResultData {
+		/**
+		 * The input to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 */
+		input: string | MarkdownString;
+		/**
+		 * The output to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 */
+		output: string | MarkdownString;
+	}
+
+	export interface ChatToolResourcesInvocationData {
+		/**
+		 * Array of file URIs or locations to display as a collapsible list
+		 */
+		values: Array<Uri | Location>;
+	}
+
 	export class ChatToolInvocationPart {
 		toolName: string;
 		toolCallId: string;
@@ -289,7 +311,7 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatGenericToolResultData | ChatToolResourcesInvocationData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 

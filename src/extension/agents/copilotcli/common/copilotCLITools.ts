@@ -10,6 +10,7 @@ import { ILogger } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { isAbsolutePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
@@ -309,7 +310,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -431,7 +432,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'tool.execution_complete': {
-				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger) ?? [undefined, undefined];
+				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger, workingDirectory) ?? [undefined, undefined];
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
@@ -563,7 +564,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -596,7 +597,7 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
-			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data);
+			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
 		}
 	}
 
@@ -638,7 +639,7 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 }
 
 type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string) => void;
-type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, result: ToolCallResult) => void;
+type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, result: ToolCallResult, workingDirectory?: URI) => void;
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
@@ -659,18 +660,18 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, emptyInvocation],
 	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, emptyInvocation],
 	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, emptyInvocation],
-	'search': [l10n.t('Search'), formatSearchToolInvocation, emptyInvocation],
+	'search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
-	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, emptyInvocation],
-	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, emptyInvocation],
-	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, emptyInvocation],
-	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, emptyInvocation],
+	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
+	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
 	'report_intent': [l10n.t('Report Intent'), emptyInvocation, emptyInvocation],
 	'think': [l10n.t('Thinking'), emptyInvocation, emptyInvocation],
-	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation, emptyInvocation],
-	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, emptyInvocation],
-	'web_search': [l10n.t('Web Search'), emptyInvocation, emptyInvocation],
+	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation, genericToolInvocationCompleted],
+	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, genericToolInvocationCompleted],
+	'web_search': [l10n.t('Web Search'), emptyInvocation, genericToolInvocationCompleted],
 	'update_todo': [l10n.t('Update Todo'), formatUpdateTodoInvocation, formatUpdateTodoInvocationCompleted],
 };
 
@@ -836,23 +837,31 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	}
 }
 
-function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool, result: ToolCallResult): void {
+function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool, result: ToolCallResult, workingDirectory?: URI): void {
 	if (toolCall.toolName === 'search') {
 		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
 	} else if (toolCall.toolName === 'semantic_code_search') {
 		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
 	} else if (toolCall.toolName === 'search_bash') {
 		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob') {
+	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep') {
+		const noMatches = (result.result?.content || '').toLowerCase().includes('no matches found') || (result.result?.content || '').toLowerCase().includes('no files matched the pattern');
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		const files = result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
+		const files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
 		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
-	} else if (toolCall.toolName === 'grep') {
-		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		const files = result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
-		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
-		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
+		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
+		if (toolCall.arguments.path && workingDirectory && searchPath && !isAbsolutePath(searchPath)) {
+			searchPath = Uri.joinPath(workingDirectory, toolCall.arguments.path);
+		}
+		invocation.toolSpecificData = {
+			values: files.map(file => {
+				if (!file.startsWith('./') || !searchPath) {
+					return Uri.file(file);
+				}
+				return Uri.joinPath(searchPath, file.substring(2));
+			})
+		};
 	}
 }
 
@@ -982,5 +991,15 @@ function formatUpdateTodoInvocationCompleted(invocation: ChatToolInvocationPart,
  * The `toolCall` parameter is unused and present for interface consistency.
  */
 function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
-	//
+	// No custom formatting needed
+}
+
+function genericToolInvocationCompleted(_invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
+	if (result.success && result.result?.content && typeof result.result.content === 'string') {
+		_invocation.toolSpecificData = {
+			output: new MarkdownString(result.result.content),
+			input: toolCall.arguments ? `\`\`\`json\n${JSON.stringify(toolCall.arguments, null, 2)}\n\`\`\`` : ''
+		};
+	}
+
 }
