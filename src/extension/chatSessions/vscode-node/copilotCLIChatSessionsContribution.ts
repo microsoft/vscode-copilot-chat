@@ -1136,7 +1136,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			}
 
 			if (!selectedRepository) {
-				return { workingDirectory, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: false };
+				return { workingDirectory, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: false, cancelled: false };
 			}
 
 			// Note: The repository will already be trusted, Git Extension API only returns trusted repos.
@@ -1145,7 +1145,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return { workingDirectory: Uri.file(worktreeProperties.worktreePath), worktreeProperties, isWorkspaceFolderWithoutRepo: false, cancelled: false };
 			} else {
 				stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));
-				return { workingDirectory, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: true, cancelled: false };
+				return { workingDirectory, worktreeProperties: undefined, isWorkspaceFolderWithoutRepo: false, cancelled: false };
 			}
 		};
 
