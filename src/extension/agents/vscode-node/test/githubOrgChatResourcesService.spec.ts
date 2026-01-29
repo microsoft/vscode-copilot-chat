@@ -9,6 +9,7 @@ import type { ExtensionContext } from 'vscode';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -25,6 +26,7 @@ suite('GitHubOrgChatResourcesService', () => {
 	let mockGitService: MockGitService;
 	let mockOctoKitService: MockOctoKitService;
 	let mockWorkspaceService: MockWorkspaceService;
+	let mockAuthService: MockAuthenticationService;
 	let logService: ILogService;
 	let service: GitHubOrgChatResourcesService;
 
@@ -42,6 +44,7 @@ suite('GitHubOrgChatResourcesService', () => {
 		mockGitService = new MockGitService();
 		mockOctoKitService = new MockOctoKitService();
 		mockWorkspaceService = new MockWorkspaceService();
+		mockAuthService = new MockAuthenticationService();
 
 		// Set up testing services to get log service
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
@@ -56,6 +59,7 @@ suite('GitHubOrgChatResourcesService', () => {
 
 	function createService(): GitHubOrgChatResourcesService {
 		service = new GitHubOrgChatResourcesService(
+			mockAuthService as any,
 			mockExtensionContext as any,
 			mockFileSystem,
 			mockGitService,
