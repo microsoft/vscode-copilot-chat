@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { isRepoMemoryEntry, normalizeCitations, RepoMemoryEntry } from '../agentMemoryService';
+import { isRepoMemoryEntry, normalizeCitations } from '../agentMemoryService';
 
 describe('AgentMemoryService', () => {
 	describe('isRepoMemoryEntry', () => {
@@ -124,90 +124,6 @@ describe('AgentMemoryService', () => {
 		it('should handle empty string', () => {
 			const result = normalizeCitations('');
 			expect(result).toEqual([]);
-		});
-	});
-
-	describe('deduplicateMemories', () => {
-		// Helper function to deduplicate (same logic as in RepoMemoryContextPrompt)
-		function deduplicateMemories(memories: RepoMemoryEntry[]): RepoMemoryEntry[] {
-			const seen = new Set<string>();
-			const deduplicated: RepoMemoryEntry[] = [];
-
-			for (const memory of memories) {
-				const key = `${memory.subject.toLowerCase()}|${memory.fact.toLowerCase()}`;
-				if (!seen.has(key)) {
-					seen.add(key);
-					deduplicated.push(memory);
-				}
-			}
-
-			return deduplicated;
-		}
-
-		it('should return empty array for empty input', () => {
-			expect(deduplicateMemories([])).toEqual([]);
-		});
-
-		it('should return single memory unchanged', () => {
-			const memories: RepoMemoryEntry[] = [{
-				subject: 'testing',
-				fact: 'Use vitest'
-			}];
-			expect(deduplicateMemories(memories)).toEqual(memories);
-		});
-
-		it('should remove duplicate memories by subject+fact', () => {
-			const memories: RepoMemoryEntry[] = [
-				{ subject: 'testing', fact: 'Use vitest' },
-				{ subject: 'testing', fact: 'Use vitest' }
-			];
-			const result = deduplicateMemories(memories);
-			expect(result).toHaveLength(1);
-			expect(result[0]).toEqual({ subject: 'testing', fact: 'Use vitest' });
-		});
-
-		it('should be case-insensitive when deduplicating', () => {
-			const memories: RepoMemoryEntry[] = [
-				{ subject: 'Testing', fact: 'Use Vitest' },
-				{ subject: 'testing', fact: 'use vitest' }
-			];
-			const result = deduplicateMemories(memories);
-			expect(result).toHaveLength(1);
-		});
-
-		it('should keep first occurrence (CAPI memories added first)', () => {
-			const capiMemory: RepoMemoryEntry = {
-				subject: 'testing',
-				fact: 'Use vitest',
-				reason: 'From CAPI',
-				category: 'general'
-			};
-			const localMemory: RepoMemoryEntry = {
-				subject: 'testing',
-				fact: 'Use vitest',
-				reason: 'From local'
-			};
-			const result = deduplicateMemories([capiMemory, localMemory]);
-			expect(result).toHaveLength(1);
-			expect(result[0].reason).toBe('From CAPI');
-		});
-
-		it('should keep different memories with same subject but different facts', () => {
-			const memories: RepoMemoryEntry[] = [
-				{ subject: 'testing', fact: 'Use vitest' },
-				{ subject: 'testing', fact: 'Use jest' }
-			];
-			const result = deduplicateMemories(memories);
-			expect(result).toHaveLength(2);
-		});
-
-		it('should keep different memories with same fact but different subjects', () => {
-			const memories: RepoMemoryEntry[] = [
-				{ subject: 'testing', fact: 'Use TypeScript' },
-				{ subject: 'linting', fact: 'Use TypeScript' }
-			];
-			const result = deduplicateMemories(memories);
-			expect(result).toHaveLength(2);
 		});
 	});
 });
