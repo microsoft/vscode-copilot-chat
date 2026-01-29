@@ -126,13 +126,20 @@ extends:
       - script: npm run build -- --prerelease
         displayName: npm run build
 
-      - script: npm run upload-sourcemaps
+      - task: AzureCLI@2
         displayName: Upload source maps to CDN
         condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-        env:
-          AZURE_STORAGE_ACCOUNT: $(AzureStorageAccount)
-          BLOB_STORAGE_SAS_TOKEN: $(BlobStorageSasToken)
-          BUILD_SOURCEVERSION: $(Build.SourceVersion)
+        inputs:
+          azureSubscription: 'vscode-builds-subscription'
+          scriptType: 'bash'
+          addSpnToEnvironment: true
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            AZURE_STORAGE_ACCOUNT="vscodeweb" \
+            AZURE_TENANT_ID="$tenantId" \
+            AZURE_CLIENT_ID="$servicePrincipalId" \
+            AZURE_ID_TOKEN="$idToken" \
+            npm run upload-sourcemaps
 
     # testPlatforms:
     #     - name: Linux

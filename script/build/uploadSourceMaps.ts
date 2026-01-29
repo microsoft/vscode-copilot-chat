@@ -35,6 +35,7 @@ async function main(): Promise<void> {
 		console.error('  AZURE_TENANT_ID       - Azure tenant ID for WIF authentication');
 		console.error('  AZURE_CLIENT_ID       - Azure client ID for WIF authentication');
 		console.error('  AZURE_ID_TOKEN        - Azure ID token for WIF authentication');
+
 		process.exit(1);
 	}
 

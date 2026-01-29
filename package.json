@@ -5568,7 +5568,8 @@
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
 		"test:prompt": "mocha \"src/extension/completions-core/vscode-node/prompt/**/test/**/*.test.{ts,tsx}\"",
-		"test:completions-core": "tsx src/extension/completions-core/vscode-node/extension/test/runTest.ts"
+		"test:completions-core": "tsx src/extension/completions-core/vscode-node/extension/test/runTest.ts",
+		"upload-sourcemaps": "tsx script/build/uploadSourceMaps.ts"
 	},
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
