@@ -47,8 +47,6 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
-	infer: 'user',
-	agents: [],
 	tools: [
 		'agent',
 		'search',
