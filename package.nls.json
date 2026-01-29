@@ -44,6 +44,24 @@
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
 	},
+	"github.copilot.viewsWelcome.invalidToken": {
+		"message": "Your GitHub token is invalid. Please sign out from your GitHub account and sign in again.\n\n[Manage Accounts](command:workbench.action.manageAccounts)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:workbench.action.manageAccounts)'}",
+			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
+			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
+		]
+	},
+	"github.copilot.viewsWelcome.rateLimited": {
+		"message": "Your account has exceeded GitHub's API rate limit. Please wait a few minutes and try again.\n\n[Retry](command:github.copilot.refreshToken)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:github.copilot.refreshToken)'}",
+			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
+			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
+		]
+	},
 	"github.copilot.viewsWelcome.contactSupport": {
 		"message": "There seems to be a problem with your account. Please contact GitHub support.\n\n[Contact Support](https://support.github.com/?editor=vscode)",
 		"comment": [
