@@ -1992,7 +1992,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 								if (toolPart) {
 									stream.push(toolPart);
 									hasStreamedContent = true;
-									if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+									if (toolPart instanceof vscode.ChatResponseThinkingProgressPart && contentBuilder.shouldSignalReasoningDone()) {
 										stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 									}
 								}
@@ -2015,7 +2015,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 									if (toolPart) {
 										stream.push(toolPart);
 										hasStreamedContent = true;
-										if (toolPart instanceof vscode.ChatResponseThinkingProgressPart) {
+										if (toolPart instanceof vscode.ChatResponseThinkingProgressPart && contentBuilder.shouldSignalReasoningDone()) {
 											stream.push(new vscode.ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 										}
 									}
