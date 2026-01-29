@@ -5,7 +5,7 @@
 
 import { env, window } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
@@ -44,6 +44,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			this.copilotToken = undefined;
+		}
+
 		if (!this.copilotToken || this.copilotToken.expires_at - (60 * 5 /* 5min */) < nowSeconds() || force) {
 			try {
 				this._logService.debug(`Getting CopilotToken (force: ${force})...`);
@@ -59,6 +64,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	private async _auth(): Promise<TokenInfoOrError> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			return { kind: 'failure', reason: failWith };
+		}
+
 		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
 		if (!session && !allowNoAuthAccess) {
