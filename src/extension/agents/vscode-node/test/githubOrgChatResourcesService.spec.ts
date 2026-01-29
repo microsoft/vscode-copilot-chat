@@ -189,6 +189,76 @@ suite('GitHubOrgChatResourcesService', () => {
 
 			assert.equal(orgName, 'foundorg');
 		});
+
+		test('prefers Copilot sign-in org over arbitrary first org when no workspace repo', async () => {
+			mockWorkspaceService.setWorkspaceFolders([]);
+			mockOctoKitService.setUserOrganizations(['firstorg', 'copilotorg', 'thirdorg']);
+			// Set Copilot token with organization_login_list indicating Copilot access through 'copilotorg'
+			mockAuthService.copilotToken = {
+				organizationLoginList: ['copilotorg'],
+			} as any;
+
+			const service = createService();
+			const orgName = await service.getPreferredOrganizationName();
+
+			assert.equal(orgName, 'copilotorg');
+		});
+
+		test('prefers workspace repo org over Copilot sign-in org', async () => {
+			mockWorkspaceService.setWorkspaceFolders([URI.file('/workspace')]);
+			mockGitService.setRepositoryFetchUrls({
+				rootUri: URI.file('/workspace'),
+				remoteFetchUrls: ['https://github.com/workspaceorg/repo.git']
+			});
+			mockOctoKitService.setUserOrganizations(['workspaceorg', 'copilotorg']);
+			mockAuthService.copilotToken = {
+				organizationLoginList: ['copilotorg'],
+			} as any;
+
+			const service = createService();
+			const orgName = await service.getPreferredOrganizationName();
+
+			assert.equal(orgName, 'workspaceorg');
+		});
+
+		test('falls back to first org when Copilot org is not in user org list', async () => {
+			mockWorkspaceService.setWorkspaceFolders([]);
+			mockOctoKitService.setUserOrganizations(['firstorg', 'secondorg']);
+			// Copilot org is not in user's org list
+			mockAuthService.copilotToken = {
+				organizationLoginList: ['unknownorg'],
+			} as any;
+
+			const service = createService();
+			const orgName = await service.getPreferredOrganizationName();
+
+			assert.equal(orgName, 'firstorg');
+		});
+
+		test('falls back to first org when no Copilot token available', async () => {
+			mockWorkspaceService.setWorkspaceFolders([]);
+			mockOctoKitService.setUserOrganizations(['firstorg', 'secondorg']);
+			mockAuthService.copilotToken = undefined;
+
+			const service = createService();
+			const orgName = await service.getPreferredOrganizationName();
+
+			assert.equal(orgName, 'firstorg');
+		});
+
+		test('uses first matching Copilot org when multiple are available', async () => {
+			mockWorkspaceService.setWorkspaceFolders([]);
+			mockOctoKitService.setUserOrganizations(['thirdorg', 'secondcopilotorg', 'firstcopilotorg']);
+			mockAuthService.copilotToken = {
+				organizationLoginList: ['firstcopilotorg', 'secondcopilotorg'],
+			} as any;
+
+			const service = createService();
+			const orgName = await service.getPreferredOrganizationName();
+
+			// Should match 'firstcopilotorg' first in the copilot org list iteration
+			assert.equal(orgName, 'firstcopilotorg');
+		});
 	});
 
 	suite('startPolling', () => {
