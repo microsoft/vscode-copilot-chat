@@ -365,7 +365,6 @@
 	"github.copilot.config.tools.defaultToolsGrouped": "Group default tools in prompts.",
 	"github.copilot.config.claudeAgent.enabled": "Enable Claude Agent sessions in VS Code. Start and resume agentic coding sessions powered by Anthropic's Claude Agent SDK directly in the editor. Uses your existing Copilot subscription.",
 	"github.copilot.config.claudeAgent.allowDangerouslySkipPermissions": "Allow bypass permissions mode. Recommended only for sandboxes with no internet access.",
-	"github.copilot.command.claude.terminal": "New CLI Session",
 	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for Background Agents.",
 	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
 	"github.copilot.config.backgroundAgent.enabled": "Enable the Background Agent. When disabled, the Background Agent will not be available in 'Continue In' context menus.",

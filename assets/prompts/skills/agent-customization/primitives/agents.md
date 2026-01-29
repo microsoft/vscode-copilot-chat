@@ -1,6 +1,6 @@
 # [Custom Agents (.agent.md)](https://code.visualstudio.com/docs/copilot/customization/custom-agents)
 
-Custom personas with specific tools, instructions, and behaviors.
+Custom personas with specific tools, instructions, and behaviors. Use for orchestrated workflows with role-based tool restrictions.
 
 ## Locations
 
@@ -15,137 +15,92 @@ Custom personas with specific tools, instructions, and behaviors.
 ---
 description: "<required>"    # For agent picker and subagent discovery
 name: "Agent Name"           # Optional, defaults to filename
-tools: ["search", "fetch"]   # Optional: built-in, MCP (<server>/*), extension
+tools: ["search", "web"]     # Optional: aliases, MCP (<server>/*), extension tools
 model: "Claude Sonnet 4"     # Optional, uses picker default
 argument-hint: "Task..."     # Optional, input guidance
-infer: true                  # Optional, enable on-demand subagent discovery (default: true)
 agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
+infer: "all"                 # Optional: "all"|true, "user"|false, "agent", "hidden"
 handoffs: [...]              # Optional, transitions to other agents
 ---
 ```
 
+### `infer` Values
+
+| Value | Behavior |
+|-------|----------|
+| `"all"` or `true` | Available in agent picker AND as subagent (default) |
+| `"user"` or `false` | Only in agent picker, not as subagent |
+| `"agent"` | Only as subagent, hidden from picker |
+| `"hidden"` | Not available anywhere |
+
 ## Tools
 
-Specify tool names in the `tools` array. Sources: built-in tools, tool sets, MCP servers (`<server>/*`), or extension-contributed tools.
-
-To discover available tools, search your current tool list or use the tool search capability.
+Sources: built-in aliases, specific tools, MCP servers (`<server>/*`), extension tools.
 
 **Special**: `[]` = no tools, omit = defaults. Body reference: `#tool:<name>`
 
 ### Tool Aliases
 
-Common aliases for restricting agent capabilities:
-
 | Alias | Purpose |
 |-------|---------|
-| `shell` | Execute shell commands |
+| `execute` | Run shell commands |
 | `read` | Read file contents |
-| `edit` | Edit files (exact tools vary) |
+| `edit` | Edit files |
 | `search` | Search files or text |
-| `custom-agent` | Invoke other custom agents as subagents |
+| `agent` | Invoke custom agents as subagents |
 | `web` | Fetch URLs and web search |
-| `todo` | Create and manage task lists |
+| `todo` | Manage task lists |
 
-### Common Restriction Patterns
+### Common Patterns
 
 ```yaml
-# Read-only agent (no editing, no execution)
-tools: ["read", "search"]
-
-# MCP-only agent
-tools: ["myserver/*"]
-
-# No terminal access
-tools: ["read", "edit", "search"]
-
-# Planning agent (research only)
-tools: ["search", "web", "read"]
+tools: ["read", "search"]           # Read-only research
+tools: ["myserver/*"]               # MCP server only
+tools: ["read", "edit", "search"]   # No terminal access
+tools: []                            # Conversational only
 ```
 
-For the full list of available tools, see the [VS Code documentation](https://code.visualstudio.com/docs/copilot/customization/custom-agents).
+To discover available tools, check your current tool list or use `#tool:` syntax in the body to reference specific tools.
 
 ## Template
 
 ```markdown
 ---
-description: "Generate implementation plans"
-tools: ["search", "fetch", "githubRepo", "usages"]
+description: "{Use when... trigger phrases for subagent discovery}"
+tools: ["{minimal set of tool aliases}"]
+infer: "agent"
 ---
-You are in planning mode. Generate plans, don't edit code. Include: Overview, Requirements, Steps, Testing.
+You are a specialist at {specific task}. Your job is to {clear purpose}.
+
+## Constraints
+- DO NOT {thing this agent should never do}
+- DO NOT {another restriction}
+- ONLY {the one thing this agent does}
+
+## Approach
+1. {Step one of how this agent works}
+2. {Step two}
+3. {Step three}
+
+## Output Format
+{Exactly what this agent should return}
 ```
 
 ## Invocation
 
-- **Manual**: Agents dropdown or `Chat: Switch Agent...` command
-- **On-demand (subagent)**: When `infer: true`, parent agent can delegate based on `description` match—like skills and instructions
-
-## When to Use
-
-**Key Signal**: Orchestrated multi-stage processes with role-based tool restrictions. Different stages need different capabilities or strict handoffs.
-
-## Domain Examples
-
-| Domain | Example Workflow |
-|--------|------------------|
-| Engineering | planner → implementer → reviewer → deployer |
-| Product | research → strategy → execution → measurement |
-| Analytics | scope → build → analyze → report |
-| Support | triage → troubleshoot → escalate → close |
-| Content | research → write → edit → publish |
-
-## Creation Process
-
-### 1. Gather Requirements
-
-- What role or persona should this agent embody?
-- What specific tools does this role need (and which should it NOT have)?
-- Should this be workspace-specific or personal (user profile)?
-- Will this agent hand off to other agents?
-
-### 2. Determine Location
-
-| Scope | Path |
-|-------|------|
-| Workspace | `.github/agents/<name>.agent.md` |
-| User profile | `<profile>/agents/<name>.agent.md` |
-
-### 3. Create the File
-
-```markdown
----
-description: "<role description for agent picker>"
-tools: ["<minimal tool set>"]
----
-You are a <role>. Your responsibilities:
-- <primary responsibility>
-- <constraints on behavior>
-
-<Specific instructions for this role>
-```
-
-### 4. Configure Handoffs (optional)
-
-If this agent is part of a workflow:
-```yaml
-handoffs:
-  - agent: "next-stage-agent"
-    condition: "When <trigger condition>"
-```
+- **Manual**: Agent selector in chat
+- **Subagent**: Parent agent delegates based on `description` match (when `infer` allows)
 
 ## Core Principles
 
-1. **Single role per agent**: Each agent embodies one persona with focused responsibilities
-2. **Minimal tool set**: Only include tools required for the role—excess tools dilute focus and increase risk
-3. **Clear boundaries**: Define what the agent should NOT do as clearly as what it should do
-4. **Explicit handoffs**: When workflows span agents, define clear transition triggers
-5. **Discoverable via description**: The `description` field drives agent picker display—make it actionable
-6. **Keyword-rich for subagent discovery**: When `infer: true`, the `description` determines automatic delegation—include trigger words and use cases so the parent agent knows when to invoke this subagent
+1. **Single role**: One persona with focused responsibilities per agent
+2. **Minimal tools**: Only include what the role needs—excess tools dilute focus
+3. **Clear boundaries**: Define what the agent should NOT do
+4. **Keyword-rich description**: Include trigger words so parent agents know when to delegate
 
 ## Anti-patterns
 
-- **Swiss-army agents**: Agents with many tools that try to do everything
-- **Missing constraints**: Agents without clear boundaries on what they shouldn't attempt
-- **Role confusion**: Description doesn't match the persona defined in the body
-- **Circular handoffs**: Agent A hands to B which hands back to A without progress criteria
-- **Tool sprawl**: Using `tools: []` to disable all tools when specific restrictions would suffice
-- **Vague subagent descriptions**: Generic descriptions like "A helpful agent" that don't help the parent decide when to delegate—use phrases like "use proactively after code changes" for clear triggers
+- **Swiss-army agents**: Too many tools, tries to do everything
+- **Vague descriptions**: "A helpful agent" doesn't guide delegation—be specific
+- **Role confusion**: Description doesn't match body persona
+- **Circular handoffs**: A → B → A without progress criteria

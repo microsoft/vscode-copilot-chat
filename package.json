@@ -84,9 +84,7 @@
 		"onUri",
 		"onFileSystem:ccreq",
 		"onFileSystem:ccsettings",
-		"onCustomAgentProvider",
-		"onInstructionsProvider",
-		"onSkillProvider"
+		"onCustomAgentProvider"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
@@ -2133,11 +2131,6 @@
 			{
 				"command": "copilot.claude.memory",
 				"title": "Open Memory Files",
-				"category": "Claude Agent"
-			},
-			{
-				"command": "copilot.claude.terminal",
-				"title": "%github.copilot.command.claude.terminal%",
 				"category": "Claude Agent"
 			},
 			{
@@ -5351,10 +5344,6 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
-					},
-					{
-						"name": "terminal",
-						"description": "Launch Claude Code CLI using your GitHub Copilot subscription"
 					}
 				]
 			},

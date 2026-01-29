@@ -9,7 +9,8 @@
 import './agentsCommand';
 import './hooksCommand';
 import './memoryCommand';
-import './terminalCommand';
+// TODO: Re-enable after legal review is complete
+// import './terminalCommand';
 
 // Future commands can be added here:
 // import './settingsCommand';
