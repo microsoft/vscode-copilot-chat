@@ -117,6 +117,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
+		@IGitService private readonly gitSevice: IGitService,
 	) {
 		super();
 		this._register(this.terminalIntegration);
@@ -165,6 +166,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return undefined;
 	}
 
+	private shouldShowBadge(): boolean {
+		const repositories = this.gitSevice.repositories
+			.filter(repository => repository.kind !== 'worktree');
+
+		// Empty window or workspace that contains multiple repositories
+		return vscode.workspace.workspaceFolders === undefined || repositories.length > 1;
+	}
+
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
@@ -173,7 +182,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
-		if (worktreeProperties?.repositoryPath) {
+		if (worktreeProperties?.repositoryPath && this.shouldShowBadge()) {
 			const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 			badge = new vscode.MarkdownString(`$(repo) ${basename(repositoryPathUri)}`);
 			badge.supportThemeIcons = true;
