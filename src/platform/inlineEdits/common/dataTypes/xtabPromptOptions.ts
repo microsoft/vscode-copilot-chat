@@ -60,6 +60,88 @@ export enum AggressivenessLevel {
 	High = 'high',
 }
 
+/**
+ * EditIntent indicates the model's confidence level for the suggested edit.
+ * The model returns this as <|edit_intent|>value<|/edit_intent|> in the response.
+ */
+export enum EditIntent {
+	NoEdit = 'no_edit',
+	Low = 'low',
+	Medium = 'medium',
+	High = 'high',
+}
+
+export namespace EditIntent {
+	/**
+	 * Converts a string value to EditIntent enum.
+	 * Returns High (most permissive) for invalid values.
+	 */
+	export function fromString(value: string): EditIntent {
+		switch (value) {
+			case 'no_edit':
+				return EditIntent.NoEdit;
+			case 'low':
+				return EditIntent.Low;
+			case 'medium':
+				return EditIntent.Medium;
+			case 'high':
+				return EditIntent.High;
+			default:
+				// For unknown values, default to High (always show)
+				return EditIntent.High;
+		}
+	}
+
+	/**
+	 * Converts a short name (N, L, M, H) to EditIntent enum.
+	 * Only uppercase letters are accepted.
+	 * Returns undefined for invalid values.
+	 */
+	export function fromShortName(value: string): EditIntent | undefined {
+		switch (value) {
+			case 'N':
+				return EditIntent.NoEdit;
+			case 'L':
+				return EditIntent.Low;
+			case 'M':
+				return EditIntent.Medium;
+			case 'H':
+				return EditIntent.High;
+			default:
+				return undefined;
+		}
+	}
+
+	/**
+	 * Determines if the edit should be shown based on the edit intent
+	 * and the user's aggressiveness level.
+	 *
+	 * Filtering logic (edit_intent vs user aggressiveness):
+	 * - no_edit: Never show the edit
+	 * - high confidence: Show for all aggressiveness levels (high confidence = always show)
+	 * - medium confidence: Show only if user aggressiveness is medium or high
+	 * - low confidence: Show only if user aggressiveness is high
+	 */
+	export function shouldShowEdit(editIntent: EditIntent, aggressivenessLevel: AggressivenessLevel): boolean {
+		switch (editIntent) {
+			case EditIntent.NoEdit:
+				return false;
+			case EditIntent.High:
+				// High confidence edits show for all aggressiveness levels
+				return true;
+			case EditIntent.Medium:
+				// Medium confidence edits show for medium or high aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.Medium ||
+					aggressivenessLevel === AggressivenessLevel.High;
+			case EditIntent.Low:
+				// Low confidence edits only show for high aggressiveness
+				return aggressivenessLevel === AggressivenessLevel.High;
+			default:
+				assertNever(editIntent);
+		}
+	}
+}
+
 export type PromptOptions = {
 	readonly promptingStrategy: PromptingStrategy | undefined /* default */;
 	readonly currentFile: CurrentFileOptions;
@@ -86,6 +168,18 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
 	PatchBased = 'patchBased',
+	/**
+	 * Xtab275-based strategy with edit intent tag parsing.
+	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
+	 * followed by the edit window content.
+	 */
+	Xtab275EditIntent = 'xtab275EditIntent',
+	/**
+	 * Xtab275-based strategy with short edit intent parsing.
+	 * Response format: N|L|M|H (single character on first line)
+	 * followed by the edit window content.
+	 */
+	Xtab275EditIntentShort = 'xtab275EditIntentShort',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -97,6 +191,8 @@ export enum ResponseFormat {
 	UnifiedWithXml = 'unifiedWithXml',
 	EditWindowOnly = 'editWindowOnly',
 	CustomDiffPatch = 'customDiffPatch',
+	EditWindowWithEditIntent = 'editWindowWithEditIntent',
+	EditWindowWithEditIntentShort = 'editWindowWithEditIntentShort',
 }
 
 export namespace ResponseFormat {
@@ -111,6 +207,10 @@ export namespace ResponseFormat {
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
+			case PromptingStrategy.Xtab275EditIntent:
+				return ResponseFormat.EditWindowWithEditIntent;
+			case PromptingStrategy.Xtab275EditIntentShort:
+				return ResponseFormat.EditWindowWithEditIntentShort;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
