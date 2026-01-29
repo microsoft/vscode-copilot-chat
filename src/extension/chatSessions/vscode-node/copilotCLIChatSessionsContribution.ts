@@ -1245,8 +1245,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		let promptFileBody: string | undefined;
 		const requestPromptPromise = (async () => {
 			const promptFile = await this.getPromptInfoFromRequest(request, token);
-			if (promptFile?.body?.getContent()) {
-				promptFileBody = promptFile.body.getContent().trim();
+			const promptFileContent = promptFile?.body?.getContent();
+			if (promptFileContent) {
+				promptFileBody = promptFileContent.trim();
 			}
 			if (!promptFileBody && this.hasHistoryToSummarize(context.history)) {
 				stream.progress(l10n.t('Analyzing chat history'));
