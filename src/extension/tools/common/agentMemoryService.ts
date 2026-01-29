@@ -7,27 +7,12 @@ import { RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { getGithubRepoIdFromFetchUrl, getOrderedRemoteUrlsFromContext, IGitService, toGithubNwo } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { URI } from '../../../util/vs/base/common/uri';
-
-/**
- * Maximum number of session memory directories to keep.
- * Older sessions beyond this limit will be cleaned up.
- */
-const SESSION_MAX_COUNT = 20;
-
-/**
- * Directory name for memory storage within extension storage.
- */
-export const MEMORY_DIR_NAME = 'memory-tool/memories';
 
 /**
  * Repository memory entry format aligned with CAPI service contract.
@@ -91,20 +76,11 @@ export function normalizeCitations(citations: string | string[] | undefined): st
 }
 
 /**
- * Service for managing agent memory lifecycle.
- *
- * Memory types:
- * - /repo memories: Backed exclusively by Copilot Memory service (CAPI).
- *   Only available when copilot memory is enabled for the repository.
- * - /session memories: Backed by local filesystem storage.
+ * Service for managing repository memories via the Copilot Memory service (CAPI).
+ * Memories are stored in the cloud and available when Copilot Memory is enabled for the repository.
  */
 export interface IAgentMemoryService {
 	readonly _serviceBrand: undefined;
-
-	/**
-	 * Clean up old session memory directories, keeping only the most recent ones.
-	 */
-	cleanupSessions(): Promise<void>;
 
 	/**
 	 * Check if Copilot Memory is enabled for the current repository.
@@ -116,33 +92,22 @@ export interface IAgentMemoryService {
 	/**
 	 * Get repo memories from Copilot Memory service.
 	 * Returns undefined if Copilot Memory is not enabled or if fetching fails.
-	 * Note: /repo memories are only available when Copilot Memory is enabled.
 	 */
 	getRepoMemories(limit?: number): Promise<RepoMemoryEntry[] | undefined>;
 
 	/**
 	 * Store a repo memory to Copilot Memory service.
 	 * Returns true if stored successfully, false if Copilot Memory is not enabled or if storing fails.
-	 * Note: /repo memories are only available when Copilot Memory is enabled.
 	 */
 	storeRepoMemory(memory: RepoMemoryEntry): Promise<boolean>;
 }
 
 export const IAgentMemoryService = createServiceIdentifier<IAgentMemoryService>('IAgentMemoryService');
 
-interface SessionInfo {
-	uri: URI;
-	mtime: number;
-}
-
 export class AgentMemoryService extends Disposable implements IAgentMemoryService {
 	declare readonly _serviceBrand: undefined;
 
-	private static readonly SESSIONS_DIR_NAME = 'sessions';
-
 	constructor(
-		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
 		@IGitService private readonly gitService: IGitService,
@@ -152,86 +117,6 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
-	}
-
-	override dispose(): void {
-		// Perform cleanup on extension deactivation
-		this.cleanupSessions().catch(err => {
-			this.logService.error(`[AgentMemoryService] Error during dispose cleanup: ${err}`);
-		});
-		super.dispose();
-	}
-
-	async cleanupSessions(): Promise<void> {
-		try {
-			const sessionsDir = this.getSessionsDir();
-			if (!sessionsDir) {
-				return;
-			}
-
-			// Check if sessions directory exists
-			try {
-				const stat = await this.fileSystem.stat(sessionsDir);
-				if (stat.type !== FileType.Directory) {
-					return;
-				}
-			} catch {
-				// Directory doesn't exist, nothing to clean up
-				return;
-			}
-
-			// Read all session directories
-			const entries = await this.fileSystem.readDirectory(sessionsDir);
-			const sessionDirs = entries.filter(([, type]) => type === FileType.Directory);
-
-			if (sessionDirs.length <= SESSION_MAX_COUNT) {
-				return; // Nothing to clean up
-			}
-
-			// Get mtime for each session directory to sort by recency
-			const sessions: SessionInfo[] = [];
-			for (const [name] of sessionDirs) {
-				const sessionUri = URI.joinPath(sessionsDir, name);
-				try {
-					const stat = await this.fileSystem.stat(sessionUri);
-					sessions.push({
-						uri: sessionUri,
-						mtime: stat.mtime
-					});
-				} catch {
-					// Skip sessions that can't be stat'd
-					continue;
-				}
-			}
-
-			// Sort by mtime descending (most recent first)
-			sessions.sort((a, b) => b.mtime - a.mtime);
-
-			// Delete sessions beyond the limit
-			const sessionsToDelete = sessions.slice(SESSION_MAX_COUNT);
-			for (const session of sessionsToDelete) {
-				try {
-					await this.fileSystem.delete(session.uri, { recursive: true });
-					this.logService.debug(`[AgentMemoryService] Deleted old session: ${session.uri.fsPath}`);
-				} catch (error) {
-					this.logService.warn(`[AgentMemoryService] Failed to delete session ${session.uri.fsPath}: ${error}`);
-				}
-			}
-
-			if (sessionsToDelete.length > 0) {
-				this.logService.info(`[AgentMemoryService] Cleaned up ${sessionsToDelete.length} old session(s)`);
-			}
-		} catch (error) {
-			this.logService.error(`[AgentMemoryService] Error during session cleanup: ${error}`);
-		}
-	}
-
-	private getSessionsDir(): URI | undefined {
-		const storageUri = this.extensionContext.storageUri;
-		if (!storageUri) {
-			return undefined;
-		}
-		return URI.joinPath(storageUri, MEMORY_DIR_NAME, AgentMemoryService.SESSIONS_DIR_NAME);
 	}
 
 	/**
