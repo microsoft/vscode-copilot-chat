@@ -12,9 +12,13 @@ import { isEqualOrParent, normalizePath } from '../../../util/vs/base/common/res
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { IAgentMemoryService, isRepoMemoryEntry, MEMORY_DIR_NAME, RepoMemoryEntry } from '../common/agentMemoryService';
-import { ICopilotModelSpecificTool, ToolRegistry } from '../common/toolsRegistry';
+import { ToolName } from '../common/toolNames';
+import { ICopilotModelSpecificTool, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
-interface IMemoryParams {
+/**
+ * Full memory parameters for Anthropic models (command-based interface).
+ */
+interface ClaudeMemoryParams {
 	command: 'view' | 'create' | 'str_replace' | 'insert' | 'delete' | 'rename';
 	path?: string;
 	view_range?: [number, number];
@@ -27,16 +31,89 @@ interface IMemoryParams {
 	new_path?: string;
 }
 
+/**
+ * Simplified memory parameters for non-Anthropic models (direct store interface).
+ */
+interface ISimplifiedMemoryParams {
+	subject: string;
+	fact: string;
+	citations: string;
+	reason: string;
+	category: string;
+}
+
+
 interface MemoryResult {
 	success?: string;
 	error?: string;
 }
 
 /**
+ * Simplified memory tool for non-Claude models.
+ * Stores facts directly using the simplified schema defined in package.json.
+ * Tool definition is in package.json, enabled when copilotMemory.enabled is true.
+ */
+class MemoryTool implements ICopilotTool<ISimplifiedMemoryParams> {
+	public static readonly toolName = ToolName.Memory;
+
+	constructor(
+		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService
+	) { }
+
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISimplifiedMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+		const params = options.input;
+		const result = await this._storeMemory(params);
+
+		const resultText = result.error
+			? `Error: ${result.error}`
+			: result.success || '';
+
+		return new LanguageModelToolResult([
+			new LanguageModelTextPart(resultText)
+		]);
+	}
+
+	/**
+	 * Store a memory fact using the Copilot Memory service.
+	 */
+	private async _storeMemory(params: ISimplifiedMemoryParams): Promise<MemoryResult> {
+		try {
+			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
+			if (!isEnabled) {
+				return { error: 'Copilot Memory is not enabled. Memory storage requires Copilot Memory to be enabled.' };
+			}
+
+			const entry: RepoMemoryEntry = {
+				subject: params.subject,
+				fact: params.fact,
+				citations: params.citations,
+				reason: params.reason,
+				category: params.category as RepoMemoryEntry['category'],
+			};
+
+			const success = await this.agentMemoryService.storeRepoMemory(entry);
+			if (success) {
+				return { success: `Successfully stored memory: "${params.subject}"` };
+			} else {
+				return { error: 'Failed to store memory entry' };
+			}
+		} catch (error) {
+			return { error: `Cannot store memory: ${error.message}` };
+		}
+	}
+}
+
+ToolRegistry.registerTool(MemoryTool);
+
+/**
  * All memory operations are confined to the /memories directory within the extension's
  * workspace-specific storage location. Each workspace maintains its own isolated memory.
+ *
+ * This is the Claude-specific implementation that overrides the base MemoryTool for Claude models.
  */
-class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
+class ClaudeMemoryTool implements ICopilotModelSpecificTool<ClaudeMemoryParams> {
+	public readonly overridesTool = ToolName.Memory;
+
 	private static readonly SESSION_PATH_PREFIX = '/memories/session';
 	private static readonly REPO_PATH_PREFIX = '/memories/repo';
 
@@ -46,7 +123,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService
 	) { }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<ClaudeMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const params = options.input;
 		const sessionResource = (options.toolInvocationToken as any)?.sessionResource;
 		const sessionId = this.extractSessionId(sessionResource);
@@ -70,7 +147,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : undefined;
 	}
 
-	private async execute(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async execute(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const command = params.command;
 
 		try {
@@ -109,15 +186,15 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		const normalizedPath = extpath.toPosixPath(memoryPath);
 
 		// Check if path starts with /memories/session
-		if (normalizedPath === MemoryTool.SESSION_PATH_PREFIX ||
-			normalizedPath.startsWith(MemoryTool.SESSION_PATH_PREFIX + '/')) {
+		if (normalizedPath === ClaudeMemoryTool.SESSION_PATH_PREFIX ||
+			normalizedPath.startsWith(ClaudeMemoryTool.SESSION_PATH_PREFIX + '/')) {
 
 			if (!sessionId) {
 				throw new Error('Session ID is not available. Session memory operations require an active chat session.');
 			}
 
 			// Replace /memories/session with /memories/sessions/<sessionId>
-			const suffix = normalizedPath.substring(MemoryTool.SESSION_PATH_PREFIX.length);
+			const suffix = normalizedPath.substring(ClaudeMemoryTool.SESSION_PATH_PREFIX.length);
 			return `/memories/sessions/${sessionId}${suffix}`;
 		}
 
@@ -166,7 +243,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		return normalizedFullPath;
 	}
 
-	private async _view(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _view(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const viewRange = params.view_range;
 
@@ -175,7 +252,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// Warn if trying to view repo memories when Copilot Memory is enabled
-		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (memoryPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
 			if (isEnabled) {
 				return { error: 'Warning: Do not use view on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
@@ -259,7 +336,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	 * - If Copilot Memory (CAPI) is enabled, stores to CAPI only (no local file)
 	 * - Otherwise, stores to local filesystem only
 	 */
-	private async _create(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _create(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const fileText = params.file_text ?? '';
 
@@ -268,7 +345,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// For repo memory files, use exclusive strategy
-		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (memoryPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			return this._createRepoMemory(memoryPath, fileText);
 		}
 
@@ -348,7 +425,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	/**
 	 * Replace text in a file.
 	 */
-	private async _strReplace(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _strReplace(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const oldStr = params.old_str;
 		const newStr = params.new_str ?? '';
@@ -358,7 +435,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// Warn if trying to str_replace repo memories when Copilot Memory is enabled
-		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (memoryPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
 			if (isEnabled) {
 				return { error: 'Warning: Do not use str_replace on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
@@ -411,7 +488,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	/**
 	 * Insert text at a specific line.
 	 */
-	private async _insert(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _insert(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 		const insertLine = params.insert_line;
 		const insertText = params.insert_text ?? '';
@@ -421,7 +498,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// Warn if trying to insert into repo memories when Copilot Memory is enabled
-		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (memoryPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
 			if (isEnabled) {
 				return { error: 'Warning: Do not use insert on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
@@ -461,7 +538,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	/**
 	 * Delete a file or directory.
 	 */
-	private async _delete(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _delete(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const memoryPath = params.path;
 
 		if (!memoryPath) {
@@ -469,7 +546,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// Warn if trying to delete repo memories when Copilot Memory is enabled
-		if (memoryPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (memoryPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
 			if (isEnabled) {
 				return { error: 'Warning: Do not use delete on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
@@ -496,7 +573,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 	/**
 	 * Rename or move a file/directory.
 	 */
-	private async _rename(params: IMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
+	private async _rename(params: ClaudeMemoryParams, sessionId: string | undefined): Promise<MemoryResult> {
 		const oldPath = params.old_path;
 		const newPath = params.new_path;
 
@@ -505,7 +582,7 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 		}
 
 		// Warn if trying to rename repo memories when Copilot Memory is enabled
-		if (oldPath.startsWith(MemoryTool.REPO_PATH_PREFIX) || newPath.startsWith(MemoryTool.REPO_PATH_PREFIX)) {
+		if (oldPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX) || newPath.startsWith(ClaudeMemoryTool.REPO_PATH_PREFIX)) {
 			const isEnabled = await this.agentMemoryService.checkMemoryEnabled();
 			if (isEnabled) {
 				return { error: 'Warning: Do not use rename on /memories/repo paths. Repository memories are managed by Copilot Memory. Only use the create command to store new repo facts.' };
@@ -533,17 +610,20 @@ class MemoryTool implements ICopilotModelSpecificTool<IMemoryParams> {
 
 ToolRegistry.registerModelSpecificTool(
 	{
-		name: 'copilot_memory',
+		name: 'memory',
 		toolReferenceName: 'memory',
-		displayName: 'Memory',
+		displayName: 'Memory (Claude)',
 		description: 'Manage persistent memory across conversations. This tool allows you to create, view, update, and delete memory files that persist between chat sessions. Use this to remember important information about the user, their preferences, project context, or anything that should be recalled in future conversations. Available commands: view (list/read memories), create (new memory file), str_replace (edit content), insert (add content), delete (remove memory), rename (change filename).',
 		userDescription: 'Manage persistent memory files across conversations',
 		source: undefined,
 		tags: [],
 		models: [
-			{ id: 'claude-opus-4.5' },
-			{ id: 'claude-sonnet-4.5' },
-			{ id: 'claude-haiku-4.5' },
+			{ family: 'claude-opus-4.5' },
+			{ family: 'claude-sonnet-4.5' },
+			{ family: 'claude-haiku-4.5' },
+			{ family: 'claude-3.5-sonnet' },
+			{ family: 'claude-3.5-haiku' },
+			{ family: 'claude-3-opus' },
 		],
 		toolSet: 'vscode',
 		inputSchema: {
@@ -595,7 +675,7 @@ ToolRegistry.registerModelSpecificTool(
 				}
 			},
 			required: ['command']
-		}
+		},
 	},
-	MemoryTool
+	ClaudeMemoryTool
 );

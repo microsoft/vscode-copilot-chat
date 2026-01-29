@@ -536,6 +536,48 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
+				"name": "copilot_memory",
+				"toolReferenceName": "memory",
+				"displayName": "Memory",
+				"userDescription": "Store facts about the codebase so they can be recalled in future conversations",
+				"modelDescription": "Store a fact about the codebase in memory, so that it can be used in future code generation or review tasks. The fact should be a clear and concise statement about the codebase conventions, structure, logic, or usage. It may be based on the code itself, or on information provided by the user.",
+				"canBeReferencedInPrompt": true,
+				"when": "config.github.copilot.chat.copilotMemory.enabled",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"subject": {
+							"type": "string",
+							"description": "The topic to which this memory relates. 1-2 words. Examples: naming conventions, testing practices, documentation, logging, authentication, sanitization, error handling."
+						},
+						"fact": {
+							"type": "string",
+							"description": "A clear and short description of a fact about the codebase or a convention used in the codebase. Must be less than 200 characters. Examples: Use JWT for authentication. Follow PEP 257 docstring conventions. Use single quotes for strings in Python. Use Winston for logging."
+						},
+						"citations": {
+							"type": "string",
+							"description": "The source of this fact, such as a file and line number in the codebase (e.g., path/file.go:123). If the convention is not explicitly stated in the codebase, you can point at several examples that illustrate it, selecting the most diverse set of examples you can find (e.g. from multiple files or contexts). If the fact is based on user input, the citations should be User input: followed by the contents of the input."
+						},
+						"reason": {
+							"type": "string",
+							"description": "A clear and detailed explanation of the reason behind storing this fact. Must be at least 2-3 sentences long, and include which future tasks this fact will be useful for and why it is important to remember this fact."
+						},
+						"category": {
+							"type": "string",
+							"description": "The type of memory being stored. This can be bootstrap_and_build (info about how to bootstrap and build the project), user_preferences (preferences of the user, such as coding style, tabs vs. spaces, favorite libraries, etc.), general (file independent facts), or file_specific (information about a specific file in the codebase)."
+						}
+					},
+					"required": [
+						"subject",
+						"fact",
+						"citations",
+						"reason",
+						"category"
+					]
+				}
+			},
+			{
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
@@ -1312,7 +1354,8 @@
 					"runCommand",
 					"askQuestions",
 					"switchAgent",
-					"vscodeAPI"
+					"vscodeAPI",
+					"memory"
 				]
 			},
 			{

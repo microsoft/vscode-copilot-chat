@@ -3,8 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, PromptElement, PromptElementProps } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Tag } from '../../prompts/node/base/tag';
 import { IAgentMemoryService, normalizeCitations, RepoMemoryEntry } from '../common/agentMemoryService';
@@ -42,7 +44,7 @@ export class RepoMemoryContextPrompt extends PromptElement<RepoMemoryContextProm
 		const formattedMemories = this.formatMemories(memories);
 
 		return (
-			<Tag name='repositoryMemories'>
+			<Tag name='repository_memories'>
 				The following are recent memories stored for this repository from previous agent interactions. These memories may contain useful context about the codebase conventions, patterns, and practices. However, be aware that memories might be obsolete or incorrect or may not apply to your current task. Use the citations provided to verify the accuracy of any relevant memory before relying on it.<br />
 				<br />
 				{formattedMemories}
@@ -97,14 +99,17 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 		super(props);
 	}
 
-	async render() {
+	async render(state: void, sizing: PromptSizing) {
 		const enableCopilotMemory = this.configurationService.getExperimentBasedConfig(ConfigKey.CopilotMemoryEnabled, this.experimentationService);
 		if (!enableCopilotMemory) {
 			return null;
 		}
 
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+		const isAnthropic = endpoint && isAnthropicFamily(endpoint);
+
 		return <Tag name='repoMemory'>
-			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the memory tool to store it at /memories/repo/. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
+			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the {ContributedToolName.Memory} tool to store it{isAnthropic ? ' at /memories/repo/' : ''}. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
 			- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
 			- Important information about the structure or logic of the codebase<br />
 			- Commands for linting, building, or running tests that have been verified through a successful run<br />
@@ -127,8 +132,10 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 				- Contain no secrets or sensitive data<br />
 			</Tag>
 			<br />
-			ALWAYS use the {ContributedToolName.Memory}'s create command to store a new repo fact at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
-			Do NOT attempt to view, str_replace, insert, delete, or rename repo memories. Only use the create command for /memories/repo paths.<br />
+			{isAnthropic && <>
+				ALWAYS use the {ContributedToolName.Memory}'s create command to store a new repo fact at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
+				Do NOT attempt to view, str_replace, insert, delete, or rename repo memories. Only use the create command for /memories/repo paths.<br />
+			</>}
 			Always include the reason and citations fields.<br />
 			Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
 		</Tag>;

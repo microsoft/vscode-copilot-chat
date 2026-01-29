@@ -10,7 +10,6 @@ import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDefe
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
-import { RepoMemoryContextPrompt, RepoMemoryInstructionsPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
@@ -262,7 +261,6 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
-				<RepoMemoryInstructionsPrompt />
 				<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			</Tag>
 			<Tag name='communicationStyle'>
@@ -299,7 +297,6 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
-			{tools[ToolName.Memory] && this.props.isNewChat && <RepoMemoryContextPrompt />}
 		</InstructionMessage>;
 	}
 }
