@@ -362,6 +362,14 @@ export interface IResultMetadata {
 	toolCallRounds?: readonly IToolCallRound[];
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
+	/**
+	 * Reason why tool calling stopped when {@link maxToolCallsExceeded} is set.
+	 * "limit" means we hit the configured max iterations; "loopDetected" means
+	 * we aborted early due to loop detection heuristics.
+	 */
+	toolCallExitReason?: 'limit' | 'loopDetected';
+	/** True when we detected a repeated-text loop in the model response. */
+	textLoopDetected?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
 	/** Prompt tokens from the language model (e.g., Anthropic Messages API) */
 	promptTokens?: number;

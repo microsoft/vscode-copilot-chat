@@ -34,7 +34,7 @@ import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollec
 import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
 import { cancelText, IToolCallIterationIncrease } from '../../prompt/common/specialRequestTypes';
-import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
+import { detectTextLoop, detectToolCallLoop, ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
@@ -179,6 +179,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		const isGeminiFamily = endpoint.family.toLowerCase().includes('gemini');
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -197,6 +199,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				};
 
 				this.toolCallRounds.push(result.round);
+				const loopDetection = isGeminiFamily ? detectToolCallLoop(this.toolCallRounds) : undefined;
+				if (loopDetection && lastResult) {
+					lastResult = this.hitToolCallLoop(outputStream, lastResult, loopDetection);
+					break;
+				}
+				const textLoopDetection = isGeminiFamily ? detectTextLoop(this.toolCallRounds) : undefined;
+				if (textLoopDetection && lastResult) {
+					lastResult = this.hitTextLoop(outputStream, lastResult, textLoopDetection);
+					break;
+				}
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					lastResult = lastResult;
 					break;
@@ -338,7 +350,86 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			...lastResult.chatResult,
 			metadata: {
 				...lastResult.chatResult?.metadata,
-				maxToolCallsExceeded: true
+				maxToolCallsExceeded: true,
+				toolCallExitReason: 'limit'
+			} satisfies Partial<IResultMetadata>,
+		};
+
+		return lastResult;
+	}
+
+	private hitTextLoop(stream: ChatResponseStream | undefined, lastResult: IToolCallSingleResult, detection: NonNullable<ReturnType<typeof detectTextLoop>>) {
+		this._logService.error(`Text loop detected for conversation ${this.options.conversation.sessionId} (model: ${this.options.request.model?.id ?? 'unknown'})`);
+
+		/* __GDPR__
+			"toolCalling.textLoopDetected" : {
+				"owner": "roblourens",
+				"comment": "Records information when a potential repeated-text loop is detected in the model response.",
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." },
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
+				"repeatCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Maximum number of repeats for any detected sentence in the response." },
+				"totalSentences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of sentences in the response where the loop was detected." },
+				"totalToolCallRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of tool call rounds executed before the text loop was detected." },
+				"responseLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Length of the response text where the loop was detected." }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('toolCalling.textLoopDetected', {
+			model: this.options.request.model?.id,
+			conversationId: this.options.conversation.sessionId,
+		}, {
+			repeatCount: detection.repeatCount,
+			totalSentences: detection.totalSentences,
+			totalToolCallRounds: detection.totalRounds,
+			responseLength: detection.responseLength,
+		});
+
+		lastResult.chatResult = {
+			...lastResult.chatResult,
+			metadata: {
+				...lastResult.chatResult?.metadata,
+				textLoopDetected: true,
+			} satisfies Partial<IResultMetadata>,
+		};
+
+		return lastResult;
+	}
+
+	private hitToolCallLoop(stream: ChatResponseStream | undefined, lastResult: IToolCallSingleResult, detection: NonNullable<ReturnType<typeof detectToolCallLoop>>) {
+		this._logService.error(`Tool calling loop detected for conversation ${this.options.conversation.sessionId} (model: ${this.options.request.model?.id ?? 'unknown'})`);
+		this._logService.error(`Tool calling loop window: ${JSON.stringify(detection.toolCountsWindow)}`);
+
+		/* __GDPR__
+			"toolCalling.loopDetected" : {
+				"owner": "roblourens",
+				"comment": "Records information when a potential infinite tool-calling loop is detected and aborted.",
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." },
+				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
+				"toolCountsWindow": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "Counts of tool calls in the detection window, keyed by tool name and arguments." },
+				"windowSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool calls considered in the detection window." },
+				"uniqueToolKeyCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of unique tool+argument keys in the detection window." },
+				"maxKeyCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Maximum count for any single tool+argument key in the detection window." },
+				"totalToolCallRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of tool call rounds executed in the loop." },
+				"totalToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of tool calls executed in the loop." }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('toolCalling.loopDetected', {
+			model: this.options.request.model?.id,
+			conversationId: this.options.conversation.sessionId,
+			toolCountsWindow: JSON.stringify(detection.toolCountsWindow),
+		}, {
+			windowSize: detection.windowSize,
+			uniqueToolKeyCount: detection.uniqueToolKeyCount,
+			maxKeyCount: detection.maxKeyCount,
+			totalToolCallRounds: detection.totalToolCallRounds,
+			totalToolCalls: detection.totalToolCalls,
+		});
+
+		lastResult.chatResult = {
+			...lastResult.chatResult,
+			metadata: {
+				...lastResult.chatResult?.metadata,
+				maxToolCallsExceeded: true,
+				toolCallExitReason: 'loopDetected'
 			} satisfies Partial<IResultMetadata>,
 		};
 

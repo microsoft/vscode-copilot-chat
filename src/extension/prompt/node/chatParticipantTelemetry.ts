@@ -433,7 +433,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 						'ask';
 	}
 
-	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
+	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls' | 'toolLoop'): void {
 		if (availableTools.length === 0) {
 			return;
 		}
