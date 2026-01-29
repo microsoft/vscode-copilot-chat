@@ -328,7 +328,8 @@ type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<stri
 export class CopilotCLISDK implements ICopilotCLISDK {
 	declare _serviceBrand: undefined;
 	private requestMap: Record<string, RequestDetails> = {};
-
+	private _ensureShimsPromise: Lazy<Promise<void>>;
+	private _packagePromise: Lazy<Promise<typeof import('@github/copilot/sdk')>> = new Lazy(() => this.getPackageImpl());
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
@@ -337,6 +338,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
+		this._ensureShimsPromise = new Lazy(() => this.ensureShimsImpl());
 	}
 
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined {
@@ -356,6 +358,10 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
+		return this._packagePromise.value;
+	}
+
+	protected async getPackageImpl(): Promise<typeof import('@github/copilot/sdk')> {
 		try {
 			// Ensure the node-pty shim exists before importing the SDK (required for CLI sessions)
 			await this.ensureShims();
@@ -367,6 +373,10 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	protected async ensureShims(): Promise<void> {
+		await this._ensureShimsPromise.value;
+	}
+
+	protected async ensureShimsImpl(): Promise<void> {
 		await Promise.all([
 			ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService),
 			ensureRipgrepShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService)
