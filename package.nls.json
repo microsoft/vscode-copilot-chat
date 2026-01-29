@@ -45,10 +45,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.invalidToken": {
-		"message": "Your GitHub token is invalid. Please sign out from your GitHub account and sign in again.\n\n[Manage Accounts](command:workbench.action.manageAccounts)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"message": "Your GitHub token is invalid. Please sign out from your GitHub account and sign in again.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
 		"comment": [
 			"{Locked='['}",
-			"{Locked='](command:workbench.action.manageAccounts)'}",
+			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}",
 			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
@@ -63,10 +63,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.gitHubLoginFailed": {
-		"message": "GitHub login failed. Please sign in to your GitHub account to use Copilot.\n\n[Retry](command:github.copilot.refreshToken)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"message": "GitHub login failed. Please sign in to your GitHub account to use Copilot.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
 		"comment": [
 			"{Locked='['}",
-			"{Locked='](command:github.copilot.refreshToken)'}",
+			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}",
 			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
