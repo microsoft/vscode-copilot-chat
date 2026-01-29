@@ -37,10 +37,26 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
 		private readonly processNonReportedDelta: ((deltas: IResponseDelta[]) => string[]) | undefined,
-		private readonly options: { subagentInvocationId?: string } | undefined,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		private readonly options?: { subagentInvocationId?: string },
+		private readonly _configurationService?: IConfigurationService,
+		private readonly _experimentationService?: IExperimentationService
 	) { }
+
+	/**
+	 * Returns whether the reasoning done signal should be emitted.
+	 * When thinkingKeepExpanded is true, we don't signal reasoning done to keep the thinking section expanded.
+	 */
+	protected shouldSignalReasoningDone(): boolean {
+		if (!this._configurationService || !this._experimentationService) {
+			// If services are not provided, default to signaling reasoning done
+			return true;
+		}
+		const keepExpanded = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.ThinkingKeepExpanded,
+			this._experimentationService
+		);
+		return !keepExpanded;
+	}
 
 	async processResponse(_context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
 		return this.doProcessResponse(inputStream, outputStream, token);
@@ -63,9 +79,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 				this.thinkingActive = true;
 			}
 		} else if (this.thinkingActive) {
-			// Only signal reasoning done if thinkingKeepExpanded setting is false (default)
-			const keepExpanded = this._configurationService.getExperimentBasedConfig(ConfigKey.ThinkingKeepExpanded, this._experimentationService);
-			if (!keepExpanded) {
+			if (this.shouldSignalReasoningDone()) {
 				progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
 			}
 			this.thinkingActive = false;

@@ -9,6 +9,7 @@ import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { l10n, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
@@ -212,6 +213,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		@IGithubRepositoryService private readonly _githubRepositoryService: IGithubRepositoryService,
 		@IChatDelegationSummaryService private readonly _chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 		this.registerCommands();
@@ -1965,7 +1967,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 
 			// Parse the new log content
-			const contentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
+			const contentBuilder = new ChatSessionContentBuilder(
+				CopilotCloudSessionsProvider.TYPE,
+				this._gitService,
+				this._configurationService,
+				this._experimentationService
+			);
 
 			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;

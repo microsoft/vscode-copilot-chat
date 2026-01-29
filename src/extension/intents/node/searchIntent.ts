@@ -8,10 +8,12 @@ import { parse } from 'jsonc-parser';
 import type * as vscode from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { isPreRelease } from '../../../platform/env/common/packagejson';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -121,10 +123,16 @@ class SearchResponseProcessor extends PseudoStopStartResponseProcessor {
 
 	private _response = '';
 
-	constructor() {
+	constructor(
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService
+	) {
 		super(
 			[{ start: '[ARGS END]', stop: '[ARGS START]' }],
 			(delta) => jsonToTable(parseSearchParams(delta.join(''))),
+			undefined,
+			configurationService,
+			experimentationService
 		);
 	}
 

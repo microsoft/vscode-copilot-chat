@@ -6,10 +6,12 @@
 import type { Session, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatContext } from 'vscode';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
+import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
@@ -92,10 +94,15 @@ describe('CopilotCLISession', () => {
 			return undefined;
 		}
 	}();
+	let configurationService: IConfigurationService;
+	let experimentationService: IExperimentationService;
+
 	beforeEach(async () => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		logger = accessor.get(ILogService);
+		configurationService = accessor.get(IConfigurationService);
+		experimentationService = accessor.get(IExperimentationService);
 		requestLogger = new NullRequestLogger();
 		sdk = new class extends mock<ICopilotCLISDK>() {
 			override async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
@@ -129,6 +136,8 @@ describe('CopilotCLISession', () => {
 			delegationService,
 			requestLogger,
 			new NullICopilotCLIImageSupport(),
+			configurationService,
+			experimentationService,
 		));
 	}
 

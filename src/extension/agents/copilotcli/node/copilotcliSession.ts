@@ -7,6 +7,7 @@ import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -108,6 +109,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
+	}
+
+	/**
+	 * Returns whether the reasoning done signal should be emitted.
+	 * When thinkingKeepExpanded is true, we don't signal reasoning done to keep the thinking section expanded.
+	 */
+	private shouldSignalReasoningDone(): boolean {
+		const keepExpanded = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.ThinkingKeepExpanded,
+			this._experimentationService
+		);
+		return !keepExpanded;
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
@@ -245,9 +258,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					const responsePart = processToolExecutionStart(event, pendingToolInvocations);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
-						// Only signal reasoning done if thinkingKeepExpanded setting is false (default)
-						const keepExpanded = this._configurationService.getExperimentBasedConfig(ConfigKey.ThinkingKeepExpanded, this._experimentationService);
-						if (!keepExpanded) {
+						if (this.shouldSignalReasoningDone()) {
 							this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 						}
 					}

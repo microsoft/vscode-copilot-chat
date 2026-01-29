@@ -101,13 +101,24 @@ export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
 		@IGitService private readonly _gitService: IGitService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		private readonly _configurationService?: IConfigurationService,
+		private readonly _experimentationService?: IExperimentationService
 	) {
 	}
 
+	/**
+	 * Returns whether the reasoning done signal should be emitted.
+	 * When thinkingKeepExpanded is true, we don't signal reasoning done to keep the thinking section expanded.
+	 */
 	public shouldSignalReasoningDone(): boolean {
-		const keepExpanded = this._configurationService.getExperimentBasedConfig(ConfigKey.ThinkingKeepExpanded, this._experimentationService);
+		if (!this._configurationService || !this._experimentationService) {
+			// If services are not provided, default to signaling reasoning done
+			return true;
+		}
+		const keepExpanded = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.ThinkingKeepExpanded,
+			this._experimentationService
+		);
 		return !keepExpanded;
 	}
 
