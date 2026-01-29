@@ -271,7 +271,7 @@ suite('Paged clipping - recently viewed files', () => {
 				[
 				  "<|recently_viewed_code_snippet|>
 				code_snippet_file_path: /src/first.txt
-				0|
+				0| 
 				<|/recently_viewed_code_snippet|>",
 				]
 			`);
