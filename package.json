@@ -5318,10 +5318,6 @@
 						"description": "Initialize a new CLAUDE.md file with codebase documentation"
 					},
 					{
-						"name": "compact",
-						"description": "Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarization]"
-					},
-					{
 						"name": "pr-comments",
 						"description": "Get comments from a GitHub pull request"
 					},
