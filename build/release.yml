@@ -123,10 +123,14 @@ extends:
         inputs:
           azureSubscription: 'vscode-builds-subscription'
           scriptType: 'bash'
+          addSpnToEnvironment: true
           scriptLocation: 'inlineScript'
-          inlineScript: npm run upload-sourcemaps
-        env:
-          AZURE_STORAGE_ACCOUNT: $(AzureStorageAccount)
+          inlineScript: |
+            AZURE_STORAGE_ACCOUNT="vscodeweb" \
+            AZURE_TENANT_ID="$tenantId" \
+            AZURE_CLIENT_ID="$servicePrincipalId" \
+            AZURE_ID_TOKEN="$idToken" \
+            npm run upload-sourcemaps
 
     # testPlatforms:
     #     - name: Linux
