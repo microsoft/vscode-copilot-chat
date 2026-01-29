@@ -93,8 +93,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
-	asContributionFactory(GitHubMcpContrib),
-	asContributionFactory(PromptFileContribution),
+	asContributionFactory(GitHubMcpContrib)
 ];
 
 /**
@@ -119,5 +118,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
+	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
 ];
