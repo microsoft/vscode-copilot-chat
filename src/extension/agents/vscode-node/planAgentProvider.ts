@@ -241,6 +241,7 @@ MANDATORY: Instruct the subagent to work autonomously following <research_instru
 <research_instructions>
 - Research the user's task comprehensively using read-only tools.
 - Start with high-level code searches before reading specific files.
+- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
 - Identify missing information, conflicting requirements, or technical unknowns.
 - DO NOT draft a full plan yet — focus on discovery and feasibility.
 </research_instructions>
