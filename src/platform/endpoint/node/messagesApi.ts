@@ -120,7 +120,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			? (configuredBudget < 1024 ? 1024 : configuredBudget)
 			: undefined;
 		thinkingBudget = normalizedBudget
-			? Math.min(32000, maxTokens - 1, normalizedBudget)
+			? Math.min(maxTokens - 1, normalizedBudget)
 			: undefined;
 	}
 
