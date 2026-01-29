@@ -68,16 +68,19 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	private async getEndpoint(request: ChatRequest) {
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
 
-		let endpoint;
-		if (!modelName) {
-			endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		} else {
-			endpoint = await this.endpointProvider.getChatEndpoint(modelName);
-			if (!endpoint.supportsToolCalls) {
-				endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+		if (modelName) {
+			try {
+				// Try to get the specified model
+				return await this.endpointProvider.getChatEndpoint(modelName);
+			} catch (error) {
+				// Model not available or doesn't support tool calls, fallback to main agent
+				this._logService.warn(`Failed to get model ${modelName}, falling back to main agent endpoint: ${error}`);
+				return await this.endpointProvider.getChatEndpoint(this.options.request);
 			}
+		} else {
+			// No model name specified, use main agent endpoint
+			return await this.endpointProvider.getChatEndpoint(this.options.request);
 		}
-		return endpoint;
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
