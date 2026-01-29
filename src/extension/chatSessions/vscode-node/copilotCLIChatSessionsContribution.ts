@@ -813,6 +813,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
 		// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 		if (cachedRepo) {
+			const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
+			if (!trusted) {
+				// User didn't trust, we can't proceed.
+				const result = { repository: undefined, trusted: false };
+				this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+				return result;
+			}
+
 			const repository = await this.gitService.getRepository(repoPath, true);
 			return { repository, trusted: true };
 		}
@@ -1182,6 +1190,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Means we failed to create worktree or this is a workspace folder without git repo
 			if (!worktreeProperties) {
 				isolationEnabled = false;
+			}
+		}
+
+		// Verify trust for the working directory
+		if (!cancelled && workingDirectory) {
+			const trusted = await this.workspaceService.requestResourceTrust({ uri: workingDirectory, message: untrustedFolderMessage });
+			if (!trusted) {
+				stream.warning(l10n.t('The selected folder is not trusted.'));
+				cancelled = true;
 			}
 		}
 
