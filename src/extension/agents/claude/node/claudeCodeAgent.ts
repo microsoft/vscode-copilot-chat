@@ -593,12 +593,9 @@ export class ClaudeCodeSession extends Disposable {
 				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
 				unprocessedToolCalls.set(item.id, item);
-				const invocation = createFormattedToolInvocation(item, true);
+				const invocation = createFormattedToolInvocation(item, false);
 				if (invocation) {
-					if (item.name === 'Task') {
-						invocation.toolName = 'runSubagent';
-					}
-					invocation.isComplete = false;
+					invocation.enablePartialUpdate = true;
 					stream.push(invocation);
 				}
 			}
@@ -642,6 +639,7 @@ export class ClaudeCodeSession extends Disposable {
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
 		const invocation = createFormattedToolInvocation(toolUse, true);
 		if (invocation) {
+			invocation.enablePartialUpdate = true;
 			invocation.isError = toolResult.is_error;
 			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
 				invocation.isConfirmed = false;
