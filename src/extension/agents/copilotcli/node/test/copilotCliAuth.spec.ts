@@ -3,46 +3,45 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { mock } from '../../../../../util/common/test/simpleMock';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { CopilotCLISDK } from '../copilotCli';
 
+type TokenAuthInfo = Extract<NonNullable<SessionOptions['authInfo']>, { type: 'token' }>;
+
 describe('CopilotCLISDK Authentication', () => {
 	const disposables = new DisposableStore();
 	let instantiationService: IInstantiationService;
-	let configurationService: IConfigurationService;
-	let authService: IAuthenticationService;
 	let logService: ILogService;
 
 	// Helper to create a mock extension context
 	function createMockExtensionContext(): IVSCodeExtensionContext {
-		return new class extends mock<IVSCodeExtensionContext>() {
-			override workspaceState = {
+		return {
+			workspaceState: {
 				get: () => ({}),
-				update: async () => { }
-			};
-		};
+				update: async () => { },
+				keys: () => []
+			}
+		} as unknown as IVSCodeExtensionContext;
 	}
 
 	// Helper to create a mock env service
 	function createMockEnvService(): IEnvService {
-		return new class extends mock<IEnvService>() { };
+		return {} as unknown as IEnvService;
 	}
 
 	beforeEach(() => {
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
 		instantiationService = services.seal();
-		configurationService = accessor.get(IConfigurationService);
-		authService = accessor.get(IAuthenticationService);
 		logService = accessor.get(ILogService);
 	});
 
@@ -52,21 +51,21 @@ describe('CopilotCLISDK Authentication', () => {
 
 	it('should skip token validation when proxy URL is configured', async () => {
 		// Mock configuration to return a proxy URL
-		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig(key: string) {
+		const mockConfigService = {
+			getConfig(key: unknown) {
 				if (key === ConfigKey.Shared.DebugOverrideProxyUrl) {
 					return 'https://proxy.example.com';
 				}
 				return undefined;
 			}
-		};
+		} as unknown as IConfigurationService;
 
-		const mockAuthService = new class extends mock<IAuthenticationService>() {
-			override async getGitHubSession() {
+		const mockAuthService = {
+			async getGitHubSession(): Promise<undefined> {
 				// This should not be called when proxy is configured
 				throw new Error('getGitHubSession should not be called when proxy is configured');
 			}
-		};
+		} as unknown as IAuthenticationService;
 
 		const sdk = new CopilotCLISDK(
 			createMockExtensionContext(),
@@ -77,7 +76,7 @@ describe('CopilotCLISDK Authentication', () => {
 			mockConfigService
 		);
 
-		const authInfo = await sdk.getAuthInfo();
+		const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
 
 		expect(authInfo.type).toBe('token');
 		expect(authInfo.token).toBe('');
@@ -88,23 +87,23 @@ describe('CopilotCLISDK Authentication', () => {
 		let getGitHubSessionCalled = false;
 
 		// Mock configuration to return no proxy URLs
-		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig() {
+		const mockConfigService = {
+			getConfig() {
 				return undefined;
 			}
-		};
+		} as unknown as IConfigurationService;
 
-		const mockAuthService = new class extends mock<IAuthenticationService>() {
-			override async getGitHubSession() {
+		const mockAuthService = {
+			async getGitHubSession() {
 				getGitHubSessionCalled = true;
 				return {
 					accessToken: 'test-token',
 					id: 'test-id',
-					scopes: [],
+					scopes: [] as readonly string[],
 					account: { id: 'test-account', label: 'Test User' }
 				};
 			}
-		};
+		} as unknown as IAuthenticationService;
 
 		const sdk = new CopilotCLISDK(
 			createMockExtensionContext(),
@@ -115,7 +114,7 @@ describe('CopilotCLISDK Authentication', () => {
 			mockConfigService
 		);
 
-		const authInfo = await sdk.getAuthInfo();
+		const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
 
 		expect(getGitHubSessionCalled).toBe(true);
 		expect(authInfo.type).toBe('token');
@@ -125,17 +124,17 @@ describe('CopilotCLISDK Authentication', () => {
 
 	it('should return empty token when getGitHubSession returns undefined and no proxy is configured', async () => {
 		// Mock configuration to return no proxy URLs
-		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig() {
+		const mockConfigService = {
+			getConfig() {
 				return undefined;
 			}
-		};
+		} as unknown as IConfigurationService;
 
-		const mockAuthService = new class extends mock<IAuthenticationService>() {
-			override async getGitHubSession() {
+		const mockAuthService = {
+			async getGitHubSession() {
 				return undefined;
 			}
-		};
+		} as unknown as IAuthenticationService;
 
 		const sdk = new CopilotCLISDK(
 			createMockExtensionContext(),
@@ -146,7 +145,7 @@ describe('CopilotCLISDK Authentication', () => {
 			mockConfigService
 		);
 
-		const authInfo = await sdk.getAuthInfo();
+		const authInfo = await sdk.getAuthInfo() as TokenAuthInfo;
 
 		expect(authInfo.type).toBe('token');
 		expect(authInfo.token).toBe('');
