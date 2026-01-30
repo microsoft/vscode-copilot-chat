@@ -491,17 +491,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			tools: availableTools,
 		});
 		fetchStreamSource?.resolve();
-		let chatResult = await processResponsePromise ?? undefined;
+		const chatResult = await processResponsePromise ?? undefined;
 
-		// hydrate the token usage into the chat result as this renders the context window widget
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
-			chatResult = {
-				...chatResult, usage: {
-					completionTokens: fetchResult.usage.completion_tokens,
-					promptTokens: fetchResult.usage.prompt_tokens,
-					promptTokenDetails,
-				}
-			};
+		// Report token usage to the stream for rendering the context window widget
+		const stream = streamParticipants[streamParticipants.length - 1];
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+			stream.usage({
+				completionTokens: fetchResult.usage.completion_tokens,
+				promptTokens: fetchResult.usage.prompt_tokens,
+				promptTokenDetails,
+			});
 		}
 
 		// Validate authentication session upgrade and handle accordingly
