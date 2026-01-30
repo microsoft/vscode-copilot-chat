@@ -874,7 +874,7 @@ export namespace ConfigKey {
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
 	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 4000);
 	/** Keep thinking section expanded after completion. When false (default), thinking collapses when model responds. */
-	export const ThinkingKeepExpanded = defineSetting<boolean>('chat.thinkingKeepExpanded', ConfigType.ExperimentBased, false);
+	export let ThinkingKeepExpanded = defineSetting<boolean>('chat.thinkingKeepExpanded', ConfigType.ExperimentBased, false);
 	/** Enable Anthropic web search tool for BYOK Claude models */
 	export const AnthropicWebSearchToolEnabled = defineSetting<boolean>('chat.anthropic.tools.websearch.enabled', ConfigType.ExperimentBased, false);
 	/** Maximum number of web searches allowed per request */
