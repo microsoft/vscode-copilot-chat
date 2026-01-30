@@ -186,9 +186,9 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.
 			</Tag>
 			<Tag name='special_formatting'>
-				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				When referring to symbols (classes, methods, variables, constants) in the user's workspace, wrap them in backticks. For filenames and paths, use markdown links as specified in the fileLinkification section.<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
+					The class `Person` is in [src/models/person.ts](src/models/person.ts).
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>

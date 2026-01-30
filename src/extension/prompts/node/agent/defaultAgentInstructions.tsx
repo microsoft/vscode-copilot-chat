@@ -191,11 +191,11 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting in your answers. When referring to symbols (classes, methods, variables, constants) in the user's workspace, wrap them in backticks. For filenames and paths, use markdown links as specified in the fileLinkification section.<br />
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.<br />
-					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
-					You can find the configuration in `config/app.config.json`.
+					The class `Person` is in [src/models/person.ts](src/models/person.ts).<br />
+					The function `calculateTotal` is defined in [lib/utils/math.ts](lib/utils/math.ts).<br />
+					You can find the configuration in [config/app.config.json](config/app.config.json).
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
@@ -345,7 +345,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
-				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
+				Use proper Markdown formatting in your answers. When referring to symbols (classes, methods, variables, constants) in the user's workspace, wrap them in backticks. For filenames and paths, use markdown links as specified in the fileLinkification section.<br />
 				{isGpt5 && <>
 					{tools[ToolName.CoreRunInTerminal] ? <>
 						When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
@@ -358,7 +358,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					If platform-specific acceleration applies, include an optional speed-up fenced block with commands. Close with a concise completion summary describing what changed and how it was verified (build/tests/linters), plus any follow-ups.<br />
 				</>}
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
+					The class `Person` is in [src/models/person.ts](src/models/person.ts).
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
