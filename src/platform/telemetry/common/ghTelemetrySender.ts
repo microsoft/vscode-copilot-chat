@@ -109,7 +109,7 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 		this._enhancedTelemetryLogger.logError(error, definedTelemetryDataSecure);
 	}
 
-	private markAsIssuedAndMakeReadyForSending(properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): { properties: TelemetryEventProperties; measurements: TelemetryEventMeasurements; tagOverrides?: Record<string, string> } {
+	private markAsIssuedAndMakeReadyForSending(properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): { properties: TelemetryEventProperties; measurements: TelemetryEventMeasurements } {
 		const telemetryData = TelemetryData.createAndMarkAsIssued(eventPropertiesToSimpleObject(properties), measurements);
 		telemetryData.makeReadyForSending(this._configService, this._envService, this._telemetryConfig);
 		const newPropeties: Mutable<TelemetryEventProperties> = {};
@@ -118,13 +118,9 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 			newPropeties[key] = new TelemetryTrustedValue(telemetryData.properties[key]);
 		}
 
-		// Add dynamic tracking ID as tag override
-		const trackingId = this._tokenStore.copilotToken?.getTokenValue('tid');
-
 		return {
 			properties: newPropeties,
-			measurements: telemetryData.measurements,
-			tagOverrides: trackingId ? { 'ai.user.id': trackingId } : undefined
+			measurements: telemetryData.measurements
 		};
 	}
 

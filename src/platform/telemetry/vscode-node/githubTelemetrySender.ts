@@ -59,9 +59,9 @@ class TelemetryReporterAdapter implements TelemetrySender {
 
 		if (data) {
 			// Handle both formats: separate properties/measurements or mixed
-			if (data.properties || data.measurements) {
-				Object.assign(properties, data.properties || {});
-				Object.assign(measurements, data.measurements || {});
+			if (data.properties !== undefined || data.measurements !== undefined) {
+				Object.assign(properties, (data.properties || {}) as Record<string, string>);
+				Object.assign(measurements, (data.measurements || {}) as Record<string, number>);
 			} else {
 				// Mixed format - separate by type
 				for (const [key, value] of Object.entries(data)) {
@@ -78,13 +78,14 @@ class TelemetryReporterAdapter implements TelemetrySender {
 	}
 
 	sendEventData(eventName: string, data?: Record<string, unknown>): void {
-		// Unwrap event name - VS Code's TelemetryLogger adds extension prefix, we need to remove it
-		// to avoid double-prefixing (backend also adds prefix)
-		const unwrappedEventName = unwrapEventNameFromPrefix(eventName);
 		const { properties, measurements } = this.extractPropertiesAndMeasurements(data);
 
 		// Use either NEW or OLD API based on experiment flag (not both)
 		if (this.useNewTelemetryLib && this.newReporter) {
+			// Unwrap event name - VS Code's TelemetryLogger adds extension prefix, we need to remove it
+			// to avoid double-prefixing (backend also adds prefix)
+			const unwrappedEventName = unwrapEventNameFromPrefix(eventName);
+
 			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
 			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
@@ -97,13 +98,14 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			this.newReporter.sendDangerousTelemetryEvent(unwrappedEventName, properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
+			// Pass original eventName - AzureInsightReporter.massageEventName() handles the wrapped marker
+			// to avoid double-prefixing
 			const oldPayload = {
-				eventName: unwrappedEventName,
 				properties,
 				measurements,
 				...data
 			};
-			this.oldReporter.sendEventData(unwrappedEventName, oldPayload);
+			this.oldReporter.sendEventData(eventName, oldPayload);
 		}
 	}
 
