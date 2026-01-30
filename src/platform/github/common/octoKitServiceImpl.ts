@@ -338,13 +338,22 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getUserOrganizationsWithToken(authToken);
 	}
 
-	async getOrganizationRepositories(org: string, authOptions: { createIfNone?: boolean }): Promise<string[]> {
+	async isUserMemberOfOrg(org: string, authOptions: { createIfNone?: boolean }): Promise<boolean> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for isUserMemberOfOrg');
+			return false;
+		}
+		return this.isUserMemberOfOrgWithToken(org, authToken);
+	}
+
+	async getOrganizationRepositories(org: string, authOptions: { createIfNone?: boolean }, pageSize?: number): Promise<string[]> {
 		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
 			this._logService.trace('No authentication token available for getOrganizationRepositories');
 			throw new PermissiveAuthRequiredError();
 		}
-		return this.getOrganizationRepositoriesWithToken(org, authToken);
+		return this.getOrganizationRepositoriesWithToken(org, authToken, pageSize);
 	}
 
 	async getOrgCustomInstructions(orgLogin: string, authOptions: { createIfNone?: boolean }): Promise<string | undefined> {

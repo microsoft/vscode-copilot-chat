@@ -39,7 +39,8 @@ export class MockOctoKitService implements IOctoKitService {
 	isCCAEnabled = async (): Promise<CCAEnabledResult> => ({ enabled: true });
 
 	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }) => this.userOrganizations;
-	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
+	isUserMemberOfOrg = async (org: string, _authOptions?: { createIfNone?: boolean }) => this.userOrganizations.includes(org);
+	getOrganizationRepositories = async (org: string, _authOptions?: { createIfNone?: boolean }, _pageSize?: number) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
 	async getOrgCustomInstructions(orgLogin: string, _authOptions?: { createIfNone?: boolean }): Promise<string | undefined> {
 		return this.orgInstructions.get(orgLogin);
