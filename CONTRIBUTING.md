@@ -67,7 +67,7 @@ Please include the following with each issue:
 # Developing
 
 ## Requirements
-- Node >22.18.0
+- Node >=22.18.0
 - Python >= 3.10, <= 3.12
 - Git Large File Storage (LFS) - for running tests
 - (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
