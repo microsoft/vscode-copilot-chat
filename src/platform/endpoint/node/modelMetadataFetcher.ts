@@ -272,6 +272,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			// This protects against transient server issues or misconfigurations.
 			if (data.length === 0 && this._familyMap.size > 0) {
 				this._logService.warn(`Server returned empty model list, preserving existing cache ${requestId}`);
+				// Reset the last fetch time to allow retrying sooner
+				this._lastFetchTime = 0;
 				return;
 			}
 
