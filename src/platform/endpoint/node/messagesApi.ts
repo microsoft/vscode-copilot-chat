@@ -102,9 +102,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			...(toolSearchEnabled && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
 
+	const isConversationAgent = options.location === ChatLocation.Agent;
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
-	if (toolSearchEnabled) {
+	if (isConversationAgent && toolSearchEnabled) {
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
@@ -114,9 +115,8 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
-	const isConversationAgent = options.location === ChatLocation.Agent;
 	let thinkingBudget: number | undefined;
-	if (!options.disableThinking && isConversationAgent) {
+	if (isConversationAgent && !options.disableThinking) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const maxTokens = options.postOptions.max_tokens ?? 1024;
 		const normalizedBudget = (configuredBudget && configuredBudget > 0)
@@ -128,7 +128,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Build context management configuration
-	const contextManagement = isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+	const contextManagement = isConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
 		? getContextManagementFromConfig(configurationService, (thinkingBudget ?? 0) > 0)
 		: undefined;
 
