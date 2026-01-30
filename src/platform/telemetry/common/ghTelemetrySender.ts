@@ -22,7 +22,7 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 	private _enhancedTelemetryLogger?: TelemetryLogger;
 
 	constructor(
-		tokenStore: ICopilotTokenStore,
+		private readonly _tokenStore: ICopilotTokenStore,
 		protected readonly _createTelemetryLogger: (enhanced: boolean) => TelemetryLogger,
 		private readonly _configService: IConfigurationService,
 		private readonly _telemetryConfig: ITelemetryUserConfig,
@@ -30,10 +30,10 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 		protected readonly _domainService: IDomainService,
 
 	) {
-		this._processToken(tokenStore.copilotToken);
+		this._processToken(this._tokenStore.copilotToken);
 		this._standardTelemetryLogger = this._createTelemetryLogger(false);
-		this._disposables.add(tokenStore.onDidStoreUpdate(() => {
-			const token = tokenStore.copilotToken;
+		this._disposables.add(this._tokenStore.onDidStoreUpdate(() => {
+			const token = this._tokenStore.copilotToken;
 			this._processToken(token);
 		}));
 		// Rebuild the loggers when the domains change as they need to send to new endpoints
@@ -109,7 +109,7 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 		this._enhancedTelemetryLogger.logError(error, definedTelemetryDataSecure);
 	}
 
-	private markAsIssuedAndMakeReadyForSending(properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): { properties: TelemetryEventProperties; measurements: TelemetryEventMeasurements } {
+	private markAsIssuedAndMakeReadyForSending(properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): { properties: TelemetryEventProperties; measurements: TelemetryEventMeasurements; tagOverrides?: Record<string, string> } {
 		const telemetryData = TelemetryData.createAndMarkAsIssued(eventPropertiesToSimpleObject(properties), measurements);
 		telemetryData.makeReadyForSending(this._configService, this._envService, this._telemetryConfig);
 		const newPropeties: Mutable<TelemetryEventProperties> = {};
@@ -117,7 +117,15 @@ export class BaseGHTelemetrySender implements ITelemetrySender {
 		for (const key in telemetryData.properties) {
 			newPropeties[key] = new TelemetryTrustedValue(telemetryData.properties[key]);
 		}
-		return { properties: newPropeties, measurements: telemetryData.measurements };
+
+		// Add dynamic tracking ID as tag override
+		const trackingId = this._tokenStore.copilotToken?.getTokenValue('tid');
+
+		return {
+			properties: newPropeties,
+			measurements: telemetryData.measurements,
+			tagOverrides: trackingId ? { 'ai.user.id': trackingId } : undefined
+		};
 	}
 
 
