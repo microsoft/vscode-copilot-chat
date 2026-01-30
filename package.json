@@ -5385,7 +5385,7 @@
 				"type": "claude-code",
 				"name": "claude",
 				"displayName": "Claude Agent",
-				"icon": "$(code)",
+				"icon": "$(claude)",
 				"welcomeTitle": "Claude Agent",
 				"welcomeMessage": "Powered by the same agent as Claude Code",
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
