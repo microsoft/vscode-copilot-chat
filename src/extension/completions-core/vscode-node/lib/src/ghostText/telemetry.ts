@@ -7,7 +7,7 @@ import { ICompletionsLogTargetService, Logger } from '../logger';
 import { PromptResponse } from '../prompt/prompt';
 import { now, telemetry, TelemetryData, telemetryRaw, TelemetryWithExp } from '../telemetry';
 import { CopilotCompletion } from './copilotCompletion';
-import { ResultType } from './ghostText';
+import { ResultType } from './resultType';
 import { ICompletionsSpeculativeRequestCache } from './speculativeRequestCache';
 
 export type PostInsertionCategory = 'ghostText' | 'solution';

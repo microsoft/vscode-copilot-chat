@@ -11,6 +11,7 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -21,6 +22,7 @@ import { IAutomodeService } from '../../../platform/endpoint/node/automodeServic
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -38,6 +40,71 @@ import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
+
+/**
+ * Returns a description of the model's capabilities and intended use cases.
+ * This is shown in the rich hover when selecting models.
+ */
+function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | undefined {
+	const name = endpoint.name.toLowerCase();
+	const family = endpoint.family.toLowerCase();
+
+	// Claude models
+	if (family.includes('claude') || name.includes('claude')) {
+		if (name.includes('opus')) {
+			return vscode.l10n.t('Most capable Claude model. Excellent for complex analysis, coding tasks, and nuanced creative writing.');
+		}
+		if (name.includes('sonnet')) {
+			return vscode.l10n.t('Balanced Claude model offering strong performance for everyday coding and chat tasks at faster speeds.');
+		}
+		if (name.includes('haiku')) {
+			return vscode.l10n.t('Fastest and most compact Claude model. Ideal for quick responses and simple tasks.');
+		}
+	}
+
+	// GPT models
+	if (family.includes('gpt') || name.includes('gpt') || family.includes('codex') || name.includes('codex')) {
+		if (name.includes('codex') || family.includes('codex')) {
+			if (name.includes('max')) {
+				return vscode.l10n.t('Maximum capability Codex model optimized for complex multi-file refactoring and large codebase understanding.');
+			}
+			if (name.includes('mini')) {
+				return vscode.l10n.t('Lightweight Codex model for quick code completions and simple edits with low latency.');
+			}
+			return vscode.l10n.t('OpenAI Codex model specialized for code generation, debugging, and software development tasks.');
+		}
+		if (name.includes('4o')) {
+			return vscode.l10n.t('Optimized GPT-4 model with faster responses and multimodal capabilities.');
+		}
+		if (name.includes('4.1') || name.includes('4-1')) {
+			return vscode.l10n.t('Enhanced GPT-4 model with improved instruction following and coding performance.');
+		}
+		if (name.includes('4')) {
+			return vscode.l10n.t('Reliable GPT-4 model suitable for a wide range of coding and general tasks.');
+		}
+	}
+
+	// Gemini models
+	if (family.includes('gemini') || name.includes('gemini')) {
+		if (name.includes('flash')) {
+			return vscode.l10n.t('Fast and efficient Gemini model optimized for quick responses and high throughput.');
+		}
+		if (name.includes('pro')) {
+			return vscode.l10n.t("Google's advanced Gemini Pro model with strong reasoning and coding capabilities.");
+		}
+		return vscode.l10n.t('Google Gemini model with balanced performance for coding and general assistance.');
+	}
+
+	// o1/o3 reasoning models
+	if (family.includes('o1') || family.includes('o3') || name.includes('o1') || name.includes('o3')) {
+		if (name.includes('mini')) {
+			return vscode.l10n.t('Compact reasoning model for quick problem-solving with step-by-step thinking.');
+		}
+		return vscode.l10n.t('Advanced reasoning model that excels at complex problem-solving, math, and coding challenges.');
+	}
+
+	return undefined;
+}
 
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
@@ -108,8 +175,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
-		const chatEndpoints = (await this._endpointProvider.getAllChatEndpoints()).filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
-		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
+		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
+		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
 		let defaultChatEndpoint: IChatEndpoint | undefined;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
@@ -136,23 +204,19 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			seenFamilies.add(endpoint.family);
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
-			let modelDescription: string | undefined;
+			let modelTooltip: string | undefined;
 			if (endpoint.degradationReason) {
-				modelDescription = endpoint.degradationReason;
+				modelTooltip = endpoint.degradationReason;
 			} else if (endpoint instanceof AutoChatEndpoint) {
 				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
 				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
 				} else {
-					modelDescription = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
 				}
-			} else if (endpoint.multiplier) {
-				modelDescription = vscode.l10n.t('{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
-			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
-				modelDescription = vscode.l10n.t('{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
 			} else {
-				modelDescription = `${sanitizedModelName} (${endpoint.version})`;
+				modelTooltip = getModelCapabilitiesDescription(endpoint);
 			}
 
 			let modelCategory: { label: string; order: number } | undefined;
@@ -169,7 +233,17 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
 			// Let's cache the results across extension activations
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
-			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			const multiplier = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			let modelDetail: string | undefined;
+
+			// Append rate info to tooltip for all non-Auto models with a multiplier
+			if (endpoint.multiplier !== undefined && !(endpoint instanceof AutoChatEndpoint)) {
+				if (modelTooltip) {
+					modelTooltip = vscode.l10n.t('{0} Rate is counted at {1}x.', modelTooltip, endpoint.multiplier);
+				} else {
+					modelTooltip = vscode.l10n.t('Rate is counted at {0}x.', endpoint.multiplier);
+				}
+			}
 
 			if (endpoint instanceof AutoChatEndpoint) {
 				if (endpoint.discountRange.high === endpoint.discountRange.low && endpoint.discountRange.low !== 0) {
@@ -181,7 +255,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
 				modelDetail = customModel.owner_name;
-				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
+				modelTooltip = vscode.l10n.t('{0} is contributed by {1} using {2}.', sanitizedModelName, customModel.owner_name, customModel.key_name);
 				modelCategory = { label: vscode.l10n.t("Custom Models"), order: 2 };
 			}
 
@@ -192,7 +266,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
 				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
 				family: endpoint.family,
-				tooltip: modelDescription,
+				tooltip: modelTooltip,
+				multiplier: endpoint instanceof AutoChatEndpoint ? modelDetail : multiplier,
 				detail: modelDetail,
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
@@ -355,6 +430,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
 	}
@@ -415,7 +491,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			throw new Error('Message exceeds token limit.');
 		}
 
-		if (_options.tools && _options.tools.length > 128) {
+		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService, this._expService)) {
 			throw new Error('Cannot have more than 128 tools per request.');
 		}
 

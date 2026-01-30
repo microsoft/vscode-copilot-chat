@@ -10,6 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -27,7 +28,8 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 		knownModels: BYOKKnownModels | undefined,
 		byokStorageService: IBYOKStorageService,
 		@ILogService logService: ILogService,
-		@IRequestLogger private readonly _requestLogger: IRequestLogger
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		super(GeminiNativeBYOKLMProvider.providerName.toLowerCase(), GeminiNativeBYOKLMProvider.providerName, knownModels, byokStorageService, logService);
 	}
@@ -69,6 +71,7 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 	}
 
 	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
+		const issuedTime = Date.now();
 		const apiKey = model.configuration?.apiKey;
 		if (!apiKey) {
 			throw new Error('API key not found for the model');
@@ -149,7 +152,7 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(client, wrappedProgress, params, token);
+			const result = await this._makeRequest(client, wrappedProgress, params, token, issuedTime);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -170,6 +173,45 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 					}] : undefined,
 				};
 			}));
+
+			// Send success telemetry matching response.success format
+			/* __GDPR__
+				"response.success" : {
+					"owner": "lramos15",
+					"comment": "Report quality details for a successful BYOK Gemini response.",
+					"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+					"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+					"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+					"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
+					"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+					"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+					"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
+					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+					"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
+					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+					"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
+					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
+				source: 'byok.gemini',
+				model: model.id,
+				requestId,
+			}, {
+				totalTokenMax: model.maxInputTokens ?? -1,
+				tokenCountMax: model.maxOutputTokens ?? -1,
+				promptTokenCount: result.usage?.prompt_tokens,
+				promptCacheTokenCount: result.usage?.prompt_tokens_details?.cached_tokens,
+				tokenCount: result.usage?.total_tokens,
+				completionTokens: result.usage?.completion_tokens,
+				timeToFirstToken: result.ttft,
+				timeToFirstTokenEmitted: result.ttfte,
+				timeToComplete: Date.now() - issuedTime,
+				issuedTime,
+				isBYOK: 1,
+			});
 		} catch (err) {
 			this._logService.error(`BYOK GeminiNative error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
@@ -198,9 +240,10 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(client: GoogleGenAI, progress: Progress<LMResponsePart>, params: GenerateContentParameters, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(client: GoogleGenAI, progress: Progress<LMResponsePart>, params: GenerateContentParameters, token: CancellationToken, issuedTime: number): Promise<{ ttft: number | undefined; ttfte: number | undefined; usage: APIUsage | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
+		let ttfte: number | undefined;
 
 		try {
 			const stream = await client.models.generateContentStream(params);
@@ -235,6 +278,9 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 								// Handle thinking/reasoning content from Gemini API
 								progress.report(new LanguageModelThinkingPart(part.text));
 							} else if (part.text) {
+								if (ttfte === undefined) {
+									ttfte = Date.now() - issuedTime;
+								}
 								progress.report(new LanguageModelTextPart(part.text));
 							} else if (part.functionCall && part.functionCall.name) {
 								// Gemini 3 includes thought signatures for function calling
@@ -273,11 +319,11 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 				}
 			}
 
-			return { ttft, usage };
+			return { ttft, ttfte, usage };
 		} catch (error) {
 			if ((error as any)?.name === 'AbortError' || token.isCancellationRequested) {
 				this._logService.trace('Gemini streaming aborted');
-				return { ttft, usage: undefined };
+				return { ttft, ttfte, usage: undefined };
 			}
 			this._logService.error(`Gemini streaming error: ${toErrorMessage(error, true)}`);
 			throw error;

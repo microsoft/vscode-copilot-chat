@@ -127,6 +127,8 @@ export interface DiffChange extends Change {
 	readonly deletions: number;
 }
 
+export type RepositoryKind = 'repository' | 'submodule' | 'worktree';
+
 export interface RepositoryState {
 	readonly HEAD: Branch | undefined;
 	readonly refs: Ref[];
@@ -146,6 +148,11 @@ export interface RepositoryState {
 export interface RepositoryUIState {
 	readonly selected: boolean;
 	readonly onDidChange: Event<void>;
+}
+
+export interface RepositoryAccessDetails {
+	readonly rootUri: Uri;
+	readonly lastAccessTime: number;
 }
 
 /**
@@ -223,6 +230,7 @@ export interface Repository {
 	readonly rootUri: Uri;
 	readonly inputBox: InputBox;
 	readonly state: RepositoryState;
+	readonly kind: RepositoryKind;
 	readonly ui: RepositoryUIState;
 
 	readonly onDidCommit: Event<void>;
@@ -374,6 +382,7 @@ export interface API {
 	readonly onDidPublish: Event<PublishEvent>;
 	readonly git: Git;
 	readonly repositories: Repository[];
+	readonly recentRepositories: Iterable<RepositoryAccessDetails>;
 	readonly onDidOpenRepository: Event<Repository>;
 	readonly onDidCloseRepository: Event<Repository>;
 

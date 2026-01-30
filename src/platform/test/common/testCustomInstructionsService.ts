@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import type { Uri } from '../../../vscodeTypes';
 import { Config } from '../../configuration/common/configurationService';
-import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService } from '../../customInstructions/common/customInstructionsService';
+import { CodeGenerationInstruction, ICustomInstructions, ICustomInstructionsService, IInstructionIndexFile } from '../../customInstructions/common/customInstructionsService';
 
 /**
  * A configurable mock implementation of ICustomInstructionsService for testing.
@@ -18,6 +19,16 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	private skillFiles = new Set<string>();
 	private externalFiles = new Set<string>();
 	private externalFolders = new Set<string>();
+	private extensionSkillInfos = new Map<string, { skillName: string; skillFolderUri: URI }>();
+
+	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile {
+		return {
+			instructions: new ResourceSet(),
+			skills: new ResourceSet(),
+			skillFolders: new ResourceSet(),
+			agents: new Set<string>()
+		};
+	}
 
 	/**
 	 * Set the URIs that should be recognized as skill files.
@@ -41,6 +52,14 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 	setExternalFolders(uris: URI[]): void {
 		this.externalFolders.clear();
 		uris.forEach(uri => this.externalFolders.add(uri.toString()));
+	}
+
+	/**
+	 * Set the URIs that should be recognized as extension skill files with their info.
+	 */
+	setExtensionSkillInfos(infos: { uri: URI; skillName: string; skillFolderUri: URI }[]): void {
+		this.extensionSkillInfos.clear();
+		infos.forEach(info => this.extensionSkillInfos.set(info.uri.toString(), { skillName: info.skillName, skillFolderUri: info.skillFolderUri }));
 	}
 
 	isSkillFile(uri: URI): boolean {
@@ -79,8 +98,8 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 		return { skillName, skillFolderUri };
 	}
 
-	isExternalInstructionsFile(uri: URI): boolean {
-		return this.externalFiles.has(uri.toString());
+	isExternalInstructionsFile(uri: URI): Promise<boolean> {
+		return Promise.resolve(this.externalFiles.has(uri.toString()));
 	}
 
 	isExternalInstructionsFolder(uri: URI): boolean {
@@ -97,5 +116,13 @@ export class MockCustomInstructionsService implements ICustomInstructionsService
 
 	getAgentInstructions(): Promise<URI[]> {
 		return Promise.resolve([]);
+	}
+
+	refreshExtensionPromptFiles(): Promise<void> {
+		return Promise.resolve();
+	}
+
+	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
+		return this.extensionSkillInfos.get(uri.toString());
 	}
 }

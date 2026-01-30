@@ -7,6 +7,8 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -17,15 +19,16 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { isDefined } from '../../../../util/vs/base/common/types';
+import { isDefined, isString } from '../../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptInstructionText } from '../../../prompt/common/chatVariablesCollection';
 import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { RepoMemoryContextPrompt, RepoMemoryInstructionsPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
@@ -100,6 +103,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<SafetyRules />
 			</SystemMessage>
 			{instructions}
+			<SystemMessage>
+				<RepoMemoryInstructionsPrompt />
+			</SystemMessage>
 		</>;
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
@@ -193,9 +199,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
+		const isNewChat = this.props.promptContext.history?.length === 0;
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -210,7 +217,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
+		const isNewChat = this.props.promptContext.history?.length === 0;
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
 			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
@@ -222,6 +230,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly availableTools?: readonly LanguageModelToolInformation[];
+	readonly isNewChat?: boolean;
 }
 
 /**
@@ -242,6 +251,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
 			<UserPreferences flexGrow={7} priority={800} />
+			{this.props.isNewChat && <RepoMemoryContextPrompt />}
 			{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 		</UserMessage>;
 	}
@@ -269,6 +279,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly enableCacheBreakpoints?: boolean;
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
+	readonly sessionResource?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -298,6 +309,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
+		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
 		...customizations,
 	};
 }
@@ -310,7 +322,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	constructor(
 		props: AgentUserMessageProps,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super(props);
 	}
@@ -364,13 +377,14 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
-						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
+						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						<ReminderInstructionsClass {...reminderProps} />
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{this.configurationService.getNonExtensionConfig<boolean>(USE_SKILL_ADHERENCE_PROMPT_SETTING) && <SkillAdherenceReminder chatVariables={this.props.chatVariables} />}
 					</Tag>
 					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
 						<UserQuery chatVariables={this.props.chatVariables} query={query + attachmentHint} />
@@ -441,6 +455,41 @@ class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 		return (
 			!this.envService.isSimulation() && <>The current date is {dateStr}.</>
 		);
+	}
+}
+
+interface SkillAdherenceReminderProps extends BasePromptElementProps {
+	readonly chatVariables: ChatVariablesCollection;
+}
+
+/**
+ * Skill adherence reminder that prompts the model to read SKILL.md files when skills are available
+ * in the instruction index.
+ * Shown whenever the instruction index variable contains at least one skill or skill folder entry.
+ */
+class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> {
+	constructor(
+		props: SkillAdherenceReminderProps,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+	) {
+		super(props);
+	}
+
+	async render() {
+		// Check if any skills are available from the instruction index
+		const indexVariable = this.props.chatVariables.find(isPromptInstructionText);
+		if (!indexVariable || !isString(indexVariable.value)) {
+			return undefined;
+		}
+
+		const indexFile = this.customInstructionsService.parseInstructionIndexFile(indexVariable.value);
+		if (indexFile.skills.size === 0) {
+			return undefined;
+		}
+
+		return <Tag name='additional_skills_reminder'>
+			Always check if any skills apply to the user's request. If so, use the {ToolName.ReadFile} tool to read the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
+		</Tag>;
 	}
 }
 

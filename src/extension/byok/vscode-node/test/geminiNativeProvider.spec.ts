@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import type { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import type { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import type { IBYOKStorageService } from '../byokStorageService';
 
@@ -103,7 +104,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 	it.skip('throws a clear error when no API key is configured (no silent return)', async () => {
 		const { GeminiNativeBYOKLMProvider } = await import('../geminiNativeProvider');
 		const storage = createStorageService({ getAPIKey: vi.fn().mockResolvedValue(undefined) });
-		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger());
+		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger(), new NullTelemetryService());
 
 		const model: vscode.LanguageModelChatInformation = {
 			id: 'gemini-2.0-flash',
@@ -233,7 +234,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 
 		mockHandleAPIKeyUpdate.mockResolvedValue({ apiKey: undefined, deleted: false, cancelled: true });
 
-		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger());
+		const provider = new GeminiNativeBYOKLMProvider(undefined, storage, new TestLogService(), createRequestLogger(), new NullTelemetryService());
 		const tokenSource = new vscode.CancellationTokenSource();
 		const models = await provider.provideLanguageModelChatInformation({ silent: false }, tokenSource.token);
 
@@ -279,7 +280,7 @@ describe('GeminiNativeBYOKLMProvider', () => {
 			}
 		};
 
-		const provider = new GeminiNativeBYOKLMProvider(knownModels, storage, new TestLogService(), createRequestLogger());
+		const provider = new GeminiNativeBYOKLMProvider(knownModels, storage, new TestLogService(), createRequestLogger(), new NullTelemetryService());
 		const tokenSource = new vscode.CancellationTokenSource();
 		const models = await provider.provideLanguageModelChatInformation({ silent: false }, tokenSource.token);
 

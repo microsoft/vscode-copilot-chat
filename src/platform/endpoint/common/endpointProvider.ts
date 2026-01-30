@@ -42,6 +42,9 @@ export type IChatModelCapabilities = {
 		max_prompt_tokens?: number;
 		max_output_tokens?: number;
 		max_context_window_tokens?: number;
+		vision?: {
+			max_prompt_images?: number;
+		};
 	};
 	supports: {
 		parallel_tool_calls?: boolean;

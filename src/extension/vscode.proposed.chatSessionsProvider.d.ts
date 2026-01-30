@@ -233,22 +233,14 @@ declare module 'vscode' {
 		/**
 		 * Statistics about the chat session.
 		 */
-		changes?: readonly ChatSessionChangedFile[] | {
-			/**
-			 * Number of files edited during the session.
-			 */
-			files: number;
+		changes?: readonly ChatSessionChangedFile[] | readonly ChatSessionChangedFile2[];
 
-			/**
-			 * Number of insertions made during the session.
-			 */
-			insertions: number;
-
-			/**
-			 * Number of deletions made during the session.
-			 */
-			deletions: number;
-		};
+		/**
+		 * Arbitrary metadata for the chat session. Can be anything, but must be JSON-stringifyable.
+		 *
+		 * To update the metadata you must re-set this property.
+		 */
+		metadata?: { readonly [key: string]: any };
 
 		/**
 		 * Optional repository information for the chat session.
@@ -289,6 +281,35 @@ declare module 'vscode' {
 		deletions: number;
 
 		constructor(modifiedUri: Uri, insertions: number, deletions: number, originalUri?: Uri);
+	}
+
+	export class ChatSessionChangedFile2 {
+		/**
+		 * URI of the file.
+		 */
+		readonly uri: Uri;
+
+		/**
+		 * URI of the original file. Undefined if the file was created.
+		 */
+		readonly originalUri: Uri | undefined;
+
+		/**
+		 * URI of the modified file. Undefined if the file was deleted.
+		 */
+		readonly modifiedUri: Uri | undefined;
+
+		/**
+		 * Number of insertions made during the session.
+		 */
+		insertions: number;
+
+		/**
+		 * Number of deletions made during the session.
+		 */
+		deletions: number;
+
+		constructor(uri: Uri, originalUri: Uri | undefined, modifiedUri: Uri | undefined, insertions: number, deletions: number);
 	}
 
 	export interface ChatSession {
@@ -529,6 +550,12 @@ declare module 'vscode' {
 		 * @returns Additional items to display in the searchable QuickPick.
 		 */
 		readonly onSearch?: (query: string, token: CancellationToken) => Thenable<ChatSessionProviderOptionItem[]>;
+
+		/**
+		 * Commands to display as actions in the option group dropdown.
+		 * These commands are shown as clickable options in the picker UI.
+		 */
+		readonly commands?: Command[];
 	}
 
 	export interface ChatSessionProviderOptions {

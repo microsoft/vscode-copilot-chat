@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { HookCallbackMatcher, HookEvent, HookInput, HookJSONOutput, Options, PermissionMode, PreToolUseHookInput, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { IEnvService } from '../../../../platform/env/common/envService';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
@@ -28,6 +27,7 @@ import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '..
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
 import { buildHooksFromRegistry } from './hooks/index';
 
 // Manages Claude Code agent interactions and language model server lifecycle
@@ -51,20 +51,20 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
-			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}.`);
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
 			let session: ClaudeCodeSession;
 			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
 				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -76,7 +76,8 @@ export class ClaudeAgentManager extends Disposable {
 				request.toolInvocationToken,
 				stream,
 				token,
-				modelId
+				modelId,
+				permissionMode
 			);
 
 			// Store the session if sessionId was assigned during invoke
@@ -171,17 +172,42 @@ export class ClaudeCodeSession extends Disposable {
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
 	private _editTracker = new ExternalEditTracker();
+	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
 	private _currentModelId: string | undefined;
-	private _sessionVersion = 0; // Used to detect stale abort handlers
+	private _currentPermissionMode: PermissionMode;
+
+	/**
+	 * Sets the model on the active SDK session.
+	 */
+	private async _setModel(modelId: string): Promise<void> {
+		if (this._queryGenerator && modelId !== this._currentModelId) {
+			this.logService.trace(`[ClaudeCodeSession] Setting model to ${modelId} on active session`);
+			// TODO: Does this throw? How would we handle errors here?
+			await this._queryGenerator.setModel(modelId);
+			this._currentModelId = modelId;
+		}
+	}
+
+	/**
+	 * Sets the permission mode on the active SDK session.
+	 */
+	private async _setPermissionMode(mode: PermissionMode): Promise<void> {
+		if (this._queryGenerator && mode !== this._currentPermissionMode) {
+			this.logService.trace(`[ClaudeCodeSession] Setting permission mode to ${mode} on active session`);
+			// TODO: Does this throw? How would we handle errors here?
+			await this._queryGenerator.setPermissionMode(mode);
+			this._currentPermissionMode = mode;
+		}
+	}
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
 		public sessionId: string | undefined,
 		initialModelId: string | undefined,
+		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IEnvService private readonly envService: IEnvService,
+		@INativeEnvService private readonly envService: INativeEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
@@ -189,6 +215,58 @@ export class ClaudeCodeSession extends Disposable {
 	) {
 		super();
 		this._currentModelId = initialModelId;
+		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		this._settingsChangeTracker = this._createSettingsChangeTracker();
+	}
+
+	/**
+	 * Creates and configures the settings change tracker with path resolvers.
+	 * Add additional path resolvers here for new file types to track.
+	 */
+	private _createSettingsChangeTracker(): ClaudeSettingsChangeTracker {
+		const tracker = this.instantiationService.createInstance(ClaudeSettingsChangeTracker);
+
+		// Track CLAUDE.md files
+		tracker.registerPathResolver(() => {
+			const paths: URI[] = [];
+			// User-level CLAUDE.md
+			paths.push(URI.joinPath(this.envService.userHome, '.claude', 'CLAUDE.md'));
+			// Project-level CLAUDE.md files
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				paths.push(URI.joinPath(folder, '.claude', 'CLAUDE.md'));
+				paths.push(URI.joinPath(folder, '.claude', 'CLAUDE.local.md'));
+				paths.push(URI.joinPath(folder, 'CLAUDE.md'));
+				paths.push(URI.joinPath(folder, 'CLAUDE.local.md'));
+			}
+			return paths;
+		});
+
+		// Track settings/hooks files
+		tracker.registerPathResolver(() => {
+			const paths: URI[] = [];
+			// User-level settings
+			paths.push(URI.joinPath(this.envService.userHome, '.claude', 'settings.json'));
+			// Project-level settings files
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				paths.push(URI.joinPath(folder, '.claude', 'settings.json'));
+				paths.push(URI.joinPath(folder, '.claude', 'settings.local.json'));
+			}
+			return paths;
+		});
+
+		// Track agent files in agents directories
+		tracker.registerDirectoryResolver(() => {
+			const dirs: URI[] = [];
+			// User-level agents directory
+			dirs.push(URI.joinPath(this.envService.userHome, '.claude', 'agents'));
+			// Project-level agents directory
+			for (const folder of this.workspaceService.getWorkspaceFolders()) {
+				dirs.push(URI.joinPath(folder, '.claude', 'agents'));
+			}
+			return dirs;
+		}, '.md');
+
+		return tracker;
 	}
 
 	public override dispose(): void {
@@ -213,28 +291,29 @@ export class ClaudeCodeSession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string
+		modelId?: string,
+		permissionMode?: PermissionMode
 	): Promise<void> {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
 		}
 
-		// Check if model changed - if so, restart the session with new model
-		const modelChanged = modelId !== undefined && modelId !== this._currentModelId;
-		if (modelChanged) {
-			this.logService.trace(`[ClaudeCodeSession] Model changed from ${this._currentModelId} to ${modelId}, restarting session`);
-			this._currentModelId = modelId;
-			// Abort current query and restart with new model
-			if (this._queryGenerator) {
-				this._sessionVersion++; // Increment so old catch handlers know to ignore
-				this._abortController.abort();
-				this._abortController = new AbortController();
-				this._queryGenerator = undefined;
-			}
+		// Check if settings files have changed since session started
+		if (this._queryGenerator && await this._settingsChangeTracker.hasChanges()) {
+			this.logService.trace('[ClaudeCodeSession] Settings files changed, restarting session with resume');
+			this._restartSession();
 		}
 
 		if (!this._queryGenerator) {
 			await this._startSession(token);
+		}
+
+		// Update model and permission mode on active session if they changed
+		if (modelId !== undefined) {
+			await this._setModel(modelId);
+		}
+		if (permissionMode !== undefined) {
+			await this._setPermissionMode(permissionMode);
 		}
 
 		// Add this request to the queue and wait for completion
@@ -248,15 +327,6 @@ export class ClaudeCodeSession extends Disposable {
 		};
 
 		this._promptQueue.push(request);
-
-		// Handle cancellation
-		token.onCancellationRequested(() => {
-			const index = this._promptQueue.indexOf(request);
-			if (index !== -1) {
-				this._promptQueue.splice(index, 1);
-				deferred.error(new Error('Request was cancelled'));
-			}
-		});
 
 		// If there's a pending prompt request, fulfill it immediately
 		if (this._pendingPrompt) {
@@ -272,14 +342,35 @@ export class ClaudeCodeSession extends Disposable {
 	 * Starts a new Claude Code session with the configured options
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
+		const directories = this.workspaceService.getWorkspaceFolders().map(folder => folder.fsPath);
+		let additionalDirectories: string[] | undefined = directories;
+		let cwd: string | undefined;
+		// For single-root workspaces, set cwd to the root and no additional directories
+		// For empty or multi-root workspaces, don't set cwd
+		if (directories.length === 1) {
+			cwd = directories[0];
+			additionalDirectories = [];
+		}
+
 		// Build options for the Claude Code SDK
-		const isDebugEnabled = this.configService.getConfig(ConfigKey.Advanced.ClaudeCodeDebugEnabled);
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			// cwd being undefined means the SDK will use process.cwd()
+			// we do this for multi-root workspaces or no workspace
+			// ideally there would be a better value for multi-root workspaces
+			// but the SDK currently only supports a single cwd which is used
+			// for history files
+			cwd,
+			additionalDirectories,
+			// We allow this because we handle the visibility of
+			// the permission mode ourselves in the options
+			allowDangerouslySkipPermissions: true,
 			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
+			// TODO: CAPI does not yet support the WebSearch tool
+			// Once it does, we can re-enable it.
+			disallowedTools: ['WebSearch'],
 			env: {
 				...process.env,
 				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
@@ -291,6 +382,8 @@ export class ClaudeCodeSession extends Disposable {
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
 			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			// Pass the permission mode to the SDK
+			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
 			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
@@ -298,7 +391,8 @@ export class ClaudeCodeSession extends Disposable {
 				}
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
-					toolInvocationToken: this._currentRequest.toolInvocationToken
+					toolInvocationToken: this._currentRequest.toolInvocationToken,
+					permissionMode: this._currentPermissionMode
 				});
 			},
 			systemPrompt: {
@@ -306,18 +400,17 @@ export class ClaudeCodeSession extends Disposable {
 				preset: 'claude_code'
 			},
 			settingSources: ['user', 'project', 'local'],
-			...(isDebugEnabled && {
-				stderr: data => {
-					this.logService.trace(`claude-agent-sdk stderr: ${data}`);
-				}
-			})
+			stderr: data => this.logService.error(`claude-agent-sdk stderr: ${data}`)
 		};
 
-		this.logService.trace(`claude-agent-sdk: Starting query with options: ${JSON.stringify(options)}`);
+		this.logService.trace(`claude-agent-sdk: Starting query`);
 		this._queryGenerator = await this.claudeCodeService.query({
 			prompt: this._createPromptIterable(),
 			options
 		});
+
+		// Take a snapshot of settings files so we can detect changes
+		await this._settingsChangeTracker.takeSnapshot();
 
 		// Start the message processing loop
 		this._processMessages();
@@ -419,7 +512,6 @@ export class ClaudeCodeSession extends Disposable {
 	 * Routes messages to appropriate handlers and manages request completion
 	 */
 	private async _processMessages(): Promise<void> {
-		const mySessionVersion = this._sessionVersion;
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
 			for await (const message of this._queryGenerator!) {
@@ -447,18 +539,43 @@ export class ClaudeCodeSession extends Disposable {
 					this._currentRequest = undefined;
 				}
 			}
+			// Generator ended normally - clean up so next invoke starts fresh
+			this._cleanup(new Error('Session ended unexpectedly'));
 		} catch (error) {
-			// Only clean up if this is still the active session (not stale from model change)
-			if (mySessionVersion === this._sessionVersion) {
-				// Reject all pending requests
-				this._promptQueue.forEach(req => req.deferred.error(error as Error));
-				this._promptQueue = [];
-				this._pendingPrompt?.error(error as Error);
-				this._pendingPrompt = undefined;
-			} else {
-				this.logService.trace('[ClaudeCodeSession] Ignoring stale session error after model change');
-			}
+			this._cleanup(error as Error);
 		}
+	}
+
+	private _cleanup(error: Error): void {
+		// Reset session state so the next invoke() can start a fresh session
+		this._queryGenerator = undefined;
+		this._abortController.abort();
+		this._abortController = new AbortController();
+		this._currentRequest = undefined;
+		// Reject all pending requests
+		this._promptQueue.forEach(req => {
+			if (!req.deferred.isSettled) {
+				req.deferred.error(error);
+			}
+		});
+		this._promptQueue = [];
+		if (this._pendingPrompt && !this._pendingPrompt.isSettled) {
+			this._pendingPrompt.error(error);
+		}
+		this._pendingPrompt = undefined;
+	}
+
+	/**
+	 * Restarts the session to pick up settings changes.
+	 * Clears the query generator but preserves the session ID for resume.
+	 */
+	private _restartSession(): void {
+		// Clear the generator so _startSession will be called with resume
+		this._queryGenerator = undefined;
+		this._abortController.abort();
+		this._abortController = new AbortController();
+		// Note: We don't clear the prompt queue or pending prompts here
+		// because we're not erroring out, just restarting for settings reload
 	}
 
 	/**

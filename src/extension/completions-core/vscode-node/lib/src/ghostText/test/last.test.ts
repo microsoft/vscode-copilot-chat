@@ -9,7 +9,6 @@ import { createLibTestingContext } from '../../test/context';
 import { withInMemoryTelemetry } from '../../test/telemetry';
 import { createTextDocument } from '../../test/textDocument';
 import { CopilotCompletion } from '../copilotCompletion';
-import { ResultType } from '../ghostText';
 import {
 	ICompletionsLastGhostText, handleGhostTextPostInsert,
 	handleGhostTextShown,
@@ -17,6 +16,7 @@ import {
 	rejectLastShown,
 	setLastShown
 } from '../last';
+import { ResultType } from '../resultType';
 
 suite('Isolated LastGhostText tests', function () {
 	let accessor: ServicesAccessor;

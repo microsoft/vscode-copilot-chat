@@ -24,6 +24,11 @@ export interface IFetcherService {
 export class Response {
 	ok = this.status >= 200 && this.status < 300;
 	readonly body: DestroyableStream<Uint8Array>;
+	private _bytesReceived = 0;
+
+	get bytesReceived(): number {
+		return this._bytesReceived;
+	}
 
 	constructor(
 		readonly status: number,
@@ -32,7 +37,14 @@ export class Response {
 		body: ReadableStream<Uint8Array> | null,
 		readonly fetcher: FetcherId
 	) {
-		this.body = new DestroyableStream(body ?? new ReadableStream({ start(c) { c.close(); } }));
+		const countingStream = new TransformStream<Uint8Array, Uint8Array>({
+			transform: (chunk, controller) => {
+				this._bytesReceived += chunk.length;
+				controller.enqueue(chunk);
+			}
+		});
+		const inputStream = body ?? new ReadableStream({ start(c) { c.close(); } });
+		this.body = new DestroyableStream(inputStream.pipeThrough(countingStream));
 	}
 
 	static fromText(status: number, statusText: string, headers: IHeaders, body: string, fetcher: FetcherId): Response {
@@ -82,7 +94,7 @@ export interface FetchOptions {
 	 * the `Content-Type` header set to `application/json`.
 	 */
 	json?: unknown;
-	method?: 'GET' | 'POST';
+	method?: 'GET' | 'POST' | 'PUT';
 	signal?: IAbortSignal;
 	retryFallbacks?: boolean;
 	expectJSON?: boolean;

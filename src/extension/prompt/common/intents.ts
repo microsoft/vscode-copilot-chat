@@ -7,7 +7,8 @@ import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { createServiceIdentifier } from '../../../util/common/services';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
 import { getToolName } from '../../tools/common/toolNames';
@@ -58,6 +59,7 @@ export interface IBuildPromptContext {
 		readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 		readonly availableTools: readonly vscode.LanguageModelToolInformation[];
 		readonly subAgentInvocationId?: string;
+		readonly subAgentName?: string;
 	};
 	readonly modeInstructions?: vscode.ChatRequestModeInstructions;
 
@@ -80,12 +82,21 @@ export interface IBuildPromptContext {
 	 */
 	turnEditedDocuments?: ResourceMap<NotebookDocumentSnapshot | TextDocumentSnapshot>;
 
+	/**
+	 * URIs that are explicitly allowed for editing without user confirmation.
+	 * This is used by features like inline chat to pre-approve the document
+	 * being edited.
+	 */
+	readonly allowedEditUris?: ResourceSet;
+
 	readonly editedFileEvents?: readonly vscode.ChatRequestEditedFileEvent[];
 	readonly conversation?: Conversation;
 	readonly request?: ChatRequest;
 	readonly stream?: vscode.ChatResponseStream;
 	readonly isContinuation?: boolean;
 }
+
+export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');
 
 export enum WorkingSetEntryState {
 	Initial = 0,

@@ -3,16 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type * as vscode from 'vscode';
+import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { Emitter } from '../../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
+import { constObservable, IObservable } from '../../../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../../tools/common/toolsRegistry';
 import { IOnWillInvokeToolEvent, IToolsService, IToolValidationResult } from '../../../../tools/common/toolsService';
-import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeToolPermissionContext, ClaudeToolPermissionResult, IClaudeToolConfirmationParams, IClaudeToolPermissionHandler } from '../../common/claudeToolPermission';
 import { registerToolPermissionHandler } from '../../common/claudeToolPermissionRegistry';
 import { ClaudeToolPermissionService } from '../../common/claudeToolPermissionService';
@@ -48,13 +50,19 @@ class MockToolsService implements IToolsService {
 		this._invokeToolCalls = [];
 	}
 
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		return this.invokeTool(name, options);
+	}
+
+	modelSpecificTools: IObservable<{ definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]> = constObservable([]);
+
 	async invokeTool(
 		name: string,
 		options: vscode.LanguageModelToolInvocationOptions<unknown>
 	): Promise<vscode.LanguageModelToolResult2> {
 		this._invokeToolCalls.push({ name, input: options.input });
 
-		if (name === ToolName.CoreConfirmationTool) {
+		if (name === ToolName.CoreConfirmationTool || name === ToolName.CoreTerminalConfirmationTool) {
 			return {
 				content: [new LanguageModelTextPart(this._confirmationResult)]
 			};
@@ -167,21 +175,22 @@ describe('ClaudeToolPermissionService', () => {
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
 				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
 				expect(confirmParams.title).toContain('UnknownTool');
-				expect(confirmParams.confirmationType).toBe('basic');
 			});
 		});
 
 		describe('with registered handler', () => {
-			it('uses handler getConfirmationParams when available', async () => {
+			it('uses handler handle method for Bash tool with terminal confirmation', async () => {
 				const input = { command: 'npm test' };
 				const context = createMockContext();
 
 				await service.canUseTool(ClaudeToolNames.Bash, input, context);
 
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
-				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
-				expect(confirmParams.confirmationType).toBe('terminal');
-				expect(confirmParams.terminalCommand).toBe('npm test');
+				// Bash handler uses CoreTerminalConfirmationTool directly via its handle method
+				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreTerminalConfirmationTool);
+				const terminalInput = mockToolsService.invokeToolCalls[0].input as { message: string; command: string; isBackground: boolean };
+				expect(terminalInput.command).toBe('npm test');
+				expect(terminalInput.isBackground).toBe(false);
 			});
 
 			it('bypasses confirmation when canAutoApprove returns true', async () => {
@@ -245,8 +254,10 @@ describe('ClaudeToolPermissionService', () => {
 
 				// Both calls should succeed
 				expect(mockToolsService.invokeToolCalls.length).toBe(1);
-				const confirmParams = mockToolsService.invokeToolCalls[0].input as IClaudeToolConfirmationParams;
-				expect(confirmParams.terminalCommand).toBe('pwd');
+				// Bash handler uses CoreTerminalConfirmationTool directly via its handle method
+				expect(mockToolsService.invokeToolCalls[0].name).toBe(ToolName.CoreTerminalConfirmationTool);
+				const terminalInput = mockToolsService.invokeToolCalls[0].input as { message: string; command: string; isBackground: boolean };
+				expect(terminalInput.command).toBe('pwd');
 			});
 		});
 

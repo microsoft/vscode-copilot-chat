@@ -135,8 +135,10 @@ export class ConversationFeature implements IExtensionContribution {
 		this._activated = value;
 
 		if (!value) {
+			this.logService.info('ConversationFeature: Deactivating contributions');
 			this._activatedDisposables.clear();
 		} else {
+			this.logService.info('ConversationFeature: Activating contributions');
 			const options: IConversationOptions = this.conversationOptions;
 
 			this._activatedDisposables.add(this.registerProviders());
@@ -327,8 +329,8 @@ export class ConversationFeature implements IExtensionContribution {
 
 	private registerCopilotTokenListener() {
 		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
-			const chatEnabled = this.authenticationService.copilotToken?.isChatEnabled();
-			this.logService.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
+			const chatEnabled = this.authenticationService.copilotToken !== undefined;
+			this.logService.info(`copilot token sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
 			this.enabled = chatEnabled ?? false;
 		}));
 	}

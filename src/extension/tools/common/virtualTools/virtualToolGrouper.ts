@@ -89,7 +89,9 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		// Separate builtin tools from extension/MCP tools
 		const builtinTools = byToolset[BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY] || [];
-		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY);
+		const toolsetEntries = Object.entries(byToolset)
+			.filter(([key]) => key !== BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY)
+			.filter((entry): entry is [string, LanguageModelToolInformation[]] => entry[1] !== undefined);
 
 		const groupedResults: (VirtualTool | LanguageModelToolInformation)[] = [];
 

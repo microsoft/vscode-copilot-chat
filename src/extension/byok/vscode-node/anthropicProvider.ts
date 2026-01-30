@@ -10,11 +10,12 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { toErrorMessage } from '../../../util/common/errorMessage';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -33,7 +34,8 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		@ILogService logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		super(AnthropicLMProvider.providerName.toLowerCase(), AnthropicLMProvider.providerName, knownModels, byokStorageService, logService);
 
@@ -52,25 +54,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		}
 		const normalizedBudget = configuredBudget < 1024 ? 1024 : configuredBudget;
 		return Math.min(32000, maxOutputTokens - 1, normalizedBudget);
-	}
-
-	/**
-	 * Checks if a model supports memory based on its model ID.
-	 * Memory is supported by:
-	 * - Claude Sonnet 4.5 (claude-sonnet-4-5-*)
-	 * - Claude Sonnet 4 (claude-sonnet-4-*)
-	 * - Claude Haiku 4.5 (claude-haiku-4-5-*)
-	 * - Claude Opus 4.1 (claude-opus-4-1-*)
-	 * - Claude Opus 4 (claude-opus-4-*)
-	 * TODO: Save these model capabilities in the knownModels object instead of hardcoding them here
-	 */
-	private _enableMemory(modelId: string): boolean {
-		const normalized = modelId.toLowerCase();
-		return normalized.startsWith('claude-sonnet-4-5') ||
-			normalized.startsWith('claude-sonnet-4') ||
-			normalized.startsWith('claude-haiku-4-5') ||
-			normalized.startsWith('claude-opus-4-1') ||
-			normalized.startsWith('claude-opus-4');
 	}
 
 	// Filters the byok known models based on what the anthropic API knows as well
@@ -105,6 +88,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 	}
 
 	async provideLanguageModelChatResponse(model: ExtendedLanguageModelChatInformation<LanguageModelChatConfiguration>, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<void> {
+		const issuedTime = Date.now();
 		const apiKey = model.configuration?.apiKey;
 		if (!apiKey) {
 			throw new Error('API key not found for the model');
@@ -142,31 +126,49 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 		let hasMemoryTool = false;
 
-		// Build tools array, handling both standard tools and native Anthropic tools
-		const tools: Anthropic.Beta.BetaToolUnion[] = (options.tools ?? []).map(tool => {
+		const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
 
+		// Build tools array, handling both standard tools and native Anthropic tools
+		const tools: Anthropic.Beta.BetaToolUnion[] = [];
+
+		// Add tool search tool if enabled (must be first in the array)
+		if (toolSearchEnabled) {
+			tools.push({
+				name: TOOL_SEARCH_TOOL_NAME,
+				type: TOOL_SEARCH_TOOL_TYPE,
+				defer_loading: false
+			} as Anthropic.Beta.BetaToolUnion);
+		}
+
+		for (const tool of (options.tools ?? [])) {
 			// Handle native Anthropic memory tool
-			if (tool.name === 'memory' && this._enableMemory(model.id)) {
+			if (tool.name === 'memory') {
 				hasMemoryTool = true;
-				return {
+				tools.push({
 					name: 'memory',
 					type: 'memory_20250818'
-				} as Anthropic.Beta.BetaMemoryTool20250818;
+				} as Anthropic.Beta.BetaMemoryTool20250818);
+				continue;
 			}
 
+			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
+			const shouldDefer = toolSearchEnabled ? !nonDeferredToolNames.has(tool.name) : undefined;
+
 			if (!tool.inputSchema) {
-				return {
+				tools.push({
 					name: tool.name,
 					description: tool.description,
 					input_schema: {
 						type: 'object',
 						properties: {},
 						required: []
-					}
-				};
+					},
+					...(shouldDefer ? { defer_loading: shouldDefer } : {})
+				});
+				continue;
 			}
 
-			return {
+			tools.push({
 				name: tool.name,
 				description: tool.description,
 				input_schema: {
@@ -174,9 +176,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
 					required: (tool.inputSchema as { required?: string[] }).required ?? [],
 					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
-				}
-			};
-		});
+				},
+				...(shouldDefer ? { defer_loading: shouldDefer } : {})
+			});
+		}
 
 		// Check if web search is enabled and append web_search tool if not already present.
 		// We need to do this because there is no local web_search tool definition we can replace.
@@ -186,11 +189,13 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			const allowedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchAllowedDomains);
 			const blockedDomains = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchBlockedDomains);
 			const userLocation = this._configurationService.getConfig(ConfigKey.AnthropicWebSearchUserLocation);
+			const shouldDeferWebSearch = toolSearchEnabled ? !nonDeferredToolNames.has('web_search') : undefined;
 
 			const webSearchTool: Anthropic.Beta.BetaWebSearchTool20250305 = {
 				name: 'web_search',
 				type: 'web_search_20250305',
-				max_uses: maxUses
+				max_uses: maxUses,
+				...(shouldDeferWebSearch ? { defer_loading: shouldDeferWebSearch } : {})
 			};
 
 			// Add domain filtering if configured
@@ -216,12 +221,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
 		// Build context management configuration
-		const contextManagement = getContextManagementFromConfig(
+		const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 			this._configurationService,
-			this._experimentationService,
-			thinkingBudget,
-			model.maxInputTokens
-		);
+			(thinkingBudget ?? 0) > 0
+		) : undefined;
 
 		// Build betas array for beta API features
 		const betas: string[] = [];
@@ -230,6 +233,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		}
 		if (hasMemoryTool || contextManagement) {
 			betas.push('context-management-2025-06-27');
+		}
+		if (toolSearchEnabled) {
+			betas.push('advanced-tool-use-2025-11-20');
 		}
 
 		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
@@ -249,7 +255,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		const wrappedProgress = new RecordedProgress(progress);
 
 		try {
-			const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token);
+			const result = await this._makeRequest(anthropicClient, wrappedProgress, params, betas, token, issuedTime);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -290,6 +296,45 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				value: ['value'],
 				resolvedModel: model.id
 			}, responseDeltas);
+
+			// Send success telemetry matching response.success format
+			/* __GDPR__
+				"response.success" : {
+					"owner": "lramos15",
+					"comment": "Report quality details for a successful BYOK Anthropic response.",
+					"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
+					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+					"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+					"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+					"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
+					"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+					"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+					"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
+					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+					"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
+					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
+					"issuedTime": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Timestamp when the request was issued", "isMeasurement": true },
+					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
+				source: 'byok.anthropic',
+				model: model.id,
+				requestId,
+			}, {
+				totalTokenMax: model.maxInputTokens ?? -1,
+				tokenCountMax: model.maxOutputTokens ?? -1,
+				promptTokenCount: result.usage?.prompt_tokens,
+				promptCacheTokenCount: result.usage?.prompt_tokens_details?.cached_tokens,
+				tokenCount: result.usage?.total_tokens,
+				completionTokens: result.usage?.completion_tokens,
+				timeToFirstToken: result.ttft,
+				timeToFirstTokenEmitted: result.ttfte,
+				timeToComplete: Date.now() - issuedTime,
+				issuedTime,
+				isBYOK: 1,
+			});
 		} catch (err) {
 			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
@@ -328,9 +373,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
+	private async _makeRequest(anthropicClient: Anthropic, progress: RecordedProgress<LMResponsePart>, params: Anthropic.Beta.Messages.MessageCreateParamsStreaming, betas: string[], token: CancellationToken, issuedTime: number): Promise<{ ttft: number | undefined; ttfte: number | undefined; usage: APIUsage | undefined; contextManagement: ContextManagementResponse | undefined }> {
 		const start = Date.now();
 		let ttft: number | undefined;
+		let ttfte: number | undefined;
 
 		const stream = await anthropicClient.beta.messages.create({
 			...params,
@@ -431,6 +477,33 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 						[new LanguageModelTextPart(searchResults)]
 					));
 					pendingServerToolCall = undefined;
+				} else if ('content_block' in chunk && chunk.content_block.type === 'tool_search_tool_result') {
+					const toolSearchResult = chunk.content_block as unknown as ToolSearchToolResult;
+					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
+						const searchResult = toolSearchResult.content as ToolSearchToolSearchResult;
+						const toolNames = searchResult.tool_references.map(ref => ref.tool_name);
+
+						this._logService.trace(`Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
+
+						let query: string | undefined;
+						if (pendingServerToolCall) {
+							try {
+								const parsed = JSON.parse(pendingServerToolCall.jsonInput || '{}');
+								query = parsed.query;
+							} catch {
+								// Ignore parse errors
+							}
+						}
+
+						progress.report(new LanguageModelToolResultPart(
+							toolSearchResult.tool_use_id,
+							[new LanguageModelTextPart(JSON.stringify({ query, discovered_tools: toolNames }))]
+						));
+						pendingServerToolCall = undefined;
+					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
+						this._logService.warn(`Tool search error: ${toolSearchResult.content.error_code}`);
+						pendingServerToolCall = undefined;
+					}
 				}
 				continue;
 			}
@@ -438,6 +511,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			if (chunk.type === 'content_block_delta') {
 				if (chunk.delta.type === 'text_delta') {
 					progress.report(new LanguageModelTextPart(chunk.delta.text || ''));
+					if (!hasText && chunk.delta.text?.length > 0) {
+						ttfte = Date.now() - issuedTime;
+					}
 					hasText ||= chunk.delta.text?.length > 0;
 				} else if (chunk.delta.type === 'citations_delta') {
 					if ('citation' in chunk.delta) {
@@ -561,6 +637,6 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 			}
 		}
 
-		return { ttft, usage, contextManagement: contextManagementResponse };
+		return { ttft, ttfte, usage, contextManagement: contextManagementResponse };
 	}
 }

@@ -75,7 +75,6 @@ You MUST check compilation output before running ANY script or declaring work co
 - **`intents/`**: Chat participant/slash command implementations
 - **`prompts/`**: Prompt engineering and template system
 - **`prompt/`**: Common prompt utilities
-- **`relatedFiles/`**: Related file discovery and context gathering
 - **`typescriptContext/`**: TypeScript-specific context and analysis
 
 **Search & Discovery:**
@@ -275,7 +274,7 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **GitHub**: Authentication and API access
 - **Azure**: Cloud services and experimentation
 - **OpenAI**: Language model API
-- **Anthropic**: Claude model integration
+- **Anthropic**: Claude model integration - See **[src/extension/agents/claude/AGENTS.md](../src/extension/agents/claude/AGENTS.md)** for complete Claude Agent SDK integration documentation including architecture, components, and registries
 - **Telemetry**: Usage analytics and performance monitoring
 
 ## Development Workflow
@@ -302,7 +301,6 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **Context resolution changes**: Check `src/extension/context/` and `src/extension/typescriptContext/`
 - **Prompt engineering**: Update `src/extension/prompts/` and `src/extension/prompt/`
 - **Intent detection**: Modify `src/extension/intents/` for user intent classification
-- **Related files discovery**: Edit `src/extension/relatedFiles/` for context gathering
 
 **Search & Discovery:**
 - **Search functionality**: Update `src/extension/search/` for general search

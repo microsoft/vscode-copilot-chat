@@ -21,7 +21,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { getLanguageId } from '../../../util/common/markdown';
 import { findNotebook } from '../../../util/common/notebooks';
 import * as glob from '../../../util/vs/base/common/glob';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath } from '../../../util/vs/base/common/resources';
@@ -102,6 +102,10 @@ function escapeRegex(str: string): string {
  * This outputs the entire file with all changes marked.
  */
 export async function formatDiffAsUnified(accessor: ServicesAccessor, uri: URI, oldContent: string, newContent: string): Promise<string> {
+	if (oldContent.trim() === newContent.trim()) {
+		return '```\n<' + t('contents are identical') + '>\n```';
+	}
+
 	const diffService = accessor.get(IDiffService);
 	const diff = await diffService.computeDiff(oldContent, newContent, {
 		ignoreTrimWhitespace: false,
@@ -564,8 +568,8 @@ export async function applyEdit(
 	workspaceService: IWorkspaceService,
 	notebookService: INotebookService,
 	alternativeNotebookContent: IAlternativeNotebookContentService,
-	languageModel: LanguageModelChat | undefined
-
+	languageModel: LanguageModelChat | undefined,
+	opts?: { replaceAll?: boolean },
 ): Promise<{ patch: Hunk[]; updatedFile: string; edits: TextEdit[] }> {
 	let originalFile: string;
 	let updatedFile: string;
@@ -616,7 +620,7 @@ export async function applyEdit(
 							filePath
 						);
 					}
-				} else if (result.type === 'multiple') {
+				} else if (result.type === 'multiple' && !opts?.replaceAll) {
 					const suggestion = result?.suggestion || 'Please provide a more specific string.';
 					throw new MultipleMatchesError(
 						`Multiple matches found for the text to replace. ${suggestion}`,
@@ -625,8 +629,7 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const { start, end } = result.editPosition[0];
+					for (const { start, end } of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.delete(range));
 					}
@@ -641,7 +644,7 @@ export async function applyEdit(
 						`Could not find matching text to replace. ${suggestion}`,
 						filePath
 					);
-				} else if (result.type === 'multiple') {
+				} else if (result.type === 'multiple' && !opts?.replaceAll) {
 					const suggestion = result?.suggestion || 'Please provide a more specific string.';
 					throw new MultipleMatchesError(
 						`Multiple matches found for the text to replace. ${suggestion}`,
@@ -650,8 +653,7 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const { start, end, text } = result.editPosition[0];
+					for (const { start, end, text } of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.replace(range, text));
 					}
@@ -886,11 +888,11 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 }
 
-export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
+export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], allowedUris: ResourceSet | undefined, detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))
-	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
+	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation && !allowedUris?.has(r.uri));
 
 	if (!needsConfirmation.length) {
 		return { presentation: 'hidden' };

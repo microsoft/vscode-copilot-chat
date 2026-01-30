@@ -18,6 +18,7 @@ export class UserInfoStore extends Disposable {
 	private _internalOrg: string | undefined;
 	private _sku: string | undefined;
 	private _isFcv1: boolean | undefined;
+	private _isVscodeTeamMember: boolean | undefined;
 
 	private _onDidChangeUserInfo = this._register(new Emitter<void>());
 	readonly onDidChangeUserInfo = this._onDidChangeUserInfo.event;
@@ -25,12 +26,15 @@ export class UserInfoStore extends Disposable {
 	static INTERNAL_ORG_STORAGE_KEY = 'exp.github.copilot.internalOrg';
 	static SKU_STORAGE_KEY = 'exp.github.copilot.sku';
 	static IS_FCV1_STORAGE_KEY = 'exp.github.copilot.isFcv1';
+	static IS_VSCODE_TEAM_MEMBER_STORAGE_KEY = 'exp.github.copilot.isVscodeTeamMember';
 	constructor(private readonly context: IVSCodeExtensionContext, copilotTokenStore: ICopilotTokenStore) {
 		super();
 
 		if (copilotTokenStore) {
 			const getInternalOrg = (): string | undefined => {
-				if (copilotTokenStore.copilotToken?.isGitHubInternal) {
+				if (copilotTokenStore.copilotToken?.isVscodeTeamMember) {
+					return 'vscode';
+				} else if (copilotTokenStore.copilotToken?.isGitHubInternal) {
 					return 'github';
 				} else if (copilotTokenStore.copilotToken?.isMicrosoftInternal) {
 					return 'microsoft';
@@ -39,16 +43,17 @@ export class UserInfoStore extends Disposable {
 			};
 
 			copilotTokenStore.onDidStoreUpdate(() => {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1());
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1(), copilotTokenStore.copilotToken?.isVscodeTeamMember);
 			});
 
 			if (copilotTokenStore.copilotToken) {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1());
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1(), copilotTokenStore.copilotToken.isVscodeTeamMember);
 			} else {
 				const cachedInternalValue = this.context.globalState.get<string>(UserInfoStore.INTERNAL_ORG_STORAGE_KEY);
 				const cachedSkuValue = this.context.globalState.get<string>(UserInfoStore.SKU_STORAGE_KEY);
 				const cachedIsFcv1Value = this.context.globalState.get<boolean>(UserInfoStore.IS_FCV1_STORAGE_KEY);
-				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value);
+				const cachedIsVscodeTeamMemberValue = this.context.globalState.get<boolean>(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY);
+				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value, cachedIsVscodeTeamMemberValue);
 			}
 		}
 	}
@@ -65,8 +70,12 @@ export class UserInfoStore extends Disposable {
 		return this._isFcv1;
 	}
 
-	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean): void {
-		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1) {
+	get isVscodeTeamMember(): boolean | undefined {
+		return this._isVscodeTeamMember;
+	}
+
+	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isVscodeTeamMember?: boolean): void {
+		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember) {
 			// no change
 			return;
 		}
@@ -74,9 +83,11 @@ export class UserInfoStore extends Disposable {
 		this._internalOrg = internalOrg;
 		this._sku = sku;
 		this._isFcv1 = isFcv1;
-		this.context.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, this._internalOrg);
-		this.context.globalState.update(UserInfoStore.SKU_STORAGE_KEY, this._sku);
-		this.context.globalState.update(UserInfoStore.IS_FCV1_STORAGE_KEY, this._isFcv1);
+		this._isVscodeTeamMember = isVscodeTeamMember;
+		void this.context.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, this._internalOrg);
+		void this.context.globalState.update(UserInfoStore.SKU_STORAGE_KEY, this._sku);
+		void this.context.globalState.update(UserInfoStore.IS_FCV1_STORAGE_KEY, this._isFcv1);
+		void this.context.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, this._isVscodeTeamMember);
 
 		this._onDidChangeUserInfo.fire();
 	}

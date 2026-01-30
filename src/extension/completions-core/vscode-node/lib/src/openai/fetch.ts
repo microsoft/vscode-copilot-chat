@@ -743,7 +743,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 
 			return {
 				type: 'success',
-				choices,
+				choices: postProcessChoices(choices),
 				getProcessingTime: () => getProcessingTime(responseStream.headers),
 			};
 		}
@@ -862,21 +862,29 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				// finish_reason determines whether the completion is finished by the LLM
 				const hasFinishReason = !!(chunk.choices[i].finish_reason);
 
-				// call finishedCb to determine whether the completion is finished by the client
-				const solutionDecision = await finishedCb(completion.accumulator.responseSoFar, {
-					index: chunkIdx,
-					text: completion.accumulator.responseSoFar,
-					finished: hasFinishReason,
-					requestId: resp.requestId,
-					telemetryData: baseTelemetryData,
-					annotations: completion.accumulator.annotations,
-					getAPIJsonData: () => ({
+				// Only call finishedCb when there's a newline or finish_reason, matching SSEProcessor behavior.
+				// This optimization avoids calling finishedCb on every chunk which can be expensive.
+				const chunkText = choice.text ?? '';
+				const hasNewLine = chunkText.indexOf('\n') > -1;
+
+				let solutionDecision: SolutionDecision | number | undefined;
+				if (hasFinishReason || hasNewLine) {
+					// call finishedCb to determine whether the completion is finished by the client
+					solutionDecision = await finishedCb(completion.accumulator.responseSoFar, {
+						index: chunkIdx,
 						text: completion.accumulator.responseSoFar,
-						tokens: completion.accumulator.chunks,
-						finish_reason: completion.accumulator.finishReason ?? 'stop', // @ulugbekna: logic to determine if last completion was accepted uses finish reason, so changing this `?? 'stop'` will change behavior of multiline completions
-						copilot_annotations: completion.accumulator.annotations.current,
-					} satisfies APIJsonData),
-				} satisfies RequestDelta);
+						finished: hasFinishReason,
+						requestId: resp.requestId,
+						telemetryData: baseTelemetryData,
+						annotations: completion.accumulator.annotations,
+						getAPIJsonData: () => ({
+							text: completion.accumulator.responseSoFar,
+							tokens: completion.accumulator.chunks,
+							finish_reason: completion.accumulator.finishReason ?? 'stop', // @ulugbekna: logic to determine if last completion was accepted uses finish reason, so changing this `?? 'stop'` will change behavior of multiline completions
+							copilot_annotations: completion.accumulator.annotations.current,
+						} satisfies APIJsonData),
+					} satisfies RequestDelta);
+				}
 
 				// handle all fields of finishedCb
 				if (hasFinishReason ||
@@ -919,7 +927,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				const choice = createAPIChoice(
 					chunkIdx,
 					completion.accumulator.responseSoFar,
-					'DONE', // @ulugbekna: should match original ghost-text fetcher behavior
+					completion.accumulator.finishReason ?? 'stop', // Matches original SSEProcessor behavior: convertToAPIJsonData defaults to 'stop'
 					completion.accumulator,
 					false
 				);

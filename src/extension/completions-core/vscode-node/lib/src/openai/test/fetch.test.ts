@@ -361,7 +361,13 @@ async function assertResponseWithStatus(
 
 async function assertResponseWithContext(accessor: ServicesAccessor, statusCode: number, headers?: Record<string, string>) {
 	const response = createFakeResponse(statusCode, 'response-text', headers);
-	const fetcher = accessor.getIfExists(ICompletionsOpenAIFetcherService) as ErrorReturningFetcher ?? accessor.get(IInstantiationService).createInstance(ErrorReturningFetcher);
+	const fetcher = (() => {
+		try {
+			return accessor.get(ICompletionsOpenAIFetcherService) as ErrorReturningFetcher;
+		} catch {
+			return accessor.get(IInstantiationService).createInstance(ErrorReturningFetcher);
+		}
+	})();
 	fetcher.setResponse(response);
 	const completionParams: CompletionParams = fakeCompletionParams();
 	const result = await fetcher.fetchAndStreamCompletions(

@@ -33,7 +33,9 @@ function toStream(strings: string[] | { chunk: string; shouldCancelStream: boole
 	if (strings.length === 0 || typeof strings[0] === 'string') {
 		return new ReadableStream({
 			start(controller) {
-				controller.enqueue(encoder.encode(strings.join('')));
+				for (const s of strings) {
+					controller.enqueue(encoder.encode(s as string));
+				}
 				controller.close();
 			}
 		});

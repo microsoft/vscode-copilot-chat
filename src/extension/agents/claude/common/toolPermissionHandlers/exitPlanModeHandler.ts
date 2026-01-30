@@ -21,8 +21,7 @@ export class ExitPlanModeToolHandler implements IClaudeToolPermissionHandler<Cla
 	): IClaudeToolConfirmationParams {
 		return {
 			title: l10n.t('Ready to code?'),
-			message: l10n.t("Here is Claude's plan:\n\n{0}", input.plan ?? ''),
-			confirmationType: 'basic'
+			message: l10n.t("Here is Claude's plan:\n\n{0}", input.plan ?? '')
 		};
 	}
 }

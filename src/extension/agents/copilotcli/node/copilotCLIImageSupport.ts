@@ -7,12 +7,36 @@ import * as fs from 'fs/promises';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { URI } from '../../../../util/vs/base/common/uri';
 
-export class CopilotCLIImageSupport {
+export interface ICopilotCLIImageSupport {
+	readonly _serviceBrand: undefined;
+	storeImage(imageData: Uint8Array, mimeType: string): Promise<URI>;
+	isTrustedImage(imageUri: URI): boolean;
+}
+
+export function isImageMimeType(mimeType: string): boolean {
+	const map: Record<string, string> = {
+		'image/png': '.png',
+		'image/jpeg': '.jpg',
+		'image/jpg': '.jpg',
+		'image/gif': '.gif',
+		'image/webp': '.webp',
+		'image/bmp': '.bmp',
+	};
+	return mimeType.toLowerCase() in map;
+}
+
+export const ICopilotCLIImageSupport = createServiceIdentifier<ICopilotCLIImageSupport>('ICopilotCLIImageSupport');
+
+export class CopilotCLIImageSupport implements ICopilotCLIImageSupport {
+	readonly _serviceBrand: undefined;
 	private readonly storageDir: URI;
 	private readonly initialized: Lazy<Promise<void>>;
+	private readonly trustedImages = new ResourceSet();
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
@@ -32,15 +56,20 @@ export class CopilotCLIImageSupport {
 		}
 	}
 
+	isTrustedImage(imageUri: URI): boolean {
+		return this.trustedImages.has(imageUri);
+	}
+
 	async storeImage(imageData: Uint8Array, mimeType: string): Promise<URI> {
 		await this.initialized.value;
 		const timestamp = Date.now();
 		const randomId = Math.random().toString(36).substring(2, 10);
 		const extension = this.getExtension(mimeType);
 		const filename = `${timestamp}-${randomId}${extension}`;
-		const imageUri = URI.joinPath(this.storageDir, filename);
+		const imageUri = URI.file(URI.joinPath(this.storageDir, filename).fsPath);
 
 		await fs.writeFile(imageUri.fsPath, imageData);
+		this.trustedImages.add(imageUri);
 		return imageUri;
 	}
 

@@ -56,8 +56,9 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const isResourceVariable = (variable: PromptVariable) =>
 			!isScmEntry(variable.value) && (URI.isUri(variable.value) || isLocation(variable.value));
 		const isImageReference = (variable: PromptVariable) => variable.value && variable.value instanceof ChatReferenceBinaryData;
+		const isImageReferenceWithUri = (variable: PromptVariable) => variable.value && variable.value instanceof ChatReferenceBinaryData && !!variable.value.reference ? true : false;
 
-		const resourceVariables = this.props.chatVariables.filter(variable => isResourceVariable(variable) && !isImageReference(variable));
+		const resourceVariables = this.props.chatVariables.filter(variable => isResourceVariable(variable) || isImageReferenceWithUri(variable));
 		const nonResourceVariables = this.props.chatVariables.filter(variable => !isResourceVariable(variable) && !isImageReference(variable));
 		const [nonResourceAttachments, resourceAttachments] = await Promise.all([
 			renderChatVariables(nonResourceVariables, this.fileSystemService, true, false, false, true, false),
@@ -135,6 +136,18 @@ export async function generateUserPrompt(request: ChatRequest, prompt: string | 
 async function renderResourceVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, promptPathRepresentationService: IPromptPathRepresentationService): Promise<PromptElement[]> {
 	const elements: PromptElement[] = [];
 	await Promise.all(Array.from(chatVariables).map(async variable => {
+		if (variable.value instanceof ChatReferenceBinaryData) {
+			if (variable.value.reference) {
+				const attrs: Record<string, string> = {};
+				const variableName = variable.uniqueName;
+				if (variableName) {
+					attrs.id = variableName;
+				}
+				attrs.filePath = promptPathRepresentationService.getFilePath(variable.value.reference);
+				elements.push(<Tag name='attachment' attrs={attrs} />);
+			}
+			return;
+		}
 		const location = variable.value;
 		if (isLocation(location)) {
 			// If its an untitled document, we always include a summary, as CLI cannot read untitled documents.

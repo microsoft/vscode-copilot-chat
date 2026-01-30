@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { DocumentSelector, Position } from 'vscode-languageserver-protocol';
+import { GhostTextLogContext } from '../../extension/completions-core/common/ghostTextContext';
 import { CompletionsTelemetryServiceBridge, ICompletionsTelemetryService } from '../../extension/completions-core/vscode-node/bridge/src/completionsTelemetryServiceBridge';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from '../../extension/completions-core/vscode-node/extension/src/extensionStatus';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from '../../extension/completions-core/vscode-node/lib/src/auth/copilotTokenManager';
@@ -647,7 +648,7 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 		@IInstantiationService private _insta: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ICompletionsSpeculativeRequestCache private readonly _speculativeRequestCache: ICompletionsSpeculativeRequestCache,
-
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 		this._register(_insta);
@@ -661,7 +662,8 @@ class InlineCompletionsProvider extends Disposable implements IInlineCompletions
 	}
 
 	async getInlineCompletions(textDocument: ITextDocument, position: Position, token?: CancellationToken, options?: IGetInlineCompletionsOptions): Promise<CopilotCompletion[] | undefined> {
-		return await this.ghostText.getInlineCompletions(textDocument, position, token, options);
+		const telemetryBuilder = new LlmNESTelemetryBuilder(undefined, undefined, undefined, 'ghostText', undefined);
+		return await this.ghostText.getInlineCompletions(textDocument, position, token ?? CancellationToken.None, options, new GhostTextLogContext(textDocument.uri, textDocument.version, undefined), telemetryBuilder, this._logService);
 	}
 
 	async inlineCompletionShown(completionId: string): Promise<void> {
@@ -710,6 +712,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(IAuthenticationService, authService);
+	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IIgnoreService, options.ignoreService || new NullIgnoreService());
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [new UnwrappingTelemetrySender(telemetrySender)]));
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
@@ -853,6 +856,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		}
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
+	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 
 	return builder.seal();
 }

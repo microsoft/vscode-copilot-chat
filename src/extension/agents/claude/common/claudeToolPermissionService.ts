@@ -57,6 +57,11 @@ export class ClaudeToolPermissionService implements IClaudeToolPermissionService
 		input: Record<string, unknown>,
 		context: ClaudeToolPermissionContext
 	): Promise<ClaudeToolPermissionResult> {
+		if (context.permissionMode === 'bypassPermissions') {
+			// Bypass mode: allow all tools without confirmation
+			return { behavior: 'allow', updatedInput: input };
+		}
+
 		const handler = this._getHandler(toolName as ClaudeToolNames);
 
 		// If handler has full custom implementation, use it
@@ -64,7 +69,7 @@ export class ClaudeToolPermissionService implements IClaudeToolPermissionService
 			return handler.handle(toolName as ClaudeToolNames, input as ClaudeToolInputMap[ClaudeToolNames], context);
 		}
 
-		// Check auto-approve
+		// Check auto-approve (handler-specific or permission mode based)
 		if (handler?.canAutoApprove) {
 			const canAutoApprove = await handler.canAutoApprove(toolName as ClaudeToolNames, input as ClaudeToolInputMap[ClaudeToolNames], context);
 			if (canAutoApprove) {
@@ -106,8 +111,7 @@ export class ClaudeToolPermissionService implements IClaudeToolPermissionService
 	private _getDefaultConfirmationParams(toolName: string, input: Record<string, unknown>): IClaudeToolConfirmationParams {
 		return {
 			title: l10n.t('Use {0}?', toolName),
-			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-			confirmationType: 'basic'
+			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``
 		};
 	}
 

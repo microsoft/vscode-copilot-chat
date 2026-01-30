@@ -20,7 +20,6 @@ import { AlternativeTextNotebookContentProvider } from '../../common/alternative
 
 import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
 
-import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import { SimulationWorkspace } from '../../../../platform/test/node/simulationWorkspace';
 import { ExtHostNotebookDocumentData } from '../../../../util/common/test/shims/notebookDocument';
@@ -29,6 +28,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { ResourceMap } from '../../../../util/vs/base/common/map';
 import * as path from '../../../../util/vs/base/common/path';
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../vscodeTypes';
+import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
 import { fixture, loadFile, loadNotebook } from './utils';
 
 describe('Alternative Content for Notebooks', () => {
@@ -43,7 +43,9 @@ describe('Alternative Content for Notebooks', () => {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		function getEditGenerator(provider: BaseAlternativeNotebookContentProvider) {
 			return new AlternativeNotebookContentEditGenerator(new class implements IAlternativeNotebookContentService {
@@ -65,6 +67,12 @@ describe('Alternative Content for Notebooks', () => {
 				error = mockLogger.error;
 				show(preserveFocus?: boolean): void {
 					//
+				}
+				createSubLogger(): ILogger {
+					return this;
+				}
+				withExtraTarget(): ILogger {
+					return this;
 				}
 			}(), new NullTelemetryService());
 		}

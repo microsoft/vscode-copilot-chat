@@ -11,15 +11,14 @@ import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { normalizePath } from '../../../util/vs/base/common/resources';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { formatUriForFileWidget } from '../common/toolUtils';
-import { checkCancellation, resolveToolInputPath } from './toolUtils';
-import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
+import { checkCancellation, isDirExternalAndNeedsConfirmation, resolveToolInputPath } from './toolUtils';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 
 interface IListDirParams {
 	path: string;
@@ -28,21 +27,17 @@ interface IListDirParams {
 class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 	public static readonly toolName = ToolName.ListDirectory;
 
+	private _promptContext: IBuildPromptContext | undefined;
+
 	constructor(
 		@IFileSystemService private readonly fsService: IFileSystemService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
-		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IListDirParams>, token: CancellationToken) {
 		const uri = resolveToolInputPath(options.input.path, this.promptPathRepresentationService);
-		const normalizedUri = normalizePath(uri);
-		const relativeToWorkspace = this.workspaceService.getWorkspaceFolder(normalizedUri);
-		if (!relativeToWorkspace && !this.customInstructionsService.isExternalInstructionsFolder(normalizedUri)) {
-			throw new Error(`Directory ${options.input.path} is outside of the workspace and can't be read`);
-		}
 
 		checkCancellation(token);
 		const contents = await this.fsService.readDirectory(uri);
@@ -53,12 +48,38 @@ class ListDirTool implements vscode.LanguageModelTool<IListDirParams> {
 				await renderPromptElementJSON(this.instantiationService, ListDirResult, { results: contents }, options.tokenizationOptions, token))]);
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IListDirParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IListDirParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation | undefined> {
 		const uri = resolveToolInputPath(options.input.path, this.promptPathRepresentationService);
+
+		// Check if directory is external (outside workspace)
+		const isExternal = this.instantiationService.invokeFunction(
+			(accessor: ServicesAccessor) => isDirExternalAndNeedsConfirmation(accessor, uri, this._promptContext)
+		);
+
+		if (isExternal) {
+			const message = this.workspaceService.getWorkspaceFolders().length === 1
+				? new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current folder.`)
+				: new MarkdownString(l10n.t`${formatUriForFileWidget(uri)} is outside of the current workspace.`);
+
+			return {
+				invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
+				pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),
+				confirmationMessages: {
+					title: l10n.t`Allow reading external directory?`,
+					message,
+				}
+			};
+		}
+
 		return {
 			invocationMessage: new MarkdownString(l10n.t`Reading ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Read ${formatUriForFileWidget(uri)}`),
 		};
+	}
+
+	async resolveInput(input: IListDirParams, promptContext: IBuildPromptContext): Promise<IListDirParams> {
+		this._promptContext = promptContext;
+		return input;
 	}
 }
 

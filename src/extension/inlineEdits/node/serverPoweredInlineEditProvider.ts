@@ -9,7 +9,7 @@ import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/commo
 import { ISerializedNextEditRequest, IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
-import { ITracer } from '../../../util/common/tracing';
+import { ILogger } from '../../../platform/log/common/logService';
 import { assert } from '../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LineEdit, LineReplacement, SerializedLineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -43,14 +43,12 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 
 	public readonly ID: string = ServerPoweredInlineEditProvider.ID;
 
-	public readonly dependsOnSelection = true;
-
 	constructor(
 		@IChatMLFetcher private readonly fetcher: IChatMLFetcher,
 	) {
 	}
 
-	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, _tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, _logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 
 		const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
 
@@ -94,7 +92,7 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 			const edits = response.edits.map(e => LineReplacement.deserialize(e));
 			const sortingPermutation = Permutation.createSortPermutation(edits, (a, b) => a.lineRange.startLineNumber - b.lineRange.startLineNumber);
 			const lineEdit = new LineEdit(sortingPermutation.apply(edits));
-			lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit })));
+			lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit, isFromCursorJump: false })));
 			pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
 			return StatelessNextEditResult.streaming(telemetryBuilder);
 		} else {

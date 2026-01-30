@@ -12,8 +12,8 @@ import { IConfigurationService } from '../../../../../platform/configuration/com
 import { NullNativeEnvService } from '../../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { NullMcpService } from '../../../../../platform/mcp/common/mcpService';
 import { NullRequestLogger } from '../../../../../platform/requestLogger/node/nullRequestLogger';
-import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { NullWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../../util/common/test/simpleMock';
 import { Event } from '../../../../../util/vs/base/common/event';
@@ -23,6 +23,7 @@ import { IInstantiationService } from '../../../../../util/vs/platform/instantia
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
+import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
@@ -91,6 +92,16 @@ export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	}
 }
 
+export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
+	_serviceBrand: undefined;
+	storeImage(_imageData: Uint8Array, _mimeType: string): Promise<URI> {
+		return Promise.resolve(URI.file('/dev/null'));
+	}
+	isTrustedImage(_imageUri: URI): boolean {
+		return false;
+	}
+}
+
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
@@ -123,20 +134,21 @@ describe('CopilotCLISessionService', () => {
 			createInstance: (ctor: unknown, options: any, sdkSession: any) => {
 				if (ctor === CopilotCLISessionWorkspaceTracker) {
 					return new class extends mock<CopilotCLISessionWorkspaceTracker>() {
-						override async initialize(_oldSessions: string[]): Promise<void> { return; }
+						override async initialize(): Promise<void> { return; }
 						override async trackSession(_sessionId: string, _operation: 'add' | 'delete'): Promise<void> {
 							return;
 						}
-						override shouldShowSession(_sessionId: string): boolean {
-							return true;
+						override shouldShowSession(_sessionId: string): { isOldGlobalSession?: boolean; isWorkspaceSession?: boolean } {
+							return { isOldGlobalSession: false, isWorkspaceSession: true };
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger()));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);
-		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, new TestWorkspaceService(), authService, configurationService), cliAgents));
+		const nullMcpServer = disposables.add(new NullMcpService());
+		service = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), new CopilotCLIMCPHandler(logService, authService, configurationService, nullMcpServer), cliAgents, workspaceService));
 		manager = await service.getSessionManager() as unknown as MockCliSdkSessionManager;
 	});
 
@@ -267,7 +279,7 @@ describe('CopilotCLISessionService', () => {
 			s1.events.push({ type: 'user.message', data: { content: 'a'.repeat(100) }, timestamp: '2024-01-01T00:00:00.000Z' });
 			manager.sessions.set(s1.sessionId, s1);
 
-			const result = await service.getAllSessions(CancellationToken.None);
+			const result = await service.getAllSessions(() => true, CancellationToken.None);
 
 			expect(result.length).toBe(1);
 			const item = result[0];
@@ -298,7 +310,7 @@ describe('CopilotCLISessionService', () => {
 			s.events.push({ type: 'user.message', data: { content: 'Line1\nLine2' }, timestamp: Date.now().toString() });
 			manager.sessions.set(s.sessionId, s);
 
-			const sessions = await service.getAllSessions(CancellationToken.None);
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
 			const item = sessions.find(i => i.id === 'lab1');
 			expect(item?.label).includes('Line1');
 			expect(item?.label).includes('Line2');

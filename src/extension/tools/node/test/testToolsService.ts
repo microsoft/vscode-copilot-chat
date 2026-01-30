@@ -12,6 +12,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
+import { isDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { autorunIterableDelta } from '../../../../util/vs/base/common/observable';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolInformation, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../../common/toolNames';
@@ -23,7 +25,6 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	private static readonly ExcludedTools = [
 		ToolName.GetScmChanges,
-		ToolName.UpdateUserPreferences,
 		ToolName.Usages
 	];
 
@@ -48,7 +49,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	constructor(
 		disabledTools: Set<string>,
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 	) {
 		super(logService);
@@ -102,9 +103,9 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		return filteredTools;
 	}
 
-	async invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: CancellationToken): Promise<LanguageModelToolResult2> {
-		name = getToolName(name);
-		const tool = this._copilotTools.get(name as ToolName)?.value;
+	async invokeTool(contributedName: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: CancellationToken): Promise<LanguageModelToolResult2> {
+		const name = getToolName(contributedName);
+		const tool = this._copilotTools.get(name as ToolName)?.value || this.getModelSpecificTools().get(contributedName)?.tool;
 		const invoke = tool?.invoke;
 		if (invoke) {
 			this._onWillInvokeTool.fire({ toolName: name });
@@ -122,6 +123,34 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 		throw new Error('unknown tool: ' + name);
 	}
+
+	private _connectedModelSpecificTools = false;
+
+	private getModelSpecificTools() {
+		if (!this._connectedModelSpecificTools) {
+			this._register(autorunIterableDelta(
+				reader => ToolRegistry.modelSpecificTools.read(reader),
+				({ addedValues, removedValues }) => {
+					for (const { definition } of removedValues) {
+						const prev = this._modelSpecificTools.get(definition.name);
+						if (isDisposable(prev)) {
+							prev.dispose();
+						}
+						this._modelSpecificTools.delete(definition.name);
+					}
+					for (const { definition, tool } of addedValues) {
+						const instance = this.instantiationService.createInstance(tool);
+						this._modelSpecificTools.set(definition.name, { definition, tool: instance });
+					}
+				},
+				v => v.definition,
+			));
+			this._connectedModelSpecificTools = true;
+		}
+
+		return this._modelSpecificTools;
+	}
+
 
 	override getCopilotTool(name: string): ICopilotTool<unknown> | undefined {
 		const tool = this._copilotTools.get(name as ToolName)?.value;
@@ -150,6 +179,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 
 	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
+		const requestToolsByName = new Map(Iterable.map(request.tools, ([t, enabled]) => [t.name, enabled]));
 
 		const packageJsonTools = getPackagejsonToolsForTest();
 		return this.tools
@@ -166,7 +196,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 			})
 			.filter(tool => {
 				// 0. Check if the tool was enabled or disabled via the tool picker
-				const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+				const toolPickerSelection = requestToolsByName.get(getContributedToolName(tool.name));
 				if (typeof toolPickerSelection === 'boolean') {
 					return toolPickerSelection;
 				}

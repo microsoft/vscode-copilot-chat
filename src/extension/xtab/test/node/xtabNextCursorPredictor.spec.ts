@@ -15,7 +15,9 @@ import { NextCursorLinePrediction } from '../../../../platform/inlineEdits/commo
 import { AggressivenessLevel, DEFAULT_OPTIONS, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { createTracer, ITracer } from '../../../../util/common/tracing';
+import { ILogger } from '../../../../platform/log/common/logService';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { LineEdit } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -28,8 +30,8 @@ import { PromptPieces } from '../../common/promptCrafting';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 import { XtabNextCursorPredictor } from '../../node/xtabNextCursorPredictor';
 
-function createTestTracer(): ITracer {
-	return createTracer('test', () => { /* no-op log function */ });
+function createTestLogger(): ILogger {
+	return new TestLogService();
 }
 
 function computeTokens(s: string): number {
@@ -111,7 +113,7 @@ describe('XtabNextCursorPredictor', () => {
 	describe('404 disabling behavior', () => {
 		it('should disable predictor after receiving NotFound response', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// First verify predictor is enabled
@@ -126,7 +128,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail with NotFound
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -139,7 +141,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should remain disabled for subsequent calls after 404', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Set up mock to return NotFound
@@ -151,7 +153,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// First call - triggers disabling
-			await predictor.predictNextCursorPosition(promptPieces, tracer);
+			await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			// Verify disabled
 			expect(predictor.determineEnablement()).toBeUndefined();
@@ -172,7 +174,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should not disable predictor for other error types', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Verify predictor is enabled initially
@@ -187,7 +189,7 @@ describe('XtabNextCursorPredictor', () => {
 			});
 
 			// Make a prediction request - should fail but not disable
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isError()).toBe(true);
 			if (result.isError()) {
@@ -200,7 +202,7 @@ describe('XtabNextCursorPredictor', () => {
 
 		it('should return success result when prediction succeeds', async () => {
 			const predictor = instaService.createInstance(XtabNextCursorPredictor, computeTokens);
-			const tracer = createTestTracer();
+			const tracer = createTestLogger();
 			const promptPieces = createTestPromptPieces();
 
 			// Set up mock to return success with line number
@@ -213,7 +215,7 @@ describe('XtabNextCursorPredictor', () => {
 				resolvedModel: 'test-model'
 			});
 
-			const result = await predictor.predictNextCursorPosition(promptPieces, tracer);
+			const result = await predictor.predictNextCursorPosition(promptPieces, tracer, undefined, CancellationToken.None);
 
 			expect(result.isOk()).toBe(true);
 			if (result.isOk()) {

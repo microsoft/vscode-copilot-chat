@@ -256,6 +256,10 @@ export default tseslint.config(
 						{
 							target: ['./test', '!./test/base/extHostContext/*.ts'],
 							from: ['**/vscode-node/**', '**/vscode-worker/**']
+						},
+						{
+							target: 'src/!(lib)/**',
+							from: './src/lib'
 						}
 					]
 				}

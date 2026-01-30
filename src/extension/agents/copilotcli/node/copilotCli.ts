@@ -5,12 +5,12 @@
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import type { Uri } from 'vscode';
-import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -30,6 +30,10 @@ const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
 // Store last used Agent for a Session.
 const COPILOT_CLI_SESSION_AGENTS_MEMENTO_KEY = 'github.copilot.cli.sessionAgents';
+/**
+ * @deprecated Use empty strings to represent default model/agent instead.
+ * Left here for backward compatibility (for state stored by older versions of Chat extension).
+ */
 export const COPILOT_CLI_DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotCLISessionOptions {
@@ -93,12 +97,18 @@ export class CopilotCLISessionOptions {
 	}
 }
 
+export interface CopilotCLIModelInfo {
+	readonly id: string;
+	readonly name: string;
+	readonly multiplier?: number;
+}
+
 export interface ICopilotCLIModels {
 	readonly _serviceBrand: undefined;
 	resolveModel(modelId: string): Promise<string | undefined>;
 	getDefaultModel(): Promise<string | undefined>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
-	getModels(): Promise<{ id: string; name: string }[]>;
+	getModels(): Promise<CopilotCLIModelInfo[]>;
 }
 
 export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotCLISDK');
@@ -107,13 +117,17 @@ export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICo
 
 export class CopilotCLIModels implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
-	private readonly _availableModels: Lazy<Promise<{ id: string; name: string }[]>>;
+	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
-		this._availableModels = new Lazy<Promise<{ id: string; name: string }[]>>(() => this._getAvailableModels());
+		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
+		// Eagerly fetch available models so that they're ready when needed.
+		this._availableModels.value.catch((error) => {
+			this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+		});
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -136,16 +150,16 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		await this.extensionContext.globalState.update(COPILOT_CLI_MODEL_MEMENTO_KEY, modelId);
 	}
 
-	public async getModels(): Promise<{ id: string; name: string }[]> {
+	public async getModels(): Promise<CopilotCLIModelInfo[]> {
 		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
 		return this._availableModels.value;
 	}
 
-	private async _getAvailableModels(): Promise<{ id: string; name: string }[]> {
+	private async _getAvailableModels(): Promise<CopilotCLIModelInfo[]> {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.id, name: model.name }));
+			return models.map(model => ({ id: model.id, name: model.name, multiplier: model.billing?.multiplier }));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
@@ -241,13 +255,13 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	}
 
 	async getDefaultAgent(): Promise<string> {
-		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, COPILOT_CLI_DEFAULT_AGENT_ID).toLowerCase();
-		if (agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
-			return agentId;
+		const agentId = this.extensionContext.workspaceState.get<string>(COPILOT_CLI_AGENT_MEMENTO_KEY, '').toLowerCase();
+		if (!agentId || agentId === COPILOT_CLI_DEFAULT_AGENT_ID) {
+			return '';
 		}
 
 		const agents = await this.getAgents();
-		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? COPILOT_CLI_DEFAULT_AGENT_ID;
+		return agents.find(agent => agent.name.toLowerCase() === agentId)?.name ?? '';
 	}
 	async setDefaultAgent(agent: string | undefined): Promise<void> {
 		await this.extensionContext.workspaceState.update(COPILOT_CLI_AGENT_MEMENTO_KEY, agent);
@@ -280,15 +294,12 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
 			return [];
 		}
-		const [auth, { getCustomAgents }, workingDirectory] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage(), this.copilotCLISDK.getDefaultWorkingDirectory()]);
-		if (!auth) {
-			this.logService.warn('[CopilotCLISession] No authentication info available, cannot fetch custom agents');
+		const [auth, { getCustomAgents }] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.copilotCLISDK.getPackage()]);
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
 			return [];
 		}
-		if (!workingDirectory) {
-			this.logService.trace('[CopilotCLISession] No working directory available, cannot fetch custom agents');
-			return [];
-		}
+		const workingDirectory = workspaceFolders[0];
 		const agents = await getCustomAgents(auth, workingDirectory.fsPath, undefined, getCopilotLogger(this.logService));
 		return agents.map(agent => this.cloneAgent(agent));
 	}
@@ -311,7 +322,6 @@ export interface ICopilotCLISDK {
 	getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>>;
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined;
 	setRequestId(sdkRequestId: string, details: { requestId: string; toolIdEditMap: Record<string, string> }): void;
-	getDefaultWorkingDirectory(): Promise<Uri | undefined>;
 }
 
 type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<string, string> }; createdDateTime: number };
@@ -325,7 +335,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService protected readonly instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
 	}
@@ -371,17 +380,6 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 			token: copilotToken?.accessToken ?? '',
 			host: 'https://github.com'
 		};
-	}
-
-	public async getDefaultWorkingDirectory(): Promise<Uri | undefined> {
-		if (this.workspaceService.getWorkspaceFolders().length === 0) {
-			return undefined;
-		}
-		if (this.workspaceService.getWorkspaceFolders().length === 1) {
-			return this.workspaceService.getWorkspaceFolders()[0];
-		}
-		const folder = await this.workspaceService.showWorkspaceFolderPicker();
-		return folder?.uri;
 	}
 }
 

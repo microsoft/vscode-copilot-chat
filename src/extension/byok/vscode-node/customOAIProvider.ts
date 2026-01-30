@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IStringDictionary } from '../../../util/vs/base/common/collections';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { byokKnownModelToAPIInfo, resolveModelInfo } from '../common/byokProvider';
@@ -75,12 +76,20 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 		@IFetcherService fetcherService: IFetcherService,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService expService: IExperimentationService
+		@IExperimentationService expService: IExperimentationService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext
 	) {
 		super(id, name, undefined, byokStorageService, fetcherService, logService, instantiationService, configurationService, expService);
 	}
 
 	protected async migrateConfig(configKey: Config<IStringDictionary<_CustomOAIModelConfig>>, providerName: string, providerGroupName: string): Promise<void> {
+		// Check if migration has already been completed
+		const migrationKey = `copilot-byok-migration-${providerName}-${configKey}`;
+		const migrationCompleted = this._extensionContext.globalState.get<boolean>(migrationKey, false);
+		if (migrationCompleted) {
+			return;
+		}
+
 		const customOAIModelConfigsByApiKey: Map<string, Array<CustomOAIModelConfig & { requiresAPIKey?: boolean }>> = new Map();
 		const customOAIModelProviderConfig = this._configurationService.getConfig<IStringDictionary<_CustomOAIModelConfig>>(configKey);
 		for (const [modelId, modelConfig] of Object.entries(customOAIModelProviderConfig)) {
@@ -93,7 +102,8 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 			for (const [apiKey, customOAIModelConfigs] of customOAIModelConfigsByApiKey.entries()) {
 				await this.configureDefaultGroupIfExists(providerGroupName, { models: customOAIModelConfigs, apiKey: apiKey || undefined });
 			}
-			await this._configurationService.setConfig(configKey, undefined);
+			// Mark migration as completed instead of deleting the config
+			await this._extensionContext.globalState.update(migrationKey, true);
 		}
 	}
 
@@ -161,8 +171,9 @@ export class CustomOAIBYOKModelProvider extends AbstractCustomOAIBYOKModelProvid
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext
 	) {
-		super(CustomOAIBYOKModelProvider.providerName.toLowerCase(), CustomOAIBYOKModelProvider.providerName, _byokStorageService, logService, fetcherService, instantiationService, configurationService, expService);
+		super(CustomOAIBYOKModelProvider.providerName.toLowerCase(), CustomOAIBYOKModelProvider.providerName, _byokStorageService, logService, fetcherService, instantiationService, configurationService, expService, extensionContext);
 		this.migrateExistingConfigs();
 	}
 

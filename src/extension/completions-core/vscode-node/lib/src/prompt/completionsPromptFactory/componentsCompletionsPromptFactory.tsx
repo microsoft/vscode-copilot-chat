@@ -5,6 +5,8 @@
 
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../prompt/jsx-runtime/ */
+
+import { DiagnosticSeverity, type Diagnostic } from 'vscode';
 import { ICompletionsLogTargetService, logger } from '../../logger';
 
 import { IIgnoreService } from '../../../../../../../platform/ignore/common/ignoreService';
@@ -23,6 +25,7 @@ import { CompletionsContext } from '../components/completionsContext';
 import { CompletionsPromptOk, CompletionsPromptRenderer } from '../components/completionsPromptRenderer';
 import { ICompletionsContextProviderBridgeService } from '../components/contextProviderBridge';
 import { CurrentFile } from '../components/currentFile';
+import { Diagnostics } from '../components/diagnostics';
 import { DocumentMarker } from '../components/marker';
 import { RecentEdits } from '../components/recentEdits';
 import { SimilarFiles } from '../components/similarFiles';
@@ -30,13 +33,16 @@ import { splitContextCompletionsPrompt } from '../components/splitContextPrompt'
 import { SplitContextPromptRenderer } from '../components/splitContextPromptRenderer';
 import { Traits } from '../components/traits';
 
-import { Diagnostics } from '../components/diagnostics';
+import { ILanguageDiagnosticsService } from '../../../../../../../platform/languages/common/languageDiagnosticsService';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 import {
 	ContextProviderTelemetry,
+	getDefaultDiagnosticSettings,
 	matchContextItems,
 	ResolvedContextItem,
 	telemetrizeContextItems,
 	useContextProviderAPI,
+	type DefaultDiagnosticSettings
 } from '../contextProviderRegistry';
 import { getCodeSnippetsFromContextItems } from '../contextProviders/codeSnippets';
 import {
@@ -45,7 +51,7 @@ import {
 	TraitWithId,
 	type DiagnosticBagWithId,
 } from '../contextProviders/contextItemSchemas';
-import { getDiagnosticsFromContextItems } from '../contextProviders/diagnostics';
+import { getDiagnosticsFromContextItems as getDiagnosticBagsFromContextItems } from '../contextProviders/diagnostics';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
 import { componentStatisticsToPromptMatcher, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import {
@@ -55,6 +61,7 @@ import {
 	_promptError,
 	getPromptOptions,
 	MIN_PROMPT_CHARS,
+	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
@@ -163,6 +170,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		@ICompletionsContextProviderBridgeService private readonly contextProviderBridge: ICompletionsContextProviderBridgeService,
 		@ICompletionsLogTargetService private readonly logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService private readonly contextProviderStatistics: ICompletionsContextProviderService,
+		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
 		this.promptOrdering = ordering ?? PromptOrdering.Default;
 		this.virtualPrompt = virtualPrompt ?? new VirtualPrompt(this.completionsPrompt());
@@ -322,7 +330,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		let resolvedContextItems: ResolvedContextItem[] = [];
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
-		let diagnostics: DiagnosticBagWithId[] | undefined;
+		let diagnosticBags: DiagnosticBagWithId[] | undefined;
 		let turnOffSimilarFiles = false;
 		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
 			resolvedContextItems = await this.contextProviderBridge.resolution(completionId);
@@ -350,12 +358,14 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 				textDocument.detectedLanguageId
 			);
 
-			diagnostics = await this.instantiationService.invokeFunction(getDiagnosticsFromContextItems,
+			diagnosticBags = await this.instantiationService.invokeFunction(getDiagnosticBagsFromContextItems,
 				completionId,
 				matchedContextItems
 			);
 		}
-		return { traits, codeSnippets, diagnostics, turnOffSimilarFiles, resolvedContextItems };
+		const settings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
+		diagnosticBags = this.addDefaultDiagnosticBag(resolvedContextItems, diagnosticBags, completionId, completionState, settings);
+		return { traits, codeSnippets, diagnostics: diagnosticBags, turnOffSimilarFiles, resolvedContextItems };
 	}
 
 	private async failFastPrompt(
@@ -372,7 +382,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 
 		const eligibleChars = suffixPercent > 0 ? textDocument.getText().length : textDocument.offsetAt(position);
-		if (eligibleChars < MIN_PROMPT_CHARS) {
+		if (eligibleChars < MIN_PROMPT_CHARS && !MIN_PROMPT_EXCLUDED_LANGUAGE_IDS.includes(textDocument.detectedLanguageId)) {
 			// Too short context
 			return _contextTooShort;
 		}
@@ -469,6 +479,69 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 			availableDeclarativePrompts[this.promptOrdering] ?? availableDeclarativePrompts[PromptOrdering.Default];
 		return new promptInfo.renderer();
 	}
+
+	/** Public for testing */
+	public addDefaultDiagnosticBag(resolvedContextItems: ResolvedContextItem[], bags: DiagnosticBagWithId[] | undefined, completionId: string, completionState: CompletionState, settings: DefaultDiagnosticSettings | undefined): DiagnosticBagWithId[] | undefined {
+		if (settings === undefined) {
+			return bags;
+		}
+
+		const document = completionState.textDocument;
+		if (bags !== undefined && bags.some(bag => bag.uri.toString() === document.uri)) {
+			return bags;
+		}
+		const startTime = performance.now();
+		const diagnostics = this.languageDiagnosticsService.getDiagnostics(URI.parse(document.uri));
+		if (diagnostics.length === 0) {
+			return bags;
+		}
+		const errors: Diagnostic[] = [];
+		const warnings: Diagnostic[] = [];
+		const captureWarnings = settings.warnings === 'yes' || settings.warnings === 'yesIfNoErrors';
+		const position = completionState.position;
+		for (const diag of diagnostics) {
+			const inRange = Math.abs(diag.range.start.line - position.line) <= settings.maxLineDistance;
+			if (!inRange) {
+				continue;
+			}
+			if (diag.severity === DiagnosticSeverity.Error) {
+				errors.push(diag);
+			} else if (diag.severity === DiagnosticSeverity.Warning && captureWarnings) {
+				warnings.push(diag);
+			}
+		}
+		const filterDiagnostics = [...errors, ...(settings.warnings === 'yes' ? warnings : (settings.warnings === 'yesIfNoErrors' && errors.length === 0 ? warnings : []))];
+		if (filterDiagnostics.length === 0) {
+			return bags;
+		}
+		filterDiagnostics.sort((a, b) => {
+			const aDist = Math.abs(a.range.start.line - position.line);
+			const bDist = Math.abs(b.range.start.line - position.line);
+			return aDist - bDist;
+		});
+		const result: DiagnosticBagWithId = {
+			type: 'DiagnosticBag',
+			uri: URI.parse(document.uri),
+			values: filterDiagnostics.slice(0, settings.maxDiagnostics),
+			id: generateUuid()
+		};
+		const providerId = 'copilot.chat.defaultDiagnostics';
+		const statistics = this.contextProviderStatistics.getStatisticsForCompletion(completionId);
+		statistics.addExpectations(providerId, [[result, 'included']]);
+		resolvedContextItems.push({
+			providerId: providerId,
+			matchScore: 10,
+			resolution: 'full',
+			resolutionTimeMs: performance.now() - startTime,
+			data: [result]
+		});
+		statistics.setLastResolution(providerId, 'full');
+		if (bags === undefined) {
+			return [result];
+		}
+		bags.push(result);
+		return bags;
+	}
 }
 
 export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletionsPromptFactory {
@@ -479,6 +552,7 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 		@ICompletionsContextProviderBridgeService contextProviderBridge: ICompletionsContextProviderBridgeService,
 		@ICompletionsLogTargetService logTarget: ICompletionsLogTargetService,
 		@ICompletionsContextProviderService contextProviderStatistics: ICompletionsContextProviderService,
+		@ILanguageDiagnosticsService languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
 		super(
 			undefined,
@@ -488,7 +562,8 @@ export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletion
 			ignoreService,
 			contextProviderBridge,
 			logTarget,
-			contextProviderStatistics
+			contextProviderStatistics,
+			languageDiagnosticsService
 		);
 	}
 }

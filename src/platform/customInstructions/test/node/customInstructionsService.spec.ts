@@ -167,14 +167,14 @@ suite('CustomInstructionsService - Skills', () => {
 	});
 
 	suite('isExternalInstructionsFile', () => {
-		test('should return true for skill files', () => {
+		test('should return true for skill files', async () => {
 			const skillFileUri = URI.file('/workspace/.github/skills/myskill/SKILL.md');
-			expect(customInstructionsService.isExternalInstructionsFile(skillFileUri)).toBe(true);
+			expect(await customInstructionsService.isExternalInstructionsFile(skillFileUri)).toBe(true);
 		});
 
-		test('should return false for regular files', () => {
+		test('should return false for regular files', async () => {
 			const regularFileUri = URI.file('/workspace/src/file.ts');
-			expect(customInstructionsService.isExternalInstructionsFile(regularFileUri)).toBe(false);
+			expect(await customInstructionsService.isExternalInstructionsFile(regularFileUri)).toBe(false);
 		});
 	});
 
@@ -192,6 +192,133 @@ suite('CustomInstructionsService - Skills', () => {
 		test('should return false for regular folder', () => {
 			const regularFolderUri = URI.file('/workspace/src');
 			expect(customInstructionsService.isExternalInstructionsFolder(regularFolderUri)).toBe(false);
+		});
+	});
+
+	suite('chat.agentSkillsLocations config', () => {
+		test('should return skill info for file in absolute path skill location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			const skillFileUri = URI.file('/custom/skills/myskill/SKILL.md');
+			const skillInfo = customInstructionsService.getSkillInfo(skillFileUri);
+
+			expect(skillInfo).toBeDefined();
+			expect(skillInfo?.skillName).toBe('myskill');
+			expect(skillInfo?.skillFolderUri.toString()).toBe(URI.file('/custom/skills/myskill').toString());
+		});
+
+		test('should return skill info for nested file in absolute path skill location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			const skillFileUri = URI.file('/custom/skills/myskill/subfolder/code.ts');
+			const skillInfo = customInstructionsService.getSkillInfo(skillFileUri);
+
+			expect(skillInfo).toBeDefined();
+			expect(skillInfo?.skillName).toBe('myskill');
+			expect(skillInfo?.skillFolderUri.toString()).toBe(URI.file('/custom/skills/myskill').toString());
+		});
+
+		test('should return skill info for file in tilde path skill location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'~/my-skills': true
+			});
+
+			// userHome is /home/testuser in NullNativeEnvService
+			const skillFileUri = URI.file('/home/testuser/my-skills/myskill/SKILL.md');
+			const skillInfo = customInstructionsService.getSkillInfo(skillFileUri);
+
+			expect(skillInfo).toBeDefined();
+			expect(skillInfo?.skillName).toBe('myskill');
+			expect(skillInfo?.skillFolderUri.toString()).toBe(URI.file('/home/testuser/my-skills/myskill').toString());
+		});
+
+		test('should return skill info for file in relative path skill location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'custom-skills': true
+			});
+
+			// Relative paths are joined to workspace folder (/workspace)
+			const skillFileUri = URI.file('/workspace/custom-skills/myskill/SKILL.md');
+			const skillInfo = customInstructionsService.getSkillInfo(skillFileUri);
+
+			expect(skillInfo).toBeDefined();
+			expect(skillInfo?.skillName).toBe('myskill');
+			expect(skillInfo?.skillFolderUri.toString()).toBe(URI.file('/workspace/custom-skills/myskill').toString());
+		});
+
+		test('should ignore disabled skill locations (value !== true)', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': false
+			});
+
+			const skillFileUri = URI.file('/custom/skills/myskill/SKILL.md');
+			const skillInfo = customInstructionsService.getSkillInfo(skillFileUri);
+
+			expect(skillInfo).toBeUndefined();
+		});
+
+		test('should handle multiple skill locations', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true,
+				'~/my-skills': true,
+				'local-skills': true
+			});
+
+			// Check absolute path
+			const skill1 = customInstructionsService.getSkillInfo(URI.file('/custom/skills/skill1/SKILL.md'));
+			expect(skill1?.skillName).toBe('skill1');
+
+			// Check tilde path
+			const skill2 = customInstructionsService.getSkillInfo(URI.file('/home/testuser/my-skills/skill2/SKILL.md'));
+			expect(skill2?.skillName).toBe('skill2');
+
+			// Check relative path
+			const skill3 = customInstructionsService.getSkillInfo(URI.file('/workspace/local-skills/skill3/SKILL.md'));
+			expect(skill3?.skillName).toBe('skill3');
+		});
+
+		test('should return true for isSkillFile with config-based location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			const skillFileUri = URI.file('/custom/skills/myskill/code.ts');
+			expect(customInstructionsService.isSkillFile(skillFileUri)).toBe(true);
+		});
+
+		test('should return true for isSkillMdFile with config-based location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			const skillMdUri = URI.file('/custom/skills/myskill/SKILL.md');
+			expect(customInstructionsService.isSkillMdFile(skillMdUri)).toBe(true);
+		});
+
+		test('should return true for isExternalInstructionsFolder with config-based location', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			const skillFolderUri = URI.file('/custom/skills/myskill');
+			expect(customInstructionsService.isExternalInstructionsFolder(skillFolderUri)).toBe(true);
+		});
+
+		test('config-based locations should not interfere with default locations', async () => {
+			await configService.setNonExtensionConfig('chat.agentSkillsLocations', {
+				'/custom/skills': true
+			});
+
+			// Default .github/skills should still work
+			const defaultSkillFile = URI.file('/workspace/.github/skills/myskill/SKILL.md');
+			const skillInfo = customInstructionsService.getSkillInfo(defaultSkillFile);
+
+			expect(skillInfo).toBeDefined();
+			expect(skillInfo?.skillName).toBe('myskill');
 		});
 	});
 });
