@@ -5,7 +5,6 @@
 
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -34,7 +33,6 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IExecutionSubagentParams>, token: vscode.CancellationToken) {
 		const executionInstruction = [
@@ -66,12 +64,6 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			''
 		].join('\n');
 
-		const modelId = this.configurationService.getConfig(ConfigKey.ExecutionSubagentModel);
-		const modelSelector = {
-			vendor: 'copilot',
-			id: modelId
-		};
-
 		const loop = this.instantiationService.createInstance(ExecutionSubagentToolCallingLoop, {
 			toolCallLimit: 25,
 			conversation: new Conversation('', [new Turn('', { type: 'user', message: executionInstruction })]),
@@ -79,7 +71,6 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 			location: this._inputContext!.request!.location,
 			promptText: options.input.query,
 			allowedTools: new Set([ToolName.CoreRunInTerminal, ToolName.ReadFile, ToolName.FindTextInFiles, ToolName.ApplyPatch]),
-			modelSelector: modelSelector,
 			customPromptClass: ExecutionSubagentPrompt as typeof ExecutionSubagentPrompt & PromptElementCtor,
 		});
 

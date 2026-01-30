@@ -5,12 +5,11 @@
 
 import { randomUUID } from 'crypto';
 import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
-import * as vscode from 'vscode';
 import { IExperimentationService } from '../../../lib/node/chatLibMain';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -31,7 +30,6 @@ export interface ISubagentToolCallingLoopOptions extends IToolCallingLoopOptions
 	request: ChatRequest;
 	location: ChatLocation;
 	promptText: string;
-	modelSelector: { vendor: string; id: string };
 	/** Optional: if provided, only these tools will be available to the subagent */
 	allowedTools?: Set<ToolName>;
 	/** Optional: custom prompt class to use instead of AgentPrompt */
@@ -99,83 +97,77 @@ export class ExecutionSubagentToolCallingLoop extends ToolCallingLoop<ISubagentT
 		return context;
 	}
 
-	private async logAvailableModels() {
-		try {
-			// Log all available chat endpoints
-			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
-			this._logService.info('[ExecutionSubagentToolCallingLoop] ========================================');
-			this._logService.info('[ExecutionSubagentToolCallingLoop] Available chat endpoints:');
-			this._logService.info('[ExecutionSubagentToolCallingLoop] ========================================');
-			for (const ep of allEndpoints) {
-				this._logService.info(`[ExecutionSubagentToolCallingLoop]   - ${ep.model} (family: ${ep.family}, toolCalls: ${ep.supportsToolCalls}, vendor: ${ep.isExtensionContributed ? 'extension' : 'copilot'})`);
-			}
-			this._logService.info('[ExecutionSubagentToolCallingLoop] ========================================');
-		} catch (error) {
-			this._logService.warn(`[ExecutionSubagentToolCallingLoop] Failed to list available models: ${error}`);
-		}
-	}
-
 	private async getEndpoint(request: ChatRequest) {
-		// Log available models for debugging
-		await this.logAvailableModels();
-
-		const modelSelector = this.options.modelSelector;
-
-		this._logService.info(`[ExecutionSubagentToolCallingLoop] Attempting to select model: ${JSON.stringify(modelSelector, null, 2)}`);
-
-		try {
-			// Use vscode.lm.selectChatModels to get the actual registered model
-			const models = await vscode.lm.selectChatModels(modelSelector);
-
-			if (!models || models.length === 0) {
-				const errorMsg = `No models found matching selector: ${JSON.stringify(modelSelector)}. Ensure the model is configured in github.copilot.chat.customOAIModels setting.`;
-				this._logService.error(`[ExecutionSubagentToolCallingLoop] ${errorMsg}`);
-				throw new Error(errorMsg);
-			}
-
-			const qwenModel = models[0];
-			this._logService.info(`[ExecutionSubagentToolCallingLoop] Selected model from VS Code: ${JSON.stringify({
-				vendor: qwenModel.vendor,
-				id: qwenModel.id,
-				name: qwenModel.name,
-				family: qwenModel.family,
-				hasCapabilities: !!qwenModel.capabilities,
-				supportsToolCalling: qwenModel.capabilities?.supportsToolCalling
-			}, null, 2)}`);
-
-			// Pass the actual registered model to getChatEndpoint
-			const endpoint = await this.endpointProvider.getChatEndpoint(qwenModel);
-
-			this._logService.info(`[ExecutionSubagentToolCallingLoop] Successfully selected endpoint: ${JSON.stringify({
-				requestedModelId: modelSelector.id,
-				requestedModelVendor: modelSelector.vendor,
-				endpointModel: endpoint.model,
-				endpointFamily: endpoint.family,
-				supportsToolCalls: endpoint.supportsToolCalls,
-				supportsVision: endpoint.supportsVision,
-				isExtensionContributed: endpoint.isExtensionContributed
-			})}`);
-
-			if (!endpoint.supportsToolCalls) {
-				const errorMsg = `Selected model ${qwenModel.id} does not support tool calls, which is required for search subagent`;
-				this._logService.error(`[ExecutionSubagentToolCallingLoop] ${errorMsg} `);
-				throw new Error(errorMsg);
-			}
-
-			return endpoint;
-		} catch (error) {
-			// Log full error details and throw instead of falling back
-			this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
-			this._logService.error('[ExecutionSubagentToolCallingLoop] FAILED TO GET ENDPOINT');
-			this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
-			this._logService.error('[ExecutionSubagentToolCallingLoop] Requested model selector:', JSON.stringify(modelSelector, null, 2));
-			this._logService.error('[ExecutionSubagentToolCallingLoop] Error type:', error?.constructor?.name);
-			this._logService.error('[ExecutionSubagentToolCallingLoop] Error message:', error instanceof Error ? error.message : String(error));
-			this._logService.error('[ExecutionSubagentToolCallingLoop] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-			this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
-			throw new Error(`Failed to get endpoint for search subagent with model ${modelSelector.id}: ${error instanceof Error ? error.message : String(error)} `);
+		const modelName = this._configurationService.getConfig(ConfigKey.ExecutionSubagentModel) as ChatEndpointFamily;
+		let endpoint = await this.endpointProvider.getChatEndpoint(modelName);
+		if (!endpoint.supportsToolCalls) {
+			this._logService.warn(`[ExecutionSubagentToolCallingLoop] Configured model ${modelName} does not support tool calls. Falling back to request's endpoint.`);
+			endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
 		}
+		return endpoint;
 	}
+
+	// private async getEndpoint(request: ChatRequest) {
+	// 	// Log available models for debugging
+	// 	await this.logAvailableModels();
+
+	// 	const modelSelector = this.options.modelSelector;
+
+	// 	this._logService.info(`[ExecutionSubagentToolCallingLoop] Attempting to select model: ${JSON.stringify(modelSelector, null, 2)}`);
+
+	// 	try {
+	// 		// Use vscode.lm.selectChatModels to get the actual registered model
+	// 		const models = await vscode.lm.selectChatModels(modelSelector);
+
+	// 		if (!models || models.length === 0) {
+	// 			const errorMsg = `No models found matching selector: ${JSON.stringify(modelSelector)}. Ensure the model is configured in github.copilot.chat.customOAIModels setting.`;
+	// 			this._logService.error(`[ExecutionSubagentToolCallingLoop] ${errorMsg}`);
+	// 			throw new Error(errorMsg);
+	// 		}
+
+	// 		const qwenModel = models[0];
+	// 		this._logService.info(`[ExecutionSubagentToolCallingLoop] Selected model from VS Code: ${JSON.stringify({
+	// 			vendor: qwenModel.vendor,
+	// 			id: qwenModel.id,
+	// 			name: qwenModel.name,
+	// 			family: qwenModel.family,
+	// 			hasCapabilities: !!qwenModel.capabilities,
+	// 			supportsToolCalling: qwenModel.capabilities?.supportsToolCalling
+	// 		}, null, 2)}`);
+
+	// 		// Pass the actual registered model to getChatEndpoint
+	// 		const endpoint = await this.endpointProvider.getChatEndpoint(qwenModel);
+
+	// 		this._logService.info(`[ExecutionSubagentToolCallingLoop] Successfully selected endpoint: ${JSON.stringify({
+	// 			requestedModelId: modelSelector.id,
+	// 			requestedModelVendor: modelSelector.vendor,
+	// 			endpointModel: endpoint.model,
+	// 			endpointFamily: endpoint.family,
+	// 			supportsToolCalls: endpoint.supportsToolCalls,
+	// 			supportsVision: endpoint.supportsVision,
+	// 			isExtensionContributed: endpoint.isExtensionContributed
+	// 		})}`);
+
+	// 		if (!endpoint.supportsToolCalls) {
+	// 			const errorMsg = `Selected model ${qwenModel.id} does not support tool calls, which is required for search subagent`;
+	// 			this._logService.error(`[ExecutionSubagentToolCallingLoop] ${errorMsg} `);
+	// 			throw new Error(errorMsg);
+	// 		}
+
+	// 		return endpoint;
+	// 	} catch (error) {
+	// 		// Log full error details and throw instead of falling back
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] FAILED TO GET ENDPOINT');
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] Requested model selector:', JSON.stringify(modelSelector, null, 2));
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] Error type:', error?.constructor?.name);
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] Error message:', error instanceof Error ? error.message : String(error));
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+	// 		this._logService.error('[ExecutionSubagentToolCallingLoop] ========================================');
+	// 		throw new Error(`Failed to get endpoint for search subagent with model ${modelSelector.id}: ${error instanceof Error ? error.message : String(error)} `);
+	// 	}
+	// }
 
 	protected async buildPrompt(promptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
 		const endpoint = await this.getEndpoint(this.options.request);
