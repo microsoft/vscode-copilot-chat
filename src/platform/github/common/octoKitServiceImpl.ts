@@ -329,13 +329,13 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
 	}
 
-	async getUserOrganizations(authOptions: { createIfNone?: boolean }): Promise<string[]> {
+	async getUserOrganizations(authOptions: { createIfNone?: boolean }, pageSize?: number): Promise<string[]> {
 		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
 			this._logService.trace('No authentication token available for getUserOrganizations');
 			throw new PermissiveAuthRequiredError();
 		}
-		return this.getUserOrganizationsWithToken(authToken);
+		return this.getUserOrganizationsWithToken(authToken, pageSize);
 	}
 
 	async isUserMemberOfOrg(org: string, authOptions: { createIfNone?: boolean }): Promise<boolean> {

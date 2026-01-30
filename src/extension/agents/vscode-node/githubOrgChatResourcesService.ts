@@ -152,7 +152,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		// Get the organizations the user is a member of
 		let userOrganizations: string[];
 		try {
-			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: true });
+			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: true }, 1);
 			this.logService.trace(`[GitHubOrgChatResourcesService] User organizations: ${JSON.stringify(userOrganizations)}`);
 			if (userOrganizations.length === 0) {
 				this.logService.trace('[GitHubOrgChatResourcesService] No organizations found for user');

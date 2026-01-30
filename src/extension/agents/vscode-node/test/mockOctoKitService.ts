@@ -38,7 +38,7 @@ export class MockOctoKitService implements IOctoKitService {
 	getAssignableActors = async () => [];
 	isCCAEnabled = async (): Promise<CCAEnabledResult> => ({ enabled: true });
 
-	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }) => this.userOrganizations;
+	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }, _pageSize?: number) => this.userOrganizations;
 	isUserMemberOfOrg = async (org: string, _authOptions?: { createIfNone?: boolean }) => this.userOrganizations.includes(org);
 	getOrganizationRepositories = async (org: string, _authOptions?: { createIfNone?: boolean }, _pageSize?: number) => [org === 'testorg' ? 'testrepo' : 'repo'];
 

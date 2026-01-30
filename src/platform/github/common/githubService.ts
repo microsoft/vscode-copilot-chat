@@ -343,9 +343,10 @@ export interface IOctoKitService {
 	/**
 	 * Gets the list of organizations that the authenticated user belongs to.
 	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @param pageSize - Number of organizations to fetch per page (max and default: 100)
 	 * @returns An array of organization logins
 	 */
-	getUserOrganizations(authOptions: AuthOptions): Promise<string[]>;
+	getUserOrganizations(authOptions: AuthOptions, pageSize?: number): Promise<string[]>;
 
 	/**
 	 * Checks if the authenticated user is a member of a specific organization.
@@ -496,8 +497,8 @@ export class BaseOctoKitService {
 		return '';
 	}
 
-	protected async getUserOrganizationsWithToken(token: string): Promise<string[]> {
-		const result = await this._makeGHAPIRequest('user/orgs', 'GET', token);
+	protected async getUserOrganizationsWithToken(token: string, pageSize: number = 100): Promise<string[]> {
+		const result = await this._makeGHAPIRequest(`user/orgs?per_page=${pageSize}`, 'GET', token);
 		if (!result || !Array.isArray(result)) {
 			return [];
 		}
