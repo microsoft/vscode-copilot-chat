@@ -3624,15 +3624,6 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.thinkingKeepExpanded": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.thinkingKeepExpanded%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
