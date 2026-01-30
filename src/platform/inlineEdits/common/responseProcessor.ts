@@ -10,21 +10,46 @@ import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange'
 
 export namespace ResponseProcessor {
 
+	/**
+	 * Controls when to emit fast cursor line changes.
+	 * - `off`: Never emit fast cursor line changes
+	 * - `always`: Always emit when the cursor line changes (original behavior)
+	 * - `additiveOnly`: Only emit when the edit on the cursor line is additive (only adds text)
+	 */
+	export const enum EmitFastCursorLineChange {
+		Off = 'off',
+		Always = 'always',
+		AdditiveOnly = 'additiveOnly',
+	}
+
 	export type DiffParams = {
 		/**
-		 * Whether to emit a fast cursor line change event.
-		 * Defaults to false.
+		 * Controls when to emit a fast cursor line change event.
 		 */
-		readonly emitFastCursorLineChange: boolean;
+		readonly emitFastCursorLineChange: EmitFastCursorLineChange;
 		readonly nSignificantLinesToConverge: number;
 		readonly nLinesToConverge: number;
 	};
 
 	export const DEFAULT_DIFF_PARAMS: DiffParams = {
-		emitFastCursorLineChange: false,
+		emitFastCursorLineChange: EmitFastCursorLineChange.Off,
 		nSignificantLinesToConverge: 2,
 		nLinesToConverge: 3,
 	};
+
+	/**
+	 * Maps the `emitFastCursorLineChange` setting value to the new type,
+	 * preserving backward compatibility with the old boolean type.
+	 */
+	export function mapEmitFastCursorLineChange(value: boolean | EmitFastCursorLineChange): EmitFastCursorLineChange {
+		if (value === true) {
+			return EmitFastCursorLineChange.Always;
+		}
+		if (value === false) {
+			return EmitFastCursorLineChange.Off;
+		}
+		return value;
+	}
 
 	type DivergenceState =
 		| { k: 'aligned' }
@@ -117,6 +142,43 @@ export namespace ResponseProcessor {
 		return !!s.match(/[a-zA-Z1-9]+/);
 	}
 
+	/**
+	 * Checks if a line edit is additive (only adds text without removing any).
+	 * An edit is additive if the original line is a subsequence of the new line,
+	 * meaning all characters from the original appear in the new line in the same order.
+	 *
+	 * Examples:
+	 * - "function fib() {" → "function fib(n: number) {" ✓ (additive)
+	 * - "hello world" → "hello" ✗ (not additive, removes " world")
+	 * - "abc" → "aXbYcZ" ✓ (additive)
+	 */
+	export function isAdditiveEdit(originalLine: string, newLine: string): boolean {
+		return isSubsequence(originalLine, newLine);
+	}
+
+	/**
+	 * Returns true if `subsequence` is a subsequence of `str`.
+	 * A subsequence means all characters appear in `str` in the same relative order,
+	 * but not necessarily consecutively.
+	 */
+	function isSubsequence(subsequence: string, str: string): boolean {
+		if (subsequence.length === 0) {
+			return true;
+		}
+		if (subsequence.length > str.length) {
+			return false;
+		}
+
+		let subIdx = 0;
+		for (let i = 0; i < str.length && subIdx < subsequence.length; i++) {
+			if (str[i] === subsequence[subIdx]) {
+				subIdx++;
+			}
+		}
+
+		return subIdx === subsequence.length;
+	}
+
 	function checkForConvergence(
 		originalLines: string[],
 		cursorOriginalLinesOffset: number,
@@ -136,9 +198,16 @@ export namespace ResponseProcessor {
 		let candidates = lineToIndexes.get(state.newLines[newLinesIdx]).map((idx): [number, number] => [idx, idx]);
 
 		if (candidates.length === 0) {
-			if (!params.emitFastCursorLineChange ||
+			if (params.emitFastCursorLineChange === EmitFastCursorLineChange.Off ||
 				editWindowIdx !== cursorOriginalLinesOffset || state.newLines.length > 1
 			) {
+				return;
+			}
+
+			// Check if emit is allowed based on the setting
+			const originalLine = originalLines[editWindowIdx];
+			const newLine = state.newLines[0];
+			if (params.emitFastCursorLineChange === EmitFastCursorLineChange.AdditiveOnly && !isAdditiveEdit(originalLine, newLine)) {
 				return;
 			}
 

@@ -954,7 +954,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					badge: this.getPullRequestBadge(pr),
+					badge: this.getPullRequestBadge(repoIds, pr),
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
@@ -1245,11 +1245,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private getPullRequestBadge(pr: PullRequestSearchItem): vscode.MarkdownString {
-		const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
-		const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
-		badge.supportThemeIcons = true;
-		return badge;
+	private getPullRequestBadge(repoIds: GithubRepoId[] | undefined, pr: PullRequestSearchItem): vscode.MarkdownString | undefined {
+		if (vscode.workspace.workspaceFolders === undefined || (repoIds && repoIds.length > 1)) {
+			const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
+			const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
+			badge.supportThemeIcons = true;
+			return badge;
+		}
+
+		return undefined;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {

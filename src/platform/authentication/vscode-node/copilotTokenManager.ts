@@ -5,7 +5,7 @@
 
 import { env, window } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
@@ -27,6 +27,7 @@ export class ContactSupportError extends Error { }
 export class EnterpriseManagedError extends Error { }
 export class InvalidTokenError extends Error { }
 export class RateLimitedError extends Error { }
+export class GitHubLoginFailedError extends Error { }
 
 export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private _taskSingler = new TaskSingler<TokenInfoOrError>();
@@ -44,6 +45,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			this.copilotToken = undefined;
+		}
+
 		if (!this.copilotToken || this.copilotToken.expires_at - (60 * 5 /* 5min */) < nowSeconds() || force) {
 			try {
 				this._logService.debug(`Getting CopilotToken (force: ${force})...`);
@@ -59,6 +65,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	private async _auth(): Promise<TokenInfoOrError> {
+		const failWith = this.configurationService.getConfig(ConfigKey.Advanced.DebugGitHubAuthFailWith);
+		if (failWith) {
+			return { kind: 'failure', reason: failWith };
+		}
+
 		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
 		if (!session && !allowNoAuthAccess) {
@@ -121,7 +132,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'GitHubLoginFailed') {
-			throw Error('GitHubLoginFailed');
+			throw new GitHubLoginFailedError('GitHubLoginFailed');
 		}
 
 		if (tokenResult.kind === 'failure' && tokenResult.reason === 'RateLimited') {

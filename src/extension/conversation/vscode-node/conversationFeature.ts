@@ -135,8 +135,10 @@ export class ConversationFeature implements IExtensionContribution {
 		this._activated = value;
 
 		if (!value) {
+			this.logService.info('ConversationFeature: Deactivating contributions');
 			this._activatedDisposables.clear();
 		} else {
+			this.logService.info('ConversationFeature: Activating contributions');
 			const options: IConversationOptions = this.conversationOptions;
 
 			this._activatedDisposables.add(this.registerProviders());

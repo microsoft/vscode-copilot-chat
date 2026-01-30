@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { commands, extensions, window } from 'vscode';
 import { IAuthenticationService, MinimalModeError } from '../../../platform/authentication/common/authentication';
-import { ContactSupportError, EnterpriseManagedError, InvalidTokenError, NotSignedUpError, RateLimitedError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+import { ContactSupportError, EnterpriseManagedError, GitHubLoginFailedError, InvalidTokenError, NotSignedUpError, RateLimitedError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -25,6 +25,7 @@ const welcomeViewContextKeys = {
 	EnterpriseDisabled: 'github.copilot.interactiveSession.enterprise.disabled',
 	InvalidToken: 'github.copilot.interactiveSession.invalidToken',
 	RateLimited: 'github.copilot.interactiveSession.rateLimited',
+	GitHubLoginFailed: 'github.copilot.interactiveSession.gitHubLoginFailed',
 };
 
 const chatQuotaExceededContextKey = 'github.copilot.chat.quotaExceeded';
@@ -45,6 +46,7 @@ export class ContextKeysContribution extends Disposable {
 	private _needsOfflineCheck = false;
 	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
+	private _lastContextKey: string | undefined;
 
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -142,16 +144,24 @@ export class ContextKeysContribution extends Disposable {
 			key = welcomeViewContextKeys.ContactSupport;
 		} else if (error instanceof InvalidTokenError) {
 			key = welcomeViewContextKeys.InvalidToken;
-		} else if (error instanceof RateLimitedError) {
-			key = welcomeViewContextKeys.RateLimited;
+		} else if (error instanceof GitHubLoginFailedError) {
+			key = welcomeViewContextKeys.GitHubLoginFailed;
 		} else if (error) {
 			if (!extensions.getExtension(EXTENSION_ID)?.isActive) {
-				key = welcomeViewContextKeys.Offline;
+				if (error instanceof RateLimitedError) {
+					key = welcomeViewContextKeys.RateLimited;
+				} else {
+					key = welcomeViewContextKeys.Offline;
+				}
 			}
 			this._scheduleOfflineCheck();
 		}
 
 		if (key) {
+			if (key !== this._lastContextKey) {
+				this._logService.info(`[context keys] Setting context key: ${key}`);
+				this._lastContextKey = key;
+			}
 			commands.executeCommand('setContext', key, true);
 		}
 

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { expect, suite, test } from 'vitest';
+import { describe, expect, it, suite, test } from 'vitest';
 import { ResponseProcessor } from '../../../../platform/inlineEdits/common/responseProcessor';
 import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
@@ -349,5 +349,80 @@ suite('stream diffing', () => {
 			`);
 		});
 
+	});
+});
+
+describe('isAdditiveEdit', () => {
+
+	it('should detect simple substring additions as additive', () => {
+		expect(ResponseProcessor.isAdditiveEdit('hello', 'hello world')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('world', 'hello world')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('hello world', 'hello world')).toMatchInlineSnapshot(`true`);
+	});
+
+	it('should detect insertions in the middle as additive', () => {
+		// The key case: adding parameters to a function
+		expect(ResponseProcessor.isAdditiveEdit('function fib() {', 'function fib(n: number) {')).toMatchInlineSnapshot(`true`);
+
+		// Adding type annotations
+		expect(ResponseProcessor.isAdditiveEdit('const x = 5', 'const x: number = 5')).toMatchInlineSnapshot(`true`);
+
+		// Adding modifiers
+		expect(ResponseProcessor.isAdditiveEdit('function foo() {}', 'async function foo() {}')).toMatchInlineSnapshot(`true`);
+	});
+
+	it('should detect character insertions as additive', () => {
+		expect(ResponseProcessor.isAdditiveEdit('abc', 'aXbYcZ')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('abc', 'XXXaYYYbZZZc')).toMatchInlineSnapshot(`true`);
+	});
+
+	it('should detect deletions as non-additive', () => {
+		expect(ResponseProcessor.isAdditiveEdit('hello world', 'hello')).toMatchInlineSnapshot(`false`);
+		expect(ResponseProcessor.isAdditiveEdit('hello world', 'world')).toMatchInlineSnapshot(`false`);
+		expect(ResponseProcessor.isAdditiveEdit('function fib(n: number) {', 'function fib() {')).toMatchInlineSnapshot(`false`);
+	});
+
+	it('should detect replacements as non-additive', () => {
+		// Changing name (f → g) is a replacement
+		expect(ResponseProcessor.isAdditiveEdit('function fib() {', 'function gib() {')).toMatchInlineSnapshot(`false`);
+
+		// Changing value is a replacement
+		expect(ResponseProcessor.isAdditiveEdit('const x = 5', 'const x = 10')).toMatchInlineSnapshot(`false`);
+	});
+
+	it('should handle empty strings', () => {
+		expect(ResponseProcessor.isAdditiveEdit('', '')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('', 'hello')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('hello', '')).toMatchInlineSnapshot(`false`);
+	});
+
+	it('should handle whitespace changes', () => {
+		// Adding whitespace
+		expect(ResponseProcessor.isAdditiveEdit('a b', 'a  b')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('ab', 'a b')).toMatchInlineSnapshot(`true`);
+
+		// Removing whitespace is not additive
+		expect(ResponseProcessor.isAdditiveEdit('a  b', 'a b')).toMatchInlineSnapshot(`false`);
+	});
+
+	it('should handle complex code transformations', () => {
+		// Adding optional chaining
+		expect(ResponseProcessor.isAdditiveEdit('obj.prop', 'obj?.prop')).toMatchInlineSnapshot(`true`);
+
+		// Adding template literal
+		expect(ResponseProcessor.isAdditiveEdit('`hello`', '`hello ${name}`')).toMatchInlineSnapshot(`true`);
+
+		// Adding array element
+		expect(ResponseProcessor.isAdditiveEdit('[1, 2]', '[1, 2, 3]')).toMatchInlineSnapshot(`true`);
+
+		// Adding object property (subsequence still works)
+		expect(ResponseProcessor.isAdditiveEdit('{ a: 1 }', '{ a: 1, b: 2 }')).toMatchInlineSnapshot(`true`);
+	});
+
+	it('should handle repeated characters correctly', () => {
+		// All 'a's from original must be matched in order
+		expect(ResponseProcessor.isAdditiveEdit('aaa', 'aaaa')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('aaa', 'aXaYaZ')).toMatchInlineSnapshot(`true`);
+		expect(ResponseProcessor.isAdditiveEdit('aaaa', 'aaa')).toMatchInlineSnapshot(`false`);
 	});
 });

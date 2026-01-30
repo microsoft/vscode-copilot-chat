@@ -45,10 +45,10 @@
 		]
 	},
 	"github.copilot.viewsWelcome.invalidToken": {
-		"message": "Your GitHub token is invalid. Please sign out from your GitHub account and sign in again.\n\n[Manage Accounts](command:workbench.action.manageAccounts)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"message": "Your GitHub token is invalid. Please sign in again to refresh your authentication.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
 		"comment": [
 			"{Locked='['}",
-			"{Locked='](command:workbench.action.manageAccounts)'}",
+			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}",
 			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
@@ -58,6 +58,15 @@
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.refreshToken)'}",
+			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
+			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
+		]
+	},
+	"github.copilot.viewsWelcome.gitHubLoginFailed": {
+		"message": "GitHub login failed. Please sign in to your GitHub account to use Copilot.\n\n[Sign In](command:workbench.action.chat.triggerSetupForceSignIn)\n\nSee also [Copilot log](command:github.copilot.debug.showOutputChannel.internal) and [run diagnostics](command:github.copilot.debug.collectDiagnostics.internal).",
+		"comment": [
+			"{Locked='['}",
+			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}",
 			"{Locked='](command:github.copilot.debug.showOutputChannel.internal)'}",
 			"{Locked='](command:github.copilot.debug.collectDiagnostics.internal)'}"
 		]
@@ -151,7 +160,6 @@
 	"github.copilot.config.virtualTools.threshold": "This setting defines the tool count over which virtual tools should be used. Virtual tools group similar sets of tools together and they allow the model to activate them on-demand. Certain tool groups will optimistically be pre-activated. We are actively developing this feature and you experience degraded tool calling once the threshold is hit.\n\nMay be set to `0` to disable virtual tools.",
 	"github.copilot.config.alternateGptPrompt.enabled": "Enables an experimental alternate prompt for GPT models instead of the default prompt.",
 	"github.copilot.config.alternateGeminiModelFPrompt.enabled": "Enables an experimental alternate prompt for Gemini Model F instead of the default prompt.",
-	"github.copilot.config.alternateZaiPrompt.enabled": "Enables an experimental alternate prompt for Zai models instead of the default prompt.",
 	"github.copilot.config.gpt5CodexAlternatePrompt": "Specifies an experimental alternate prompt to use for the GPT-5-Codex model.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
@@ -332,8 +340,8 @@
 	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.\n\n**Important**: URL API path resolution for custom OpenAI-compatible and Azure models is independent of this setting and fully determined by `url` property of `#github.copilot.chat.customOAIModels#` or `#github.copilot.chat.azureModels#` respectively.",
 	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
-	"github.copilot.config.anthropic.thinking.budgetTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Setting this value enables extended thinking. Valid range is 1,024 to 32,000 tokens. Always capped at (max output tokens - 1).\n\n**Note**: This is an experimental feature not yet activated for all users.",
-	"github.copilot.config.thinkingKeepExpanded": "Keep the thinking/reasoning section expanded after the model finishes thinking. When disabled (default), the thinking section automatically collapses when the model moves on to provide its response.\n\n**Note**: This is an experimental feature.",
+  "github.copilot.config.thinkingKeepExpanded": "Keep the thinking/reasoning section expanded after the model finishes thinking. When disabled (default), the thinking section automatically collapses when the model moves on to provide its response.\n\n**Note**: This is an experimental feature.",
+	"github.copilot.config.anthropic.thinking.budgetTokens": "Maximum number of tokens to allocate for extended thinking in Anthropic models. Setting this value enables extended thinking. Valid range is `1,024` to `max_tokens-1`.\n\n**Note**: This is an experimental feature not yet activated for all users.",
 	"github.copilot.config.anthropic.tools.websearch.enabled": "Enable Anthropic's native web search tool for BYOK Claude models. When enabled, allows Claude to search the web for current information. \n\n**Note**: This is an experimental feature only available for BYOK Anthropic Claude models.",
 	"github.copilot.config.anthropic.tools.websearch.maxUses": "Maximum number of web searches allowed per request. Valid range is 1 to 20. Prevents excessive API calls within a single interaction. If Claude exceeds this limit, the response returns an error.",
 	"github.copilot.config.anthropic.tools.websearch.allowedDomains": "List of domains to restrict web search results to (e.g., `[\"example.com\", \"docs.example.com\"]`). Domains should not include the HTTP/HTTPS scheme. Subdomains are automatically included. Cannot be used together with blocked domains.",
@@ -417,5 +425,7 @@
 	"copilot.tools.searchSubagent.name": "Search Subagent",
 	"copilot.tools.searchSubagent.description": "Launch an iterative search-focused subagent to find relevant code in your workspace.",
 	"github.copilot.config.searchSubagent.enabled": "Enable the search subagent tool for iterative code exploration in the workspace.",
+	"github.copilot.config.searchSubagent.model": "Model to use for the search subagent. Leave empty to use the default model.",
+	"github.copilot.config.searchSubagent.toolCallLimit": "Maximum number of tool calls the search subagent can make during exploration.",
 	"github.copilot.config.agentCustomizationSkill.enabled": "Enable the built-in agent customization skill."
 }

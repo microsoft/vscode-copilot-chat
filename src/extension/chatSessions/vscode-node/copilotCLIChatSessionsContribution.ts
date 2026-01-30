@@ -117,6 +117,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
+		@IGitService private readonly gitSevice: IGitService,
 	) {
 		super();
 		this._register(this.terminalIntegration);
@@ -165,6 +166,14 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		return undefined;
 	}
 
+	private shouldShowBadge(): boolean {
+		const repositories = this.gitSevice.repositories
+			.filter(repository => repository.kind !== 'worktree');
+
+		// Empty window or workspace that contains multiple repositories
+		return vscode.workspace.workspaceFolders === undefined || repositories.length > 1;
+	}
+
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
@@ -173,7 +182,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
-		if (worktreeProperties?.repositoryPath) {
+		if (worktreeProperties?.repositoryPath && this.shouldShowBadge()) {
 			const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
 			badge = new vscode.MarkdownString(`$(repo) ${basename(repositoryPathUri)}`);
 			badge.supportThemeIcons = true;
@@ -813,6 +822,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
 		// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 		if (cachedRepo) {
+			const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
+			if (!trusted) {
+				// User didn't trust, we can't proceed.
+				const result = { repository: undefined, trusted: false };
+				this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+				return result;
+			}
+
 			const repository = await this.gitService.getRepository(repoPath, true);
 			return { repository, trusted: true };
 		}
@@ -1182,6 +1199,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			// Means we failed to create worktree or this is a workspace folder without git repo
 			if (!worktreeProperties) {
 				isolationEnabled = false;
+			}
+		}
+
+		// Verify trust for the working directory
+		if (!cancelled && workingDirectory) {
+			const trusted = await this.workspaceService.requestResourceTrust({ uri: workingDirectory, message: untrustedFolderMessage });
+			if (!trusted) {
+				stream.warning(l10n.t('The selected folder is not trusted.'));
+				cancelled = true;
 			}
 		}
 

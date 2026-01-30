@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -21,7 +20,6 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -49,10 +47,8 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 
 		// Register skill provider for built-in agent customization skill
 		if ('registerSkillProvider' in vscode.chat) {
-			if (configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentCustomizationSkillEnabled, experimentationService)) {
-				const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
-				this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
-			}
+			const agentCustomizationSkillProvider: vscode.ChatSkillProvider = instantiationService.createInstance(new SyncDescriptor(AgentCustomizationSkillProvider));
+			this._register(vscode.chat.registerSkillProvider(agentCustomizationSkillProvider));
 		}
 	}
 }
