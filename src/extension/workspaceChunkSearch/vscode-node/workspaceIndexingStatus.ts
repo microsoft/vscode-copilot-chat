@@ -147,6 +147,17 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						break;
 					}
 
+					// All repos are ready, check if external ingest is building
+					if (state.remoteIndexState.externalIngestState?.status === CodeSearchRepoStatus.BuildingIndex) {
+						return this._writeStatusItem({
+							title: remotelyIndexedMessage,
+							details: {
+								message: state.remoteIndexState.externalIngestState.progressMessage || t('Building'),
+								busy: true,
+							},
+						});
+					}
+
 					if (state.remoteIndexState.repos.every(repo => repo.status === CodeSearchRepoStatus.Ready)) {
 						return this._writeStatusItem({
 							title: remotelyIndexedMessage,

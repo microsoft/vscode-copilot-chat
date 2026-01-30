@@ -9,6 +9,7 @@ import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
@@ -26,7 +27,7 @@ import { ISearchService } from '../../../search/common/searchService';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
-import { TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
+import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
 
 const debug = false;
@@ -46,6 +47,11 @@ interface DbFileEntry {
 	mtime: number;
 	docSha: Uint8Array | null;
 	shouldIngest: ShouldIngestState;
+}
+
+export interface ExternalIngestStatus {
+	readonly status: CodeSearchRepoStatus;
+	readonly progressMessage: string | undefined;
 }
 
 /**
@@ -70,6 +76,48 @@ export class ExternalIngestIndex extends Disposable {
 	private readonly _codeSearchRepoRoots = new ResourceSet();
 
 	private readonly _client: IExternalIngestClient;
+
+	private readonly _onDidChangeState = this._register(new Emitter<void>());
+	public readonly onDidChangeState = this._onDidChangeState.event;
+
+	private _currentIngestOperation?: {
+		readonly promise: Promise<Result<true, TriggerIndexingError>>;
+
+		progressMessage: string | undefined;
+
+		completed: boolean;
+	};
+
+	/**
+	 * Returns the current index state.
+	 */
+	public getState(): ExternalIngestStatus {
+		if (this._currentIngestOperation) {
+			if (this._currentIngestOperation.completed) {
+				return {
+					status: CodeSearchRepoStatus.Ready,
+					progressMessage: undefined,
+				};
+			} else {
+				return {
+					status: CodeSearchRepoStatus.BuildingIndex,
+					progressMessage: this._currentIngestOperation.progressMessage,
+				};
+			}
+		}
+
+		if (this.getCurrentIndexCheckpoint()) {
+			return {
+				status: CodeSearchRepoStatus.Ready,
+				progressMessage: undefined,
+			};
+		}
+
+		return {
+			status: CodeSearchRepoStatus.NotYetIndexed,
+			progressMessage: undefined,
+		};
+	}
 
 	constructor(
 		client: IExternalIngestClient,
@@ -141,6 +189,7 @@ export class ExternalIngestIndex extends Disposable {
 
 		await this._client.deleteFileset(filesetName, token);
 		this.clearCurrentIndexCheckpoint();
+		this._onDidChangeState.fire();
 
 		this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
 	}
@@ -191,30 +240,58 @@ export class ExternalIngestIndex extends Disposable {
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
-		try {
-			const result = await this._client.updateIndex(
-				this.getFilesetName(primaryRoot),
-				currentCheckpoint,
-				this.getFilesToIndexFromDb(token),
-				token,
-				onProgress
-			);
-			if (result.isOk()) {
-				this.setCurrentIndexCheckpoint(result.val.checkpoint);
-				return Result.ok(true);
-			} else {
+		// Track building state
+		const operation: typeof this._currentIngestOperation = {
+			promise: undefined!,
+			progressMessage: undefined,
+			completed: false,
+		};
+
+		const wrappedOnProgress = (message: string) => {
+			if (this._currentIngestOperation === operation) {
+				operation.progressMessage = message;
+				this._onDidChangeState.fire();
+			}
+
+			onProgress(message);
+		};
+
+		const updatePromise = (async (): Promise<Result<true, TriggerIndexingError>> => {
+			try {
+				const result = await this._client.updateIndex(
+					this.getFilesetName(primaryRoot),
+					currentCheckpoint,
+					this.getFilesToIndexFromDb(token),
+					token,
+					wrappedOnProgress
+				);
+				if (result.isOk()) {
+					this.setCurrentIndexCheckpoint(result.val.checkpoint);
+					return Result.ok(true);
+				} else {
+					return Result.error({
+						id: 'external-ingest-error',
+						userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+					});
+				}
+			} catch (e) {
 				return Result.error({
 					id: 'external-ingest-error',
-					userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+					userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
 				});
+			} finally {
+				if (this._currentIngestOperation === operation) {
+					operation.completed = true;
+				}
+				this._onDidChangeState.fire();
 			}
-		} catch (e) {
-			return Result.error({
-				id: 'external-ingest-error',
-				userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
-			});
-		}
+		})();
 
+		(operation as { promise: typeof updatePromise }).promise = updatePromise;
+		this._currentIngestOperation = operation;
+		this._onDidChangeState.fire();
+
+		return updatePromise;
 	}
 
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
