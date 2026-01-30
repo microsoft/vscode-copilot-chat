@@ -130,7 +130,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			userInitiatedRequest: false,
 			telemetryProperties: {
 				messageId: randomUUID(),
-				messageSource: SearchSubagentToolCallingLoop.ID
+				messageSource: 'chat.editAgent'
 			},
 		}, token);
 	}
