@@ -84,41 +84,7 @@ describe('CopilotCLISDK Authentication', () => {
 		expect(authInfo.host).toBe('https://github.com');
 	});
 
-	it('should skip token validation when CAPI URL is configured', async () => {
-		// Mock configuration to return a CAPI URL
-		const mockConfigService = new class extends mock<IConfigurationService>() {
-			override getConfig(key: string) {
-				if (key === ConfigKey.Shared.DebugOverrideCAPIUrl) {
-					return 'https://capi.example.com';
-				}
-				return undefined;
-			}
-		};
-
-		const mockAuthService = new class extends mock<IAuthenticationService>() {
-			override async getGitHubSession() {
-				// This should not be called when CAPI URL is configured
-				throw new Error('getGitHubSession should not be called when CAPI URL is configured');
-			}
-		};
-
-		const sdk = new CopilotCLISDK(
-			createMockExtensionContext(),
-			createMockEnvService(),
-			logService,
-			instantiationService,
-			mockAuthService,
-			mockConfigService
-		);
-
-		const authInfo = await sdk.getAuthInfo();
-
-		expect(authInfo.type).toBe('token');
-		expect(authInfo.token).toBe('');
-		expect(authInfo.host).toBe('https://github.com');
-	});
-
-	it('should call getGitHubSession when no proxy URLs are configured', async () => {
+	it('should call getGitHubSession when no proxy URL is configured', async () => {
 		let getGitHubSessionCalled = false;
 
 		// Mock configuration to return no proxy URLs

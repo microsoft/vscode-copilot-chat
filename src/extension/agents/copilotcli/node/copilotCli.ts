@@ -375,12 +375,11 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
-		// Check if proxy URLs are configured - if so, skip client-side token validation
+		// Check if proxy URL is configured - if so, skip client-side token validation
 		// as the proxy will handle authentication server-side
 		const overrideProxyUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl);
-		const overrideCapiUrl = this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideCAPIUrl);
 
-		if (overrideProxyUrl || overrideCapiUrl) {
+		if (overrideProxyUrl) {
 			this.logService.info('[CopilotCLISession] Proxy URL configured, skipping client-side token validation');
 			return {
 				type: 'token',
