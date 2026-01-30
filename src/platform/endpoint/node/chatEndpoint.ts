@@ -310,7 +310,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this);
 			return this.customizeResponsesBody(body);
-		} else if (this.useMessagesApi) {
+		} else if (this.useMessagesApi || options.location === ChatLocation.Agent) {
 			const body = this._instantiationService.invokeFunction(createMessagesRequestBody, options, this.model, this);
 			return this.customizeMessagesBody(body);
 		} else {
