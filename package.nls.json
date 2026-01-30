@@ -348,6 +348,7 @@
 	"github.copilot.config.anthropic.tools.websearch.userLocation": "User location for personalizing web search results based on geographic context. All fields (city, region, country, timezone) are optional. Example: `{\"city\": \"San Francisco\", \"region\": \"California\", \"country\": \"US\", \"timezone\": \"America/Los_Angeles\"}`",
 	"github.copilot.config.tools.memory.enabled": "Enable memory tool to allow models to store and retrieve information across conversations. \n\n**Note**: This is an experimental feature.",
 	"github.copilot.config.askQuestions.enabled": "Allow agent mode to ask clarifying questions before proceeding with a task.",
+	"github.copilot.config.switchAgent.enabled": "Allow agent to switch to the Plan agent for research, exploration, and planning tasks.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
 	"github.copilot.config.debug.overrideChatEngine": "Override the chat model. This allows you to test with different models.\n\n**Note**: This is an advanced debugging setting and should not be used while self-hosting as it may lead to a different experience compared to end-users.",
