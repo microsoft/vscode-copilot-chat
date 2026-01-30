@@ -326,7 +326,7 @@ export interface TokenEnvelope {
 	/** SKU-isolated endpoints. */
 	endpoints?: Endpoints;
 	/** Enterprise IDs if user has enterprise access. */
-	enterprise_list?: number[];
+	enterprise_list?: number[] | null;
 	/** Quota remaining for free/limited users. Null for non-free users. */
 	limited_user_quotas?: { chat: number; completions: number } | null;
 	/** Unix timestamp when quotas reset for free/limited users. Null for non-free users. */
@@ -396,7 +396,7 @@ const tokenEnvelopeValidator = vObj({
 		proxy: vString(),
 		telemetry: vString(),
 	}),
-	enterprise_list: vArray(vNumber()),
+	enterprise_list: vNullable(vArray(vNumber())),
 	limited_user_quotas: vNullable(vObj({
 		chat: vRequired(vNumber()),
 		completions: vRequired(vNumber()),
@@ -453,9 +453,8 @@ export function validateTokenEnvelope(obj: unknown): TokenValidationResult {
 			valid: true,
 			strategy: 'fallback',
 			strictError,
-			// Technically not a safe cast if the backend changed non-critical fields.
-			// Telemetry should be used to track how often this happens.
-			envelope: fallbackResult.content as TokenEnvelope
+			// Use the full payload, not the validator result, to preserve all server fields
+			envelope: obj as TokenEnvelope
 		};
 	}
 

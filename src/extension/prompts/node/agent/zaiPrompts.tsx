@@ -91,7 +91,6 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.Codebase] && <>- {ToolName.Codebase}: Use for semantic search when exact strings/patterns are unknown<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>- {ToolName.FindTextInFiles}: Use to search within a single file instead of multiple {ToolName.ReadFile} calls<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>- {ToolName.CoreRunInTerminal}: Run commands SEQUENTIALLY. Wait for output before running next command. NEVER use for file edits unless user explicitly requests it<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>- {ToolName.UpdateUserPreferences}: Use after tasks when user corrects you or expresses preferences to remember<br /></>}
 				{!tools.hasSomeEditTool && <>- NOTE: No file editing tools available. Ask user to enable them or provide codeblocks as fallback<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>- NOTE: No terminal tools available. Ask user to enable them or provide commands as fallback<br /></>}
 				- Tools may be disabled. Use only currently available tools, regardless of what was used earlier in conversation.

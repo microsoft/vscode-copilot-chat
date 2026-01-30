@@ -59,7 +59,7 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 			const internalOptions = { includeSources: ['org', 'enterprise'] } satisfies CustomAgentListOptions;
 
 			// Note: we need to fetch an arbitrary visible/accessible repository, in case user does not have access to .github-private
-			const repos = await this.octoKitService.getOrganizationRepositories(orgId, { createIfNone: false });
+			const repos = await this.octoKitService.getOrganizationRepositories(orgId, { createIfNone: false }, 1);
 			if (repos.length === 0) {
 				this.logService.trace(`[GitHubOrgCustomAgentProvider] No repositories found for org ${orgId}`);
 				return;

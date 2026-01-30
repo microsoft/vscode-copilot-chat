@@ -115,6 +115,8 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 			<br />
 			Always include the reason and citations fields.<br />
 			Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
+			<br />
+			If the user asks how to view or manage their memories, refer them to https://docs.github.com/en/copilot/how-tos/use-copilot-agents/copilot-memory.<br />
 		</Tag>;
 	}
 }

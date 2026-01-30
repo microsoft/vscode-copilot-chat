@@ -221,18 +221,19 @@ suite('GitHubOrgChatResourcesService', () => {
 			assert.equal(orgName, 'workspaceorg');
 		});
 
-		test('falls back to first org when Copilot org is not in user org list', async () => {
+		test('uses Copilot org even when not in paginated user org list', async () => {
 			mockWorkspaceService.setWorkspaceFolders([]);
 			mockOctoKitService.setUserOrganizations(['firstorg', 'secondorg']);
-			// Copilot org is not in user's org list
+			// Copilot org may not appear in paginated user org list but is still valid
 			mockAuthService.copilotToken = {
-				organizationLoginList: ['unknownorg'],
+				organizationLoginList: ['copilotorg'],
 			} as any;
 
 			const service = createService();
 			const orgName = await service.getPreferredOrganizationName();
 
-			assert.equal(orgName, 'firstorg');
+			// Copilot token orgs are trusted since they represent validated membership
+			assert.equal(orgName, 'copilotorg');
 		});
 
 		test('falls back to first org when no Copilot token available', async () => {

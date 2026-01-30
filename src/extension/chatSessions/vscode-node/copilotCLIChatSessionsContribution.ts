@@ -222,7 +222,15 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const id = SessionIdForCLI.parse(sessionItem.resource);
 		const terminalName = sessionItem.label || id;
 		const cliArgs = ['--resume', id];
-		await this.terminalIntegration.openTerminal(terminalName, cliArgs);
+		const worktreeProperties = this.worktreeManager.getWorktreeProperties(id);
+		const workspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(id);
+		const token = new vscode.CancellationTokenSource();
+		try {
+			const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath ?? (await this.copilotcliSessionService.getSessionWorkingDirectory(id, token.token))?.fsPath;
+			await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+		} finally {
+			token.dispose();
+		}
 	}
 }
 
@@ -334,10 +342,18 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				await trackSelectedFolderOrRepo(copilotcliSessionId, firstRepo, this.workspaceFolderService, this.copilotCLIWorktreeManagerService);
 			}
 		} else {
+			const sessionWorkspaceFolder = await this.sessionService.getSessionWorkingDirectory(copilotcliSessionId, token);
+			let folderName = sessionWorkspaceFolder ? basename(sessionWorkspaceFolder) : undefined;
+			if (!folderName && this.workspaceService.getWorkspaceFolders().length === 1) {
+				folderName = this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]);
+			}
+			if (!folderName) {
+				folderName = l10n.t('Unknown');
+			}
 			// This is an existing session without a worktree, display current workspace folder.
 			options[REPOSITORY_OPTION_ID] = {
 				id: '',
-				name: this.workspaceService.getWorkspaceFolders().length === 1 ? this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]) : l10n.t('Current Workspace'),
+				name: folderName,
 				icon: new vscode.ThemeIcon('repo'),
 				locked: true
 			};
@@ -426,7 +442,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 		// In multi-root workspaces, also include workspace folders that don't have any git repos
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-		if (workspaceFolders.length > 1) {
+		if (workspaceFolders.length) {
 			// Find workspace folders that contain git repos
 			const foldersWithRepos = new Set<string>();
 			for (const repo of repositories) {
@@ -820,18 +836,19 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
-		// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 		if (cachedRepo) {
-			const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
-			if (!trusted) {
-				// User didn't trust, we can't proceed.
-				const result = { repository: undefined, trusted: false };
-				this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
-				return result;
+			if (!cachedRepo.trusted) {
+				const trusted = await this.workspaceService.requestResourceTrust({ uri: cachedRepo.repository?.rootUri ?? repoPath, message: untrustedFolderMessage });
+				if (!trusted) {
+					return { repository: undefined, trusted: false };
+				}
 			}
 
+			// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 			const repository = await this.gitService.getRepository(repoPath, true);
-			return { repository, trusted: true };
+			const result = { repository, trusted: true };
+			this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+			return result;
 		}
 		// Ask the user if they trust the folder before we look for repos.
 		const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
@@ -1186,12 +1203,19 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			} else {
 				workingDirectory = this.copilotCLIWorktreeManagerService.getWorktreePath(id);
+				worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(id);
 				const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(id);
 				// Check if this is an existing session with a workspace folder (no git repo)
 				if (!workingDirectory && sessionWorkspaceFolder) {
 					workingDirectory = sessionWorkspaceFolder;
 					isWorkspaceFolderWithoutRepo = true;
 					isolationEnabled = false;
+				}
+				// If we dont' have the information, possible this is a session started using terminal.
+				// Try to get the working directory from the session service (using metadata for session in CLI).
+				if (!workingDirectory && !sessionWorkspaceFolder) {
+					workingDirectory = await this.sessionService.getSessionWorkingDirectory(id, token);
+					isolationEnabled = false; // We didn't start this session with isolation, so disable it.
 				}
 			}
 		} else {
@@ -1203,11 +1227,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Verify trust for the working directory
-		if (!cancelled && workingDirectory) {
-			const trusted = await this.workspaceService.requestResourceTrust({ uri: workingDirectory, message: untrustedFolderMessage });
-			if (!trusted) {
-				stream.warning(l10n.t('The selected folder is not trusted.'));
-				cancelled = true;
+		if (!cancelled && (workingDirectory || worktreeProperties)) {
+			const folderToCheckTrust = (worktreeProperties ? Uri.file(worktreeProperties.repositoryPath) : undefined) ?? workingDirectory;
+			if (folderToCheckTrust) {
+				const trusted = await this.workspaceService.requestResourceTrust({ uri: folderToCheckTrust, message: untrustedFolderMessage });
+				if (!trusted) {
+					stream.warning(l10n.t('The selected folder is not trusted.'));
+					cancelled = true;
+				}
 			}
 		}
 
