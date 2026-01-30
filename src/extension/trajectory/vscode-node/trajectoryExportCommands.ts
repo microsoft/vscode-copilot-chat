@@ -5,6 +5,7 @@
 
 import * as os from 'os';
 import * as vscode from 'vscode';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
@@ -27,11 +28,12 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 	constructor(
 		@ITrajectoryLogger private readonly trajectoryLogger: ITrajectoryLogger,
 		@IRequestLogger requestLogger: IRequestLogger,
+		@IConfigurationService configService: IConfigurationService,
 	) {
 		super();
 		// Initialize adapter to bridge RequestLogger to TrajectoryLogger
 		// The adapter subscribes to RequestLogger events and populates TrajectoryLogger
-		this.adapter = this._register(new TrajectoryLoggerAdapter(requestLogger, trajectoryLogger, renderToolResultToStringNoBudget));
+		this.adapter = this._register(new TrajectoryLoggerAdapter(requestLogger, trajectoryLogger, configService, renderToolResultToStringNoBudget));
 		this.registerCommands();
 	}
 
