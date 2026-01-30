@@ -348,7 +348,7 @@ export type ConfigDefaultValue<T> = T | CustomTeamDefaultValue<T> | CustomIntern
 
 export namespace ConfigValueValidators {
 	export function isCustomTeamDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomTeamDefaultValue<T> {
-		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true });
+		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true, owner: true, expirationDate: true });
 	}
 
 	export function isCustomInternalDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomInternalDefaultValue<T> {
