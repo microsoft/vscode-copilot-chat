@@ -251,17 +251,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
     ],
   },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
-  },
 }
 `;
 
@@ -362,17 +351,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -2465,17 +2443,6 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
       },
     ],
   },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
-  },
 }
 `;
 
@@ -2812,17 +2779,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
