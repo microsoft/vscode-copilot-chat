@@ -267,6 +267,14 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
 
+			// If the server returns an empty data array and we have existing models,
+			// preserve the last-known-good cache instead of clearing it.
+			// This protects against transient server issues or misconfigurations.
+			if (data.length === 0 && this._familyMap.size > 0) {
+				this._logService.warn(`Server returned empty model list, preserving existing cache ${requestId}`);
+				return;
+			}
+
 			// Build new maps and swap them in only once we have a fully-hydrated model list.
 			// This avoids a transient empty-model window during refresh.
 			const nextFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
