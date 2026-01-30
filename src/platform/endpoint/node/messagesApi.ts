@@ -10,6 +10,7 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
@@ -112,8 +113,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	// or if the location is not the chat panel (conversation agent)
+	const isConversationAgent = options.location === ChatLocation.Agent;
 	let thinkingBudget: number | undefined;
-	if (!options.disableThinking) {
+	if (!options.disableThinking && isConversationAgent) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const maxTokens = options.postOptions.max_tokens ?? 1024;
 		const normalizedBudget = (configuredBudget && configuredBudget > 0)
