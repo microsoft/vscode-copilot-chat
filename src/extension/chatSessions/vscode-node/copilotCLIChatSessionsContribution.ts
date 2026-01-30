@@ -224,8 +224,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const cliArgs = ['--resume', id];
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(id);
 		const workspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(id);
-		const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath;
-		await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+		const token = new vscode.CancellationTokenSource();
+		try {
+			const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath ?? (await this.copilotcliSessionService.getSessionWorkingDirectory(id, token.token))?.fsPath;
+			await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+		} finally {
+			token.dispose();
+		}
 	}
 }
 

@@ -43,6 +43,8 @@ export interface ICopilotCLISessionService {
 
 	onDidChangeSessions: Event<void>;
 
+	getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined>;
+
 	// Session metadata querying
 	getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]>;
 
@@ -90,6 +92,20 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return new internal.LocalSessionManager({});
 		});
 		this._sessionTracker = this.instantiationService.createInstance(CopilotCLISessionWorkspaceTracker);
+	}
+
+	async getSessionWorkingDirectory(sessionId: string, token: CancellationToken): Promise<Uri | undefined> {
+		const sessionManager = await raceCancellationError(this.getSessionManager(), token);
+		if (token.isCancellationRequested) {
+			return;
+		}
+		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
+		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
+		if (!metadata?.context?.cwd) {
+			return;
+		}
+
+		return URI.file(metadata.context.cwd);
 	}
 
 	protected monitorSessionFiles() {
