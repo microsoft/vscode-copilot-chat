@@ -170,10 +170,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi) {
+		if (this.useMessagesApi && location === ChatLocation.Agent) {
 
 			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
 			if (modelProviderPreference) {
@@ -512,7 +512,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		expectedNumChoices: number,
 		finishCallback: FinishedCallback,
 		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken | undefined
+		cancellationToken?: CancellationToken | undefined,
+		_location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>> {
 		// We must override this to a num choices > 1 because remote agents can do internal function calls which emit multiple completions even when N > 1
 		// It's awful that they do this, but we have to support it
