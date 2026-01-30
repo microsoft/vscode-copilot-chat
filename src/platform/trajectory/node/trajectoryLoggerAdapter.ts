@@ -6,6 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { CapturingToken } from '../../requestLogger/common/capturingToken';
 import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
 import { IAgentStepContext, type IObservationResult, type IStepMetrics, type IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
@@ -38,6 +39,7 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	constructor(
 		private readonly requestLogger: IRequestLogger,
 		private readonly trajectoryLogger: ITrajectoryLogger,
+		private readonly configService: IConfigurationService,
 		private readonly promptTsxRenderer?: PromptTsxRenderer
 	) {
 		super();
@@ -51,6 +53,19 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	 * Synchronize trajectories with request logger state
 	 */
 	private async syncTrajectories(): Promise<void> {
+		// Safety valve: prevent unbounded growth of tracking sets
+		// This handles the case where RequestLogger evicts entries but our sets retain orphaned IDs
+		// Use the same max entries setting as RequestLogger for consistency
+		const maxEntries = this.configService.getConfig(ConfigKey.Advanced.RequestLoggerMaxEntries);
+		if (this.processedEntries.size > maxEntries) {
+			const entries = [...this.processedEntries];
+			this.processedEntries = new Set(entries.slice(-maxEntries / 2));
+		}
+		if (this.processedToolCalls.size > maxEntries) {
+			const toolCalls = [...this.processedToolCalls];
+			this.processedToolCalls = new Set(toolCalls.slice(-maxEntries / 2));
+		}
+
 		const requests = this.requestLogger.getRequests();
 
 		for (const entry of requests) {
@@ -508,5 +523,41 @@ export class TrajectoryLoggerAdapter extends Disposable {
 	 */
 	public getSessionIdForToken(token: CapturingToken): string | undefined {
 		return this.tokenToSessionId.get(token);
+	}
+
+	/**
+	 * Clear adapter state for a specific session or all sessions.
+	 * This should be called when trajectories are cleared to prevent memory leaks
+	 * from orphaned tracking data.
+	 * @param sessionId Optional session ID to clear. If omitted, clears all state.
+	 */
+	public clearSessionState(sessionId?: string): void {
+		if (sessionId) {
+			// Clear session-specific data
+			this.lastUserMessageBySession.delete(sessionId);
+			this.pendingStepContexts.delete(sessionId);
+
+			// Clear requestToStepContext entries for this session
+			for (const [key, info] of this.requestToStepContext) {
+				if (info.sessionId === sessionId) {
+					this.requestToStepContext.delete(key);
+				}
+			}
+
+			// Clear runSubagentToolCallToSessionId entries pointing to this session
+			for (const [toolCallId, mappedSessionId] of this.runSubagentToolCallToSessionId) {
+				if (mappedSessionId === sessionId) {
+					this.runSubagentToolCallToSessionId.delete(toolCallId);
+				}
+			}
+		} else {
+			// Clear all state
+			this.processedEntries.clear();
+			this.processedToolCalls.clear();
+			this.lastUserMessageBySession.clear();
+			this.pendingStepContexts.clear();
+			this.requestToStepContext.clear();
+			this.runSubagentToolCallToSessionId.clear();
+		}
 	}
 }
