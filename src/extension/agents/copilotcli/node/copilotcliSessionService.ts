@@ -97,6 +97,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			const sessionDir = joinPath(this.nativeEnv.userHome, '.copilot', 'session-state');
 			const watcher = this._register(this.fileSystem.createFileSystemWatcher(new RelativePattern(sessionDir, '**/*.jsonl')));
 			this._register(watcher.onDidCreate(() => this._onDidChangeSessions.fire()));
+			this._register(watcher.onDidChange(() => this._onDidChangeSessions.fire()));
+			this._register(watcher.onDidDelete(() => this._onDidChangeSessions.fire()));
 		} catch (error) {
 			this.logService.error(`Failed to monitor Copilot CLI session files: ${error}`);
 		}
