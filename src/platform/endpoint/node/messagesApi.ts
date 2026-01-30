@@ -10,6 +10,7 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
@@ -101,9 +102,10 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			...(toolSearchEnabled && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
 
+	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
-	if (toolSearchEnabled) {
+	if (isAllowedConversationAgent && toolSearchEnabled) {
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
@@ -112,8 +114,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
+	// or if the location is not the chat panel (conversation agent)
 	let thinkingBudget: number | undefined;
-	if (!options.disableThinking) {
+	if (isAllowedConversationAgent && !options.disableThinking) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const maxTokens = options.postOptions.max_tokens ?? 1024;
 		const normalizedBudget = (configuredBudget && configuredBudget > 0)
@@ -125,7 +128,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	}
 
 	// Build context management configuration
-	const contextManagement = isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+	const contextManagement = isAllowedConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
 		? getContextManagementFromConfig(configurationService, (thinkingBudget ?? 0) > 0)
 		: undefined;
 
