@@ -15,7 +15,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { basename, isEqual } from '../../../util/vs/base/common/resources';
-import { ChatSessionWorktreeData, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
 
@@ -23,7 +23,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	declare _serviceBrand: undefined;
 
 	private _sessionWorktrees: Map<string, string | ChatSessionWorktreeProperties> = new Map();
-	private _sessionWorktreeChanges: Map<string, vscode.ChatSessionChangedFile2[] | undefined> = new Map();
 
 	constructor(
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
@@ -165,9 +164,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				untracked: true
 			});
 
-			// Clear worktree changes cache
-			this._sessionWorktreeChanges.delete(sessionId);
-
 			return;
 		}
 
@@ -211,20 +207,27 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			});
 		}
 
-		// Clear worktree changes cache
-		this._sessionWorktreeChanges.delete(sessionId);
+		// Update worktree changes cache
+		this.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			changes: []
+		});
 	}
 
 	async getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile2[] | undefined> {
-		if (this._sessionWorktreeChanges.has(sessionId)) {
-			return this._sessionWorktreeChanges.get(sessionId);
-		}
-
-		// Check whether the session has an associated worktree
-		const worktreePath = this.getWorktreePath(sessionId);
-		if (!worktreePath) {
+		// Get worktree properties
+		const worktreeProperties = this.getWorktreeProperties(sessionId);
+		if (!worktreeProperties) {
 			return undefined;
 		}
+
+		// Return cached changes
+		if (worktreeProperties?.changes) {
+			return worktreeProperties.changes
+				.map(change => this.toChatSessionChangedFiles(worktreeProperties, change));
+		}
+
+		const worktreePath = vscode.Uri.file(worktreeProperties.worktreePath);
 
 		// Ensure the initial repository discovery is completed and the repository
 		// states are initialized in the vscode.git extension. This is needed as these
@@ -233,19 +236,16 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// so we can get them from the main repository or discovered worktree.
 		await this.gitService.initialize();
 
+		// TODO@lszomoru: Remove this change to support welcome view
 		// Check whether the worktree belongs to any of the discovered repositories
 		const repository = this.gitService.repositories
 			.find(r => r.worktrees.some(w => isEqual(vscode.Uri.file(w.path), worktreePath)));
 
 		if (!repository) {
-			this._sessionWorktreeChanges.set(sessionId, undefined);
 			return undefined;
 		}
 
-		// Get worktree properties
-		const worktreeProperties = this.getWorktreeProperties(sessionId);
-
-		if (worktreeProperties === undefined || worktreeProperties.autoCommit === false) {
+		if (worktreeProperties.autoCommit === false) {
 			// These changes are staged in the worktree but not yet committed. Since the
 			// changes are not committed, we need to get them from the worktree repository
 			// state. To do that we need to open the worktree repository. The source control
@@ -253,7 +253,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const worktreeRepository = await this.gitService.getRepository(worktreePath);
 
 			if (!worktreeRepository?.changes) {
-				this._sessionWorktreeChanges.set(sessionId, []);
+				this.setWorktreeProperties(sessionId, {
+					...worktreeProperties,
+					changes: []
+				});
+
 				return [];
 			}
 
@@ -274,7 +278,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				} catch (error) { }
 			}
 
-			this._sessionWorktreeChanges.set(sessionId, changes);
+			this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: changes
+					.map(change => this.toChatSessionWorktreeFile(change))
+			});
 			return changes;
 		}
 
@@ -287,7 +295,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			worktreeProperties.branchName);
 
 		if (!diff) {
-			this._sessionWorktreeChanges.set(sessionId, []);
+			this.setWorktreeProperties(sessionId, {
+				...worktreeProperties,
+				changes: []
+			});
+
 			return [];
 		}
 
@@ -304,7 +316,10 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				change.deletions);
 		});
 
-		this._sessionWorktreeChanges.set(sessionId, changes);
+		this.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			changes: changes.map(change => this.toChatSessionWorktreeFile(change))
+		});
 		return changes;
 	}
 
@@ -340,7 +355,39 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		await this.gitService.commit(vscode.Uri.file(worktreePath), message, { all: true, noVerify: true, signCommit: false });
 		this.logService.trace(`[ChatSessionWorktreeService] Committed all changes in working directory ${worktreePath}`);
 
-		// Delete worktree changes from cache
-		this._sessionWorktreeChanges.delete(sessionId);
+		// Update worktree changes cache
+		const changes = await this.getWorktreeChanges(sessionId);
+		this.setWorktreeProperties(sessionId, {
+			...worktreeProperties,
+			changes: changes?.map(change => this.toChatSessionWorktreeFile(change))
+		});
+	}
+
+	private toChatSessionChangedFiles(
+		worktreeProperties: ChatSessionWorktreeProperties,
+		change: ChatSessionWorktreeFile
+	): vscode.ChatSessionChangedFile2 {
+		return new vscode.ChatSessionChangedFile2(
+			vscode.Uri.file(change.filePath),
+			change.originalFilePath
+				? toGitUri(vscode.Uri.file(change.originalFilePath), worktreeProperties.baseCommit)
+				: undefined,
+			change.modifiedFilePath
+				? toGitUri(vscode.Uri.file(change.modifiedFilePath), worktreeProperties.branchName)
+				: undefined,
+			change.statistics.additions,
+			change.statistics.deletions);
+	}
+
+	private toChatSessionWorktreeFile(change: vscode.ChatSessionChangedFile2): ChatSessionWorktreeFile {
+		return {
+			filePath: change.uri.fsPath,
+			originalFilePath: change.originalUri?.fsPath,
+			modifiedFilePath: change.modifiedUri?.fsPath,
+			statistics: {
+				additions: change.insertions,
+				deletions: change.deletions
+			}
+		} satisfies ChatSessionWorktreeFile;
 	}
 }

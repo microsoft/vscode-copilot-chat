@@ -7,6 +7,16 @@ import type * as vscode from 'vscode';
 import { RepoContext } from '../../../platform/git/common/gitService';
 import { createServiceIdentifier } from '../../../util/common/services';
 
+export interface ChatSessionWorktreeFile {
+	readonly filePath: string;
+	readonly originalFilePath: string | undefined;
+	readonly modifiedFilePath: string | undefined;
+	readonly statistics: {
+		readonly additions: number;
+		readonly deletions: number;
+	};
+}
+
 export interface ChatSessionWorktreeData {
 	readonly data: string;
 	readonly version: number;
@@ -18,6 +28,7 @@ interface ChatSessionWorktreePropertiesV1 {
 	readonly branchName: string;
 	readonly repositoryPath: string;
 	readonly worktreePath: string;
+	readonly changes?: readonly ChatSessionWorktreeFile[] | undefined;
 }
 
 export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
