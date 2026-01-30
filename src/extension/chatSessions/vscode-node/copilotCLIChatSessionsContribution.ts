@@ -426,7 +426,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 
 		// In multi-root workspaces, also include workspace folders that don't have any git repos
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
-		if (workspaceFolders.length > 1) {
+		if (workspaceFolders.length) {
 			// Find workspace folders that contain git repos
 			const foldersWithRepos = new Set<string>();
 			for (const repo of repositories) {
@@ -820,16 +820,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const cachedRepo = this._repositoryCacheInEmptyWorkspace.get(repoPath);
-		// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 		if (cachedRepo) {
-			const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
-			if (!trusted) {
-				// User didn't trust, we can't proceed.
-				const result = { repository: undefined, trusted: false };
-				this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
-				return result;
+			if (!cachedRepo.trusted) {
+				const trusted = await this.workspaceService.requestResourceTrust({ uri: cachedRepo.repository?.rootUri ?? repoPath, message: untrustedFolderMessage });
+				if (!trusted) {
+					return { repository: undefined, trusted: false };
+				}
 			}
 
+			// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 			const repository = await this.gitService.getRepository(repoPath, true);
 			return { repository, trusted: true };
 		}
@@ -1203,11 +1202,14 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		// Verify trust for the working directory
-		if (!cancelled && workingDirectory) {
-			const trusted = await this.workspaceService.requestResourceTrust({ uri: workingDirectory, message: untrustedFolderMessage });
-			if (!trusted) {
-				stream.warning(l10n.t('The selected folder is not trusted.'));
-				cancelled = true;
+		if (!cancelled && (workingDirectory || worktreeProperties)) {
+			const folderToCheckTrust = (worktreeProperties ? Uri.file(worktreeProperties.repositoryPath) : undefined) ?? workingDirectory;
+			if (folderToCheckTrust) {
+				const trusted = await this.workspaceService.requestResourceTrust({ uri: folderToCheckTrust, message: untrustedFolderMessage });
+				if (!trusted) {
+					stream.warning(l10n.t('The selected folder is not trusted.'));
+					cancelled = true;
+				}
 			}
 		}
 
