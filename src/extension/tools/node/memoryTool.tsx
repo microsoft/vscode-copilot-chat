@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
@@ -38,6 +39,13 @@ class MemoryTool implements ICopilotTool<ISimplifiedMemoryParams> {
 	constructor(
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService
 	) { }
+
+	prepareInvocation(_options: vscode.LanguageModelToolInvocationPrepareOptions<ISimplifiedMemoryParams>, _token: CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		return {
+			invocationMessage: l10n.t`Updating memory`,
+			pastTenseMessage: l10n.t`Updated memory`
+		};
+	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISimplifiedMemoryParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const params = options.input;
