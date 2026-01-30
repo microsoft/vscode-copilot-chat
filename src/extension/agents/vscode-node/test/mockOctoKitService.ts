@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
+import { CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, IOctoKitService, PermissiveAuthRequiredError } from '../../../../platform/github/common/githubService';
 
 /**
  * Mock implementation of IOctoKitService for testing
@@ -36,9 +36,11 @@ export class MockOctoKitService implements IOctoKitService {
 	getRecentlyCommittedRepositories = async () => [];
 	getCopilotAgentModels = async () => [];
 	getAssignableActors = async () => [];
+	isCCAEnabled = async (): Promise<CCAEnabledResult> => ({ enabled: true });
 
-	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }) => this.userOrganizations;
-	getOrganizationRepositories = async (org: string) => [org === 'testorg' ? 'testrepo' : 'repo'];
+	getUserOrganizations = async (_authOptions?: { createIfNone?: boolean }, _pageSize?: number) => this.userOrganizations;
+	isUserMemberOfOrg = async (org: string, _authOptions?: { createIfNone?: boolean }) => this.userOrganizations.includes(org);
+	getOrganizationRepositories = async (org: string, _authOptions?: { createIfNone?: boolean }, _pageSize?: number) => [org === 'testorg' ? 'testrepo' : 'repo'];
 
 	async getOrgCustomInstructions(orgLogin: string, _authOptions?: { createIfNone?: boolean }): Promise<string | undefined> {
 		return this.orgInstructions.get(orgLogin);

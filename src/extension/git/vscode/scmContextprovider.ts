@@ -59,13 +59,20 @@ export class ScmContextProviderContribution extends Disposable {
 	private _registerCacheInvalidation(): IDisposable {
 		const disposables = new DisposableStore();
 
-		// Invalidate cache when workspace text documents change, excluding SCM input documents
-		disposables.add(this._workspaceService.onDidChangeTextDocument(e => {
-			const scheme = e.document.uri.scheme;
-			if (scheme === 'vscode-scm' || scheme === 'vscode-source-control') {
-				return;
+		const resourcesToConsider = this._gitService.activeRepository.map(repository => {
+			if (!repository) {
+				return new Set<string>();
 			}
-			this._resolver.invalidateCache();
+
+			const workingTreeChanges = repository.changes?.workingTree.map(change => change.uri.toString()) ?? [];
+			return new Set(workingTreeChanges);
+		});
+
+		// Invalidate cache when workspace file documents change
+		disposables.add(this._workspaceService.onDidChangeTextDocument(e => {
+			if (resourcesToConsider.get().has(e.document.uri.toString())) {
+				this._resolver.invalidateCache();
+			}
 		}));
 
 		return disposables;
@@ -89,8 +96,10 @@ class ScmContextResolver implements Copilot.ContextResolver<Copilot.SupportedCon
 	) { }
 
 	invalidateCache(): void {
-		this._cachedDiffs = undefined;
-		this._logService.trace('[ScmContextResolver] Cache invalidated');
+		if (this._cachedDiffs !== undefined) {
+			this._cachedDiffs = undefined;
+			this._logService.trace('[ScmContextResolver] Cache invalidated');
+		}
 	}
 
 	async *resolve(request: Copilot.ResolveRequest, token: CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
@@ -101,13 +110,13 @@ class ScmContextResolver implements Copilot.ContextResolver<Copilot.SupportedCon
 		// Build commit message guidelines based on configuration
 		const guidelines: string[] = [
 			'This is a git commit message input field.',
+			'The commit message should accurately describe the changes being committed in less than a sentence.',
 			'Only provide a completion if you are confident you understand the intent of the user\'s commit based on the staged changes.',
 			'Write in natural human language, not code or technical syntax.',
 			'Use imperative mood (e.g., "Add feature" not "Added feature").',
 			`Keep the first line (subject) under ${inputValidationSubjectLength} characters.`,
 			`Keep all lines under ${inputValidationLength} characters.`,
-			'If the user continues to a second line, add a more detailed description of the change.',
-			'If the changes are unclear or ambiguous, do not provide a completion.'
+			'If the changes are unclear or ambiguous, do not complete the commit message.'
 		];
 
 		yield {

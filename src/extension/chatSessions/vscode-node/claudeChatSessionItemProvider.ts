@@ -46,7 +46,7 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 				created: session.timestamp.getTime(),
 				startTime: session.timestamp.getTime(),
 			},
-			iconPath: new vscode.ThemeIcon('star-add')
+			iconPath: new vscode.ThemeIcon('claude')
 		} satisfies vscode.ChatSessionItem));
 
 		return diskSessions;

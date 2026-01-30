@@ -76,11 +76,13 @@ export async function getRepoId(gitService: IGitService): Promise<GithubRepoId[]
 
 	// support multi-root
 	if (gitService.repositories.length > 1) {
-		return gitService.repositories.map(repo => {
-			if (repo.remoteFetchUrls && repo.remoteFetchUrls[0]) {
-				return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
-			}
-		}).filter((id): id is GithubRepoId => !!id);
+		return gitService.repositories
+			.filter(repo => repo.kind !== 'worktree')
+			.map(repo => {
+				if (repo.remoteFetchUrls && repo.remoteFetchUrls[0]) {
+					return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+				}
+			}).filter((id): id is GithubRepoId => !!id);
 	}
 
 	const repo = gitService.activeRepository.get();

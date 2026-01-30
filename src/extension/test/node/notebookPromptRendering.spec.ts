@@ -135,6 +135,12 @@ describe('Notebook Prompt Rendering', function () {
 			override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 				throw new Error('Method not implemented.');
 			}
+			override requestResourceTrust(_options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
+			override requestWorkspaceTrust(_options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {

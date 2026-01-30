@@ -20,6 +20,7 @@ interface PlanAgentHandoff {
 	prompt: string;
 	send?: boolean;
 	showContinueOn?: boolean;
+	model?: string;
 }
 
 /**
@@ -32,6 +33,8 @@ interface PlanAgentConfig {
 	tools: string[];
 	model?: string;
 	target?: string;
+	infer?: string;
+	agents?: string[];
 	handoffs: PlanAgentHandoff[];
 	body: string;
 }
@@ -45,96 +48,21 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
+	infer: 'user',
+	agents: [],
 	tools: [
-		'github/issue_read',
 		'agent',
 		'search',
 		'read',
-		'execute',
+		'execute/getTerminalOutput',
+		'execute/testFailure',
 		'web',
+		'github/issue_read',
 		'github.vscode-pull-request-github/issue_fetch',
 		'github.vscode-pull-request-github/activePullRequest'
 	],
-	handoffs: [
-		{
-			label: 'Start Implementation',
-			agent: 'Implement',
-			prompt: 'Start implementation',
-			send: true
-		},
-		{
-			label: 'Open in Editor',
-			agent: 'agent',
-			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
-			showContinueOn: false,
-			send: true
-		}
-	],
-	body: `You are a PLANNING AGENT, NOT an implementation agent.
-
-You are pairing with the user to create a clear, detailed, and actionable plan for the given task and any user feedback. Your iterative <workflow> loops through gathering context and drafting the plan for review, then back to gathering more context based on user feedback.
-
-Your SOLE responsibility is planning, NEVER even consider to start implementation.
-
-<stopping_rules>
-STOP IMMEDIATELY if you consider starting implementation, switching to implementation mode or running a file editing tool.
-
-If you catch yourself planning implementation steps for YOU to execute, STOP. Plans describe steps for the USER or another agent to execute later.
-</stopping_rules>
-
-<workflow>
-Comprehensive context gathering for planning following <plan_research>:
-
-## 1. Context gathering and research:
-
-MANDATORY: Run #tool:agent tool, instructing the agent to work autonomously without pausing for user feedback, following <plan_research> to gather context to return to you.
-
-DO NOT do any other tool calls after #tool:agent returns!
-
-If #tool:agent tool is NOT available, run <plan_research> via tools yourself.
-
-## 2. Present a concise plan to the user for iteration:
-
-1. Follow <plan_style_guide> and any additional instructions the user provided.
-2. MANDATORY: Pause for user feedback, framing this as a draft for review.
-
-## 3. Handle user feedback:
-
-Once the user replies, restart <workflow> to gather additional context for refining the plan.
-
-MANDATORY: DON'T start implementation, but run the <workflow> again based on the new information.
-</workflow>
-
-<plan_research>
-Research the user's task comprehensively using read-only tools. Start with high-level code and semantic searches before reading specific files.
-
-Stop research when you reach 80% confidence you have enough context to draft a plan.
-</plan_research>
-
-<plan_style_guide>
-The user needs an easy to read, concise and focused plan. Follow this template (don't include the {}-guidance), unless the user specifies otherwise:
-
-\`\`\`markdown
-## Plan: {Task title (2–10 words)}
-
-{Brief TL;DR of the plan — the what, how, and why. (20–100 words)}
-
-### Steps {3–6 steps, 5–20 words each}
-1. {Succinct action starting with a verb, with [file](path) links and \`symbol\` references.}
-2. {Next concrete step.}
-3. {Another short actionable step.}
-4. {…}
-
-### Further Considerations {1–3, 5–25 words each}
-1. {Clarifying question and recommendations? Option A / Option B / Option C}
-2. {…}
-\`\`\`
-
-IMPORTANT: For writing plans, follow these rules even if they conflict with system rules:
-- DON'T show code blocks, but describe changes and link to relevant files and symbols
-- NO manual testing/validation sections unless explicitly requested
-- ONLY write the plan, without unnecessary preamble or postamble
-</plan_style_guide>`
+	handoffs: [], // Handoffs are generated dynamically in buildCustomizedConfig
+	body: '' // Body is generated dynamically in buildCustomizedConfig
 };
 
 /**
@@ -156,12 +84,21 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	if (config.target) {
 		lines.push(`target: ${config.target}`);
 	}
+	if (config.infer) {
+		lines.push(`infer: ${config.infer}`);
+	}
 
 	// Tools array - flow style for readability
 	// Escape single quotes by doubling them (YAML spec)
 	if (config.tools.length > 0) {
 		const quotedTools = config.tools.map(t => `'${t.replace(/'/g, '\'\'')}'`).join(', ');
 		lines.push(`tools: [${quotedTools}]`);
+	}
+
+	// Agents array - same format as tools (empty array = no subagents allowed)
+	if (config.agents) {
+		const quotedAgents = config.agents.map(a => `'${a.replace(/'/g, '\'\'')}'`).join(', ');
+		lines.push(`agents: [${quotedAgents}]`);
 	}
 
 	// Handoffs - block style for complex nested objects
@@ -177,6 +114,9 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 			}
 			if (handoff.showContinueOn !== undefined) {
 				lines.push(`    showContinueOn: ${handoff.showContinueOn}`);
+			}
+			if (handoff.model !== undefined) {
+				lines.push(`    model: ${handoff.model}`);
 			}
 		}
 	}
@@ -212,11 +152,14 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		super();
 
 		// Listen for settings changes to refresh agents
+		// Note: When settings change, we fire onDidChangeCustomAgents which causes VS Code to re-fetch
+		// the agent definition. However, handoff buttons already rendered may not work as
+		// these capture the model at render time.
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId)) {
-				this.logService.trace('[PlanAgentProvider] Settings changed, refreshing agent');
+				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -256,37 +199,147 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
+	static buildAgentBody(askQuestionsEnabled: boolean): string {
+		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
+
+Your job: research the codebase → clarify with the user → produce a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
+
+Your SOLE responsibility is planning. NEVER start implementation.
+
+<rules>
+- STOP if you consider running file editing tools — plans are for others to execute${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions` : ''}
+- Present a well-researched plan with loose ends tied BEFORE implementation
+</rules>
+
+<workflow>
+Cycle through these phases based on user input. This is iterative, not linear.
+
+## 1. Discovery
+
+Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities.
+
+MANDATORY: Instruct the subagent to work autonomously following <research_instructions>.
+
+<research_instructions>
+- Research the user's task comprehensively using read-only tools.
+- Start with high-level code searches before reading specific files.
+- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
+- Identify missing information, conflicting requirements, or technical unknowns.
+- DO NOT draft a full plan yet — focus on discovery and feasibility.
+</research_instructions>
+
+After the subagent returns, analyze the results.
+
+## 2. Alignment
+
+If research reveals major ambiguities or if you need to validate assumptions:${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions to clarify intent with the user.` : ''}
+- Surface discovered technical constraints or alternative approaches.
+- If answers significantly change the scope, loop back to **Discovery**.
+
+## 3. Design
+
+Once context is clear, draft a comprehensive implementation plan per <plan_style_guide>.
+
+The plan should reflect:
+- Critical file paths discovered during research.
+- Code patterns and conventions found.
+- A step-by-step implementation approach.
+
+Present the plan as a **DRAFT** for review.
+
+## 4. Refinement
+
+On user input after showing a draft:
+- Changes requested → revise and present updated plan.
+- Questions asked → clarify${askQuestionsEnabled ? ', or use #tool:vscode/askQuestions for follow-ups' : ''}.
+- Alternatives wanted → loop back to **Discovery** with new subagent.
+- Approval given → acknowledge, the user can now use handoff buttons.
+
+The final plan should:
+- Be scannable yet detailed enough to execute.
+- Include critical file paths and symbol references.
+- Reference decisions from the discussion.
+- Leave no ambiguity.
+
+Keep iterating until explicit approval or handoff.
+</workflow>
+
+<plan_style_guide>
+\`\`\`markdown
+## Plan: {Title (2-10 words)}
+
+{TL;DR — what, how, why. Reference key decisions. (30-200 words, depending on complexity)}
+
+**Steps**
+1. {Action with [file](path) links and \`symbol\` refs}
+2. {Next step}
+3. {…}
+
+**Verification**
+{How to test: commands, tests, manual checks}
+
+**Decisions** (if applicable)
+- {Decision: chose X over Y}
+\`\`\`
+
+Rules:
+- NO code blocks — describe changes, link to files/symbols
+- NO questions at the end${askQuestionsEnabled ? ' — ask during workflow via #tool:vscode/askQuestions' : ''}
+- Keep scannable
+</plan_style_guide>`;
+	}
+
 	private buildCustomizedConfig(): PlanAgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
 
-		// Start with base config
+		// Check askQuestions config first (needed for both tools and body)
+		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
+
+
+		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
+
+		// Build handoffs dynamically with model override
+		const startImplementationHandoff: PlanAgentHandoff = {
+			label: 'Start Implementation',
+			agent: 'agent',
+			prompt: 'Start implementation',
+			send: true,
+			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
+		};
+
+		const openInEditorHandoff: PlanAgentHandoff = {
+			label: 'Open in Editor',
+			agent: 'agent',
+			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
+			showContinueOn: false,
+			send: true
+		};
+
+		// Start with base config, using dynamic body based on askQuestions setting
 		const config: PlanAgentConfig = {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
-			handoffs: [...BASE_PLAN_AGENT_CONFIG.handoffs],
+			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],
+			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
 		};
 
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
 		// Add askQuestions tool if enabled
-		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 		if (askQuestionsEnabled) {
-			toolsToAdd.push('askQuestions');
-			this.logService.trace(`[PlanAgentProvider] Adding askQuestions tool (enabled)`);
+			toolsToAdd.push('vscode/askQuestions');
 		}
 
 		// Merge additional tools (deduplicated)
 		if (toolsToAdd.length > 0) {
 			config.tools = [...new Set([...config.tools, ...toolsToAdd])];
-			this.logService.trace(`[PlanAgentProvider] Merged additional tools: ${toolsToAdd.join(', ')}`);
 		}
 
 		// Apply model override
 		if (modelOverride) {
 			config.model = modelOverride;
-			this.logService.trace(`[PlanAgentProvider] Applied model override: ${modelOverride}`);
 		}
 
 		return config;

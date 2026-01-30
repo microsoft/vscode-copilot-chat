@@ -7,11 +7,11 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
-import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { ChatQuestion, ChatQuestionType, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface IQuestionOption {
 	label: string;
@@ -24,6 +24,7 @@ export interface IQuestion {
 	question: string;
 	multiSelect?: boolean;
 	options?: IQuestionOption[];
+	allowFreeformInput?: boolean;
 }
 
 export interface IAskQuestionsParams {
@@ -36,21 +37,14 @@ export interface IQuestionAnswer {
 	skipped: boolean;
 }
 
-type AskQuestionResult = IQuestionAnswer | 'back' | 'skipped';
-
 export interface IAnswerResult {
 	answers: Record<string, IQuestionAnswer>;
 }
 
-interface IQuickPickOptionItem extends vscode.QuickPickItem {
-	isRecommended?: boolean;
-	isCustomTextOption?: boolean;
-	isOtherOption?: boolean;
-	originalLabel: string;
-}
-
 export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 	public static readonly toolName = ToolName.AskQuestions;
+
+	private _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -61,52 +55,42 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		const stopWatch = StopWatch.create();
 		const { questions } = options.input;
 		this._logService.trace(`[AskQuestionsTool] Invoking with ${questions.length} question(s)`);
-		const result: IAnswerResult = { answers: {} };
-		let currentStep = 0;
 
-		while (currentStep < questions.length) {
-			if (token.isCancellationRequested) {
-				// Mark remaining questions as skipped
-				for (let i = currentStep; i < questions.length; i++) {
-					const q = questions[i];
-					result.answers[q.header] = {
-						selected: [],
-						freeText: null,
-						skipped: true
-					};
-				}
-				break;
+		const stream = this._promptContext?.stream;
+		if (!stream) {
+			this._logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
+
+			// When no stream is available, return a schema-compliant result with all questions marked as skipped
+			const skippedAnswers: Record<string, IQuestionAnswer> = {};
+			for (const question of questions) {
+				skippedAnswers[question.header] = {
+					selected: [],
+					freeText: null,
+					skipped: true
+				};
 			}
 
-			const question = questions[currentStep];
-			const answer = await this.askQuestion(question, currentStep, questions.length, token);
-
-			if (answer === 'back') {
-				if (currentStep > 0) {
-					currentStep--;
-				}
-				continue;
-			}
-
-			if (answer === 'skipped') {
-				// User pressed ESC - mark current and remaining questions as skipped
-				for (let i = currentStep; i < questions.length; i++) {
-					const q = questions[i];
-					result.answers[q.header] = {
-						selected: [],
-						freeText: null,
-						skipped: true
-					};
-				}
-				break;
-			}
-
-			// Control flow ensures answer is IQuestionAnswer here:
-			// - 'back' case executed `continue` above
-			// - 'skipped' case executed `break` above
-			result.answers[question.header] = answer;
-			currentStep++;
+			const toolResultJson = JSON.stringify({ answers: skippedAnswers });
+			return new LanguageModelToolResult([
+				new LanguageModelTextPart(toolResultJson)
+			]);
 		}
+
+		// Convert IQuestion array to ChatQuestion array
+		const chatQuestions = questions.map(q => this._convertToChatQuestion(q));
+		this._logService.trace(`[AskQuestionsTool] ChatQuestions: ${JSON.stringify(chatQuestions.map(q => ({ id: q.id, title: q.title, type: q.type })))}`);
+
+		// Show the question carousel and wait for answers
+		const carouselAnswers = await stream.questionCarousel(chatQuestions, true);
+		this._logService.trace(`[AskQuestionsTool] Raw carousel answers: ${JSON.stringify(carouselAnswers)}`);
+
+		// Immediately show progress to address the long pause after carousel submission
+		// This provides visual feedback while answers are processed and the LLM generates a response
+		stream.progress(vscode.l10n.t('Analyzing your answers...'));
+
+		// Convert carousel answers back to IAnswerResult format
+		const result = this._convertCarouselAnswers(questions, carouselAnswers);
+		this._logService.trace(`[AskQuestionsTool] Converted result: ${JSON.stringify(result)}`);
 
 		// Calculate telemetry metrics from results
 		const answers = Object.values(result.answers);
@@ -131,9 +115,201 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 			stopWatch.elapsed()
 		);
 
+		const toolResultJson = JSON.stringify(result);
+		this._logService.trace(`[AskQuestionsTool] Returning tool result: ${toolResultJson}`);
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart(JSON.stringify(result))
+			new LanguageModelTextPart(toolResultJson)
 		]);
+	}
+
+	async resolveInput(input: IAskQuestionsParams, promptContext: IBuildPromptContext, _mode: CopilotToolMode): Promise<IAskQuestionsParams> {
+		this._promptContext = promptContext;
+		return input;
+	}
+
+	private _convertToChatQuestion(question: IQuestion): ChatQuestion {
+		// Determine question type based on options and multiSelect
+		let type: ChatQuestionType;
+		if (!question.options || question.options.length === 0) {
+			type = ChatQuestionType.Text;
+		} else if (question.multiSelect) {
+			type = ChatQuestionType.MultiSelect;
+		} else {
+			type = ChatQuestionType.SingleSelect;
+		}
+
+		// Find default value from recommended option
+		let defaultValue: string | string[] | undefined;
+		if (question.options) {
+			const recommendedOptions = question.options.filter(opt => opt.recommended);
+			if (recommendedOptions.length > 0) {
+				if (question.multiSelect) {
+					defaultValue = recommendedOptions.map(opt => opt.label);
+				} else {
+					defaultValue = recommendedOptions[0].label;
+				}
+			}
+		}
+
+		return new ChatQuestion(
+			question.header,
+			type,
+			question.header,
+			{
+				message: question.question,
+				options: question.options?.map(opt => ({
+					id: opt.label,
+					label: `${opt.label}${opt.description ? ' - ' + opt.description : ''}`,
+					value: opt.label
+				})),
+				defaultValue,
+				allowFreeformInput: question.allowFreeformInput ?? false
+			}
+		);
+	}
+
+	protected _convertCarouselAnswers(questions: IQuestion[], carouselAnswers: Record<string, unknown> | undefined): IAnswerResult {
+		const result: IAnswerResult = { answers: {} };
+
+		// Log all available keys in carouselAnswers for debugging
+		if (carouselAnswers) {
+			this._logService.trace(`[AskQuestionsTool] Carousel answer keys: ${Object.keys(carouselAnswers).join(', ')}`);
+			this._logService.trace(`[AskQuestionsTool] Question headers: ${questions.map(q => q.header).join(', ')}`);
+		}
+
+		for (const question of questions) {
+			if (!carouselAnswers) {
+				// User skipped all questions
+				result.answers[question.header] = {
+					selected: [],
+					freeText: null,
+					skipped: true
+				};
+				continue;
+			}
+
+			const answer = carouselAnswers[question.header];
+			this._logService.trace(`[AskQuestionsTool] Processing question "${question.header}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
+
+			if (answer === undefined) {
+				result.answers[question.header] = {
+					selected: [],
+					freeText: null,
+					skipped: true
+				};
+			} else if (typeof answer === 'string') {
+				// Free text answer or single selection
+				if (question.options?.some(opt => opt.label === answer)) {
+					result.answers[question.header] = {
+						selected: [answer],
+						freeText: null,
+						skipped: false
+					};
+				} else {
+					result.answers[question.header] = {
+						selected: [],
+						freeText: answer,
+						skipped: false
+					};
+				}
+			} else if (Array.isArray(answer)) {
+				// Multi-select answer
+				result.answers[question.header] = {
+					selected: answer.map(a => String(a)),
+					freeText: null,
+					skipped: false
+				};
+			} else if (typeof answer === 'object' && answer !== null) {
+				// Handle object answers - VS Code returns { selectedValue: string } or { selectedValues: string[] }
+				// Also may include { freeformValue: string } when user enters free text with options
+				const answerObj = answer as Record<string, unknown>;
+
+				// Extract freeform text if present (treat empty string as no freeform)
+				const freeformValue = ('freeformValue' in answerObj && typeof answerObj.freeformValue === 'string' && answerObj.freeformValue)
+					? answerObj.freeformValue
+					: null;
+
+				if ('selectedValues' in answerObj && Array.isArray(answerObj.selectedValues)) {
+					// Multi-select answer
+					result.answers[question.header] = {
+						selected: answerObj.selectedValues.map(v => String(v)),
+						freeText: freeformValue,
+						skipped: false
+					};
+				} else if ('selectedValue' in answerObj) {
+					const value = answerObj.selectedValue;
+					if (typeof value === 'string') {
+						if (question.options?.some(opt => opt.label === value)) {
+							result.answers[question.header] = {
+								selected: [value],
+								freeText: freeformValue,
+								skipped: false
+							};
+						} else {
+							// selectedValue is not a known option - treat it as free text
+							result.answers[question.header] = {
+								selected: [],
+								freeText: freeformValue ?? value,
+								skipped: false
+							};
+						}
+					} else if (Array.isArray(value)) {
+						result.answers[question.header] = {
+							selected: value.map(v => String(v)),
+							freeText: freeformValue,
+							skipped: false
+						};
+					} else if (value === undefined || value === null) {
+						// No selection made, but might have freeform text
+						if (freeformValue) {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: freeformValue,
+								skipped: false
+							};
+						} else {
+							result.answers[question.header] = {
+								selected: [],
+								freeText: null,
+								skipped: true
+							};
+						}
+					}
+				} else if ('freeformValue' in answerObj && freeformValue) {
+					// Only freeform text provided, no selection
+					result.answers[question.header] = {
+						selected: [],
+						freeText: freeformValue,
+						skipped: false
+					};
+				} else if ('label' in answerObj && typeof answerObj.label === 'string') {
+					// Answer might be the raw option object
+					result.answers[question.header] = {
+						selected: [answerObj.label],
+						freeText: null,
+						skipped: false
+					};
+				} else {
+					// Unknown object format
+					this._logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.header}": ${JSON.stringify(answer)}`);
+					result.answers[question.header] = {
+						selected: [],
+						freeText: null,
+						skipped: true
+					};
+				}
+			} else {
+				// Unknown format, treat as skipped
+				this._logService.warn(`[AskQuestionsTool] Unknown answer format for "${question.header}": ${typeof answer}`);
+				result.answers[question.header] = {
+					selected: [],
+					freeText: null,
+					skipped: true
+				};
+			}
+		}
+
+		return result;
 	}
 
 	private _sendTelemetry(
@@ -174,265 +350,6 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				duration,
 			}
 		);
-	}
-
-	private _getDefaultOption(question: IQuestion): IQuestionOption | undefined {
-		if (!question.options?.length) {
-			return undefined;
-		}
-		const recommended = question.options.find(opt => opt.recommended);
-		return recommended ?? question.options[0];
-	}
-
-	private async _askFreeTextQuestion(
-		question: IQuestion,
-		step: number,
-		totalSteps: number,
-		token: CancellationToken
-	): Promise<AskQuestionResult> {
-		const input = await vscode.window.showInputBox({
-			title: `${question.header} (${step + 1}/${totalSteps})`,
-			prompt: question.question,
-			placeHolder: vscode.l10n.t('Enter your answer'),
-			ignoreFocusOut: true
-		}, token);
-
-		if (input === undefined || !input.trim()) {
-			return {
-				selected: [],
-				freeText: null,
-				skipped: true
-			};
-		}
-
-		return {
-			selected: [],
-			freeText: input.trim(),
-			skipped: false
-		};
-	}
-
-	private async askQuestion(
-		question: IQuestion,
-		step: number,
-		totalSteps: number,
-		token: CancellationToken
-	): Promise<AskQuestionResult> {
-		// Check cancellation before showing UI to avoid creating unnecessary QuickPick
-		if (token.isCancellationRequested) {
-			return 'skipped';
-		}
-
-		// Free text mode: show input box instead of QuickPick
-		if (!question.options || question.options.length === 0) {
-			return this._askFreeTextQuestion(question, step, totalSteps, token);
-		}
-
-		return new Promise((resolve) => {
-			// Track resolution state to prevent race conditions (e.g., onDidHide firing after onDidAccept)
-			let resolved = false;
-			const safeResolve = (value: AskQuestionResult) => {
-				if (!resolved) {
-					resolved = true;
-					resolve(value);
-				}
-			};
-
-			const quickPick = vscode.window.createQuickPick<IQuickPickOptionItem>();
-			quickPick.title = question.header;
-			quickPick.placeholder = question.question;
-			quickPick.step = step + 1;
-			quickPick.totalSteps = totalSteps;
-			quickPick.canSelectMany = question.multiSelect ?? false;
-			quickPick.ignoreFocusOut = true;
-
-			// Build items
-			const items: IQuickPickOptionItem[] = question.options!.map(opt => ({
-				label: opt.recommended ? `$(star-full) ${opt.label}` : opt.label,
-				description: opt.description,
-				isRecommended: opt.recommended,
-				originalLabel: opt.label
-			}));
-
-			// Track the original items for filtering (before adding "Other...")
-			const originalItems = [...items];
-
-			// Add "Other..." option for custom answers
-			const otherItem: IQuickPickOptionItem = {
-				label: `$(edit) ${vscode.l10n.t('Other...')}`,
-				description: vscode.l10n.t('Enter custom answer'),
-				isOtherOption: true,
-				originalLabel: 'Other'
-			};
-			items.push(otherItem);
-
-			quickPick.items = items;
-
-			// Set default selection
-			if (question.multiSelect) {
-				// Select all recommended items in multiselect mode
-				const recommendedItems = items.filter(item => item.isRecommended);
-				if (recommendedItems.length > 0) {
-					quickPick.selectedItems = recommendedItems;
-				}
-			} else {
-				// Set first recommended or first item as active in single-select
-				const defaultOption = this._getDefaultOption(question);
-				if (defaultOption) {
-					const defaultItem = items.find(item => item.originalLabel === defaultOption.label);
-					if (defaultItem) {
-						quickPick.activeItems = [defaultItem];
-					}
-				}
-			}
-
-			// Add back button for multi-step flows
-			if (step > 0) {
-				quickPick.buttons = [vscode.QuickInputButtons.Back];
-			}
-
-			const store = new DisposableStore();
-			store.add(quickPick);
-
-			store.add(
-				token.onCancellationRequested(() => {
-					quickPick.hide();
-				})
-			);
-
-			store.add(
-				quickPick.onDidTriggerButton(button => {
-					if (button === vscode.QuickInputButtons.Back) {
-						quickPick.hide();
-						safeResolve('back');
-					}
-				})
-			);
-
-			// Show dynamic "Use custom answer" item when typing non-matching text
-			store.add(
-				quickPick.onDidChangeValue(value => {
-					const trimmed = value.trim();
-					const matchesOption = originalItems.some(
-						item => item.originalLabel.toLowerCase().includes(trimmed.toLowerCase())
-					);
-
-					if (trimmed.length > 0 && !matchesOption) {
-						// Show custom text option at the top, keep "Other..." at the bottom
-						const customItem: IQuickPickOptionItem = {
-							label: `$(edit) ${vscode.l10n.t('Use "{0}"', trimmed)}`,
-							description: vscode.l10n.t('Submit as custom answer'),
-							originalLabel: trimmed,
-							isCustomTextOption: true,
-							alwaysShow: true
-						};
-						quickPick.items = [customItem, ...originalItems, otherItem];
-					} else {
-						// Restore original items with "Other..." at the bottom
-						quickPick.items = [...originalItems, otherItem];
-					}
-				})
-			);
-
-			store.add(
-				quickPick.onDidAccept(async () => {
-					const selectedItems = question.multiSelect
-						? quickPick.selectedItems
-						: quickPick.activeItems;
-
-					// Check if user explicitly selected the custom text option (dynamic)
-					const customTextItem = selectedItems.find(item => item.isCustomTextOption);
-					if (customTextItem) {
-						// User explicitly chose the custom text option - only submit custom text
-						quickPick.hide();
-						safeResolve({
-							selected: [],
-							freeText: customTextItem.originalLabel,
-							skipped: false
-						});
-						return;
-					}
-
-					// Check if user selected "Other..." option
-					const otherOptionItem = selectedItems.find(item => item.isOtherOption);
-					if (otherOptionItem) {
-						// Mark as resolved before hiding to prevent onDidHide from resolving
-						resolved = true;
-						quickPick.hide();
-
-						const freeTextInput = await vscode.window.showInputBox({
-							prompt: question.question,
-							placeHolder: vscode.l10n.t('Enter your answer'),
-							ignoreFocusOut: true
-						}, token);
-
-						// Get other selections (excluding "Other...")
-						const otherSelections = selectedItems
-							.filter(item => !item.isOtherOption && !item.isCustomTextOption)
-							.map(item => item.originalLabel);
-
-						if (freeTextInput === undefined) {
-							// User cancelled input box
-							if (otherSelections.length > 0) {
-								resolve({
-									selected: otherSelections,
-									freeText: null,
-									skipped: false
-								});
-							} else {
-								resolve('skipped');
-							}
-						} else {
-							resolve({
-								selected: otherSelections,
-								freeText: freeTextInput,
-								skipped: false
-							});
-						}
-						return;
-					}
-
-					// Regular selection - filter out any special items
-					const selectedLabels = selectedItems
-						.filter(item => !item.isCustomTextOption && !item.isOtherOption)
-						.map(item => item.originalLabel);
-
-					if (selectedLabels.length === 0) {
-						// No selection, use default if available
-						const defaultOption = this._getDefaultOption(question);
-						quickPick.hide();
-						if (defaultOption) {
-							safeResolve({
-								selected: [defaultOption.label],
-								freeText: null,
-								skipped: false
-							});
-						} else {
-							safeResolve('skipped');
-						}
-						return;
-					}
-
-					// Regular selection
-					quickPick.hide();
-					safeResolve({
-						selected: selectedLabels,
-						freeText: null,
-						skipped: false
-					});
-				})
-			);
-
-			store.add(
-				quickPick.onDidHide(() => {
-					// Resolve first before disposal to prevent race conditions
-					safeResolve('skipped');
-					store.dispose();
-				})
-			);
-
-			quickPick.show();
-		});
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IAskQuestionsParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {

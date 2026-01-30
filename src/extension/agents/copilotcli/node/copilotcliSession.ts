@@ -23,6 +23,7 @@ import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
+import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
 
 type PermissionHandler = (
@@ -99,6 +100,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -354,6 +356,10 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			// read requests. Outside workspace reads (e.g., /etc/passwd) will still require
 			// approval.
 			const data = Uri.file(permissionRequest.path);
+
+			if (this._imageSupport.isTrustedImage(data)) {
+				return { kind: 'approved' };
+			}
 
 			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
 				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permissionRequest.path}`);

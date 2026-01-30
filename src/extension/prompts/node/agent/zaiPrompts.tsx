@@ -4,16 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPrompt, DefaultAgentPromptProps, DefaultReminderInstructions, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
+import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, DefaultReminderInstructions, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
 
@@ -93,7 +91,6 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.Codebase] && <>- {ToolName.Codebase}: Use for semantic search when exact strings/patterns are unknown<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>- {ToolName.FindTextInFiles}: Use to search within a single file instead of multiple {ToolName.ReadFile} calls<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>- {ToolName.CoreRunInTerminal}: Run commands SEQUENTIALLY. Wait for output before running next command. NEVER use for file edits unless user explicitly requests it<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>- {ToolName.UpdateUserPreferences}: Use after tasks when user corrects you or expresses preferences to remember<br /></>}
 				{!tools.hasSomeEditTool && <>- NOTE: No file editing tools available. Ask user to enable them or provide codeblocks as fallback<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>- NOTE: No terminal tools available. Ask user to enable them or provide commands as fallback<br /></>}
 				- Tools may be disabled. Use only currently available tools, regardless of what was used earlier in conversation.
@@ -167,11 +164,6 @@ class DefaultZaiAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class ZaiPromptResolver implements IAgentPrompt {
-	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService
-	) { }
-
 	// No specific family prefixes for Zai models as it can be hosted under various names
 	static readonly familyPrefixes: string[] = [];
 
@@ -186,16 +178,10 @@ class ZaiPromptResolver implements IAgentPrompt {
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		// A/B testing: Use custom Zai prompt when experiment flag is enabled (treatment),
-		// otherwise use default agent prompt (control)
-		if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateZaiPrompt, this.experimentationService)) {
-			return DefaultZaiAgentPrompt;
-		}
-		return DefaultAgentPrompt;
+		return DefaultZaiAgentPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
-		// Keep reminder instructions consistent across both experiment variants
 		return DefaultReminderInstructions;
 	}
 }

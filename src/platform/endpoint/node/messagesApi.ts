@@ -13,13 +13,27 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
-import { FinishedCallback, IResponseDelta } from '../../networking/common/fetch';
+import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+
+/** IP Code Citation annotation from Messages API copilot_annotations */
+interface AnthropicIPCodeCitation {
+	id: number;
+	start_offset: number;
+	end_offset: number;
+	details: Record<string, unknown>;
+	citations: {
+		snippet: string;
+		url: string;
+		ip_type?: string;
+		license: string;
+	};
+}
 
 interface AnthropicStreamEvent {
 	type: string;
@@ -51,6 +65,9 @@ interface AnthropicStreamEvent {
 		signature?: string;
 		stop_reason?: string;
 		stop_sequence?: string;
+	};
+	copilot_annotations?: {
+		IPCodeCitations?: AnthropicIPCodeCitation[];
 	};
 	usage?: {
 		output_tokens: number;
@@ -103,7 +120,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			? (configuredBudget < 1024 ? 1024 : configuredBudget)
 			: undefined;
 		thinkingBudget = normalizedBudget
-			? Math.min(32000, maxTokens - 1, normalizedBudget)
+			? Math.min(maxTokens - 1, normalizedBudget)
 			: undefined;
 	}
 
@@ -370,7 +387,59 @@ export class AnthropicMessagesProcessor {
 		private readonly requestId: string,
 		private readonly ghRequestId: string,
 		@ILogService private readonly logService: ILogService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) { }
+
+	/**
+	 * Extract IP code citations from copilot_annotations and convert to IIPCodeCitation format
+	 */
+	private extractIPCodeCitations(annotations?: { IPCodeCitations?: AnthropicIPCodeCitation[] }): IIPCodeCitation[] {
+		if (!annotations?.IPCodeCitations?.length) {
+			return [];
+		}
+
+		// Deduplicate by URL since the same citation can appear multiple times
+		const seenUrls = new Set<string>();
+		const citations: IIPCodeCitation[] = [];
+
+		for (const citation of annotations.IPCodeCitations) {
+			const citationDetails = citation.citations;
+			if (!citationDetails) {
+				continue;
+			}
+
+			const { url, license, snippet } = citationDetails;
+
+			if (typeof url !== 'string' || url.trim() === '') {
+				continue;
+			}
+
+			if (typeof license !== 'string' || license.trim() === '') {
+				continue;
+			}
+
+			if (typeof snippet !== 'string' || snippet.trim() === '') {
+				continue;
+			}
+
+			if (!seenUrls.has(url)) {
+				seenUrls.add(url);
+				citations.push({
+					citations: {
+						url,
+						license,
+						snippet,
+					}
+				});
+			}
+		}
+
+		if (citations.length > 0) {
+			this.logService.trace(`[messagesAPI] IP code citations found: ${citations.length} unique citations`);
+		}
+
+		return citations;
+	}
 
 	public push(chunk: AnthropicStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
 		const onProgress = (delta: IResponseDelta): undefined => {
@@ -418,42 +487,102 @@ export class AnthropicMessagesProcessor {
 				} else if (chunk.content_block?.type === 'tool_search_tool_result' && chunk.index !== undefined) {
 					const toolSearchResult = chunk.content_block as ToolSearchToolResult;
 					if (toolSearchResult.content.type === 'tool_search_tool_search_result') {
-						const toolNames = toolSearchResult.content.tool_references.map(ref => ref.tool_name);
+						const toolReferences = toolSearchResult.content.tool_references;
+						const toolNames = toolReferences.map(ref => ref.tool_name);
 
 						this.logService.trace(`[messagesAPI] Tool search discovered ${toolNames.length} tools: ${toolNames.join(', ')}`);
 
-						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
-						if (serverToolCall) {
-							let query: string | undefined;
-							try {
-								const parsed = JSON.parse(serverToolCall.arguments);
-								query = parsed.query;
-							} catch {
-								// Ignore parse errors
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
 							}
-							this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
-							return onProgress({
-								text: '',
-								serverToolCalls: [{
-									id: serverToolCall.id,
-									name: serverToolCall.name,
-									arguments: JSON.stringify({ query, discovered_tools: toolNames }),
-									isServer: true,
-								}],
-							});
-						} else {
-							return onProgress({
-								text: '',
-								serverToolCalls: [{
-									id: toolSearchResult.tool_use_id,
-									name: 'tool_search_result',
-									arguments: JSON.stringify({ discovered_tools: toolNames }),
-									isServer: true,
-								}],
-							});
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'success', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model },
+							{ discoveredToolCount: toolNames.length }
+						);
+
+						// Get the original server tool call to pair with this result
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
+							try {
+								parsedArgs = JSON.parse(serverToolCall.arguments);
+							} catch {
+								parsedArgs = serverToolCall.arguments;
+							}
 						}
+
+						// Report combined entry with both args and result (like regular tools)
+						return onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { tool_references: toolReferences },
+							}],
+						});
 					} else if (toolSearchResult.content.type === 'tool_search_tool_result_error') {
 						this.logService.warn(`[messagesAPI] Tool search error: ${toolSearchResult.content.error_code}`);
+
+						/* __GDPR__
+							"toolSearchToolInvoked" : {
+								"owner": "bhavyaus",
+								"comment": "Details about invocation of tools",
+								"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+								"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+								"validateOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool input validation. valid, invalid and unknown" },
+								"invokeOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The outcome of the tool invocation. success, error" },
+								"toolName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the tool being invoked." },
+								"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+								"errorCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error code if failed" },
+								"discoveredToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools discovered", "isMeasurement": true }
+							}
+						*/
+						this.telemetryService.sendMSFTTelemetryEvent('toolSearchToolInvoked',
+							{ requestId: this.requestId, interactionId: this.requestId, validateOutcome: 'unknown', invokeOutcome: 'error', toolName: TOOL_SEARCH_TOOL_NAME, model: this.model, errorCode: toolSearchResult.content.error_code },
+							{ discoveredToolCount: 0 }
+						);
+
+						// Get the original server tool call to pair with this error result
+						const serverToolCall = this.completedServerToolCalls.get(toolSearchResult.tool_use_id);
+						this.completedServerToolCalls.delete(toolSearchResult.tool_use_id);
+
+						// Parse the arguments from JSON string
+						let parsedArgs: unknown;
+						if (serverToolCall?.arguments) {
+							try {
+								parsedArgs = JSON.parse(serverToolCall.arguments);
+							} catch {
+								parsedArgs = serverToolCall.arguments;
+							}
+						}
+
+						// Report server tool call with error result for logging
+						onProgress({
+							text: '',
+							serverToolCalls: [{
+								id: toolSearchResult.tool_use_id,
+								name: serverToolCall?.name ?? 'tool_search_tool_regex',
+								args: parsedArgs,
+								isServer: true,
+								result: { error: toolSearchResult.content.error_code },
+							}],
+						});
+
 						return onProgress({
 							text: '',
 							copilotErrors: [{
@@ -490,6 +619,10 @@ export class AnthropicMessagesProcessor {
 			case 'content_block_delta':
 				if (chunk.delta) {
 					if (chunk.delta.type === 'text_delta' && chunk.delta.text) {
+						const ipCitations = this.extractIPCodeCitations(chunk.copilot_annotations);
+						if (ipCitations.length > 0) {
+							return onProgress({ text: chunk.delta.text, ipCitations });
+						}
 						return onProgress({ text: chunk.delta.text });
 					} else if (chunk.delta.type === 'thinking_delta' && chunk.delta.thinking && chunk.index !== undefined) {
 						const thinking = this.thinkingAccumulator.get(chunk.index);
@@ -544,7 +677,7 @@ export class AnthropicMessagesProcessor {
 						});
 						this.toolCallAccumulator.delete(chunk.index);
 					}
-					// Handle server tool call completion (tool search) - store for later combination with result
+					// Handle server tool call completion (tool search) - store for result pairing
 					const serverToolCall = this.serverToolCallAccumulator.get(chunk.index);
 					if (serverToolCall) {
 						// Store completed server tool call by ID, waiting for tool_search_tool_result
