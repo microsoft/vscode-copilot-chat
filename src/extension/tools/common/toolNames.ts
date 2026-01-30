@@ -29,7 +29,6 @@ export enum ToolName {
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
-	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
@@ -78,7 +77,6 @@ export enum ContributedToolName {
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
 	Usages = 'copilot_listCodeUsages',
-	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
 	/** @deprecated moving to core soon */
@@ -224,7 +222,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
 
 	// Other tools - categorize appropriately
-	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,

@@ -72,8 +72,8 @@ interface UserSelectedRepository {
 }
 
 // TODO: No API from GH yet.
-const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string }[] = [
-	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot', assignableActorLogin: 'copilot-swe-agent' },
+const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string; codiconId?: string }[] = [
+	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot', assignableActorLogin: 'copilot-swe-agent', codiconId: 'copilot' },
 	{ id: '2246796', name: 'Claude', at: 'claude[agent]', assignableActorLogin: 'anthropic-code-agent' },
 	{ id: '2248422', name: 'Codex', at: 'codex[agent]', assignableActorLogin: 'openai-code-agent' }
 ];
@@ -529,7 +529,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	 * Queries for available partner agents by checking if known CCA logins are assignable in the repository.
 	 * TODO: Remove once given a proper API
 	 */
-	private async getAvailablePartnerAgents(owner: string, repo: string): Promise<{ id: string; name: string; at?: string }[]> {
+	private async getAvailablePartnerAgents(owner: string, repo: string): Promise<{ id: string; name: string; at?: string; codiconId?: string }[]> {
 		const cacheKey = `${owner}/${repo}`;
 
 		// Return cached result if available
@@ -542,7 +542,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const assignableActors = await this._octoKitService.getAssignableActors(owner, repo, { createIfNone: false });
 
 			// Check which agents from HARDCODED_PARTNER_AGENTS are assignable
-			const availableAgents: { id: string; name: string; at?: string }[] = [];
+			const availableAgents: { id: string; name: string; at?: string; codiconId?: string }[] = [];
 
 			for (const agent of HARDCODED_PARTNER_AGENTS) {
 				const { assignableActorLogin } = agent;
@@ -646,7 +646,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		try {
 			// Fetch agents (requires repo), models (global), and partner agents in parallel
 			const [customAgents, models, partnerAgents] = await Promise.allSettled([
-				repoId ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
+				repoId && repoIds?.length === 1 ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
 				this._octoKitService.getCopilotAgentModels({ createIfNone: false }),
 				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve([])
 			]);
@@ -659,7 +659,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					id: agent.id,
 					name: agent.name,
 					...(agent.id === DEFAULT_PARTNER_AGENT_ID && { default: true }),
-					icon: new vscode.ThemeIcon('agent')
+					icon: agent.codiconId ? new vscode.ThemeIcon(agent.codiconId) : undefined
 				}));
 				optionGroups.push({
 					id: PARTNER_AGENTS_OPTION_GROUP_ID,
@@ -674,14 +674,13 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				customAgents.status === 'fulfilled' ? customAgents.value : []
 			);
 
-			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || localOnly.length > 0) {
+			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || (repoIds?.length === 1 && localOnly.length > 0)) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
 					{
 						id: DEFAULT_CUSTOM_AGENT_ID,
 						default: true,
 						name: vscode.l10n.t('Agent'),
-						description: vscode.l10n.t('Default'),
-						icon: new vscode.ThemeIcon('file-text')
+						icon: new vscode.ThemeIcon('agent')
 					},
 					...(customAgents.status === 'fulfilled' ? customAgents.value.map(agent => ({
 						id: agent.name,
@@ -710,6 +709,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const modelItems: vscode.ChatSessionProviderOptionItem[] = models.value.map(model => ({
 					id: model.id,
 					name: model.name,
+					description: `${model.billing.multiplier}x`,
 				}));
 				if (!models.value.find(m => m.id === DEFAULT_MODEL_ID)) {
 					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
@@ -943,11 +943,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					change.added ?? 0,
 					change.removed ?? 0));
 
+				const metadata = {
+					name: pr.repository?.name,
+					owner: pr.repository?.owner?.login
+				} satisfies { readonly [key: string]: unknown };
+
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					badge: this.getPullRequestBadge(pr),
+					badge: this.getPullRequestBadge(repoIds, pr),
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
@@ -957,12 +962,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 					} : {}),
 					changes,
+					metadata,
 					fullDatabaseId: pr.fullDatabaseId.toString(),
-					pullRequestDetails: pr,
-					repository: {
-						owner: pr.repository?.owner?.login ?? '',
-						name: pr.repository?.name ?? ''
-					}
+					pullRequestDetails: pr
 				} satisfies vscode.ChatSessionItem & {
 					fullDatabaseId: string;
 					pullRequestDetails: PullRequestSearchItem;
@@ -1241,26 +1243,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private getPullRequestBadge(pr: PullRequestSearchItem): vscode.MarkdownString {
-		let badgeText: string;
-		switch (pr.state) {
-			case 'failed':
-				badgeText = vscode.l10n.t('$(git-pull-request) Failed in {0}', `#${pr.number}`);
-				break;
-			case 'in_progress':
-				badgeText = vscode.l10n.t('$(git-pull-request) Running in {0}', `#${pr.number}`);
-				break;
-			case 'queued':
-				badgeText = vscode.l10n.t('$(git-pull-request) Queued in {0}', `#${pr.number}`);
-				break;
-			default:
-				badgeText = vscode.l10n.t('$(git-pull-request) {0}', `#${pr.number}`);
-				break;
+	private getPullRequestBadge(repoIds: GithubRepoId[] | undefined, pr: PullRequestSearchItem): vscode.MarkdownString | undefined {
+		if (vscode.workspace.workspaceFolders === undefined || (repoIds && repoIds.length > 1)) {
+			const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
+			const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
+			badge.supportThemeIcons = true;
+			return badge;
 		}
 
-		const badge = new vscode.MarkdownString(badgeText);
-		badge.supportThemeIcons = true;
-		return badge;
+		return undefined;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {

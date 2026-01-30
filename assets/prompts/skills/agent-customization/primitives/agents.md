@@ -17,6 +17,8 @@ description: "<required>"    # For agent picker and subagent discovery
 name: "Agent Name"           # Optional, defaults to filename
 tools: ["search", "web"]     # Optional: aliases, MCP (<server>/*), extension tools
 model: "Claude Sonnet 4"     # Optional, uses picker default
+argument-hint: "Task..."     # Optional, input guidance
+agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
 infer: "all"                 # Optional: "all"|true, "user"|false, "agent", "hidden"
 handoffs: [...]              # Optional, transitions to other agents
 ---

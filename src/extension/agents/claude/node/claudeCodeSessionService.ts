@@ -116,7 +116,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			slugs.push(this._computeFolderSlug(folders[0]));
 		} else {
 			// Multi-root or no folder - add the no-project slug
-			slugs.push('-');
+			slugs.push(this._computeFolderSlug(URI.file(process.cwd())));
 		}
 
 		for (const slug of slugs) {

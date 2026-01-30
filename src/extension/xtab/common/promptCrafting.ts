@@ -60,7 +60,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
 
-	const mainPrompt = `${PromptTags.RECENT_FILES.start}
+	const basePrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
 ${PromptTags.RECENT_FILES.end}
 
@@ -71,11 +71,16 @@ ${PromptTags.CURRENT_FILE.end}
 ${lintsWithNewLinePadding}
 ${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
-${PromptTags.EDIT_HISTORY.end}
+${PromptTags.EDIT_HISTORY.end}`;
 
-${areaAroundCodeToEdit}`;
+	const mainPrompt =
+		opts.promptingStrategy !== PromptingStrategy.PatchBased01
+			? basePrompt + `\n\n${areaAroundCodeToEdit}`
+			: basePrompt;
 
-	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
+	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 &&
+		opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified &&
+		opts.promptingStrategy !== PromptingStrategy.PatchBased01;
 
 	const packagedPrompt = includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt;
 	const packagedPromptWithRelatedInfo = addRelatedInformation(relatedInformation, packagedPrompt, opts.languageContext.traitPosition);
@@ -115,6 +120,7 @@ function appendWithNewLineIfNeeded(base: string, toAppend: string, minNewLines: 
 function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string, aggressivenessLevel: AggressivenessLevel) {
 	let postScript: string | undefined;
 	switch (strategy) {
+		case PromptingStrategy.PatchBased01:
 		case PromptingStrategy.Codexv21NesUnified:
 			break;
 		case PromptingStrategy.UnifiedModel:
@@ -285,15 +291,28 @@ export function toUniquePath(documentId: DocumentId, workspaceRootPath: string |
 function formatCodeSnippet(
 	documentId: DocumentId,
 	lines: string[],
-	opts: { truncated: boolean; includeLineNumbers: boolean; startLineOffset: number },
+	opts: { truncated: boolean; includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption; startLineOffset: number },
 ): string {
 	const filePath = toUniquePath(documentId, undefined);
 	const firstLine = opts.truncated
 		? `code_snippet_file_path: ${filePath} (truncated)`
 		: `code_snippet_file_path: ${filePath}`;
-	const formattedLines = opts.includeLineNumbers
-		? lines.map((line, idx) => `${opts.startLineOffset + idx}| ${line}`)
-		: lines;
+
+	let formattedLines: string[];
+	switch (opts.includeLineNumbers) {
+		case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
+			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}| ${line}`);
+			break;
+		case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
+			formattedLines = lines.map((line, idx) => `${opts.startLineOffset + idx}|${line}`);
+			break;
+		case xtabPromptOptions.IncludeLineNumbersOption.None:
+			formattedLines = lines;
+			break;
+		default:
+			assertNever(opts.includeLineNumbers);
+	}
+
 	const fileContent = formattedLines.join('\n');
 	return [PromptTags.RECENT_FILE.start, firstLine, fileContent, PromptTags.RECENT_FILE.end].join('\n');
 }
@@ -666,6 +685,19 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	return Result.ok(new ClippedDocument(taggedCurrentFileContent, keptRange));
 }
 
+function addLineNumbers(lines: readonly string[], option: xtabPromptOptions.IncludeLineNumbersOption): string[] {
+	switch (option) {
+		case xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter:
+			return lines.map((line, idx) => `${idx}| ${line}`);
+		case xtabPromptOptions.IncludeLineNumbersOption.WithoutSpace:
+			return lines.map((line, idx) => `${idx}|${line}`);
+		case xtabPromptOptions.IncludeLineNumbersOption.None:
+			return [...lines];
+		default:
+			assertNever(option);
+	}
+}
+
 export function constructTaggedFile(
 	currentDocument: CurrentDocument,
 	editWindowLinesRange: OffsetRange,
@@ -673,20 +705,20 @@ export function constructTaggedFile(
 	promptOptions: xtabPromptOptions.PromptOptions,
 	computeTokens: (s: string) => number,
 	opts: {
-		includeLineNumbers: { areaAroundCodeToEdit: boolean; currentFileContent: boolean };
+		includeLineNumbers: {
+			areaAroundCodeToEdit: xtabPromptOptions.IncludeLineNumbersOption;
+			currentFileContent: xtabPromptOptions.IncludeLineNumbersOption;
+		};
 	}
 ) {
+	// Content with cursor tag - always created for areaAroundCodeToEdit
 	const contentWithCursorAsLinesOriginal = (() => {
 		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
 		const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
 		return contentWithCursor.getLines();
 	})();
 
-	const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
-
-	const contentWithCursorAsLines = opts.includeLineNumbers.areaAroundCodeToEdit
-		? addLineNumbers(contentWithCursorAsLinesOriginal)
-		: contentWithCursorAsLinesOriginal;
+	const contentWithCursorAsLines = addLineNumbers(contentWithCursorAsLinesOriginal, opts.includeLineNumbers.areaAroundCodeToEdit);
 
 	const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
@@ -700,18 +732,19 @@ export function constructTaggedFile(
 		PromptTags.AREA_AROUND.end
 	];
 
-	const currentFileContentWithCursorLines = opts.includeLineNumbers.currentFileContent
-		? addLineNumbers(contentWithCursorAsLinesOriginal)
-		: contentWithCursorAsLinesOriginal;
-	const currentFileContentLines = opts.includeLineNumbers.currentFileContent
-		? addLineNumbers(currentDocument.lines)
+	// For current file content, optionally include cursor tag based on includeCursorTag option
+	const currentFileContentSourceLines = promptOptions.currentFile.includeCursorTag
+		? contentWithCursorAsLinesOriginal
 		: currentDocument.lines;
+	const currentFileContentWithCursorLines = addLineNumbers(currentFileContentSourceLines, opts.includeLineNumbers.currentFileContent);
+	const currentFileContentLines = addLineNumbers(currentDocument.lines, opts.includeLineNumbers.currentFileContent);
 
 	let areaAroundCodeToEditForCurrentFile: string[];
 	if (promptOptions.currentFile.includeTags && opts.includeLineNumbers.currentFileContent === opts.includeLineNumbers.areaAroundCodeToEdit) {
 		areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
 	} else {
-		const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		// Use currentFileContentWithCursorLines for edit window too
+		const editWindowLines = currentFileContentWithCursorLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 		areaAroundCodeToEditForCurrentFile = [
 			...currentFileContentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 			...editWindowLines,

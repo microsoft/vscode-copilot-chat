@@ -7,8 +7,8 @@ import { randomUUID } from 'crypto';
 import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -62,22 +62,37 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		return context;
 	}
 
+	/**
+	 * Get the endpoint to use for the search subagent
+	 */
 	private async getEndpoint(request: ChatRequest) {
-		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
+
+		if (modelName) {
+			try {
+				// Try to get the specified model
+				return await this.endpointProvider.getChatEndpoint(modelName);
+			} catch (error) {
+				// Model not available or doesn't support tool calls, fallback to main agent
+				this._logService.warn(`Failed to get model ${modelName}, falling back to main agent endpoint: ${error}`);
+				return await this.endpointProvider.getChatEndpoint(this.options.request);
+			}
+		} else {
+			// No model name specified, use main agent endpoint
+			return await this.endpointProvider.getChatEndpoint(this.options.request);
 		}
-		return endpoint;
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
 		const endpoint = await this.getEndpoint(this.options.request);
+		const maxSearchTurns = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolCallLimit, this._experimentationService);
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
 			SearchSubagentPrompt,
 			{
-				promptContext: buildPromptContext
+				promptContext: buildPromptContext,
+				maxSearchTurns
 			}
 		);
 		return await renderer.render(progress, token);
