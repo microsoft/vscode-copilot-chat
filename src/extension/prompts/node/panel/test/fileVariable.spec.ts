@@ -11,9 +11,13 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../../vscodeTypes';
+import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
+import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { renderPromptElementJSON } from '../../base/promptRenderer';
+import { renderPromptElement, renderPromptElementJSON } from '../../base/promptRenderer';
 import { FileVariable } from '../fileVariable';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../../platform/authentication/common/copilotToken';
+import { ICopilotTokenStore } from '../../../../../platform/authentication/common/copilotTokenStore';
 
 // PromptNodeType enum values from @vscode/prompt-tsx (const enum values are erased at runtime)
 const PromptNodeType = {
@@ -87,5 +91,30 @@ describe('FileVariable', () => {
 				omitContents: true,
 			});
 		expect(jsonTreeToString(result.node)).toMatchSnapshot();
+	});
+
+	test('uses admin disabled tooltip for image attachments when preview features are disabled', async () => {
+		const testingServiceCollection = createExtensionUnitTestingServices();
+		accessor = testingServiceCollection.createTestingAccessor();
+		const token = new CopilotToken(createTestExtendedTokenInfo({
+			token: 'editor_preview_features=0',
+			copilot_plan: 'business',
+			individual: false,
+		}));
+		accessor.get(ICopilotTokenStore).copilotToken = token;
+
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
+		const result = await renderPromptElement(
+			accessor.get(IInstantiationService),
+			endpoint,
+			FileVariable,
+			{
+				variableName: 'image',
+				variableValue: Uri.file('/path/to/image.png'),
+			},
+			undefined,
+			CancellationToken.None,
+		);
+		expect(result.references[0]?.options?.status?.description).toBe("Vision support is disabled by your admin.");
 	});
 });
