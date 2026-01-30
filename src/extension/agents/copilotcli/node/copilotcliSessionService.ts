@@ -101,11 +101,14 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		}
 		const sessionMetadataList = await raceCancellationError(sessionManager.listSessions(), token);
 		const metadata = sessionMetadataList.find(s => s.sessionId === sessionId);
-		if (!metadata?.context?.cwd) {
+		const cwd = metadata?.context?.gitRoot ?? metadata?.context?.cwd;
+		// Give preference to the git root if available.
+		// Found while testing that cwd can be users root directory in some cases.
+		if (!cwd || !(await checkPathExists(URI.file(cwd), this.fileSystem))) {
 			return;
 		}
 
-		return URI.file(metadata.context.cwd);
+		return URI.file(cwd);
 	}
 
 	protected monitorSessionFiles() {
@@ -493,5 +496,14 @@ export class RefCountedSession extends RefCountedDisposable implements IReferenc
 	}
 	dispose(): void {
 		this.release();
+	}
+}
+
+async function checkPathExists(filePath: Uri, fileSystem: IFileSystemService): Promise<boolean> {
+	try {
+		await fileSystem.stat(filePath);
+		return true;
+	} catch (error) {
+		return false;
 	}
 }
