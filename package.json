@@ -3605,7 +3605,7 @@
 						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
 						"minimum": 0,
 						"maximum": 32000,
-						"default": 4000,
+						"default": 16000,
 						"tags": [
 							"experimental",
 							"onExp"
