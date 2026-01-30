@@ -108,6 +108,12 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 			this.logService.trace('[GitHubOrgChatResourcesService] Workspace folders changed, invalidating cached org name');
 			this._cachedPreferredOrgName = undefined;
 		}));
+
+		// Invalidate cached org name when authentication changes (sign in/out)
+		this._register(this.authService.onDidAuthenticationChange(() => {
+			this.logService.trace('[GitHubOrgChatResourcesService] Authentication changed, invalidating cached org name');
+			this._cachedPreferredOrgName = undefined;
+		}));
 	}
 
 	async getPreferredOrganizationName(): Promise<string | undefined> {
