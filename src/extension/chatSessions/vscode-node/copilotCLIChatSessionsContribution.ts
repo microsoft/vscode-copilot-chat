@@ -1185,6 +1185,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			} else {
 				workingDirectory = this.copilotCLIWorktreeManagerService.getWorktreePath(id);
+				worktreeProperties = this.copilotCLIWorktreeManagerService.getWorktreeProperties(id);
 				const sessionWorkspaceFolder = this.workspaceFolderService.getSessionWorkspaceFolder(id);
 				// Check if this is an existing session with a workspace folder (no git repo)
 				if (!workingDirectory && sessionWorkspaceFolder) {
