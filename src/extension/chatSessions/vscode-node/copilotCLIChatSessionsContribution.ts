@@ -342,13 +342,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				await trackSelectedFolderOrRepo(copilotcliSessionId, firstRepo, this.workspaceFolderService, this.copilotCLIWorktreeManagerService);
 			}
 		} else {
-			const sessionWorkspaceFolder = await this.workspaceFolderService.getSessionWorkspaceFolder(copilotcliSessionId);
+			const sessionWorkspaceFolder = await this.sessionService.getSessionWorkingDirectory(copilotcliSessionId, token);
 			let folderName = sessionWorkspaceFolder ? basename(sessionWorkspaceFolder) : undefined;
 			if (!folderName && this.workspaceService.getWorkspaceFolders().length === 1) {
 				folderName = this.workspaceService.getWorkspaceFolderName(this.workspaceService.getWorkspaceFolders()[0]);
 			}
 			if (!folderName) {
-				folderName = l10n.t('Current Workspace');
+				folderName = l10n.t('Unknown');
 			}
 			// This is an existing session without a worktree, display current workspace folder.
 			options[REPOSITORY_OPTION_ID] = {
