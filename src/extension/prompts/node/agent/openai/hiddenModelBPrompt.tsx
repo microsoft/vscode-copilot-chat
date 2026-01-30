@@ -150,6 +150,11 @@ class HiddenModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 				If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. copilot-instructions.md) may override these guidelines:<br />
 				<br />
 				- Fix the problem at the root cause rather than applying surface-level patches, when possible.<br />
+				- After implementing a fix, VERIFY it works by testing. Do not claim something is fixed without testing.<br />
+				- Confirm the original symptom/issue no longer exists after your fix.<br />
+				- Resolve ambiguous terms using context from the codebase and user instructions; do not rely on fixed, hardcoded interpretations of specific words.<br />
+				- Implement the BEST solution for user constraints, not just a working solution. Research proper patterns.<br />
+				- When uncertain about implementation details or code structure, INVESTIGATE immediately - read files, search codebase, grep patterns, test code. NEVER speculate without verification. If you genuinely cannot determine the answer after investigation, THEN ask a clarifying question.<br />
 				- Avoid unneeded complexity in your solution.<br />
 				- Do not attempt to fix unrelated bugs or broken tests. It is not your responsibility to fix them. (You may mention them to the user in your final message though.)<br />
 				- Update documentation as necessary.<br />
