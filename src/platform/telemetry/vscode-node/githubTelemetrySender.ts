@@ -82,8 +82,8 @@ class TelemetryReporterAdapter implements TelemetrySender {
 
 		// Use either NEW or OLD API based on experiment flag (not both)
 		if (this.useNewTelemetryLib && this.newReporter) {
-			// Unwrap event name - VS Code's TelemetryLogger adds extension prefix, we need to remove it
-			// to avoid double-prefixing (backend also adds prefix)
+			// Remove the wrapped-telemetry-event-name marker if present.
+			// This marker is used to signal that the event name should not be re-namespaced.
 			const unwrappedEventName = unwrapEventNameFromPrefix(eventName);
 
 			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
@@ -91,20 +91,15 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
 			// Use sendDangerousTelemetryEvent to bypass TelemetryReporter's internal TelemetryLogger.
-			// This avoids double-prefixing: the outer TelemetryLogger already added the prefix,
-			// and the inner one would add it again if we used sendTelemetryEvent.
-			// This is safe because: (1) opt-in/settings check is handled by our outer TelemetryLogger,
-			// and (2) sanitization is also handled by the outer TelemetryLogger before data reaches here.
+			// This is necessary because we already have our own outer TelemetryLogger that handles
+			// opt-in/settings checks. Using the regular sendTelemetryEvent would add another layer.
 			this.newReporter.sendDangerousTelemetryEvent(unwrappedEventName, properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
 			// Pass original eventName - AzureInsightReporter.massageEventName() handles the wrapped marker
 			// to avoid double-prefixing
-			const oldPayload = {
-				properties,
-				measurements,
-				...data
-			};
+			// Spread data first so extracted properties/measurements take precedence
+			const oldPayload = { ...data, properties, measurements };
 			this.oldReporter.sendEventData(eventName, oldPayload);
 		}
 	}
@@ -126,21 +121,22 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
 			// Use sendDangerousTelemetryErrorEvent to bypass TelemetryReporter's internal TelemetryLogger
-			// (same reason as sendDangerousTelemetryEvent - avoid double-prefixing)
+			// (same reason as sendDangerousTelemetryEvent - we have our own outer TelemetryLogger)
 			this.newReporter.sendDangerousTelemetryErrorEvent('error', properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
-			const oldPayload = { properties, measurements, ...data };
+			// Spread data first so our augmented properties/measurements take precedence
+			const oldPayload = { ...data, properties, measurements };
 			this.oldReporter.sendErrorData(error, oldPayload);
 		}
 	}
 
-	flush(): void | Thenable<void> {
-		if (this.useNewTelemetryLib && this.newReporter) {
-			return this.newReporter.dispose();
-		} else {
-			return this.oldReporter.flush();
-		}
+	flush(): Promise<void> {
+		// Dispose both reporters since both are created eagerly
+		return Promise.all([
+			this.oldReporter.flush(),
+			this.newReporter?.dispose()
+		]).then(() => { });
 	}
 }
 
