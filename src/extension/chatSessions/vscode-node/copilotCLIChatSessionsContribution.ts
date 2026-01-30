@@ -1201,6 +1201,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					isWorkspaceFolderWithoutRepo = true;
 					isolationEnabled = false;
 				}
+				// If we dont' have the information, possible this is a session started using terminal.
+				// Try to get the working directory from the session service (using metadata for session in CLI).
+				if (!workingDirectory && !sessionWorkspaceFolder) {
+					workingDirectory = await this.sessionService.getSessionWorkingDirectory(id, token);
+					isolationEnabled = false; // We didn't start this session with isolation, so disable it.
+				}
 			}
 		} else {
 			({ workingDirectory, worktreeProperties, isWorkspaceFolderWithoutRepo, cancelled } = await createWorkingTreeIfRequired(undefined));
