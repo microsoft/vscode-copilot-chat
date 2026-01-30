@@ -830,7 +830,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 			// If we have repo then it's trusted, let's get the latest information again by requesting the repo again.
 			const repository = await this.gitService.getRepository(repoPath, true);
-			return { repository, trusted: true };
+			const result = { repository, trusted: true };
+			this._repositoryCacheInEmptyWorkspace.set(repoPath, result);
+			return result;
 		}
 		// Ask the user if they trust the folder before we look for repos.
 		const trusted = await this.workspaceService.requestResourceTrust({ uri: repoPath, message: untrustedFolderMessage });
