@@ -175,7 +175,8 @@ export class ChatEndpoint implements IChatEndpoint {
 	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi && location === ChatLocation.Agent) {
+		const isAllowedConversationAgentModel = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
+		if (isAllowedConversationAgentModel && this.useMessagesApi) {
 
 			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
 			if (modelProviderPreference) {
