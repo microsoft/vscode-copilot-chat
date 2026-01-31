@@ -2750,6 +2750,15 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.backgroundAgent.enabled%"
 					},
+					"github.copilot.chat.thinkingKeepExpanded": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.thinkingKeepExpanded%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.cloudAgent.enabled": {
 						"type": "boolean",
 						"default": true,
