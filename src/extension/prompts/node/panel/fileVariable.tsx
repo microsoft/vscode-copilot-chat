@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, ChatResponseReferencePartStatusKind, Image, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import { UserMessage } from '@vscode/prompt-tsx/dist/base/promptElements';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
@@ -53,6 +54,7 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		@INotebookService private readonly notebookService: INotebookService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
 		super(props);
@@ -84,7 +86,7 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		}
 
 		if (/\.(png|jpg|jpeg|bmp|gif|webp)$/i.test(uri.path)) {
-			const options = { status: { description: l10n.t("{0} does not support images.", this.promptEndpoint.model), kind: ChatResponseReferencePartStatusKind.Omitted } };
+			const options = { status: { description: this.getUnsupportedImageDescription(), kind: ChatResponseReferencePartStatusKind.Omitted } };
 			if (this.props.omitReferences) {
 				return;
 			}
@@ -128,7 +130,7 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 			}
 			const outputCell = items[2];
 			if (outputCell.items.length > 0 && outputCell.items[0].mime.startsWith('image/') && !this.promptEndpoint.supportsVision) {
-				const options = { status: { description: l10n.t("{0} does not support images.", this.promptEndpoint.model), kind: ChatResponseReferencePartStatusKind.Omitted } };
+				const options = { status: { description: this.getUnsupportedImageDescription(), kind: ChatResponseReferencePartStatusKind.Omitted } };
 				if (this.props.omitReferences) {
 					return;
 				}
@@ -194,6 +196,18 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 		}
 
 		return <CodeSummary variableName={this.props.variableName} document={documentSnapshot} range={range} filePathMode={this.props.filePathMode} lineNumberStyle={this.props.lineNumberStyle} omitReferences={this.props.omitReferences} description={this.props.description} />;
+	}
+
+	private getUnsupportedImageDescription(): string {
+		const copilotToken = this.authService.copilotToken;
+		if (copilotToken && !copilotToken.isEditorPreviewFeaturesEnabled()) {
+			const plan = copilotToken.copilotPlan;
+			if (plan === 'business' || plan === 'enterprise') {
+				return l10n.t("Vision support is disabled by your admin.");
+			}
+		}
+
+		return l10n.t("{0} does not support images.", this.promptEndpoint.model);
 	}
 }
 
