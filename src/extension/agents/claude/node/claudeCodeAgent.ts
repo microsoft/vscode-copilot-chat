@@ -453,9 +453,17 @@ export class ClaudeCodeSession extends Disposable {
 			return {};
 		}
 
+		// Filter out plan files - they are internal to Claude's planning process
+		// and shouldn't be shown as user-facing changes
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		const filteredUris = uris.filter(uri => {
+			// Check if the URI is within the .claude/plans directory
+			return !uri.toString().startsWith(planDirUri.toString());
+		});
+
 		await this._editTracker.trackEdit(
 			toolUseID ?? '',
-			uris,
+			filteredUris,
 			this._currentRequest.stream,
 			token
 		);
