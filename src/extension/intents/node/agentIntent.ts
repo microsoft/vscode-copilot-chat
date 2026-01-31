@@ -205,8 +205,7 @@ export class AgentIntent extends EditCodeIntent {
 			return {};
 		}
 
-		const endpointProvider = this.instantiationService.invokeFunction(accessor => accessor.get(IEndpointProvider));
-		const endpoint = await endpointProvider.getChatEndpoint(request);
+		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 
 		const promptContext: IBuildPromptContext = {
 			history,
