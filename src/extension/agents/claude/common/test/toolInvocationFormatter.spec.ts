@@ -28,7 +28,7 @@ describe('createFormattedToolInvocation', () => {
 			expect(result).toBeDefined();
 			expect(result!.toolName).toBe(ClaudeToolNames.Bash);
 			expect(result!.toolCallId).toBe('test-tool-id-123');
-			expect(result!.isConfirmed).toBe(true);
+			expect(result!.isConfirmed).toBeUndefined();
 			expect(result!.invocationMessage).toBe('');
 			expect(result!.toolSpecificData).toEqual({
 				commandLine: { original: 'npm install' },
@@ -57,7 +57,7 @@ describe('createFormattedToolInvocation', () => {
 
 			expect(result).toBeDefined();
 			expect(result!.toolName).toBe(ClaudeToolNames.Read);
-			expect(result!.isConfirmed).toBe(true);
+			expect(result!.isConfirmed).toBeUndefined();
 			expect(result!.invocationMessage).toBeDefined();
 			const message = result!.invocationMessage as { value: string };
 			expect(message.value).toContain(URI.file('/path/to/file.ts').toString());
@@ -237,7 +237,25 @@ describe('createFormattedToolInvocation', () => {
 	});
 
 	describe('common properties', () => {
-		it('sets isConfirmed to true for all non-suppressed tools', () => {
+		it('sets isConfirmed to true when complete=true is passed', () => {
+			const tools = [
+				ClaudeToolNames.Bash,
+				ClaudeToolNames.Read,
+				ClaudeToolNames.Glob,
+				ClaudeToolNames.Grep,
+				ClaudeToolNames.LS,
+				ClaudeToolNames.ExitPlanMode,
+				ClaudeToolNames.Task
+			];
+
+			for (const tool of tools) {
+				const toolUse = createToolUseBlock(tool, {});
+				const result = createFormattedToolInvocation(toolUse, true);
+				expect(result?.isConfirmed).toBe(true);
+			}
+		});
+
+		it('leaves isConfirmed undefined when complete is not passed', () => {
 			const tools = [
 				ClaudeToolNames.Bash,
 				ClaudeToolNames.Read,
@@ -251,7 +269,7 @@ describe('createFormattedToolInvocation', () => {
 			for (const tool of tools) {
 				const toolUse = createToolUseBlock(tool, {});
 				const result = createFormattedToolInvocation(toolUse);
-				expect(result?.isConfirmed).toBe(true);
+				expect(result?.isConfirmed).toBeUndefined();
 			}
 		});
 
