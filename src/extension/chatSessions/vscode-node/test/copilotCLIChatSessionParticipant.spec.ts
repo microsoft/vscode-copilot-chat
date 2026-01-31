@@ -7,10 +7,12 @@ import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/promptsServiceImpl';
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
@@ -187,6 +189,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
 		const logService = accessor.get(ILogService);
+		const configurationService = accessor.get(IConfigurationService);
+		const experimentationService = accessor.get(IExperimentationService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
 			override loadMcpConfig = vi.fn(async () => {
 				return undefined;
@@ -213,7 +217,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 						}
 					}();
 				}
-				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport());
+				const session = new TestCopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport(), configurationService, experimentationService);
 				cliSessions.push(session);
 				return disposables.add(session);
 			}

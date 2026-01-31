@@ -11,7 +11,7 @@ import { CopilotToken } from '../../../platform/authentication/common/copilotTok
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -585,7 +585,11 @@ export class CopilotLanguageModelWrapper extends Disposable {
 					thinkingActive = true;
 				}
 			} else if (thinkingActive) {
-				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				// Only signal reasoning done if thinkingKeepExpanded setting is false (default)
+				const keepExpanded = this._configurationService.getExperimentBasedConfig(ConfigKey.ThinkingKeepExpanded, this._expService);
+				if (!keepExpanded) {
+					progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				}
 				thinkingActive = false;
 			}
 			if (delta.text) {

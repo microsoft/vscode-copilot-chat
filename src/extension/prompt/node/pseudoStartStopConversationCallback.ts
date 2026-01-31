@@ -7,8 +7,10 @@ import * as l10n from '@vscode/l10n';
 import { disableErrorLogging, parse as parsePartialJson } from 'best-effort-json-parser';
 import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -35,8 +37,26 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
 		private readonly processNonReportedDelta: ((deltas: IResponseDelta[]) => string[]) | undefined,
-		private readonly options?: { subagentInvocationId?: string }
+		private readonly options?: { subagentInvocationId?: string },
+		private readonly _configurationService?: IConfigurationService,
+		private readonly _experimentationService?: IExperimentationService
 	) { }
+
+	/**
+	 * Returns whether the reasoning done signal should be emitted.
+	 * When thinkingKeepExpanded is true, we don't signal reasoning done to keep the thinking section expanded.
+	 */
+	protected shouldSignalReasoningDone(): boolean {
+		if (!this._configurationService || !this._experimentationService) {
+			// If services are not provided, default to signaling reasoning done
+			return true;
+		}
+		const keepExpanded = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.ThinkingKeepExpanded,
+			this._experimentationService
+		);
+		return !keepExpanded;
+	}
 
 	async processResponse(_context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
 		return this.doProcessResponse(inputStream, outputStream, token);
@@ -59,7 +79,9 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 				this.thinkingActive = true;
 			}
 		} else if (this.thinkingActive) {
-			progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
+			if (this.shouldSignalReasoningDone()) {
+				progress.thinkingProgress({ id: '', text: '', metadata: { vscodeReasoningDone: true, stopReason: delta.text ? 'text' : 'other' } });
+			}
 			this.thinkingActive = false;
 		}
 

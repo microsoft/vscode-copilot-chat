@@ -5,7 +5,9 @@
 
 import type { Attachment, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger, LoggedRequestKind } from '../../../../platform/requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -101,9 +103,23 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		@IChatDelegationSummaryService private readonly _delegationSummaryService: IChatDelegationSummaryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ICopilotCLIImageSupport private readonly _imageSupport: ICopilotCLIImageSupport,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
+	}
+
+	/**
+	 * Returns whether the reasoning done signal should be emitted.
+	 * When thinkingKeepExpanded is true, we don't signal reasoning done to keep the thinking section expanded.
+	 */
+	private shouldSignalReasoningDone(): boolean {
+		const keepExpanded = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.ThinkingKeepExpanded,
+			this._experimentationService
+		);
+		return !keepExpanded;
 	}
 
 	attachStream(stream: vscode.ChatResponseStream): IDisposable {
@@ -241,7 +257,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					const responsePart = processToolExecutionStart(event, pendingToolInvocations);
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
-						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						if (this.shouldSignalReasoningDone()) {
+							this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+						}
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
