@@ -16,6 +16,7 @@ import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
+import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
@@ -457,8 +458,8 @@ export class ClaudeCodeSession extends Disposable {
 		// and shouldn't be shown as user-facing changes
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		const filteredUris = uris.filter(uri => {
-			// Check if the URI is within the .claude/plans directory
-			return !uri.toString().startsWith(planDirUri.toString());
+			// Check if the URI is within the .claude/plans directory using proper path comparison
+			return !isEqualOrParent(uri, planDirUri);
 		});
 
 		await this._editTracker.trackEdit(

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
+import { isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 
 describe('Plan File Filtering', () => {
@@ -12,7 +13,8 @@ describe('Plan File Filtering', () => {
 	function filterPlanFiles(uris: URI[], userHome: URI): URI[] {
 		const planDirUri = URI.joinPath(userHome, '.claude', 'plans');
 		return uris.filter(uri => {
-			return !uri.toString().startsWith(planDirUri.toString());
+			// Check if the URI is within the .claude/plans directory using proper path comparison
+			return !isEqualOrParent(uri, planDirUri);
 		});
 	}
 
@@ -109,5 +111,19 @@ describe('Plan File Filtering', () => {
 
 		expect(filtered.length).toBe(1);
 		expect(filtered[0].toString()).toBe(regularFile.toString());
+	});
+
+	it('should not filter files with similar prefix outside plans directory', () => {
+		const userHome = URI.file('/home/user');
+		const similarFile = URI.joinPath(userHome, '.claude', 'plans-backup', 'file.md');
+		const regularFile = URI.file('/workspace/src/test.ts');
+
+		const uris = [similarFile, regularFile];
+		const filtered = filterPlanFiles(uris, userHome);
+
+		// Both should be kept because plans-backup is not the plans directory
+		expect(filtered.length).toBe(2);
+		expect(filtered).toContain(similarFile);
+		expect(filtered).toContain(regularFile);
 	});
 });
