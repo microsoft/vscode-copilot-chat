@@ -166,6 +166,7 @@
 	"copilot.title": "Build with Agent",
 	"copilot.edits.description": "Edit files in your workspace",
 	"copilot.agent.description": "Edit files in your workspace in agent mode",
+	"copilot.agent.summarize.description": "Summarize conversation history",
 	"copilot.workspace.description": "Ask about your workspace",
 	"copilot.workspace.sampleRequest": "How do I build this project?",
 	"copilot.workspace.explain.description": "Explain how the code in your active editor works",
