@@ -16,7 +16,6 @@ import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
-import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
@@ -172,7 +171,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _editTracker = new ExternalEditTracker();
+	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
 	private _currentModelId: string | undefined;
 	private _currentPermissionMode: PermissionMode;
@@ -217,6 +216,11 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		
+		// Initialize edit tracker with plan directory as ignored
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		this._editTracker = new ExternalEditTracker([planDirUri]);
+		
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
@@ -454,17 +458,9 @@ export class ClaudeCodeSession extends Disposable {
 			return {};
 		}
 
-		// Filter out plan files - they are internal to Claude's planning process
-		// and shouldn't be shown as user-facing changes
-		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
-		const filteredUris = uris.filter(uri => {
-			// Check if the URI is within the .claude/plans directory using proper path comparison
-			return !isEqualOrParent(uri, planDirUri);
-		});
-
 		await this._editTracker.trackEdit(
 			toolUseID ?? '',
-			filteredUris,
+			uris,
 			this._currentRequest.stream,
 			token
 		);
