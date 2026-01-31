@@ -886,6 +886,8 @@ Test prompt
 	test('deduplicates enterprise agents that appear in multiple organizations', async () => {
 		// Setup multiple organizations BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+		// Clear default workspace so getPreferredOrganizationName falls back to user organizations
+		mockWorkspaceService.setWorkspaceFolders([]);
 
 		// Create an enterprise agent that will appear in both organizations
 		const enterpriseAgent: CustomAgentListItem = {
