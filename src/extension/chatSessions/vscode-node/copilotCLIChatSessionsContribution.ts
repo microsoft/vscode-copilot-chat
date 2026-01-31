@@ -566,18 +566,19 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
-				if (!parsedFile.header?.model) {
+				const modelFromHeader = parsedFile.header?.model?.[0];
+				if (!modelFromHeader) {
 					continue;
 				}
-				let modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model);
+				let modelId = await this.copilotCLIModels.resolveModel(modelFromHeader);
 				if (modelId) {
 					return modelId;
 				}
 				// Sometimes the models can contain ` (Copilot)` suffix, try stripping that and resolving again.
-				if (!parsedFile.header.model.includes('(')) {
+				if (!modelFromHeader.includes('(')) {
 					continue;
 				}
-				modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model.substring(0, parsedFile.header.model.indexOf('(')).trim());
+				modelId = await this.copilotCLIModels.resolveModel(modelFromHeader.substring(0, modelFromHeader.indexOf('(')).trim());
 				if (modelId) {
 					return modelId;
 				}
@@ -966,8 +967,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 */
 	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined, preferModelInRequest: boolean, token: vscode.CancellationToken): Promise<string | undefined> {
 		const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
-		if (promptFile?.header?.model) {
-			const model = await this.copilotCLIModels.resolveModel(promptFile.header.model);
+		const modelFromHeader = promptFile?.header?.model?.[0];
+		if (modelFromHeader) {
+			const model = await this.copilotCLIModels.resolveModel(modelFromHeader);
 			if (model) {
 				return model;
 			}
