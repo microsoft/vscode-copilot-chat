@@ -13,6 +13,9 @@ import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../..
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotExtensionApi } from '../../api/vscode/extensionApi';
 import { ContributionCollection, IExtensionContributionFactory } from '../../common/contributions';
+import { setHost } from '../../../host/host';
+import { VsCodeHost } from '../../../host/vscodeHost';
+import { WasmHost } from '../../../host/wasmHost';
 
 // ##################################################################################
 // ###                                                                            ###
@@ -32,6 +35,15 @@ export interface IExtensionActivationConfiguration {
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
 	const context = configuration.context;
+
+	const hostKind = (typeof process !== 'undefined' && process.env && process.env.COPILOT_CHAT_HOST
+		? process.env.COPILOT_CHAT_HOST
+		: 'vscode').toLowerCase();
+	if (hostKind === 'wasm') {
+		setHost(new WasmHost());
+	} else {
+		setHost(new VsCodeHost(context));
+	}
 	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation && !isScenarioAutomation) {
 		// FIXME Running in tests, don't activate the extension
 		// Avoid bundling the extension code in the test bundle
