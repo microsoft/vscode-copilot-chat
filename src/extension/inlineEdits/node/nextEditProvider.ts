@@ -53,7 +53,7 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	handleShown(suggestion: T): void;
 	handleAcceptance(docId: DocumentId, suggestion: T): void;
 	handleRejection(docId: DocumentId, suggestion: T): void;
-	handleIgnored(docId: DocumentId, suggestion: T, supersededByRequestUuid: INextEditResult | undefined): void;
+	handleIgnored(docId: DocumentId, suggestion: T, supersededBy: INextEditResult | undefined): void;
 	lastRejectionTime: number;
 	lastTriggerTime: number;
 }
@@ -74,6 +74,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
 	private _lastShownTime = 0;
+	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
+	private _lastShownSuggestionId: number | undefined = undefined;
 
 	private _lastRejectionTime = 0;
 	public get lastRejectionTime() {
@@ -753,6 +755,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
+		this._lastShownSuggestionId = suggestion.requestId;
 	}
 
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
@@ -784,7 +787,15 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
+		// Check if this was the last shown suggestion
+		const wasShown = this._lastShownSuggestionId === suggestion.requestId;
+		const wasSuperseded = supersededBy !== undefined;
+		if (wasShown && !wasSuperseded) {
+			// Was shown to the user
+			this._statelessNextEditProvider.handleIgnored?.();
+		}
+	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined || suggestion.result.edit === undefined) {

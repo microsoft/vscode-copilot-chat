@@ -4,19 +4,159 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { AggressivenessLevel } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DelaySession } from './delay';
 
+export type ActionKind = 'accepted' | 'rejected' | 'ignored';
+
+export const MAX_INTERACTIONS_CONSIDERED = 10;
+export const MAX_INTERACTIONS_STORED = 30;
+
+/**
+ * Get window of actions with ignored action limiting via window expansion.
+ *
+ * When ignored limit is reached, skip excess ignored actions but expand window
+ * further back to still get MAX_INTERACTIONS_CONSIDERED items.
+ */
+export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
+	actions: T[],
+	config: UserHappinessScoreConfiguration
+): T[] {
+	const { limitConsecutiveIgnored, limitTotalIgnored, ignoredLimit } = config;
+
+	if (!limitConsecutiveIgnored && !limitTotalIgnored) {
+		// No limiting - just take last MAX_INTERACTIONS_CONSIDERED
+		return actions.slice(-MAX_INTERACTIONS_CONSIDERED);
+	}
+
+	const result: T[] = [];
+	let consecutiveIgnored = 0;
+	let totalIgnored = 0;
+
+	// Walk backwards through history
+	for (let i = actions.length - 1; i >= 0 && result.length < MAX_INTERACTIONS_CONSIDERED; i--) {
+		const action = actions[i];
+
+		if (action.kind === 'ignored') {
+			let skip = false;
+			if (limitConsecutiveIgnored && consecutiveIgnored >= ignoredLimit) {
+				skip = true;
+			}
+			if (limitTotalIgnored && totalIgnored >= ignoredLimit) {
+				skip = true;
+			}
+
+			if (skip) {
+				continue;
+			}
+
+			consecutiveIgnored++;
+			totalIgnored++;
+		} else {
+			consecutiveIgnored = 0; // Reset consecutive count on accept/reject
+		}
+
+		result.push(action);
+	}
+
+	// Reverse to get chronological order
+	result.reverse();
+	return result;
+}
+
+/**
+ * Calculate user happiness score from actions.
+ * Value between 0 and 1 indicating user happiness.
+ * 1 means very happy, 0 means very unhappy.
+ *
+ * Uses position-weighted scoring with ignored action limiting:
+ * - More recent actions have higher weight
+ * - Ignored actions can be limited (consecutive or total) to prevent score dilution
+ * - Score is adjusted towards neutral (0.5) based on data confidence
+ */
+export function getUserHappinessScore(
+	actions: { kind: ActionKind }[],
+	config: UserHappinessScoreConfiguration
+): number {
+	if (actions.length === 0) {
+		return 0.5; // neutral score when no data
+	}
+
+	// Get window of actions with ignored limiting
+	const window = getWindowWithIgnoredLimit(actions, config);
+
+	if (window.length === 0) {
+		return 0.5; // neutral score when no data after filtering
+	}
+
+	// Calculate weighted score
+	let weightedScore = 0; // Sum of weighted normalized scores
+	let totalWeight = 0; // Sum of weights applied
+	let scoredActionCount = 0; // Count of actions that contributed to score
+
+	for (let i = 0; i < window.length; i++) {
+		const action = window[i];
+
+		// Skip ignored actions if not included in score calculation
+		if (action.kind === 'ignored' && !config.includeIgnored) {
+			continue;
+		}
+
+		scoredActionCount++;
+
+		// Calculate weight based on position (more recent = higher weight)
+		// Position 0 (oldest) has lowest weight, last position has highest weight
+		const weight = i + 1;
+
+		// Get score based on action kind from configuration
+		let score: number;
+		switch (action.kind) {
+			case 'accepted':
+				score = config.acceptedScore;
+				break;
+			case 'rejected':
+				score = config.rejectedScore;
+				break;
+			case 'ignored':
+				score = config.ignoredScore;
+				break;
+		}
+
+		// Normalize score to 0-1 range based on accept/reject weights
+		const normalized = (score - config.rejectedScore) / (config.acceptedScore - config.rejectedScore);
+
+		weightedScore += normalized * weight;
+		totalWeight += weight;
+	}
+
+	const rawScore = totalWeight > 0 ? weightedScore / totalWeight : 0.5;
+
+	// Adjust score towards neutral (0.5) when we have fewer data points
+	// This prevents extreme scores with limited data
+	const dataConfidence = scoredActionCount / MAX_INTERACTIONS_CONSIDERED;
+	return 0.5 + (rawScore - 0.5) * dataConfidence;
+}
+
 export class UserInteractionMonitor {
 
-	private static readonly MAX_INTERACTIONS_CONSIDERED = 10;
+	/**
+	 * Used for aggressiveness level calculation.
+	 * Includes all action types (accepted, rejected, ignored).
+	 */
+	private _recentUserActionsForAggressiveness: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
 
-	private _recentUserActions: { time: number; kind: 'accepted' | 'rejected' }[] = [];
+	/**
+	 * Used for timing/debounce calculation.
+	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
+	 */
+	private _recentUserActionsForTiming: { time: number; kind: 'accepted' | 'rejected' }[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ILogService private readonly _logService: ILogService,
 	) { }
 
 	// Capture user interactions
@@ -29,10 +169,22 @@ export class UserInteractionMonitor {
 		this._recordUserAction('rejected');
 	}
 
-	private _recordUserAction(kind: 'accepted' | 'rejected') {
-		this._recentUserActions.push({ time: Date.now(), kind });
-		// keep at most 10 user actions
-		this._recentUserActions = this._recentUserActions.slice(-UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED);
+	public handleIgnored(): void {
+		this._recordUserAction('ignored');
+	}
+
+	private _recordUserAction(kind: 'accepted' | 'rejected' | 'ignored') {
+		const now = Date.now();
+
+		// Always record for aggressiveness calculation
+		this._recentUserActionsForAggressiveness.push({ time: now, kind });
+		this._recentUserActionsForAggressiveness = this._recentUserActionsForAggressiveness.slice(-MAX_INTERACTIONS_STORED);
+
+		// Only record accepts/rejects for timing calculation
+		if (kind !== 'ignored') {
+			this._recentUserActionsForTiming.push({ time: now, kind });
+			this._recentUserActionsForTiming = this._recentUserActionsForTiming.slice(-MAX_INTERACTIONS_CONSIDERED);
+		}
 	}
 
 	// Creates a DelaySession based on recent user interactions
@@ -56,7 +208,8 @@ export class UserInteractionMonitor {
 		let multiplier = 1;
 
 		// Calculate impact of each action with time decay
-		for (const action of this._recentUserActions) {
+		// Uses timing-specific array which only contains accepts/rejects
+		for (const action of this._recentUserActionsForTiming) {
 			const timeSinceAction = now - action.time;
 			if (timeSinceAction > DEBOUNCE_DECAY_TIME_MS) {
 				continue;
@@ -90,10 +243,11 @@ export class UserInteractionMonitor {
 		}
 
 		let level: AggressivenessLevel;
-		const userHappinessScore = this._getUserHappinessScore();
-		if (userHappinessScore >= 0.7) {
+		const config = this._getUserHappinessScoreConfiguration();
+		const userHappinessScore = this._getUserHappinessScore(config);
+		if (userHappinessScore >= config.highThreshold) {
 			level = AggressivenessLevel.High;
-		} else if (userHappinessScore >= 0.4) {
+		} else if (userHappinessScore >= config.mediumThreshold) {
 			level = AggressivenessLevel.Medium;
 		} else {
 			level = AggressivenessLevel.Low;
@@ -101,36 +255,22 @@ export class UserInteractionMonitor {
 		return { aggressivenessLevel: level, userHappinessScore };
 	}
 
-	/**
-	 * Value between 0 and 1 indicating user happiness.
-	 * 1 means very happy, 0 means very unhappy.
-	 */
-	private _getUserHappinessScore(): number {
-		if (this._recentUserActions.length === 0) {
-			return 0.5; // neutral score when no data
+	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+		const configString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString, this._experimentationService);
+		if (configString === undefined) {
+			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 
-		let weightedScore = 0;
-		let totalWeight = 0;
-
-		for (let i = 0; i < this._recentUserActions.length; i++) {
-			const action = this._recentUserActions[i];
-			// Calculate weight based on position (more recent = higher weight)
-			// Position 0 (oldest) has lowest weight, last position has highest weight
-			const weight = i + 1;
-
-			// Accepted = 1, Rejected = 0
-			const score = action.kind === 'accepted' ? 1 : 0;
-
-			weightedScore += score * weight;
-			totalWeight += weight;
+		try {
+			return parseUserHappinessScoreConfigurationString(configString);
 		}
+		catch (e) {
+			this._logService.error('Failed to parse user happiness score configuration, using default config', e);
+			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
+		}
+	}
 
-		const rawScore = totalWeight > 0 ? weightedScore / totalWeight : 0.5;
-
-		// Adjust score towards neutral (0.5) when we have fewer data points
-		// This prevents extreme scores with limited data
-		const dataConfidence = this._recentUserActions.length / UserInteractionMonitor.MAX_INTERACTIONS_CONSIDERED;
-		return 0.5 + (rawScore - 0.5) * dataConfidence;
+	private _getUserHappinessScore(config: UserHappinessScoreConfiguration): number {
+		return getUserHappinessScore(this._recentUserActionsForAggressiveness, config);
 	}
 }
