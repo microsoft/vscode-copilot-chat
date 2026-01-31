@@ -9,6 +9,7 @@ import { createSha256Hash } from '../../../../../../util/common/crypto';
 import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
+import { isInlineSuggestionFromTextAfterCursor } from '../../../../../xtab/common/inlineSuggestion';
 import { GhostTextLogContext } from '../../../../common/ghostTextContext';
 import { initializeTokenizers } from '../../../prompt/src/tokenization';
 import { CancellationTokenSource, CancellationToken as ICancellationToken } from '../../../types/src';
@@ -705,34 +706,9 @@ function getLocalInlineSuggestion(
 
 /** Checks if the position is valid inline suggestion position. Returns `undefined` if it's position where ghost text shouldn't be displayed */
 function isInlineSuggestion(document: TextDocumentContents, position: IPosition) {
-	//Checks if we're in the position for the middle of the line suggestion
-	const isMiddleOfLine = isMiddleOfTheLine(position, document);
-	const isValidMiddleOfLine = isValidMiddleOfTheLinePosition(position, document);
-
-	if (isMiddleOfLine && !isValidMiddleOfLine) {
-		return;
-	}
-
-	const isInlineSuggestion = isMiddleOfLine && isValidMiddleOfLine;
-	return isInlineSuggestion;
-}
-
-/** Checks if position is NOT at the end of the line */
-function isMiddleOfTheLine(selectionPosition: IPosition, doc: TextDocumentContents): boolean {
-	// must be end of line or trailing whitespace
-	const line = doc.lineAt(selectionPosition);
-	if (line.text.substr(selectionPosition.character).trim().length !== 0) {
-		return true;
-	}
-
-	return false;
-}
-
-/** Checks if position is valid for the middle of the line suggestion */
-function isValidMiddleOfTheLinePosition(selectionPosition: IPosition, doc: TextDocumentContents): boolean {
-	const line = doc.lineAt(selectionPosition);
-	const endOfLine = line.text.substr(selectionPosition.character).trim();
-	return /^\s*[)>}\]"'`]*\s*[:{;,]?\s*$/.test(endOfLine);
+	const line = document.lineAt(position);
+	const textAfterCursor = line.text.substring(position.character);
+	return isInlineSuggestionFromTextAfterCursor(textAfterCursor);
 }
 
 // This enables tests to control multi line behavior
