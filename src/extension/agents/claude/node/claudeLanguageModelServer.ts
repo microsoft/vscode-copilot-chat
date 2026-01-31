@@ -26,6 +26,11 @@ import { SSEParser } from '../../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
+/**
+ * Marker string to identify user-initiated messages from VS Code in the Messages API.
+ */
+export const VSCODE_USER_INITIATED_MESSAGE_MARKER = '__vscode_user_initiated_message__';
+
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
 	readonly nonce: string;
@@ -161,7 +166,21 @@ export class ClaudeLanguageModelServer extends Disposable {
 
 			// Determine if this is a user-initiated message
 			const lastMessage = requestBody.messages?.at(-1);
-			const isUserInitiatedMessage = lastMessage?.role === 'user';
+			const lastContentItems = !lastMessage || typeof lastMessage.content === 'string'
+				? []
+				: lastMessage.content;
+			// const lastContentItem = lastContentItems?.at(-1);
+
+			const isUserInitiatedMessage =
+				// A user initiated message would only be of role 'user'
+				lastMessage?.role === 'user' &&
+				// We expect our marker AND the user's actual message so there will be multiple content items
+				lastContentItems.length > 1 &&
+				// If it's a user-initiated message, the last one will be the actual user message,
+				// so we check the preceding content items for the marker.
+				lastContentItems
+					.slice(0, -1)
+					.some(c => c.type === 'text' && c.text.includes(VSCODE_USER_INITIATED_MESSAGE_MARKER));
 
 			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
 			// Filter to only endpoints that support the Messages API
