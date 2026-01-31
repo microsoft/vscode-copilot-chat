@@ -3099,7 +3099,6 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.askQuestions.enabled%",
 						"tags": [
-							"experimental",
 							"onExp"
 						]
 					},
