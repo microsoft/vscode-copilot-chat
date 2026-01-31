@@ -4,14 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CustomFetcher } from '@vscode/extension-telemetry';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
-import { IConfigurationService } from '../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
 import { BaseTelemetryService } from '../common/baseTelemetryService';
+import { IExperimentationService } from '../common/nullExperimentationService';
 import { ITelemetryUserConfig } from '../common/telemetry';
 import { GitHubTelemetrySender } from './githubTelemetrySender';
 import { MicrosoftTelemetrySender } from './microsoftTelemetrySender';
@@ -31,7 +33,8 @@ export class TelemetryService extends BaseTelemetryService {
 		@IEnvService envService: IEnvService,
 		@ITelemetryUserConfig telemetryUserConfig: ITelemetryUserConfig,
 		@IDomainService domainService: IDomainService,
-		@IFetcherService fetcherService: IFetcherService
+		@IFetcherService fetcherService: IFetcherService,
+		@IInstantiationService instantiationService: IInstantiationService
 	) {
 		const customFetcher: CustomFetcher = async (url: string, init?: { method: 'POST'; headers?: Record<string, string>; body?: string }) => {
 			return fetcherService.fetch(url, {
@@ -47,6 +50,16 @@ export class TelemetryService extends BaseTelemetryService {
 			tokenStore,
 			customFetcher
 		);
+
+		// Lazy getter for the experiment flag.
+		// Uses IInstantiationService to get IExperimentationService lazily to avoid circular dependency:
+		// TelemetryService -> IExperimentationService -> ITelemetryService
+		// The flag is only evaluated on the first telemetry event, by which time both services are initialized.
+		const useNewTelemetryLibGetter = () => {
+			const expService = instantiationService.invokeFunction(accessor => accessor.get(IExperimentationService));
+			return configService.getExperimentBasedConfig(ConfigKey.TeamInternal.UseVSCodeTelemetryLibForGH, expService);
+		};
+
 		const ghTelemetrySender = new GitHubTelemetrySender(
 			configService,
 			envService,
@@ -56,7 +69,8 @@ export class TelemetryService extends BaseTelemetryService {
 			extensionName,
 			externalGHAIKey,
 			estrictedGHAIKey,
-			tokenStore
+			tokenStore,
+			useNewTelemetryLibGetter
 		);
 		super(tokenStore, capiClientService, microsoftTelemetrySender, ghTelemetrySender);
 
