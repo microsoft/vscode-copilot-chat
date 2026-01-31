@@ -141,6 +141,17 @@ const importMetaPlugin: esbuild.Plugin = {
 	}
 };
 
+const srcAliasPlugin: esbuild.Plugin = {
+	name: 'srcAliasPlugin',
+	setup(build) {
+		// Resolve #src/* imports to ./src/*
+		build.onResolve({ filter: /^#src\// }, args => {
+			const relativePath = args.path.slice('#src/'.length);
+			return { path: path.join(REPO_ROOT, 'src', relativePath) };
+		});
+	}
+};
+
 const shimVsCodeTypesPlugin: esbuild.Plugin = {
 	name: 'shimVsCodeTypesPlugin',
 	setup(build) {
@@ -188,7 +199,7 @@ const nodeExtHostBuildOptions = {
 		{ in: './src/sanity-test-extension.ts', out: 'sanity-test-extension' },
 	],
 	loader: { '.ps1': 'text' },
-	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
+	plugins: [srcAliasPlugin, testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 		'vscode'
@@ -202,6 +213,7 @@ const webExtHostBuildOptions = {
 		{ in: './src/extension/extension/vscode-worker/extension.ts', out: 'web' },
 	],
 	format: 'cjs', // Necessary to export activate function from bundle for extension
+	plugins: [srcAliasPlugin],
 	external: [
 		'vscode',
 		'http',
@@ -221,7 +233,7 @@ const nodeSimulationBuildOptions = {
 	entryPoints: [
 		{ in: './test/simulationMain.ts', out: 'simulationMain' },
 	],
-	plugins: [testBundlePlugin, shimVsCodeTypesPlugin],
+	plugins: [srcAliasPlugin, testBundlePlugin, shimVsCodeTypesPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 	]
@@ -237,6 +249,7 @@ const nodeSimulationWorkbenchUIBuildOptions = {
 	alias: {
 		'vscode': './src/util/common/test/shims/vscodeTypesShim.ts'
 	},
+	plugins: [srcAliasPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 
@@ -278,6 +291,7 @@ const typeScriptServerPluginBuildOptions = {
 		"typescript",
 		"typescript/lib/tsserverlibrary"
 	],
+	plugins: [srcAliasPlugin],
 	entryPoints: [
 		{ in: './src/extension/typescriptContext/serverPlugin/src/node/main.ts', out: 'main' },
 	]
