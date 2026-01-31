@@ -169,7 +169,6 @@ export class ClaudeLanguageModelServer extends Disposable {
 			const lastContentItems = !lastMessage || typeof lastMessage.content === 'string'
 				? []
 				: lastMessage.content;
-			// const lastContentItem = lastContentItems?.at(-1);
 
 			// Find the index of the marker content item if it exists
 			const markerIndex = lastContentItems.findIndex(
