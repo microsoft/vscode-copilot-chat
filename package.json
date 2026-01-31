@@ -2716,13 +2716,13 @@
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
-				"enablement": "!chatSessionRequestInProgress && workbenchState != empty",
+				"enablement": "!chatSessionRequestInProgress",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
-				"enablement": "!chatSessionRequestInProgress && workbenchState != empty",
+				"enablement": "!chatSessionRequestInProgress",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			},
@@ -4403,7 +4403,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty",
 					"group": "navigation@0"
 				},
 				{
@@ -4973,7 +4973,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty"
 				}
 			],
 			"chat/chatSessions": [
@@ -4999,7 +4999,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty",
 					"group": "3_apply@0"
 				},
 				{
