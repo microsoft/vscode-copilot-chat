@@ -651,6 +651,25 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve([])
 			]);
 
+			try {
+				const items = await this.getRepositoriesOptionItems(repoIds);
+				if (items.length > 0) {
+					optionGroups.push({
+						id: REPOSITORIES_OPTION_GROUP_ID,
+						name: vscode.l10n.t('Repository'),
+						description: vscode.l10n.t('Select repository'),
+						icon: new vscode.ThemeIcon('repo'),
+						items,
+						commands: [{
+							command: OPEN_REPOSITORY_COMMAND_ID,
+							title: vscode.l10n.t('Browse repositories...'),
+						}]
+					});
+				}
+
+			} catch (error) {
+				this.logService.error(`Error fetching repositories: ${error}`);
+			}
 
 			// Partner agents
 			// Only show if repo provides a choice of agent (>1)
@@ -721,26 +740,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					items: modelItems,
 					when: `!chatSessionOption.partnerAgents || chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
-			}
-
-			try {
-				const items = await this.getRepositoriesOptionItems(repoIds);
-				if (items.length > 0) {
-					optionGroups.push({
-						id: REPOSITORIES_OPTION_GROUP_ID,
-						name: vscode.l10n.t('Repository'),
-						description: vscode.l10n.t('Select repository'),
-						icon: new vscode.ThemeIcon('repo'),
-						items,
-						commands: [{
-							command: OPEN_REPOSITORY_COMMAND_ID,
-							title: vscode.l10n.t('Browse repositories...'),
-						}]
-					});
-				}
-
-			} catch (error) {
-				this.logService.error(`Error fetching repositories: ${error}`);
 			}
 
 			this.logService.trace(`copilotCloudSessionsProvider#provideChatSessionProviderOptions: Returning options: ${JSON.stringify(optionGroups, undefined, 2)}`);
