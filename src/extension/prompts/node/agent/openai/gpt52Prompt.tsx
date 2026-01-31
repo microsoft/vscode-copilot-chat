@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isHiddenModelB } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt52Family } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -306,10 +306,10 @@ class HiddenModelBPrompt extends PromptElement<DefaultAgentPromptProps> {
 	}
 }
 
-class HiddenModelBPromptResolver implements IAgentPrompt {
+class Gpt52PromptResolver implements IAgentPrompt {
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelB(endpoint.family);
+		return isGpt52Family(endpoint);
 	}
 
 	static readonly familyPrefixes = [];
@@ -346,4 +346,4 @@ export class HiddenModelBReminderInstructions extends PromptElement<ReminderInst
 	}
 }
 
-PromptRegistry.registerPrompt(HiddenModelBPromptResolver);
+PromptRegistry.registerPrompt(Gpt52PromptResolver);
