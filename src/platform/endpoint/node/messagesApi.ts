@@ -730,12 +730,40 @@ export class AnthropicMessagesProcessor {
 						(sum, edit) => sum + (edit.cleared_input_tokens || 0),
 						0
 					);
-					this.logService.trace(`[messagesAPI] Anthropic context editing applied: cleared ${totalClearedTokens} tokens.`);
-					this.telemetryData.extendedBy({
-						contextEditingApplied: 'true',
-						contextEditingClearedTokens: totalClearedTokens.toString(),
-						contextEditingEditCount: this.contextManagementResponse.applied_edits.length.toString(),
-					});
+					const totalClearedToolUses = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+						0
+					);
+					const totalClearedThinkingTurns = this.contextManagementResponse.applied_edits.reduce(
+						(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+						0
+					);
+					this.logService.trace(`[messagesAPI] Anthropic context editing applied: cleared ${totalClearedTokens} tokens, ${totalClearedToolUses} tool uses.`);
+
+					/* __GDPR__
+						"contextEditingApplied" : {
+							"owner": "bhavyaus",
+							"comment": "Tracks when Anthropic context editing is applied to manage context window",
+							"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID for correlation" },
+							"interactionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The interaction ID for correlation" },
+							"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used" },
+							"clearedTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tokens cleared" },
+							"clearedToolUses": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total tool uses cleared" },
+							"clearedThinkingTurns": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total thinking turns cleared" }
+						}
+					*/
+					this.telemetryService.sendMSFTTelemetryEvent('contextEditingApplied',
+						{
+							requestId: this.requestId,
+							interactionId: this.requestId,
+							model: this.model,
+						},
+						{
+							clearedTokens: totalClearedTokens,
+							clearedToolUses: totalClearedToolUses,
+							clearedThinkingTurns: totalClearedThinkingTurns,
+						}
+					);
 				}
 				if (this.toolSearchRequests > 0) {
 					this.logService.trace(`[messagesAPI] Anthropic tool search requests: ${this.toolSearchRequests}.`);
