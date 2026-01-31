@@ -230,7 +230,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		// Return cached changes
-		if (worktreeProperties?.changes) {
+		if (worktreeProperties.changes) {
 			return worktreeProperties.changes;
 		}
 
