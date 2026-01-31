@@ -4265,7 +4265,6 @@
 						"markdownDescription": "%github.copilot.config.agentCustomizationSkill.enabled%",
 						"tags": [
 							"advanced",
-							"experimental",
 							"onExp"
 						]
 					},
