@@ -216,11 +216,9 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
-		
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
-		
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
