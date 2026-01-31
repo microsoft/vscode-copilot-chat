@@ -2716,13 +2716,13 @@
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
 				"title": "%github.copilot.command.applyCopilotCLIAgentSessionChanges%",
-				"enablement": "!chatSessionRequestInProgress",
+				"enablement": "!chatSessionRequestInProgress && workbenchState != empty",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
 				"title": "%github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply%",
-				"enablement": "!chatSessionRequestInProgress",
+				"enablement": "!chatSessionRequestInProgress && workbenchState != empty",
 				"icon": "$(git-stash-pop)",
 				"category": "GitHub Copilot"
 			},
