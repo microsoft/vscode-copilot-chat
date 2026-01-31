@@ -24,18 +24,21 @@ class TelemetryReporterAdapter implements TelemetrySender {
 	private readonly newReporter?: TelemetryReporter;
 	private readonly tokenStore?: ICopilotTokenStore;
 	private readonly useNewTelemetryLibGetter: () => boolean;
+	private readonly namespace: string;
 	private cachedFlagValue: boolean | undefined;
 
 	constructor(
 		oldReporter: AzureInsightReporter,
 		newReporter: TelemetryReporter | undefined,
 		tokenStore: ICopilotTokenStore | undefined,
-		useNewTelemetryLibGetter: () => boolean
+		useNewTelemetryLibGetter: () => boolean,
+		namespace: string
 	) {
 		this.oldReporter = oldReporter;
 		this.newReporter = newReporter;
 		this.tokenStore = tokenStore;
 		this.useNewTelemetryLibGetter = useNewTelemetryLibGetter;
+		this.namespace = namespace;
 	}
 
 	/**
@@ -47,6 +50,18 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			this.cachedFlagValue = this.useNewTelemetryLibGetter();
 		}
 		return this.cachedFlagValue;
+	}
+
+	/**
+	 * Processes the event name to match the behavior of AzureInsightReporter.massageEventName:
+	 * - If wrapped with the special marker, unwrap and return as-is
+	 * - Otherwise, prefix with namespace/ unless already prefixed
+	 */
+	private massageEventName(eventName: string): string {
+		if (eventName.includes('wrapped-telemetry-event-name-') && eventName.endsWith('-wrapped-telemetry-event-name')) {
+			return unwrapEventNameFromPrefix(eventName);
+		}
+		return eventName.includes(this.namespace) ? eventName : `${this.namespace}/${eventName}`;
 	}
 
 	/**
@@ -82,9 +97,9 @@ class TelemetryReporterAdapter implements TelemetrySender {
 
 		// Use either NEW or OLD API based on experiment flag (not both)
 		if (this.useNewTelemetryLib && this.newReporter) {
-			// Remove the wrapped-telemetry-event-name marker if present.
-			// This marker is used to signal that the event name should not be re-namespaced.
-			const unwrappedEventName = unwrapEventNameFromPrefix(eventName);
+			// Apply the same event name processing as AzureInsightReporter.massageEventName:
+			// unwrap if wrapped, otherwise add extension prefix
+			const processedEventName = this.massageEventName(eventName);
 
 			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
 			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
@@ -93,7 +108,7 @@ class TelemetryReporterAdapter implements TelemetrySender {
 			// Use sendDangerousTelemetryEvent to bypass TelemetryReporter's internal TelemetryLogger.
 			// This is necessary because we already have our own outer TelemetryLogger that handles
 			// opt-in/settings checks. Using the regular sendTelemetryEvent would add another layer.
-			this.newReporter.sendDangerousTelemetryEvent(unwrappedEventName, properties, measurements, tagOverrides);
+			this.newReporter.sendDangerousTelemetryEvent(processedEventName, properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
 			// Pass original eventName - AzureInsightReporter.massageEventName() handles the wrapped marker
@@ -107,22 +122,15 @@ class TelemetryReporterAdapter implements TelemetrySender {
 	sendErrorData(error: Error, data?: Record<string, unknown>): void {
 		const { properties, measurements } = this.extractPropertiesAndMeasurements(data);
 
-		// Add error info to properties
-		properties['error.name'] = error.name;
-		properties['error.message'] = error.message;
-		if (error.stack) {
-			properties['error.stack'] = error.stack;
-		}
-
 		// Use either NEW or OLD API based on experiment flag (not both)
 		if (this.useNewTelemetryLib && this.newReporter) {
 			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
 			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
-			// Use sendDangerousTelemetryErrorEvent to bypass TelemetryReporter's internal TelemetryLogger
-			// (same reason as sendDangerousTelemetryEvent - we have our own outer TelemetryLogger)
-			this.newReporter.sendDangerousTelemetryErrorEvent('error', properties, measurements, tagOverrides);
+			// Use sendDangerousTelemetryException to send to the exceptions table (not events table)
+			// This matches the old API's trackException behavior
+			this.newReporter.sendDangerousTelemetryException(error, properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
 			// Spread data first so our augmented properties/measurements take precedence
@@ -195,7 +203,7 @@ function createGitHubTelemetryReporter(
 		appInsightsOptions
 	);
 
-	return new TelemetryReporterAdapter(oldReporter, newReporter, tokenStore, useNewTelemetryLibGetter);
+	return new TelemetryReporterAdapter(oldReporter, newReporter, tokenStore, useNewTelemetryLibGetter, extensionName);
 }
 
 export class GitHubTelemetrySender extends BaseGHTelemetrySender {
