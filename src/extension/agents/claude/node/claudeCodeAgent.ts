@@ -171,7 +171,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _editTracker = new ExternalEditTracker();
+	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
 	private _currentModelId: string | undefined;
 	private _currentPermissionMode: PermissionMode;
@@ -216,6 +216,9 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		// Initialize edit tracker with plan directory as ignored
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		this._editTracker = new ExternalEditTracker([planDirUri]);
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
