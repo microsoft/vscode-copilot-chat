@@ -138,11 +138,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
-		if (!worktreeProperties) {
-			return;
-		}
 
-		if (worktreeProperties.autoCommit === false) {
+		if (worktreeProperties === undefined || worktreeProperties.autoCommit === false) {
 			// Legacy background session that has the changes staged in the worktree.
 			// To apply the changes, we need to migrate them from the worktree to the
 			// main repository using a stash.
@@ -167,10 +164,12 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			});
 
 			// Delete worktree changes cache
-			this.setWorktreeProperties(sessionId, {
-				...worktreeProperties,
-				changes: undefined
-			});
+			if (worktreeProperties) {
+				this.setWorktreeProperties(sessionId, {
+					...worktreeProperties,
+					changes: undefined
+				});
+			}
 
 			return;
 		}

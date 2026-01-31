@@ -379,6 +379,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// We need this when we create the session later for execution.
 		_sessionModel.set(copilotcliSessionId, model);
 
+		// Ensure that the repository for the background session is opened. This is needed
+		// when the background session is opened in the empty window so that we can access
+		// the changes of the background session.
+		if (worktreeProperties?.repositoryPath) {
+			await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+		}
+
 		return {
 			history,
 			activeResponseCallback: undefined,
