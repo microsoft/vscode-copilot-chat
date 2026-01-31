@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
-import { CancellationToken, DocumentLink, DocumentLinkProvider, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { CancellationToken, DocumentLink, DocumentLinkProvider, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, MarkdownString, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
@@ -236,6 +236,9 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
 		public readonly toolMetadata?: unknown,
+		public readonly toolResultMessage?: string,
+		public readonly toolResultError?: string,
+		public readonly hasError?: boolean,
 	) { }
 
 	async toJSON(): Promise<object> {
@@ -264,7 +267,10 @@ class LoggedToolCall implements ILoggedToolCall {
 			response: responseData,
 			thinking: thinking,
 			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined,
-			toolMetadata: this.toolMetadata
+			toolMetadata: this.toolMetadata,
+			toolResultMessage: this.toolResultMessage,
+			toolResultError: this.toolResultError,
+			hasError: this.hasError
 		};
 	}
 }
@@ -334,8 +340,13 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		const edits = this._workspaceEditRecorder?.getEditsAndReset();
-		// Extract toolMetadata from response if it exists
 		const toolMetadata = 'toolMetadata' in response ? (response as ExtendedLanguageModelToolResult).toolMetadata : undefined;
+		let toolResultMessage = 'toolResultMessage' in response ? (response as ExtendedLanguageModelToolResult).toolResultMessage : undefined;
+		if (toolResultMessage instanceof MarkdownString) {
+			toolResultMessage = toolResultMessage.value;
+		}
+		const toolResultError = 'toolResultError' in response ? (response as ExtendedLanguageModelToolResult).toolResultError : undefined;
+		const hasError = 'hasError' in response ? (response as ExtendedLanguageModelToolResult).hasError : undefined;
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -345,7 +356,10 @@ export class RequestLogger extends AbstractRequestLogger {
 			Date.now(),
 			thinking,
 			edits,
-			toolMetadata
+			toolMetadata,
+			toolResultMessage,
+			toolResultError,
+			hasError
 		));
 	}
 
@@ -523,6 +537,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`id   : ${entry.id}`);
 		result.push(`tool : ${entry.name}`);
 		result.push(`args : ${args}`);
+		result.push(`metadata : ${JSON.stringify(entry.toolMetadata, undefined, 2)}`);
 		result.push(`~~~`);
 
 		result.push(`## Response`);
@@ -546,6 +561,27 @@ export class RequestLogger extends AbstractRequestLogger {
 			}
 			result.push(`~~~`);
 			result.push(Array.isArray(entry.thinking.text) ? entry.thinking.text.join('\n') : entry.thinking.text);
+			result.push(`~~~`);
+		}
+
+		if (entry.toolResultMessage) {
+			result.push(`## Tool Result Message`);
+			result.push(`~~~`);
+			result.push(entry.toolResultMessage);
+			result.push(`~~~`);
+		}
+
+		if (entry.toolResultError) {
+			result.push(`## Tool Result Error`);
+			result.push(`~~~`);
+			result.push(entry.toolResultError);
+			result.push(`~~~`);
+		}
+
+		if (entry.hasError !== undefined) {
+			result.push(`## Has Error`);
+			result.push(`~~~`);
+			result.push(entry.hasError.toString());
 			result.push(`~~~`);
 		}
 
