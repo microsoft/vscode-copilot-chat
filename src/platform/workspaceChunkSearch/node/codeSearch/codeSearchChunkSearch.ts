@@ -473,7 +473,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		if (this.isExternalIngestEnabled() === 'force') {
 			return {
-				status: '',
+				status: 'loaded',
 				repos: [],
 				externalIngestState,
 			};
