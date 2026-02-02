@@ -245,7 +245,7 @@ function createReviewComment(ghComment: ResponseComment | ExcludedComment, reque
 }
 
 const SUGGESTION_EXPRESSION = /```suggestion(\u0020*(\r\n|\n))((?<suggestion>[\s\S]*?)(\r\n|\n))?```/g;
-function removeSuggestion(body: string) {
+export function removeSuggestion(body: string) {
 	const suggestions: string[] = [];
 	const content = body.replaceAll(SUGGESTION_EXPRESSION, (_match, _ws, _nl, suggestion) => {
 		if (suggestion) {
@@ -326,7 +326,7 @@ interface ExcludedFile {
 	};
 }
 
-function parseLine(line: string): ResponseReference[] {
+export function parseLine(line: string): ResponseReference[] {
 
 	if (line === 'data: [DONE]') { return []; }
 	if (line === '') { return []; }
@@ -428,19 +428,19 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 	};
 }
 
-function reversePatch(after: string, diff: string) {
+export function reversePatch(after: string, diff: string) {
 	const patch = parsePatch(diff.split(/\r?\n/));
 	const patchedLines = reverseParsedPatch(after.split(/\r?\n/), patch);
 	return patchedLines.join('\n');
 }
 
-interface LineChange {
+export interface LineChange {
 	beforeLineNumber: number;
 	content: string;
 	type: 'add' | 'remove';
 }
 
-function parsePatch(patchLines: string[]): LineChange[] {
+export function parsePatch(patchLines: string[]): LineChange[] {
 	const changes: LineChange[] = [];
 	let beforeLineNumber = -1;
 
@@ -465,7 +465,7 @@ function parsePatch(patchLines: string[]): LineChange[] {
 	return changes;
 }
 
-function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] {
+export function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] {
 	for (const change of patch) {
 		if (change.type === 'add') {
 			fileLines.splice(change.beforeLineNumber - 1, 1);
