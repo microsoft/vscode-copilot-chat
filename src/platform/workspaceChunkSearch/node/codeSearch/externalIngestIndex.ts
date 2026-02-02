@@ -14,6 +14,7 @@ import { Disposable, DisposableStore, MutableDisposable } from '../../../../util
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import { isEqualOrParent, relativePath } from '../../../../util/vs/base/common/resources';
+import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
@@ -24,6 +25,7 @@ import { RelativePattern } from '../../../filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../ignore/common/ignoreService';
 import { ILogService } from '../../../log/common/logService';
 import { ISearchService } from '../../../search/common/searchService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
@@ -81,7 +83,7 @@ export class ExternalIngestIndex extends Disposable {
 	public readonly onDidChangeState = this._onDidChangeState.event;
 
 	private _currentIngestOperation?: {
-		readonly promise: Promise<Result<true, TriggerIndexingError>>;
+		promise: Promise<Result<true, TriggerIndexingError>>;
 
 		progressMessage: string | undefined;
 
@@ -127,6 +129,7 @@ export class ExternalIngestIndex extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@ISearchService private readonly _searchService: ISearchService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IVSCodeExtensionContext private readonly _vsExtensionContext: IVSCodeExtensionContext,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
@@ -187,11 +190,31 @@ export class ExternalIngestIndex extends Disposable {
 		const filesetName = this.getFilesetName(primaryRoot);
 		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
 
-		await this._client.deleteFileset(filesetName, token);
-		this.clearCurrentIndexCheckpoint();
-		this._onDidChangeState.fire();
+		try {
+			await this._client.deleteFileset(filesetName, token);
+			this.clearCurrentIndexCheckpoint();
+			this._onDidChangeState.fire();
 
-		this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
+			this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
+
+			/* __GDPR__
+				"externalIngestIndex.deleteIndex" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest index is deleted successfully"
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.deleteIndex');
+		} catch (e) {
+			/* __GDPR__
+				"externalIngestIndex.deleteIndex.error" : {
+					"owner": "mjbvz",
+					"comment": "Logged when deleting external ingest index fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.deleteIndex.error', { error: (e as Error).message });
+			throw e;
+		}
 	}
 
 	/**
@@ -256,6 +279,8 @@ export class ExternalIngestIndex extends Disposable {
 			onProgress(message);
 		};
 
+		const sw = new StopWatch();
+
 		const updatePromise = (async (): Promise<Result<true, TriggerIndexingError>> => {
 			try {
 				const result = await this._client.updateIndex(
@@ -267,14 +292,44 @@ export class ExternalIngestIndex extends Disposable {
 				);
 				if (result.isOk()) {
 					this.setCurrentIndexCheckpoint(result.val.checkpoint);
+
+					/* __GDPR__
+						"externalIngestIndex.updateIndex.success" : {
+							"owner": "mjbvz",
+							"comment": "Logged when external ingest index update completes successfully",
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed() });
+
 					return Result.ok(true);
 				} else {
+					/* __GDPR__
+						"externalIngestIndex.updateIndex.error" : {
+							"owner": "mjbvz",
+							"comment": "Logged when external ingest index update fails",
+							"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" },
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before failure in milliseconds" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.updateIndex.error', { error: result.err.message }, { durationMs: sw.elapsed() });
+
 					return Result.error({
 						id: 'external-ingest-error',
 						userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
 					});
 				}
 			} catch (e) {
+				/* __GDPR__
+					"externalIngestIndex.updateIndex.exception" : {
+						"owner": "mjbvz",
+						"comment": "Logged when external ingest index update throws an exception",
+						"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The exception message" },
+						"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before exception in milliseconds" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.updateIndex.exception', { error: (e as Error).message }, { durationMs: sw.elapsed() });
+
 				return Result.error({
 					id: 'external-ingest-error',
 					userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
@@ -287,7 +342,7 @@ export class ExternalIngestIndex extends Disposable {
 			}
 		})();
 
-		(operation as { promise: typeof updatePromise }).promise = updatePromise;
+		operation.promise = updatePromise;
 		this._currentIngestOperation = operation;
 		this._onDidChangeState.fire();
 
@@ -300,20 +355,48 @@ export class ExternalIngestIndex extends Disposable {
 			return [];
 		}
 
-		const resolvedQuery = await query.resolveQuery(token);
+		const sw = new StopWatch();
 
-		await raceCancellationError(this.doIngest(() => { }, token), token);
+		try {
+			const resolvedQuery = await query.resolveQuery(token);
 
-		// TODO: search changed files too
-		const primaryRoot = workspaceFolders[0];
-		const result = await raceCancellationError(this._client.searchFilesets(
-			this.getFilesetName(primaryRoot),
-			primaryRoot,
-			resolvedQuery,
-			sizing.maxResultCountHint,
-			token), token);
+			await raceCancellationError(this.doIngest(() => { }, token), token);
 
-		return result.chunks;
+			// TODO: search changed files too
+			const primaryRoot = workspaceFolders[0];
+			const result = await raceCancellationError(this._client.searchFilesets(
+				this.getFilesetName(primaryRoot),
+				primaryRoot,
+				resolvedQuery,
+				sizing.maxResultCountHint,
+				token), token);
+
+			/* __GDPR__
+				"externalIngestIndex.search.success" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest search completes successfully",
+					"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks returned from the search" },
+					"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the search in milliseconds" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.search.success', undefined, {
+				resultCount: result.chunks.length,
+				durationMs: sw.elapsed()
+			});
+
+			return result.chunks;
+		} catch (e) {
+			/* __GDPR__
+				"externalIngestIndex.search.error" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest search fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" },
+					"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before failure in milliseconds" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.search.error', { error: (e as Error).message }, { durationMs: sw.elapsed() });
+			throw e;
+		}
 	}
 
 	private createDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {

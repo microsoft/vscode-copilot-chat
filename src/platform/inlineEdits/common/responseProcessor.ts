@@ -207,6 +207,17 @@ export namespace ResponseProcessor {
 			// Check if emit is allowed based on the setting
 			const originalLine = originalLines[editWindowIdx];
 			const newLine = state.newLines[0];
+
+			// When the cursor is on an empty line and the model outputs content that matches
+			// (or is a prefix of) the next original line, it's likely deleting the empty line
+			// rather than replacing it. Skip fast-emit to avoid line duplication.
+			if (originalLine.trim() === '' && editWindowIdx + 1 < originalLines.length) {
+				const nextLine = originalLines[editWindowIdx + 1];
+				if (newLine === nextLine || nextLine.startsWith(newLine)) {
+					return;
+				}
+			}
+
 			if (params.emitFastCursorLineChange === EmitFastCursorLineChange.AdditiveOnly && !isAdditiveEdit(originalLine, newLine)) {
 				return;
 			}

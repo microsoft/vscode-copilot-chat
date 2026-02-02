@@ -251,17 +251,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
     ],
   },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
-  },
 }
 `;
 
@@ -362,17 +351,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -633,6 +611,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -869,6 +848,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -1105,6 +1085,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -1341,6 +1322,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -1627,6 +1609,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -1863,6 +1846,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -2099,6 +2083,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -2335,6 +2320,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -2464,17 +2450,6 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -2660,6 +2635,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -2812,17 +2788,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -3008,6 +2973,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
@@ -3244,6 +3210,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
