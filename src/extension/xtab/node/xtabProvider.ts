@@ -49,6 +49,7 @@ import { DelaySession } from '../../inlineEdits/common/delay';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { UserInteractionMonitor } from '../../inlineEdits/common/userInteractionMonitor';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
+import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
@@ -220,13 +221,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
 		// check if there's any non-whitespace character after the cursor in the line
 		const isCursorAtEndOfLine = cursorLine.substring(cursorPosition.column - 1).match(/^\s*$/) !== null;
-		if (isCursorAtEndOfLine) {
+		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
+
+		// Apply extra debounce based on cursor position - only one applies
+		const isInlineSuggestionPosition = isInlineSuggestion(currentDocument, cursorPosition);
+		telemetryBuilder.setIsInlineSuggestion(!!isInlineSuggestionPosition);
+
+		const inlineSuggestionDebounce = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceInlineSuggestion, this.expService);
+		if (isInlineSuggestionPosition && inlineSuggestionDebounce > 0) {
+			tracer.trace('Debouncing for inline suggestion position');
+			delaySession.setExtraDebounce(inlineSuggestionDebounce);
+		} else if (isCursorAtEndOfLine) {
 			tracer.trace('Debouncing for cursor at end of line');
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		} else {
-			tracer.trace('Debouncing for cursor NOT at end of line');
+			tracer.trace('No extra debounce applied');
 		}
-		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
