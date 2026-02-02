@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import { isGpt5_2_CodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
+import { isGpt52CodexFamily } from '../../../../../platform/endpoint/common/chatModelCapabilities';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { GPT5CopilotIdentityRule } from '../../base/copilotIdentity';
@@ -124,7 +124,7 @@ class Gpt51CodexResolver implements IAgentPrompt {
 	static readonly familyPrefixes = [];
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex')) || isGpt5_2_CodexFamily(endpoint);
+		return (endpoint.family.startsWith('gpt-5.1') && endpoint.family.includes('-codex')) || isGpt52CodexFamily(endpoint);
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
