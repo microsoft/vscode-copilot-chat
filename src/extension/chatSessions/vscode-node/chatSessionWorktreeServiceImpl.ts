@@ -337,7 +337,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 
 		// Commit the changes
-		await this.gitService.commit(vscode.Uri.file(worktreePath), message);
+		await this.gitService.commit(vscode.Uri.file(worktreePath), message, { all: true, noVerify: true, signCommit: false });
 		this.logService.trace(`[ChatSessionWorktreeService] Committed all changes in working directory ${worktreePath}`);
 
 		// Delete worktree changes from cache
