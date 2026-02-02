@@ -208,7 +208,7 @@ export async function githubReview(
 	return { type: 'success', comments, excludedComments, reason: unsupportedLanguages.length ? l10n.t('Some of the submitted languages are currently not supported: {0}', unsupportedLanguages.join(', ')) : undefined };
 }
 
-function createReviewComment(ghComment: ResponseComment | ExcludedComment, request: ReviewRequest, document: TextDocument, index: number) {
+export function createReviewComment(ghComment: ResponseComment | ExcludedComment, request: ReviewRequest, document: TextDocument, index: number) {
 	const fromLine = document.lineAt(ghComment.data.line - 1);
 	const lastNonWhitespaceCharacterIndex = fromLine.text.trimEnd().length;
 	const range = new Range(fromLine.lineNumber, fromLine.firstNonWhitespaceCharacterIndex, fromLine.lineNumber, lastNonWhitespaceCharacterIndex);
@@ -291,9 +291,9 @@ interface FileState {
 //   }
 // }
 
-type ResponseReference = ResponseComment | ExcludedComment | ExcludedFile | { type: 'unknown' };
+export type ResponseReference = ResponseComment | ExcludedComment | ExcludedFile | { type: 'unknown' };
 
-interface ResponseComment {
+export interface ResponseComment {
 	type: 'github.generated-pull-request-comment';
 	data: {
 		// The path of the file
@@ -306,7 +306,7 @@ interface ResponseComment {
 	};
 }
 
-interface ExcludedComment {
+export interface ExcludedComment {
 	type: 'github.excluded-pull-request-comment';
 	data: {
 		path: string;
@@ -317,7 +317,7 @@ interface ExcludedComment {
 	};
 }
 
-interface ExcludedFile {
+export interface ExcludedFile {
 	type: 'github.excluded-file';
 	data: {
 		file_path: string;
@@ -477,7 +477,7 @@ export function reverseParsedPatch(fileLines: string[], patch: LineChange[]): st
 	return fileLines;
 }
 
-interface CodingGuideline {
+export interface CodingGuideline {
 	type: string;
 	id: string;
 	data: {
@@ -489,7 +489,7 @@ interface CodingGuideline {
 	};
 }
 
-async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
+export async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
 	const customInstructionRefs = [];
 	let nextId = firstId;
 
