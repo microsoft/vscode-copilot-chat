@@ -126,8 +126,8 @@ export interface IFolderRepositoryManager {
 	 * It will:
 	 * 1. Get the selected folder from memory or workspace folder service
 	 * 2. Check if the folder contains a git repository
-	 * 3. Create a worktree if a git repo is found
-	 * 4. Verify trust on the repository/folder
+	 * 3. Verify trust on the repository/folder
+	 * 4. Create a worktree if a git repo is found
 	 * 5. Migrate uncommitted changes to worktree if requested
 	 */
 	initializeFolderRepository(
