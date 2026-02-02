@@ -10,7 +10,7 @@ import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit'
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -29,7 +29,7 @@ import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/com
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -572,122 +572,163 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			});
 		}) : undefined);
 
-		const createPushEdit = (): PushEdit => {
-			let ithEdit = -1;
-			const statePerDoc = new CachedFunction((id: DocumentId) => {
-				const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
-				if (!doc) {
-					throw new BugIndicatingError();
-				}
-				return {
-					docContents: doc.documentAfterEdits,
-					editsSoFar: StringEdit.empty,
-					nextEdits: [] as StringReplacement[],
-					docId: id,
-				};
-			});
-			const pushEdit: PushEdit = (result) => {
-				const myLogger = logger.createSubLogger('pushEdit');
 
-				++ithEdit;
-				myLogger.trace(`processing edit #${ithEdit} (starts at 0)`);
-
-				if (result.isError()) { // either error or stream of edits ended
-					// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
-					if (ithEdit === 0 && result.err instanceof NoNextEditReason.NoSuggestions) {
-						myLogger.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
-						this._shouldExpandEditWindow = false;
-					}
-					if (statePerDoc.get(curDocId).nextEdits.length) {
-						myLogger.trace(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
-					} else {
-						myLogger.trace(`no edit, reason: ${result.err.kind}`);
-						if (result.err instanceof NoNextEditReason.NoSuggestions) {
-							const { documentBeforeEdits, window } = result.err;
-							const reducedWindow = window ? computeReducedWindow(window, activeDocSelection, documentBeforeEdits) : undefined;
-							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
-						}
-					}
-					{
-						disp.dispose();
-						removeFromPending();
-					}
-					if (!firstEdit.isSettled) {
-						firstEdit.complete(result);
-					}
-					return;
-				}
-
-				// reset shouldExpandEditWindow to false when we get any edit
-				myLogger.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
-				this._shouldExpandEditWindow = false;
-
-				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
-
-				const singleLineEdit = result.val.edit;
-				const lineEdit = new LineEdit([singleLineEdit]);
-				const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
-				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
-
-				if (rebasedEdit === undefined) {
-					myLogger.trace(`edit ${ithEdit} is undefined after rebasing`);
-					if (!firstEdit.isSettled) {
-						firstEdit.complete(Result.error(new NoNextEditReason.Uncategorized(new Error('Rebased edit is undefined'))));
-					}
-					return;
-				}
-
-				targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
-
-				let cachedEdit: CachedOrRebasedEdit | undefined;
-				if (rebasedEdit.replacements.length === 0) {
-					myLogger.trace(`WARNING: ${ithEdit} has no edits`);
-				} else if (rebasedEdit.replacements.length > 1) {
-					myLogger.trace(`WARNING: ${ithEdit} has ${rebasedEdit.replacements.length} edits, but expected only 1`);
-				} else {
-					// populate the cache
-					const nextEdit = rebasedEdit.replacements[0];
-					targetDocState.nextEdits.push(nextEdit);
-					cachedEdit = this._nextEditCache.setKthNextEdit(
-						targetDocState.docId,
-						targetDocState.docContents,
-						ithEdit === 0 ? result.val.window : undefined,
-						nextEdit,
-						ithEdit,
-						ithEdit === 0 ? targetDocState.nextEdits : undefined,
-						ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
-						req,
-						{ isFromCursorJump: result.val.isFromCursorJump }
-					);
-					myLogger.trace(`populated cache for ${ithEdit}`);
-				}
-
-				if (!firstEdit.isSettled) {
-					myLogger.trace('resolving firstEdit promise');
-					logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
-					firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
-				}
-
-				targetDocState.docContents = rebasedEdit.applyOnText(targetDocState.docContents);
+		const statePerDoc = new CachedFunction((id: DocumentId) => {
+			const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
+			if (!doc) {
+				throw new BugIndicatingError();
+			}
+			return {
+				docContents: doc.documentAfterEdits,
+				editsSoFar: StringEdit.empty,
+				nextEdits: [] as StringReplacement[],
+				docId: id,
 			};
+		});
 
-			return pushEdit;
+		const editStream = this._statelessNextEditProvider.provideNextEdit(nextEditRequest, logger, logContext, nextEditRequest.cancellationTokenSource.token);
+
+		let ithEdit = -1;
+
+		const processEdit = (streamedEdit: { readonly edit: LineReplacement; readonly isFromCursorJump: boolean; readonly window?: OffsetRange; readonly targetDocument?: DocumentId }, telemetry: IStatelessNextEditTelemetry): CachedOrRebasedEdit | undefined => {
+			++ithEdit;
+			const myLogger = logger.createSubLogger('processEdit');
+			myLogger.trace(`processing edit #${ithEdit} (starts at 0)`);
+
+			// reset shouldExpandEditWindow to false when we get any edit
+			myLogger.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
+			this._shouldExpandEditWindow = false;
+
+			const targetDocState = statePerDoc.get(streamedEdit.targetDocument ?? curDocId);
+
+			const singleLineEdit = streamedEdit.edit;
+			const lineEdit = new LineEdit([singleLineEdit]);
+			const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
+			const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
+
+			if (rebasedEdit === undefined) {
+				myLogger.trace(`edit ${ithEdit} is undefined after rebasing`);
+				if (!firstEdit.isSettled) {
+					firstEdit.complete(Result.error(new NoNextEditReason.Uncategorized(new Error('Rebased edit is undefined'))));
+				}
+				return undefined;
+			}
+
+			targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
+
+			let cachedEdit: CachedOrRebasedEdit | undefined;
+			if (rebasedEdit.replacements.length === 0) {
+				myLogger.trace(`WARNING: ${ithEdit} has no edits`);
+			} else if (rebasedEdit.replacements.length > 1) {
+				myLogger.trace(`WARNING: ${ithEdit} has ${rebasedEdit.replacements.length} edits, but expected only 1`);
+			} else {
+				// populate the cache
+				const nextEditReplacement = rebasedEdit.replacements[0];
+				targetDocState.nextEdits.push(nextEditReplacement);
+				cachedEdit = this._nextEditCache.setKthNextEdit(
+					targetDocState.docId,
+					targetDocState.docContents,
+					ithEdit === 0 ? streamedEdit.window : undefined,
+					nextEditReplacement,
+					ithEdit,
+					ithEdit === 0 ? targetDocState.nextEdits : undefined,
+					ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
+					req,
+					{ isFromCursorJump: streamedEdit.isFromCursorJump }
+				);
+				myLogger.trace(`populated cache for ${ithEdit}`);
+			}
+
+			if (!firstEdit.isSettled) {
+				myLogger.trace('resolving firstEdit promise');
+				logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
+				firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
+			}
+
+			targetDocState.docContents = rebasedEdit.applyOnText(targetDocState.docContents);
+
+			return cachedEdit;
 		};
-		const pushEdit = createPushEdit();
+
+		const handleStreamEnd = (completionReason: NoNextEditReason, lastTelemetry: IStatelessNextEditTelemetry) => {
+			const myLogger = logger.createSubLogger('streamEnd');
+
+			// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
+			const hadNoEdits = ithEdit === -1;
+			if (hadNoEdits && completionReason instanceof NoNextEditReason.NoSuggestions) {
+				myLogger.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
+				this._shouldExpandEditWindow = false;
+			}
+
+			if (statePerDoc.get(curDocId).nextEdits.length) {
+				myLogger.trace(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
+			} else {
+				myLogger.trace(`no edit, reason: ${completionReason.kind}`);
+				if (completionReason instanceof NoNextEditReason.NoSuggestions) {
+					const { documentBeforeEdits, window } = completionReason;
+					const reducedWindow = window ? computeReducedWindow(window, activeDocSelection, documentBeforeEdits) : undefined;
+					this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
+				}
+			}
+
+			if (!firstEdit.isSettled) {
+				firstEdit.complete(Result.error(completionReason));
+			}
+
+			const resultForTelemetry: Result<void, NoNextEditReason> = statePerDoc.get(curDocId).nextEdits.length > 0
+				? Result.ok(undefined)
+				: Result.error(completionReason);
+			const result = new StatelessNextEditResult(resultForTelemetry, lastTelemetry);
+			nextEditRequest.setResult(result);
+
+			disp.dispose();
+			removeFromPending();
+
+			return result;
+		};
+
 		try {
-			nextEditResult = await this._statelessNextEditProvider.provideNextEdit(nextEditRequest, pushEdit, logger, logContext, nextEditRequest.cancellationTokenSource.token);
-			nextEditRequest.setResult(nextEditResult);
+			let res = await editStream.next();
+
+			if (res.done) {
+				// Stream ended immediately without any edits
+				const completionReason = res.value.v;
+				nextEditResult = handleStreamEnd(completionReason, res.value.telemetryBuilder);
+			} else {
+				// Process first edit synchronously
+				const firstStreamedEdit = res.value.v;
+				const firstTelemetry = res.value.telemetryBuilder;
+				processEdit(firstStreamedEdit, firstTelemetry);
+
+				// Continue streaming remaining edits in the background (unawaited)
+				(async () => {
+					try {
+						res = await editStream.next();
+						while (!res.done) {
+							const streamedEdit = res.value.v;
+							processEdit(streamedEdit, res.value.telemetryBuilder);
+							res = await editStream.next();
+						}
+
+						// Stream completed
+						const completionReason = res.value.v;
+						handleStreamEnd(completionReason, res.value.telemetryBuilder);
+					} catch (err) {
+						logger.trace(`Error while streaming further edits: ${errors.toString(err)}`);
+						const errorReason = new NoNextEditReason.Unexpected(errors.fromUnknown(err));
+						handleStreamEnd(errorReason, firstTelemetry);
+					}
+				})();
+
+				// Return early with streaming result
+				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest));
+			}
+
 		} catch (err) {
 			nextEditRequest.setResultError(err);
 			throw err;
-		} finally {
-			if (!nextEditResult || nextEditResult.nextEdit.isError()) {
-				// when streaming, we need to keep the response going unless UI cancels it
-				// if we remove it from pending here, when UI cancels, we cannot cancel it because we think that the request has finished
-				disp.dispose();
-				removeFromPending();
-			}
 		}
+
 		return { nextEditRequest, nextEditResult };
 	}
 

@@ -31,6 +31,18 @@ export const enum ShowNextEditPreference {
 	AroundEdit = 'aroundEdit',
 }
 
+export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
+
+export class WithStatelessProviderTelemetry<T> {
+	constructor(
+		public readonly v: T,
+		public readonly telemetryBuilder: IStatelessNextEditTelemetry,
+	) {
+	}
+}
+
+export type EditStreamingWithTelemetry = AsyncGenerator<WithStatelessProviderTelemetry<StreamedEdit>, WithStatelessProviderTelemetry<NoNextEditReason>, void>
+
 export type StreamedEdit = {
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
@@ -43,7 +55,7 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
 	readonly showNextEditPreference?: ShowNextEditPreference;
-	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
+	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
 }
