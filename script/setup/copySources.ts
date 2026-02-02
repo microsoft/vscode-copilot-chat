@@ -142,6 +142,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/cache.ts',
 			'vs/base/common/cancellation.ts',
 			'vs/base/common/charCode.ts',
+			'vs/base/common/date.ts',
 			'vs/base/common/errors.ts',
 			'vs/base/common/event.ts',
 			'vs/base/common/functional.ts',
