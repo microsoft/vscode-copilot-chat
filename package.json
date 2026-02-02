@@ -4403,7 +4403,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty",
 					"group": "navigation@0"
 				},
 				{
@@ -4973,7 +4973,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty"
 				}
 			],
 			"chat/chatSessions": [
@@ -4999,7 +4999,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty",
 					"group": "3_apply@0"
 				},
 				{
@@ -5651,7 +5651,7 @@
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
 		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.388",
+		"@github/copilot": "^0.0.400",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

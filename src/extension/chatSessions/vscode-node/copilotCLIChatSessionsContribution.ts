@@ -10,6 +10,7 @@ import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from '
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -177,7 +178,20 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		}
 
 		// Statistics
-		const changes = await this.worktreeManager.getWorktreeChanges(session.id);
+		const changes: vscode.ChatSessionChangedFile2[] = [];
+		if (worktreeProperties) {
+			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
+			changes.push(...worktreeChanges.map(change => new vscode.ChatSessionChangedFile2(
+				vscode.Uri.file(change.filePath),
+				change.originalFilePath
+					? toGitUri(vscode.Uri.file(change.originalFilePath), worktreeProperties.baseCommit)
+					: undefined,
+				change.modifiedFilePath
+					? toGitUri(vscode.Uri.file(change.modifiedFilePath), worktreeProperties.branchName)
+					: undefined,
+				change.statistics.additions,
+				change.statistics.deletions)));
+		}
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
@@ -348,6 +362,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// We need this when we create the session later for execution.
 		_sessionModel.set(copilotcliSessionId, model);
 
+		// Ensure that the repository for the background session is opened. This is needed
+		// when the background session is opened in the empty window so that we can access
+		// the changes of the background session.
+		if (worktreeProperties?.repositoryPath) {
+			await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+		}
+
 		return {
 			history,
 			activeResponseCallback: undefined,
@@ -504,18 +525,11 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					continue;
 				}
 				const parsedFile = await this.promptsService.parseFile(agentFile, token);
-				if (!parsedFile.header?.model) {
+				const modelsFromHeader = parsedFile.header?.model;
+				if (!modelsFromHeader) {
 					continue;
 				}
-				let modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model);
-				if (modelId) {
-					return modelId;
-				}
-				// Sometimes the models can contain ` (Copilot)` suffix, try stripping that and resolving again.
-				if (!parsedFile.header.model.includes('(')) {
-					continue;
-				}
-				modelId = await this.copilotCLIModels.resolveModel(parsedFile.header.model.substring(0, parsedFile.header.model.indexOf('(')).trim());
+				const modelId = await getModelFromPromptFile(modelsFromHeader, this.copilotCLIModels);
 				if (modelId) {
 					return modelId;
 				}
@@ -864,11 +878,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	 */
 	private async getModelId(sessionId: string | undefined, request: vscode.ChatRequest | undefined, preferModelInRequest: boolean, token: vscode.CancellationToken): Promise<string | undefined> {
 		const promptFile = request ? await this.getPromptInfoFromRequest(request, token) : undefined;
-		if (promptFile?.header?.model) {
-			const model = await this.copilotCLIModels.resolveModel(promptFile.header.model);
-			if (model) {
-				return model;
-			}
+		const model = promptFile?.header?.model ? await getModelFromPromptFile(promptFile.header.model, this.copilotCLIModels) : undefined;
+		if (model) {
+			return model;
 		}
 
 		// If we have a session, get the model from there
@@ -1334,3 +1346,22 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply', applyChanges));
 	return disposableStore;
 }
+
+async function getModelFromPromptFile(models: readonly string[], copilotCLIModels: ICopilotCLIModels): Promise<string | undefined> {
+	for (const model of models) {
+		let modelId = await copilotCLIModels.resolveModel(model);
+		if (modelId) {
+			return modelId;
+		}
+		// Sometimes the models can contain ` (Copilot)` suffix, try stripping that and resolving again.
+		if (!model.includes('(')) {
+			continue;
+		}
+		modelId = await copilotCLIModels.resolveModel(model.substring(0, model.indexOf('(')).trim());
+		if (modelId) {
+			return modelId;
+		}
+	}
+	return undefined;
+}
+
