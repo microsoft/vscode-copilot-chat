@@ -132,7 +132,7 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
 		modelId = modelId.trim().toLowerCase();
-		return models.find(m => m.id.toLowerCase() === modelId)?.id;
+		return models.find(m => m.id.toLowerCase() === modelId || m.name.toLowerCase() === modelId)?.id;
 	}
 	public async getDefaultModel() {
 		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
