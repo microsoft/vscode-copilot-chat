@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { basename, isEqual } from '../../../util/vs/base/common/resources';
+import { basename } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -242,15 +242,6 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// so we can get them from the main repository or discovered worktree.
 		await this.gitService.initialize();
 
-		// TODO@lszomoru: Remove this change to support welcome view
-		// Check whether the worktree belongs to any of the discovered repositories
-		const repository = this.gitService.repositories
-			.find(r => r.worktrees.some(w => isEqual(vscode.Uri.file(w.path), worktreePath)));
-
-		if (!repository) {
-			return undefined;
-		}
-
 		if (worktreeProperties.autoCommit === false) {
 			// These changes are staged in the worktree but not yet committed. Since the
 			// changes are not committed, we need to get them from the worktree repository
@@ -291,6 +282,15 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				...worktreeProperties, changes
 			});
 			return changes;
+		}
+
+		// Open the main repository that contains the worktree. We have to open
+		// the repository so that we can run do `git diff` against the repository
+		// to get the committed changes in the worktree branch.
+		const repository = await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+
+		if (!repository) {
+			return undefined;
 		}
 
 		// These changes are committed in the worktree branch but since they are
