@@ -10,6 +10,7 @@ import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from '
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
+import { toGitUri } from '../../../platform/git/common/utils';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -189,7 +190,20 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		}
 
 		// Statistics
-		const changes = await this.worktreeManager.getWorktreeChanges(session.id);
+		const changes: vscode.ChatSessionChangedFile2[] = [];
+		if (worktreeProperties) {
+			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
+			changes.push(...worktreeChanges.map(change => new vscode.ChatSessionChangedFile2(
+				vscode.Uri.file(change.filePath),
+				change.originalFilePath
+					? toGitUri(vscode.Uri.file(change.originalFilePath), worktreeProperties.baseCommit)
+					: undefined,
+				change.modifiedFilePath
+					? toGitUri(vscode.Uri.file(change.modifiedFilePath), worktreeProperties.branchName)
+					: undefined,
+				change.statistics.additions,
+				change.statistics.deletions)));
+		}
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
@@ -364,6 +378,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// Always keep track of this in memory.
 		// We need this when we create the session later for execution.
 		_sessionModel.set(copilotcliSessionId, model);
+
+		// Ensure that the repository for the background session is opened. This is needed
+		// when the background session is opened in the empty window so that we can access
+		// the changes of the background session.
+		if (worktreeProperties?.repositoryPath) {
+			await this.gitService.getRepository(vscode.Uri.file(worktreeProperties.repositoryPath));
+		}
 
 		return {
 			history,
