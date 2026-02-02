@@ -26,11 +26,6 @@ import { SSEParser } from '../../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
-/**
- * Marker string to identify user-initiated messages from VS Code in the Messages API.
- */
-export const VSCODE_USER_INITIATED_MESSAGE_MARKER = '__vscode_user_initiated_message__';
-
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
 	readonly nonce: string;
@@ -166,35 +161,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 
 			// Determine if this is a user-initiated message
 			const lastMessage = requestBody.messages?.at(-1);
-			const lastContentItems = !lastMessage || typeof lastMessage.content === 'string'
-				? []
-				: lastMessage.content;
-
-			// Find the index of the marker content item if it exists
-			const markerIndex = lastContentItems.findIndex(
-				c => c.type === 'text' &&
-					// Our marker
-					c.text.includes(VSCODE_USER_INITIATED_MESSAGE_MARKER) &&
-					// The name of the hook we are using
-					c.text.includes('UserPromptSubmit')
-			);
-
-			const isUserInitiatedMessage =
-				// A user initiated message would only be of role 'user'
-				lastMessage?.role === 'user' &&
-				// We expect our marker AND the user's actual message so there will be multiple content items
-				lastContentItems.length > 1 &&
-				// The marker must be in a preceding content item, not the last one (which is the actual user message)
-				markerIndex !== -1 &&
-				markerIndex !== lastContentItems.length - 1;
-
-			// Remove the marker content item and the one before it (which just provides the status of our hook)
-			// so they don't influence the request
-			if (isUserInitiatedMessage) {
-				// Remove marker and its preceding item (if it exists)
-				const indicesToRemove = markerIndex > 0 ? [markerIndex - 1, markerIndex] : [markerIndex];
-				lastMessage.content = lastContentItems.filter((_, i) => !indicesToRemove.includes(i));
-			}
+			const isUserInitiatedMessage = lastMessage?.role === 'user';
 
 			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
 			// Filter to only endpoints that support the Messages API
