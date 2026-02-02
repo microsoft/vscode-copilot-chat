@@ -116,10 +116,14 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	): Promise<FolderRepositoryInfo> {
 		// For untitled sessions, use what ever is in memory.
 		if (isUntitledSessionId(sessionId)) {
-			const folder = this._untitledSessionFolders.get(sessionId)
-				?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
-
-			return { folder, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+			if (options) {
+				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options?.stream, token);
+				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
+			} else {
+				const folder = this._untitledSessionFolders.get(sessionId)
+					?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
+				return { folder, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
+			}
 		}
 
 		// For named sessions, check worktree properties first
@@ -180,16 +184,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		return { folder: undefined, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 	}
 
-	/**
-	 * @inheritdoc
-	 */
-	async initializeFolderRepository(
-		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; uncommittedChangesAction?: 'move' | 'copy' | 'skip' },
-		token: vscode.CancellationToken
-	): Promise<FolderRepositoryInfo> {
-		const { stream, uncommittedChangesAction } = options;
-
+	private async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<Omit<FolderRepositoryInfo, 'worktree' | 'worktreeProperties'>> {
 		// Get the selected folder
 		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)
 			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
@@ -219,8 +214,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 				return {
 					folder: selectedFolder,
 					repository: undefined,
-					worktree: undefined,
-					worktreeProperties: undefined,
 					trusted: false
 				};
 			}
@@ -234,8 +227,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 				return {
 					folder: selectedFolder,
 					repository: undefined,
-					worktree: undefined,
-					worktreeProperties: undefined,
 					trusted: true
 				};
 			}
@@ -248,8 +239,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 				return {
 					folder: folderUri,
 					repository: undefined,
-					worktree: undefined,
-					worktreeProperties: undefined,
 					trusted
 				};
 			}
@@ -257,8 +246,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			return {
 				folder: undefined,
 				repository: undefined,
-				worktree: undefined,
-				worktreeProperties: undefined,
 				trusted: true
 			};
 		}
@@ -270,21 +257,45 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			return {
 				folder: folderUri ?? repositoryUri,
 				repository: repositoryUri,
-				worktree: undefined,
-				worktreeProperties: undefined,
 				trusted: false
 			};
 		}
 
+		return {
+			folder: folderUri ?? repositoryUri,
+			repository: repositoryUri,
+			trusted: true
+		};
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	async initializeFolderRepository(
+		sessionId: string | undefined,
+		options: { stream: vscode.ChatResponseStream; uncommittedChangesAction?: 'move' | 'copy' | 'skip' },
+		token: vscode.CancellationToken
+	): Promise<FolderRepositoryInfo> {
+		const { stream, uncommittedChangesAction } = options;
+
+		const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
+		if (trusted === false) {
+			return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
+		}
+		if (!repository) {
+			// No git repository found, proceed without isolation
+			return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted: true };
+		}
+
 		// Create worktree for the git repository
-		const worktreeProperties = await this.worktreeService.createWorktree(repositoryUri, stream);
+		const worktreeProperties = await this.worktreeService.createWorktree(repository, stream);
 
 		if (!worktreeProperties) {
 			stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));
 
 			return {
-				folder: folderUri ?? repositoryUri,
-				repository: repositoryUri,
+				folder: folder ?? repository,
+				repository: repository,
 				worktree: undefined,
 				worktreeProperties,
 				trusted
@@ -299,7 +310,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		// Migrate changes from active repository to worktree if requested
 		if (uncommittedChangesAction === 'move' || uncommittedChangesAction === 'copy') {
 			await this.moveOrCopyChangesToWorkTree(
-				repositoryUri,
+				repository,
 				vscode.Uri.file(worktreeProperties.worktreePath),
 				uncommittedChangesAction,
 				stream,
@@ -308,8 +319,8 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		}
 
 		return {
-			folder: folderUri ?? repositoryUri,
-			repository: repositoryUri,
+			folder: folder ?? repository,
+			repository: repository,
 			worktree: vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties,
 			trusted: true
