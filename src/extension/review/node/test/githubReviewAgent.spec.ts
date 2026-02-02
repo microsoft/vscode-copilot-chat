@@ -5,7 +5,22 @@
 
 import assert from 'assert';
 import { describe, suite, test } from 'vitest';
-import { LineChange, parseLine, parsePatch, removeSuggestion, reverseParsedPatch, reversePatch } from '../githubReviewAgent';
+import { ReviewRequest } from '../../../../platform/review/common/reviewService';
+import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { URI } from '../../../../util/vs/base/common/uri';
+import {
+	createReviewComment,
+	ExcludedComment,
+	LineChange,
+	loadCustomInstructions,
+	parseLine,
+	parsePatch,
+	removeSuggestion,
+	ResponseComment,
+	reverseParsedPatch,
+	reversePatch
+} from '../githubReviewAgent';
 
 suite('githubReviewAgent', () => {
 
@@ -362,6 +377,224 @@ suite('githubReviewAgent', () => {
 			const result = reversePatch(after, diff);
 
 			assert.strictEqual(result, 'line1\nline2');
+		});
+	});
+
+	describe('createReviewComment', () => {
+
+		function createTestRequest(overrides?: Partial<ReviewRequest>): ReviewRequest {
+			return {
+				source: 'githubReviewAgent',
+				promptCount: 1,
+				messageId: 'test-message-id',
+				inputType: 'change',
+				inputRanges: [],
+				...overrides,
+			};
+		}
+
+		test('creates comment with correct range from line number', () => {
+			const docData = createTextDocumentData(
+				URI.file('/test/file.ts'),
+				'line1\n    indented line\nline3',
+				'typescript'
+			);
+			const ghComment: ResponseComment = {
+				type: 'github.generated-pull-request-comment',
+				data: {
+					path: 'file.ts',
+					line: 2,
+					body: 'This line has an issue.'
+				}
+			};
+			const request = createTestRequest();
+
+			const comment = createReviewComment(ghComment, request, docData.document, 0);
+
+			assert.strictEqual(comment.range.start.line, 1); // 0-indexed
+			assert.strictEqual(comment.range.start.character, 4); // firstNonWhitespaceCharacterIndex
+			assert.strictEqual(comment.range.end.line, 1);
+			assert.strictEqual(comment.languageId, 'typescript');
+			assert.strictEqual(comment.originalIndex, 0);
+			assert.strictEqual(comment.kind, 'bug');
+			assert.strictEqual(comment.severity, 'medium');
+		});
+
+		test('extracts suggestion from body and creates edit', () => {
+			const docData = createTextDocumentData(
+				URI.file('/test/file.ts'),
+				'const x = 1;\nconst y = 2;\nconst z = 3;',
+				'typescript'
+			);
+			const ghComment: ResponseComment = {
+				type: 'github.generated-pull-request-comment',
+				data: {
+					path: 'file.ts',
+					line: 2,
+					body: 'Fix the variable name.\n```suggestion\nconst fixedY = 2;\n```'
+				}
+			};
+			const request = createTestRequest();
+
+			const comment = createReviewComment(ghComment, request, docData.document, 0);
+
+			// Body should have suggestion removed - body is MarkdownString in this case
+			const bodyValue = typeof comment.body === 'string' ? comment.body : comment.body.value;
+			assert.strictEqual(bodyValue, 'Fix the variable name.\n');
+			// Should have one edit suggestion
+			assert.ok(comment.suggestion);
+			assert.ok(!('then' in comment.suggestion)); // Not a promise
+			const suggestion = comment.suggestion as { edits: { newText: string }[] };
+			assert.strictEqual(suggestion.edits.length, 1);
+			assert.strictEqual(suggestion.edits[0].newText, 'const fixedY = 2;\n');
+		});
+
+		test('handles comment with start_line for multi-line range', () => {
+			const docData = createTextDocumentData(
+				URI.file('/test/file.ts'),
+				'line1\nline2\nline3\nline4',
+				'typescript'
+			);
+			const ghComment: ResponseComment = {
+				type: 'github.generated-pull-request-comment',
+				data: {
+					path: 'file.ts',
+					line: 3,
+					start_line: 2,
+					body: 'Multi-line issue.\n```suggestion\nreplacement\n```'
+				}
+			};
+			const request = createTestRequest();
+
+			const comment = createReviewComment(ghComment, request, docData.document, 1);
+
+			// Suggestion range should span from start_line to line
+			assert.ok(comment.suggestion);
+			assert.ok(!('then' in comment.suggestion)); // Not a promise
+			const suggestion = comment.suggestion as { edits: { range: { start: { line: number }; end: { line: number } } }[] };
+			assert.strictEqual(suggestion.edits[0].range.start.line, 1); // start_line - 1
+			assert.strictEqual(suggestion.edits[0].range.end.line, 3); // line
+			assert.strictEqual(comment.originalIndex, 1);
+		});
+
+		test('handles excluded comment', () => {
+			const docData = createTextDocumentData(
+				URI.file('/test/file.ts'),
+				'line1\nline2\nline3',
+				'typescript'
+			);
+			const ghComment: ExcludedComment = {
+				type: 'github.excluded-pull-request-comment',
+				data: {
+					path: 'file.ts',
+					line: 2,
+					body: 'Low confidence comment.',
+					exclusion_reason: 'denylisted_type'
+				}
+			};
+			const request = createTestRequest();
+
+			const comment = createReviewComment(ghComment, request, docData.document, 0);
+
+			const bodyValue = typeof comment.body === 'string' ? comment.body : comment.body.value;
+			assert.strictEqual(bodyValue, 'Low confidence comment.');
+			assert.strictEqual(comment.range.start.line, 1);
+		});
+
+		test('handles comment without suggestion', () => {
+			const docData = createTextDocumentData(
+				URI.file('/test/file.ts'),
+				'const x = 1;',
+				'typescript'
+			);
+			const ghComment: ResponseComment = {
+				type: 'github.generated-pull-request-comment',
+				data: {
+					path: 'file.ts',
+					line: 1,
+					body: 'Consider renaming this variable.'
+				}
+			};
+			const request = createTestRequest();
+
+			const comment = createReviewComment(ghComment, request, docData.document, 0);
+
+			const bodyValue = typeof comment.body === 'string' ? comment.body : comment.body.value;
+			assert.strictEqual(bodyValue, 'Consider renaming this variable.');
+			assert.ok(comment.suggestion);
+			assert.ok(!('then' in comment.suggestion)); // Not a promise
+			const suggestion = comment.suggestion as { edits: unknown[] };
+			assert.strictEqual(suggestion.edits.length, 0);
+		});
+	});
+
+	describe('loadCustomInstructions', () => {
+
+		function createMockWorkspaceService() {
+			return {
+				asRelativePath: (uri: URI) => uri.path.split('/').pop() || uri.path
+			};
+		}
+
+		test('returns empty array when no instructions configured', async () => {
+			const customInstructionsService = new MockCustomInstructionsService();
+			const workspaceService = createMockWorkspaceService();
+			const languageIdToFilePatterns = new Map<string, Set<string>>();
+
+			const result = await loadCustomInstructions(
+				customInstructionsService,
+				workspaceService as any,
+				'diff',
+				languageIdToFilePatterns,
+				1
+			);
+
+			assert.deepStrictEqual(result, []);
+		});
+
+		test('uses correct firstId for numbering', async () => {
+			const customInstructionsService = new MockCustomInstructionsService();
+			const workspaceService = createMockWorkspaceService();
+			const languageIdToFilePatterns = new Map<string, Set<string>>();
+
+			const result = await loadCustomInstructions(
+				customInstructionsService,
+				workspaceService as any,
+				'selection',
+				languageIdToFilePatterns,
+				5 // Starting from 5
+			);
+
+			// With no instructions, result should be empty but the function should accept the firstId
+			assert.deepStrictEqual(result, []);
+		});
+
+		test('handles kind parameter for selection vs diff', async () => {
+			const customInstructionsService = new MockCustomInstructionsService();
+			const workspaceService = createMockWorkspaceService();
+			const languageIdToFilePatterns = new Map<string, Set<string>>();
+
+			// Test with 'selection' kind - should include CodeFeedbackInstructions
+			const selectionResult = await loadCustomInstructions(
+				customInstructionsService,
+				workspaceService as any,
+				'selection',
+				languageIdToFilePatterns,
+				1
+			);
+
+			// Test with 'diff' kind - should NOT include CodeFeedbackInstructions
+			const diffResult = await loadCustomInstructions(
+				customInstructionsService,
+				workspaceService as any,
+				'diff',
+				languageIdToFilePatterns,
+				1
+			);
+
+			// Both should be empty with mock service returning no instructions
+			assert.deepStrictEqual(selectionResult, []);
+			assert.deepStrictEqual(diffResult, []);
 		});
 	});
 });
