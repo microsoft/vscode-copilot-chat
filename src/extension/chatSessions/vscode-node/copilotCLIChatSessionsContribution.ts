@@ -264,6 +264,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	public notifyProviderOptionsChange(): void {
+		this._repositoryOptionItemsForUntitledWorkspace = undefined;
 		this._onDidChangeChatSessionProviderOptions.fire();
 	}
 

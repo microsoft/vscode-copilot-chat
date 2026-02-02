@@ -58,7 +58,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	 * In-memory storage for untitled session folder selections.
 	 * Maps session ID → folder URI.
 	 */
-	private readonly _untitledSessionFolders = new Map<string, vscode.Uri>();
+	private readonly _untitledSessionFolders = new Map<string, { uri: vscode.Uri; lastAccessTime: number }>();
 
 	/**
 	 * ID of the last used folder in an untitled workspace (for defaulting selection).
@@ -85,7 +85,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			throw new Error(`Cannot set folder for non-untitled session: ${sessionId}`);
 		}
 
-		this._untitledSessionFolders.set(sessionId, folderUri);
+		this._untitledSessionFolders.set(sessionId, { uri: folderUri, lastAccessTime: Date.now() });
 
 		// Update MRU tracking for untitled workspaces
 		if (isWelcomeView(this.workspaceService)) {
@@ -97,7 +97,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	 * @inheritdoc
 	 */
 	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
-		return this._untitledSessionFolders.get(sessionId);
+		return this._untitledSessionFolders.get(sessionId)?.uri;
 	}
 
 	/**
@@ -121,7 +121,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 				const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, options?.stream, token);
 				return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
 			} else {
-				const folder = this._untitledSessionFolders.get(sessionId)
+				const folder = this._untitledSessionFolders.get(sessionId)?.uri
 					?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId);
 				return { folder, repository: undefined, worktree: undefined, trusted: undefined, worktreeProperties: undefined };
 			}
@@ -187,7 +187,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 
 	private async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<Omit<FolderRepositoryInfo, 'worktree' | 'worktreeProperties'>> {
 		// Get the selected folder
-		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)
+		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)?.uri
 			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
 
 		// If no folder selected and we have a single workspace folder, use active repository
@@ -334,6 +334,18 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
 		const latestReposAndFolders: FolderRepositoryMRUEntry[] = [];
 		const seenUris = new ResourceSet();
+
+		for (const { uri, lastAccessTime } of this._untitledSessionFolders.values()) {
+			if (seenUris.has(uri)) {
+				continue;
+			}
+			seenUris.add(uri);
+			latestReposAndFolders.push({
+				folder: uri,
+				repository: undefined,
+				lastAccessed: lastAccessTime
+			});
+		}
 
 		// Add recent git repositories
 		for (const repo of this.gitService.getRecentRepositories()) {
