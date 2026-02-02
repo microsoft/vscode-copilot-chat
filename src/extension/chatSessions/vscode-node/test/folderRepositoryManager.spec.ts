@@ -550,9 +550,9 @@ describe('FolderRepositoryManager', () => {
 			]);
 
 			// Mock file existence check
-			fileSystemService.addExistingPath('/repo1');
-			fileSystemService.addExistingPath('/repo2');
-			fileSystemService.addExistingPath('/folder1');
+			fileSystemService.addExistingPath(vscode.Uri.file('/repo1').fsPath);
+			fileSystemService.addExistingPath(vscode.Uri.file('/repo2').fsPath);
+			fileSystemService.addExistingPath(vscode.Uri.file('/folder1').fsPath);
 
 			const result = await manager.getFolderMRU();
 
