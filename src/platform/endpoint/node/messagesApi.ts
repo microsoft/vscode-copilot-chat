@@ -87,6 +87,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	const experimentationService = accessor.get(IExperimentationService);
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
+	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
@@ -98,11 +99,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 				properties: (tool.function.parameters as { properties?: Record<string, unknown> })?.properties ?? {},
 				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
 			},
-			// Mark tools for deferred loading when tool search is enabled, except for frequently used tools
-			...(toolSearchEnabled && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
+			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
+			...(toolSearchEnabled && isAllowedConversationAgent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
-
-	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (isAllowedConversationAgent && toolSearchEnabled) {
