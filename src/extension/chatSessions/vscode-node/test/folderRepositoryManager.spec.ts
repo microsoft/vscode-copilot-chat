@@ -293,7 +293,7 @@ describe('FolderRepositoryManager', () => {
 			manager.setUntitledSessionFolder(sessionId, folderUri);
 
 			// Should store in memory only - workspace folder tracking happens in initializeFolderRepository
-			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe('/my/folder');
+			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe(vscode.Uri.file('/my/folder').fsPath);
 		});
 
 		it('throws error for non-untitled session ID', () => {
@@ -310,7 +310,7 @@ describe('FolderRepositoryManager', () => {
 
 			manager.setUntitledSessionFolder(sessionId, folderUri);
 
-			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe('/another/folder');
+			expect(manager.getUntitledSessionFolder(sessionId)?.fsPath).toBe(vscode.Uri.file('/another/folder').fsPath);
 		});
 	});
 
@@ -324,7 +324,7 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
-			expect(result.folder?.fsPath).toBe('/my/folder');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/my/folder').fsPath);
 			expect(result.repository).toBeUndefined();
 			expect(result.worktree).toBeUndefined();
 			expect(result.trusted).toBeUndefined();
@@ -344,9 +344,9 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
-			expect(result.folder?.fsPath).toBe('/repo');
-			expect(result.repository?.fsPath).toBe('/repo');
-			expect(result.worktree?.fsPath).toBe('/repo-worktree');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/repo').fsPath);
+			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/repo').fsPath);
+			expect(result.worktree?.fsPath).toBe(vscode.Uri.file('/repo-worktree').fsPath);
 		});
 
 		it('returns workspace folder for sessions without worktrees', async () => {
@@ -358,7 +358,7 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
-			expect(result.folder?.fsPath).toBe('/workspace/project');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/workspace/project').fsPath);
 			expect(result.repository).toBeUndefined();
 			expect(result.worktree).toBeUndefined();
 		});
@@ -372,7 +372,7 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
-			expect(result.folder?.fsPath).toBe('/terminal/cwd');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/terminal/cwd').fsPath);
 		});
 
 		it('prompts for trust when option is set', async () => {
@@ -441,7 +441,7 @@ describe('FolderRepositoryManager', () => {
 			);
 
 			// Trust should be checked on repository path, not worktree path
-			expect(workspaceService.trustRequests[0].fsPath).toBe('/original-repo');
+			expect(workspaceService.trustRequests[0].fsPath).toBe(vscode.Uri.file('/original-repo').fsPath);
 		});
 	});
 
@@ -468,8 +468,8 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.initializeFolderRepository(sessionId, { stream }, token);
 
-			expect(result.worktree?.fsPath).toBe('/my/repo-worktree');
-			expect(result.repository?.fsPath).toBe('/my/repo');
+			expect(result.worktree?.fsPath).toBe(vscode.Uri.file('/my/repo-worktree').fsPath);
+			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/my/repo').fsPath);
 			expect(result.trusted).toBe(true);
 		});
 
@@ -490,7 +490,7 @@ describe('FolderRepositoryManager', () => {
 			const result = await manager.initializeFolderRepository(sessionId, { stream }, token);
 
 			expect(result.worktree).toBeUndefined();
-			expect(result.repository?.fsPath).toBe('/my/repo');
+			expect(result.repository?.fsPath).toBe(vscode.Uri.file('/my/repo').fsPath);
 			expect(stream.output.some(o => /failed to create worktree/i.test(o))).toBe(true);
 		});
 
@@ -505,7 +505,7 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.initializeFolderRepository(sessionId, { stream }, token);
 
-			expect(result.folder?.fsPath).toBe('/plain/folder');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/plain/folder').fsPath);
 			expect(result.repository).toBeUndefined();
 			expect(result.worktree).toBeUndefined();
 			expect(result.trusted).toBe(true);
@@ -569,7 +569,7 @@ describe('FolderRepositoryManager', () => {
 				{ folder: duplicateUri, lastAccessTime: 2000 }
 			]);
 
-			fileSystemService.addExistingPath('/same/path');
+			fileSystemService.addExistingPath(vscode.Uri.file('/same/path').fsPath);
 
 			const result = await manager.getFolderMRU();
 
@@ -586,22 +586,22 @@ describe('FolderRepositoryManager', () => {
 				{ rootUri: vscode.Uri.file('/middle'), lastAccessTime: 2000 }
 			]);
 
-			fileSystemService.addExistingPath('/old');
-			fileSystemService.addExistingPath('/new');
-			fileSystemService.addExistingPath('/middle');
+			fileSystemService.addExistingPath(vscode.Uri.file('/old').fsPath);
+			fileSystemService.addExistingPath(vscode.Uri.file('/new').fsPath);
+			fileSystemService.addExistingPath(vscode.Uri.file('/middle').fsPath);
 
 			const result = await manager.getFolderMRU();
 
-			expect(result[0].folder.fsPath).toBe('/new');
-			expect(result[1].folder.fsPath).toBe('/middle');
-			expect(result[2].folder.fsPath).toBe('/old');
+			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/new').fsPath);
+			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/middle').fsPath);
+			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/old').fsPath);
 		});
 
 		it('limits to 10 items', async () => {
 			const repos = [];
 			for (let i = 0; i < 15; i++) {
 				repos.push({ rootUri: vscode.Uri.file(`/repo${i}`), lastAccessTime: i * 100 });
-				fileSystemService.addExistingPath(`/repo${i}`);
+				fileSystemService.addExistingPath(vscode.Uri.file(`/repo${i}`).fsPath);
 			}
 			gitService.setTestRecentRepositories(repos);
 
@@ -647,7 +647,7 @@ describe('FolderRepositoryManager', () => {
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
 
-			expect(result.folder?.fsPath).toBe('/selected/folder');
+			expect(result.folder?.fsPath).toBe(vscode.Uri.file('/selected/folder').fsPath);
 		});
 
 		it('returns undefined for unknown session', async () => {
