@@ -283,6 +283,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	public notifyProviderOptionsChange(): void {
+		this._repositoryOptionItemsForUntitledWorkspace = undefined;
 		this._onDidChangeChatSessionProviderOptions.fire();
 	}
 
@@ -1487,7 +1488,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		const selectedFolderUri = folderUris[0];
 		const sessionId = SessionIdForCLI.parse(sessionItemResource);
-
+		untitledWorkspaceFodlers.set(selectedFolderUri, Date.now());
 		await trackSelectedFolderOrRepo(sessionId, selectedFolderUri.fsPath, copilotCliWorkspaceSession, copilotCLIWorktreeManagerService);
 
 		// Notify VS Code that the option changed
