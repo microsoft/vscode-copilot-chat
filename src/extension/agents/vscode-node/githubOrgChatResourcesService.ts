@@ -131,17 +131,12 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 			return undefined;
 		}
 
-		// Check if workspace repo belongs to an organization the user is a member of
+		// Use the organization from the current workspace's git repository, if any
 		const workspaceOrg = await this.getWorkspaceRepositoryOrganization();
 		this.logService.trace(`[GitHubOrgChatResourcesService] Workspace organization: ${workspaceOrg ?? 'none'}`);
 		if (workspaceOrg) {
-			// Use direct API call to check membership to avoid pagination issues with getUserOrganizations
-			const isMember = await this.octoKitService.isUserMemberOfOrg(workspaceOrg, { createIfNone: false });
-			if (isMember) {
-				this.logService.trace(`[GitHubOrgChatResourcesService] Using workspace organization: ${workspaceOrg}`);
-				return workspaceOrg;
-			}
-			this.logService.trace(`[GitHubOrgChatResourcesService] User is not a member of workspace organization '${workspaceOrg}', checking Copilot orgs`);
+			this.logService.trace(`[GitHubOrgChatResourcesService] Using workspace organization: ${workspaceOrg}`);
+			return workspaceOrg;
 		}
 
 		// Check if user has Copilot access through an organization (Business/Enterprise subscription)
@@ -158,7 +153,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		// Get the organizations the user is a member of
 		let userOrganizations: string[];
 		try {
-			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: true }, 1);
+			userOrganizations = await this.octoKitService.getUserOrganizations({ createIfNone: false }, 1);
 			this.logService.trace(`[GitHubOrgChatResourcesService] User organizations: ${JSON.stringify(userOrganizations)}`);
 			if (userOrganizations.length === 0) {
 				this.logService.trace('[GitHubOrgChatResourcesService] No organizations found for user');
