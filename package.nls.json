@@ -161,6 +161,8 @@
 	"copilot.workspace.semanticSearch.sampleRequest": "Where is the toolbar code?",
 	"copilot.workspace.compact.description": "Summarize the conversation history to reduce context size",
 	"copilot.workspace.compact.sampleRequest": "Summarize this conversation",
+	"copilot.compact.description": "Summarize the conversation history to reduce context size",
+	"copilot.compact.sampleRequest": "Summarize this conversation",
 	"copilot.vscode.description": "Ask questions about VS Code",
 	"copilot.workspaceSymbols.tool.description": "Search for workspace symbols using language services.",
 	"copilot.listCodeUsages.tool.description": "Find references, definitions, and other usages of a symbol",
