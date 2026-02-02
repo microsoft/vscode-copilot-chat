@@ -3540,7 +3540,6 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.useMessagesApi%",
 						"tags": [
-							"experimental",
 							"onExp"
 						]
 					},
@@ -3597,7 +3596,6 @@
 						"maximum": 32000,
 						"default": 16000,
 						"tags": [
-							"experimental",
 							"onExp"
 						]
 					},
