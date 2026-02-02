@@ -39,6 +39,7 @@ import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWork
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
+import { FakeFolderRepositoryManager } from './folderRepositoryManager.spec';
 
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
@@ -156,6 +157,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
+	let folderRepositoryManager: FakeFolderRepositoryManager;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -182,6 +184,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		workspaceFolderService = new FakeChatSessionWorkspaceFolderService();
 		git = new FakeGitService();
 		models = new FakeModels();
+		folderRepositoryManager = new FakeFolderRepositoryManager();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
@@ -244,6 +247,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
 			workspaceService,
+			folderRepositoryManager,
 		);
 	});
 
@@ -267,15 +271,20 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
-		workspaceFolderService.trackSessionWorkspaceFolder('temp-new', Uri.file(`${sep}repo`).fsPath);
-		git.setRepo(({ rootUri: Uri.file(`${sep}repo`) } as RepoContext));
-		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+		const worktreeProperties: ChatSessionWorktreeProperties = {
 			autoCommit: true,
 			baseCommit: 'deadbeef',
 			branchName: 'test',
 			repositoryPath: `${sep}repo`,
 			worktreePath: `${sep}worktree`
-		} satisfies ChatSessionWorktreeProperties);
+		};
+		folderRepositoryManager.setTestFolderRepositoryInfo('temp-new', {
+			folder: Uri.file(`${sep}repo`),
+			repository: Uri.file(`${sep}repo`),
+			worktree: Uri.file(`${sep}worktree`),
+			trusted: true,
+			worktreeProperties
+		});
 
 		const request = new TestChatRequest('Say hi');
 		const context = createChatContext('temp-new', true);
@@ -294,8 +303,13 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('falls back to workspace workingDirectory when isolation is enabled but worktree creation fails', async () => {
-		(worktree.createWorktree as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-		workspaceFolderService.trackSessionWorkspaceFolder('temp-new', Uri.file(`${sep}workspace`).fsPath);
+		folderRepositoryManager.setTestFolderRepositoryInfo('temp-new', {
+			folder: Uri.file(`${sep}workspace`),
+			repository: undefined,
+			worktree: undefined,
+			trusted: true,
+			worktreeProperties: undefined
+		});
 		const request = new TestChatRequest('Say hi');
 		const context = createChatContext('temp-new', true);
 		const stream = new MockChatResponseStream();
@@ -503,7 +517,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('shows confirmation prompt for untitled session with uncommitted changes', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
-		workspaceFolderService.trackSessionWorkspaceFolder('temp-new', git.activeRepository.get()?.rootUri.fsPath || '');
+		// Configure folderRepositoryManager to return repository info for getFolderRepository
+		folderRepositoryManager.setTestFolderRepositoryInfo('temp-new', {
+			folder: Uri.file(`${sep}repo`),
+			repository: Uri.file(`${sep}repo`),
+			worktree: undefined,
+			trusted: true,
+			worktreeProperties: undefined
+		});
 		const request = new TestChatRequest('Fix the bug');
 		const context = createChatContext('temp-new', true);
 		const parts: vscode.ExtendedChatResponsePart[] = [];
@@ -665,13 +686,20 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	it('reuses untitled session after confirmation without creating new session', async () => {
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
+		// Configure folderRepositoryManager to return repository info for getFolderRepository (for uncommitted changes check)
+		folderRepositoryManager.setTestFolderRepositoryInfo('temp-new', {
+			folder: Uri.file(`${sep}workspace`),
+			repository: Uri.file(`${sep}workspace`),
+			worktree: undefined,
+			trusted: true,
+			worktreeProperties: undefined
+		});
 		// First request shows confirmation
 		const request1 = new TestChatRequest('First request');
 		const context1 = createChatContext('temp-new', true);
 		const parts1: vscode.ExtendedChatResponsePart[] = [];
 		const stream1 = new MockChatResponseStream((part) => parts1.push(part));
 		const token1 = disposables.add(new CancellationTokenSource()).token;
-		workspaceFolderService.trackSessionWorkspaceFolder('temp-new', Uri.file(`${sep}workspace`).fsPath);
 
 		await participant.createHandler()(request1, context1, stream1, token1);
 
