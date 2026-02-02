@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
+import { SpyChatResponseStream } from '../../../../util/common/test/mockChatResponseStream';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ExternalEditTracker } from '../externalEditTracker';
-import { MockChatResponseStream } from '../../../test/node/testHelpers';
-import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 
 describe('ExternalEditTracker', () => {
 	describe('ignore directories', () => {
@@ -18,7 +18,7 @@ describe('ExternalEditTracker', () => {
 
 			const planFile = URI.joinPath(userHome, '.claude', 'plans', 'test-plan.md');
 			const regularFile = URI.file('/workspace/src/test.ts');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-1', [planFile, regularFile], stream, CancellationToken.None);
 
@@ -34,7 +34,7 @@ describe('ExternalEditTracker', () => {
 
 			const agentFile = URI.joinPath(userHome, '.claude', 'agents', 'my-agent.md');
 			const memoryFile = URI.joinPath(userHome, '.claude', 'CLAUDE.md');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-2', [agentFile, memoryFile], stream, CancellationToken.None);
 
@@ -51,7 +51,7 @@ describe('ExternalEditTracker', () => {
 			const planFile = URI.joinPath(userHome, '.claude', 'plans', 'plan.md');
 			const tempFile = URI.joinPath(tempDir, 'temp.txt');
 			const regularFile = URI.file('/workspace/src/test.ts');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-3', [planFile, tempFile, regularFile], stream, CancellationToken.None);
 
@@ -67,7 +67,7 @@ describe('ExternalEditTracker', () => {
 
 			const nestedPlanFile = URI.joinPath(userHome, '.claude', 'plans', 'subfolder', 'nested-plan.md');
 			const regularFile = URI.file('/workspace/src/test.ts');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-4', [nestedPlanFile, regularFile], stream, CancellationToken.None);
 
@@ -83,7 +83,7 @@ describe('ExternalEditTracker', () => {
 
 			const similarFile = URI.joinPath(userHome, '.claude', 'plans-backup', 'file.md');
 			const regularFile = URI.file('/workspace/src/test.ts');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-5', [similarFile, regularFile], stream, CancellationToken.None);
 
@@ -95,7 +95,7 @@ describe('ExternalEditTracker', () => {
 			const tracker = new ExternalEditTracker();
 			const file1 = URI.file('/workspace/src/file1.ts');
 			const file2 = URI.file('/workspace/src/file2.ts');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-6', [file1, file2], stream, CancellationToken.None);
 
@@ -110,7 +110,7 @@ describe('ExternalEditTracker', () => {
 
 			const planFile1 = URI.joinPath(userHome, '.claude', 'plans', 'plan1.md');
 			const planFile2 = URI.joinPath(userHome, '.claude', 'plans', 'plan2.md');
-			const stream = new MockChatResponseStream();
+			const stream = new SpyChatResponseStream();
 
 			await tracker.trackEdit('edit-7', [planFile1, planFile2], stream, CancellationToken.None);
 
