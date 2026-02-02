@@ -315,7 +315,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					...existingItem,
 					locked: true
 				};
-			} if (folderInfo.repository) {
+			} else if (folderInfo.repository) {
 				options[REPOSITORY_OPTION_ID] = {
 					...toRepositoryOptionItem(folderInfo.repository),
 					locked: true
