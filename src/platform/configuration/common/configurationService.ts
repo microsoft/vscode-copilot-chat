@@ -348,7 +348,7 @@ export type ConfigDefaultValue<T> = T | CustomTeamDefaultValue<T> | CustomIntern
 
 export namespace ConfigValueValidators {
 	export function isCustomTeamDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomTeamDefaultValue<T> {
-		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true });
+		return typeof value === 'object' && !!value && types.hasKey(value, { defaultValue: true, teamDefaultValue: true, owner: true, expirationDate: true });
 	}
 
 	export function isCustomInternalDefaultValue<T>(value: ConfigDefaultValue<T>): value is CustomInternalDefaultValue<T> {
@@ -744,7 +744,7 @@ export namespace ConfigKey {
 		 */
 		export const DebugReportFeedback = defineTeamInternalSetting<boolean>('chat.advanced.debug.reportFeedback', ConfigType.Simple, false);
 		export const InlineEditsIgnoreCompletionsDisablement = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', ConfigType.Simple, false, vBoolean());
-		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, { defaultValue: false, teamDefaultValue: true, owner: 'ulugbekna', expirationDate: '2026-02-01' }, vBoolean());
+		export const InlineEditsModelPickerEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.modelPicker.enabled', ConfigType.ExperimentBased, false, vBoolean());
 		export const InlineEditsUseSlashModels = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.useSlashModels', ConfigType.ExperimentBased, true);
 		export const InlineEditsLogContextRecorderEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.logContextRecorder.enabled', ConfigType.Simple, false);
 		export const InlineEditsHideInternalInterface = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', ConfigType.Simple, false, vBoolean());
@@ -783,6 +783,7 @@ export namespace ConfigKey {
 		export const InlineEditsRebasedCacheDelay = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.rebasedCacheDelay', ConfigType.ExperimentBased, 0);
 		export const InlineEditsBackoffDebounceEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.backoffDebounceEnabled', ConfigType.ExperimentBased, true);
 		export const InlineEditsExtraDebounceEndOfLine = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.extraDebounceEndOfLine', ConfigType.ExperimentBased, 2000);
+		export const InlineEditsExtraDebounceInlineSuggestion = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.extraDebounceInlineSuggestion', ConfigType.ExperimentBased, 0);
 		export const InlineEditsDebounceOnSelectionChange = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.debounceOnSelectionChange', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsProviderId = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.providerId', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsUnification = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.unification', ConfigType.ExperimentBased, false);
