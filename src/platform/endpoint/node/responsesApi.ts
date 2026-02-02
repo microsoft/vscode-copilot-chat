@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -32,11 +31,6 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
 
-	const hasTools = !!options.requestOptions?.tools?.length;
-	const geminiFunctionCallingMode = hasTools && endpoint.family.toLowerCase().includes('gemini-3')
-		? configService.getExperimentBasedConfig(ConfigKey.TeamInternal.GeminiFunctionCallingMode, expService)
-		: undefined;
-
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -50,11 +44,9 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
 		max_output_tokens: options.postOptions.max_tokens,
-		tool_choice: geminiFunctionCallingMode && typeof options.postOptions.tool_choice !== 'object'
-			? geminiFunctionCallingMode
-			: (typeof options.postOptions.tool_choice === 'object'
-				? { type: 'function', name: options.postOptions.tool_choice.function.name }
-				: options.postOptions.tool_choice),
+		tool_choice: typeof options.postOptions.tool_choice === 'object'
+			? { type: 'function', name: options.postOptions.tool_choice.function.name }
+			: options.postOptions.tool_choice,
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
 		store: false,
 		text: verbosity ? { verbosity } : undefined,
@@ -353,7 +345,6 @@ function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.R
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
@@ -370,11 +361,11 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 			}
 		});
 
-		for await (const chunk of body) {
+		for await (const chunk of response.body) {
 			parser.feed(chunk);
 		}
-	}, () => {
-		body.destroy();
+	}, async () => {
+		await response.body.destroy();
 	});
 }
 
@@ -385,6 +376,8 @@ interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseText
 export class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
+	/** Maps output_index to { name, callId, arguments } for streaming tool call updates */
+	private readonly toolCallInfo = new Map<number, { name: string; callId: string; arguments: string }>();
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -416,14 +409,31 @@ export class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.added':
 				if (chunk.item.type === 'function_call') {
+					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
 					onProgress({
 						text: '',
-						beginToolCalls: [{ name: chunk.item.name }]
+						beginToolCalls: [{ name: chunk.item.name, id: chunk.item.call_id }]
 					});
 				}
 				return;
+			case 'response.function_call_arguments.delta': {
+				const info = this.toolCallInfo.get(chunk.output_index);
+				if (info) {
+					info.arguments += chunk.delta;
+					onProgress({
+						text: '',
+						copilotToolCallStreamUpdates: [{
+							id: info.callId,
+							name: info.name,
+							arguments: info.arguments,
+						}],
+					});
+				}
+				return;
+			}
 			case 'response.output_item.done':
 				if (chunk.item.type === 'function_call') {
+					this.toolCallInfo.delete(chunk.output_index);
 					onProgress({
 						text: '',
 						copilotToolCalls: [{

@@ -12,7 +12,7 @@ import { Prompt } from '../prompt/prompt';
 import { TelemetryWithExp } from '../telemetry';
 import { Deferred } from '../util/async';
 import { ReplaySubject } from '../util/subject';
-import { GetNetworkCompletionsType } from './ghostText';
+import { GetNetworkCompletionsType } from './completionsFromNetwork';
 
 enum AsyncCompletionRequestState {
 	Completed,

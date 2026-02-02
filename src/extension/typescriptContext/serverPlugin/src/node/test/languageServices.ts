@@ -12,6 +12,7 @@ const ts = TS();
 
 import { ComputeContextSession, type Logger } from '../../common/contextProvider';
 import type { Host } from '../../common/host';
+import { LanguageServiceProxy } from './languageServerProxy';
 
 const isWindows = process.platform === 'win32';
 function _normalizePath(value: string): string {
@@ -103,77 +104,132 @@ namespace LanguageServiceHost {
 	}
 }
 
+class LocalLanguageServiceHost implements tt.LanguageServiceHost {
+
+	private readonly scriptSnapshots: Map<string, tt.IScriptSnapshot>;
+	private languageServiceProxy: LanguageServiceProxy | undefined;
+
+	constructor(private readonly config: tt.ParsedCommandLine, private readonly configFilePath: string | undefined, private readonly overrides?: Map<string, string>) {
+		this.scriptSnapshots = new Map<string, tt.IScriptSnapshot>();
+	}
+
+	public setLanguageServiceProxy(languageService: LanguageServiceProxy): void {
+		this.languageServiceProxy = languageService;
+	}
+
+	public getProgram(): tt.Program | undefined {
+		return this.languageServiceProxy?.getProgram();
+	}
+
+	public getScriptFileNames() {
+		return this.config.fileNames;
+	}
+	public getCompilationSettings() {
+		return this.config.options;
+	}
+	public getProjectReferences() {
+		return this.config.projectReferences;
+	}
+	public getScriptVersion(_fileName: string): string {
+		// The files are immutable.
+		return '0';
+	}
+	// The project is immutable
+	public getProjectVersion(): string {
+		return '0';
+	}
+	public getScriptSnapshot(fileName: string): tt.IScriptSnapshot | undefined {
+		let result: tt.IScriptSnapshot | undefined = this.scriptSnapshots.get(fileName);
+		if (result === undefined) {
+			const content: string | undefined = this.overrides?.get(fileName) ?? (ts.sys.fileExists(fileName) ? ts.sys.readFile(fileName) : undefined);
+			if (content === undefined) {
+				return undefined;
+			}
+			result = ts.ScriptSnapshot.fromString(content);
+			this.scriptSnapshots.set(fileName, result);
+		}
+		return result;
+	}
+	public getCurrentDirectory(): string {
+		if (this.configFilePath !== undefined) {
+			return path.dirname(this.configFilePath);
+		} else {
+			return process.cwd();
+		}
+	}
+	public getDefaultLibFileName(options: tt.CompilerOptions): string {
+		// We need to return the path since the language service needs
+		// to know the full path and not only the name which is return
+		// from ts.getDefaultLibFileName
+		return ts.getDefaultLibFilePath(options);
+	}
+
+	public directoryExists = ts.sys.directoryExists;
+	public getDirectories = ts.sys.getDirectories;
+	public fileExists = ts.sys.fileExists;
+	public readFile = ts.sys.readFile;
+	public readDirectory = ts.sys.readDirectory;
+	// this is necessary to make source references work.
+	public realpath = ts.sys.realpath;
+
+	public runWithTemporaryFileUpdate(rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void {
+		if (this.languageServiceProxy === undefined) {
+			throw new Error('Language service proxy not set.');
+		}
+
+		// In the test setup we can't update a script snapshot since everything is immutable. Since the
+		// test project are usually small, we simple recreate the language service with the updated content.
+		const overrides = this.overrides ?? new Map<string, string>();
+		overrides.set(rootFile, updatedText);
+
+		const originalLanguageService = this.languageServiceProxy.getLanguageService();
+		try {
+			const host: LocalLanguageServiceHost = new LocalLanguageServiceHost(this.config, this.configFilePath, overrides);
+			LanguageServiceHost.useSourceOfProjectReferenceRedirect(host, () => {
+				return !this.config.options.disableSourceOfProjectReferenceRedirect;
+			});
+
+			const languageService: tt.LanguageService = ts.createLanguageService(host);
+			const program = languageService.getProgram();
+			if (program === undefined) {
+				throw new Error('Couldn\'t create language service with underlying program.');
+			}
+			this.languageServiceProxy.setLanguageService(languageService);
+			host.setLanguageServiceProxy(this.languageServiceProxy);
+			const updatedFile = program.getSourceFile(rootFile);
+			if (updatedFile === undefined) {
+				throw new Error('Couldn\'t find updated file in program.');
+			}
+			cb(program, originalLanguageService.getProgram(), updatedFile);
+		} finally {
+			this.languageServiceProxy.setLanguageService(originalLanguageService!);
+		}
+	}
+}
+
 export namespace LanguageServices {
 
-	export function createLanguageService(fileOrDirectory: string): tt.LanguageService {
+	export function createLanguageService(fileOrDirectory: string): [tt.LanguageService, tt.LanguageServiceHost] {
 		const config = ParseCommandLine.create(fileOrDirectory);
 		return LanguageServices._createLanguageService(config);
 	}
 
-	export function _createLanguageService(config: tt.ParsedCommandLine): tt.LanguageService {
+	export function _createLanguageService(config: tt.ParsedCommandLine): [tt.LanguageService, tt.LanguageServiceHost] {
 		const configFilePath = CompileOptions.getConfigFilePath(config.options);
-		const scriptSnapshots: Map<string, tt.IScriptSnapshot> = new Map();
-		const host: tt.LanguageServiceHost = {
-			getScriptFileNames: () => {
-				return config.fileNames;
-			},
-			getCompilationSettings: () => {
-				return config.options;
-			},
-			getProjectReferences: () => {
-				return config.projectReferences;
-			},
-			getScriptVersion: (_fileName: string): string => {
-				// The files are immutable.
-				return '0';
-			},
-			// The project is immutable
-			getProjectVersion: () => '0',
-			getScriptSnapshot: (fileName: string): tt.IScriptSnapshot | undefined => {
-				let result: tt.IScriptSnapshot | undefined = scriptSnapshots.get(fileName);
-				if (result === undefined) {
-					const content: string | undefined = ts.sys.fileExists(fileName) ? ts.sys.readFile(fileName) : undefined;
-					if (content === undefined) {
-						return undefined;
-					}
-					result = ts.ScriptSnapshot.fromString(content);
-					scriptSnapshots.set(fileName, result);
-				}
-				return result;
-			},
-			getCurrentDirectory: () => {
-				if (configFilePath !== undefined) {
-					return path.dirname(configFilePath);
-				} else {
-					return process.cwd();
-				}
-			},
-			getDefaultLibFileName: (options) => {
-				// We need to return the path since the language service needs
-				// to know the full path and not only the name which is return
-				// from ts.getDefaultLibFileName
-				return ts.getDefaultLibFilePath(options);
-			},
-			directoryExists: ts.sys.directoryExists,
-			getDirectories: ts.sys.getDirectories,
-			fileExists: ts.sys.fileExists,
-			readFile: ts.sys.readFile,
-			readDirectory: ts.sys.readDirectory,
-			// this is necessary to make source references work.
-			realpath: ts.sys.realpath
-		};
+		const host: LocalLanguageServiceHost = new LocalLanguageServiceHost(config, configFilePath);
 
 		LanguageServiceHost.useSourceOfProjectReferenceRedirect(host, () => {
 			return !config.options.disableSourceOfProjectReferenceRedirect;
 		});
 
-		const languageService: tt.LanguageService = ts.createLanguageService(host);
+		const languageService: LanguageServiceProxy = new LanguageServiceProxy(ts.createLanguageService(host));
+
 		const program = languageService.getProgram();
 		if (program === undefined) {
 			throw new Error('Couldn\'t create language service with underlying program.');
 		}
-
-		return languageService;
+		host.setLanguageServiceProxy(languageService);
+		return [languageService, host];
 	}
 }
 
@@ -216,14 +272,14 @@ export class LanguageServicesSession extends ComputeContextSession {
 
 	public readonly logger: Logger;
 
-	constructor(root: tt.LanguageService | string, host: Host) {
-		super(host, true);
+	constructor(root: tt.LanguageService | string, languageServiceHost: tt.LanguageServiceHost, host: Host) {
+		super(languageServiceHost, host, true);
 		this.logger = new ConsoleLogger();
 		this.languageServices = new Map();
 		let languageService: tt.LanguageService;
 		let key: string | undefined;
 		if (typeof root === 'string') {
-			languageService = LanguageServices.createLanguageService(root);
+			languageService = LanguageServices.createLanguageService(root)[0];
 			key = makeAbsolute(root);
 		} else {
 			languageService = root;
@@ -279,7 +335,7 @@ export class LanguageServicesSession extends ComputeContextSession {
 				if (this.languageServices.has(key)) {
 					continue;
 				}
-				const languageService = LanguageServices._createLanguageService(reference.commandLine);
+				const [languageService] = LanguageServices._createLanguageService(reference.commandLine);
 				this.languageServices.set(key, languageService);
 				this.createDeep(languageService);
 			}

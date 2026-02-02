@@ -24,7 +24,7 @@ const COPILOT_CLI_COMMAND = 'copilot';
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
-	openTerminal(name: string, cliArgs?: string[]): Promise<void>;
+	openTerminal(name: string, cliArgs?: string[], cwd?: string): Promise<void>;
 }
 
 type IShellInfo = {
@@ -89,7 +89,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = []) {
+	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string) {
 		// Generate another set of shell args, but with --clear to clear the terminal before running the command.
 		// We'd like to hide all of the custom shell commands we send to the terminal from the user.
 		cliArgs.unshift('--clear');
@@ -100,6 +100,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		]);
 
 		const options = await getCommonTerminalOptions(name, this._authenticationService);
+		options.cwd = cwd;
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}

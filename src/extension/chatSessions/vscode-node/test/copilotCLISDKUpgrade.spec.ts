@@ -55,20 +55,9 @@ describe('CopilotCLI SDK Upgrade', function () {
 			path.join('ripgrep', 'bin', 'linux-x64', 'rg'),
 			path.join('ripgrep', 'bin', 'linux-arm64', 'rg'),
 			// sharp related files
-			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-arm64', 'lib', 'libvips-cpp.so.8.17.3'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-linux-x64', 'lib', 'libvips-cpp.so.8.17.3'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-darwin-arm64', 'lib', 'sharp-darwin-arm64.node'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-darwin-x64', 'lib', 'sharp-darwin-x64.node'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-darwin-arm64', 'lib', 'libvips-cpp.8.17.3.dylib'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-libvips-darwin-x64', 'lib', 'libvips-cpp.8.17.3.dylib'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-linux-arm64', 'lib', 'sharp-linux-arm64.node'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-linux-x64', 'lib', 'sharp-linux-x64.node'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'libvips-42.dll'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'libvips-cpp-8.17.3.dll'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-arm64', 'lib', 'sharp-win32-arm64.node'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'libvips-42.dll'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'libvips-cpp-8.17.3.dll'),
-			path.join('sharp', 'node_modules', '@img', 'sharp-win32-x64', 'lib', 'sharp-win32-x64.node'),
+			path.join('sharp', 'node_modules', '@img', 'sharp-wasm32', 'lib', 'sharp-wasm32.node.wasm'),
+			// sharp related files, files copied by us.
+			path.join('sdk', 'sharp', 'node_modules', '@img', 'sharp-wasm32', 'lib', 'sharp-wasm32.node.wasm'),
 			// parsing commands for shell.
 			'tree-sitter-bash.wasm',
 			'tree-sitter-powershell.wasm',

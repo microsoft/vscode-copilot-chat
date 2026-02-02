@@ -122,17 +122,29 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		});
 	}
 
-	getRepository(uri?: Uri): Repository | null {
+	async getRepository(uri?: Uri): Promise<Repository | null> {
 		if (!this._gitExtensionApi) {
 			return null;
 		}
 
-		if (this._gitExtensionApi.repositories.length === 1) {
+		if (uri === undefined && this._gitExtensionApi.repositories.length === 1) {
 			return this._gitExtensionApi.repositories[0];
 		}
 
 		uri = uri ?? window.activeTextEditor?.document.uri;
-		return uri ? this._gitExtensionApi.getRepository(uri) : null;
+		if (!uri) {
+			return null;
+		}
+
+		const repository = await this._gitExtensionApi.openRepository(uri);
+		if (!repository) {
+			return null;
+		}
+
+		// Refresh repository state
+		await repository.status();
+
+		return repository;
 	}
 
 	private _getAttemptCount(repository: Repository, changes: string[]): number {

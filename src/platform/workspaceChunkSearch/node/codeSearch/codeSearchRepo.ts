@@ -62,12 +62,18 @@ export enum CodeSearchRepoStatus {
 	Ready = 'Ready'
 }
 export type BuildIndexTriggerReason = 'auto' | 'manual';
+
 export interface TriggerIndexingError {
 	readonly id: string;
 	readonly userMessage: string;
 }
 
 export namespace TriggerRemoteIndexingError {
+	export const noWorkspace: TriggerIndexingError = {
+		id: 'no-workspace',
+		userMessage: l10n.t("No workspace found")
+	};
+
 	export const noGitRepos: TriggerIndexingError = {
 		id: 'no-git-repos',
 		userMessage: l10n.t("No git repos found")

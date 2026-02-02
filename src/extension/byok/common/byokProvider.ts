@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as l10n from '@vscode/l10n';
-import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
@@ -67,21 +67,6 @@ export interface BYOKModelRegistry {
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void;
 	getAllModels(apiKey?: string): Promise<{ id: string; name: string }[]>;
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
-}
-
-export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider<T> {
-	readonly authType: BYOKAuthType;
-	/**
-	 * Called when the user is requesting an API key update via UI. The provider should handle all the UI and updating the storage
-	 */
-	updateAPIKey(): Promise<void>;
-	/**
-	 * Called when the user is requesting an API key update via VS Code Command. The provider should handle loading from environment variable and updating the storage
-	 * @param envVarName - Name of the environment variable containing the API key
-	 * @param action - Action to perform: 'update' or 'remove'
-	 * @param modelId - Model ID (required for PerModelDeployment auth type)
-	 */
-	updateAPIKeyViaCmd?(envVarName: string, action: 'update' | 'remove', modelId?: string): Promise<void>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id
@@ -164,22 +149,24 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 	if (!knownModels) {
 		return [];
 	}
-	return Object.entries(knownModels).map(([id, capabilities]) => {
-		return {
-			id,
-			name: capabilities.name,
-			version: '1.0.0',
-			maxOutputTokens: capabilities.maxOutputTokens,
-			maxInputTokens: capabilities.maxInputTokens,
-			detail: providerName,
-			family: providerName,
-			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
-			capabilities: {
-				toolCalling: capabilities.toolCalling,
-				imageInput: capabilities.vision
-			},
-		} satisfies LanguageModelChatInformation;
-	});
+	return Object.entries(knownModels).map(([id, capabilities]) => byokKnownModelToAPIInfo(providerName, id, capabilities));
+}
+
+export function byokKnownModelToAPIInfo(providerName: string, id: string, capabilities: BYOKModelCapabilities): LanguageModelChatInformation {
+	return {
+		id,
+		name: capabilities.name,
+		version: '1.0.0',
+		maxOutputTokens: capabilities.maxOutputTokens,
+		maxInputTokens: capabilities.maxInputTokens,
+		detail: providerName,
+		family: id,
+		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		capabilities: {
+			toolCalling: capabilities.toolCalling,
+			imageInput: capabilities.vision
+		}
+	};
 }
 
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {

@@ -19,11 +19,11 @@ import { contextProviderMatch } from './extension/src/contextProviderMatch';
 import { registerPanelSupport } from './extension/src/copilotPanel/common';
 import { CopilotExtensionStatus, ICompletionsExtensionStatus } from './extension/src/extensionStatus';
 import { extensionFileSystem } from './extension/src/fileSystem';
-import { exception } from './extension/src/inlineCompletion';
 import { ModelPickerManager } from './extension/src/modelPicker';
 import { CopilotStatusBar } from './extension/src/statusBar';
 import { CopilotStatusBarPickMenu } from './extension/src/statusBarPicker';
 import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
+import { exception } from './extension/src/vscodeInlineCompletionItemProvider';
 import { CopilotTokenManagerImpl, ICompletionsCopilotTokenManager } from './lib/src/auth/copilotTokenManager';
 import { ICompletionsCitationManager } from './lib/src/citationManager';
 import { CompletionNotifier, ICompletionsNotifierService } from './lib/src/completionNotifier';
@@ -139,6 +139,8 @@ export function setup(serviceAccessor: ServicesAccessor, disposables: Disposable
 	const defaultContextProviders = serviceAccessor.get(ICompletionsDefaultContextProviders);
 	defaultContextProviders.add('ms-vscode.cpptools');
 	defaultContextProviders.add('promptfile-ai-context-provider');
+	defaultContextProviders.add('scm-context-provider');
+	defaultContextProviders.add('chat-session-context-provider');
 
 	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 }

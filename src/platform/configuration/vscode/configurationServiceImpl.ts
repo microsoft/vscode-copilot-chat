@@ -210,7 +210,7 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		return target;
 	}
 
-	setConfig<T>(key: BaseConfig<T>, value: T): Thenable<void> {
+	async setConfig<T>(key: BaseConfig<T>, value: T): Promise<void> {
 		if (key.advancedSubKey) {
 			// This is a `github.copilot.advanced.*` setting
 
@@ -246,7 +246,29 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			}
 			return this.config.update('advanced', currentValue, this._getTargetFromInspect(this.config.inspect('advanced')));
 		}
-		return this.config.update(key.id, value, this._getTargetFromInspect(this.config.inspect(key.id)));
+
+		const inspect = this.config.inspect(key.id);
+		if (value === undefined) {
+			if (!inspect) {
+				return this.config.update(key.id, value, vscode.ConfigurationTarget.Global);
+			}
+
+			if (inspect.workspaceFolderValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.WorkspaceFolder);
+			}
+
+			if (inspect.workspaceValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.Workspace);
+			}
+
+			if (inspect.globalValue !== undefined) {
+				await this.config.update(key.id, value, vscode.ConfigurationTarget.Global);
+			}
+
+			return;
+		}
+
+		return this.config.update(key.id, value, this._getTargetFromInspect(inspect));
 	}
 
 	override getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService, scope?: vscode.ConfigurationScope): T {

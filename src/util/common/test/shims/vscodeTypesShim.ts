@@ -18,7 +18,7 @@ import { SnippetString } from '../../../vs/workbench/api/common/extHostTypes/sni
 import { SnippetTextEdit } from '../../../vs/workbench/api/common/extHostTypes/snippetTextEdit';
 import { SymbolInformation, SymbolKind } from '../../../vs/workbench/api/common/extHostTypes/symbolInformation';
 import { EndOfLine, TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
-import { AISearchKeyword, ChatErrorLevel, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseTurn2, ChatResponseWarningPart, ChatSessionStatus, ChatToolInvocationPart, ExcludeSettingOptions, LanguageModelChatMessage, LanguageModelChatMessageRole, LanguageModelChatToolMode, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelError, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2 } from './chatTypes';
+import { AISearchKeyword, ChatErrorLevel, ChatQuestion, ChatQuestionType, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseQuestionCarouselPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseTurn2, ChatResponseWarningPart, ChatResponseWorkspaceEditPart, ChatSessionStatus, ChatToolInvocationPart, ExcludeSettingOptions, LanguageModelChatMessage, LanguageModelChatMessageRole, LanguageModelChatToolMode, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelError, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, McpHttpServerDefinition, McpStdioServerDefinition, McpToolInvocationContentData, TextSearchMatch2 } from './chatTypes';
 import { TextDocumentChangeReason, TextEditorSelectionChangeKind, WorkspaceEdit } from './editing';
 import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, ExtensionMode, FileType, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
 import { t } from './l10n';
@@ -66,8 +66,11 @@ const shim: typeof vscodeTypes = {
 	ChatResponseCodeblockUriPart,
 	ChatResponseTextEditPart,
 	ChatResponseNotebookEditPart,
+	ChatResponseWorkspaceEditPart,
 	ChatResponseConfirmationPart,
-	ChatPrepareToolInvocationPart,
+	ChatQuestion,
+	ChatQuestionType,
+	ChatResponseQuestionCarouselPart,
 	ChatRequestTurn,
 	ChatResponseTurn,
 	ChatRequestEditorData,
@@ -113,6 +116,7 @@ const shim: typeof vscodeTypes = {
 	TextEditorSelectionChangeKind,
 	TextDocumentChangeReason,
 	ChatToolInvocationPart,
+	McpToolInvocationContentData,
 	ChatResponseTurn2,
 	ChatRequestTurn2: ChatRequestTurn,
 	LanguageModelError: LanguageModelError as any, // Some difference in the definition of Error is breaking this
@@ -123,7 +127,9 @@ const shim: typeof vscodeTypes = {
 	ChatSessionStatus,
 	authentication: {
 		getSession: async () => { throw new Error('authentication.getSession not mocked in test'); }
-	}
+	},
+	McpHttpServerDefinition,
+	McpStdioServerDefinition
 };
 
 export = shim;

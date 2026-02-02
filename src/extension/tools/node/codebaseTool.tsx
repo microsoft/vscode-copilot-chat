@@ -6,8 +6,8 @@
 import * as l10n from '@vscode/l10n';
 import { PromptElement, PromptReference, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -150,6 +150,12 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 
 		// When anonymous (no GitHub session), always force agent path so we avoid relying on semantic index features.
 		const isAnonymous = !this.authenticationService.anyGitHubSession;
+
+		// Don't trigger nested tool calling loop if we're already in a subagent
+		if (this._input?.tools?.subAgentInvocationId) {
+			return false;
+		}
+
 		return (isAnonymous || agentEnabled) && noScopedDirectories;
 	}
 }

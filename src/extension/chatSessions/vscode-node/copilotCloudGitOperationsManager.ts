@@ -26,10 +26,11 @@ export class CopilotCloudGitOperationsManager {
 	async repoInfo(): Promise<GitRepoInfo> {
 		// TODO: support selecting remote
 		// await this.promptAndUpdatePreferredGitHubRemote(true);
-		const repoId = await getRepoId(this.gitService);
-		if (!repoId) {
+		const repoIds = await getRepoId(this.gitService);
+		if (!repoIds || repoIds.length === 0) {
 			throw new Error(vscode.l10n.t('Repository information is not available. Open a GitHub repository to continue with cloud agent.'));
 		}
+		const repoId = repoIds[0];
 		const currentRepository = this.gitService.activeRepository.get();
 		if (!currentRepository) {
 			throw new Error(vscode.l10n.t('No active repository found. Open a GitHub repository to continue with cloud agent.'));

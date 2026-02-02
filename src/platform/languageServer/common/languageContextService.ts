@@ -10,7 +10,8 @@ export const ILanguageContextService = createServiceIdentifier<ILanguageContextS
 
 export enum ContextKind {
 	Snippet = 'snippet',
-	Trait = 'trait'
+	Trait = 'trait',
+	DiagnosticBag = 'diagnosticBag'
 }
 
 /**
@@ -80,7 +81,36 @@ export interface TraitContext {
 	value: string;
 }
 
-export type ContextItem = SnippetContext | TraitContext;
+export interface DiagnosticBagContext {
+	/**
+	 * The kind of the context.
+	 */
+	kind: ContextKind.DiagnosticBag;
+
+	/**
+	 * A unique ID for the context item, used to provide
+	 * detailed statistics about the item's usage. If an ID
+	 * is not provided, it will be generated randomly.
+	 */
+	id?: string;
+
+	/**
+	 * The priority of the context.
+	 */
+	priority: number;
+
+	/**
+	 * The resource the diagnostics are associated with.
+	 */
+	uri: vscode.Uri;
+
+	/**
+	 * The diagnostics.
+	 */
+	values: vscode.Diagnostic[];
+}
+
+export type ContextItem = SnippetContext | TraitContext | DiagnosticBagContext;
 
 export enum KnownSources {
 	unknown = 'unknown',

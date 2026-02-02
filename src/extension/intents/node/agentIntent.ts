@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isAnthropicFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isAnthropicFamily, isGptFamily, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -88,13 +88,15 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 
 	allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
 	allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
+	allowTools[ToolName.SearchSubagent] = (isGptFamily(model) || isAnthropicFamily(model)) && configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, experimentationService);
 
 	if (model.family.includes('grok-code')) {
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
 
 	allowTools[ToolName.EditFilesPlaceholder] = false;
-	if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+	// todo@connor4312: string check here is for back-compat for 1.109 Insiders
+	if (Iterable.some(request.tools, ([t, enabled]) => (typeof t === 'string' ? t : t.name) === ContributedToolName.EditFilesPlaceholder && enabled === false)) {
 		allowTools[ToolName.ApplyPatch] = false;
 		allowTools[ToolName.EditFile] = false;
 		allowTools[ToolName.ReplaceString] = false;
@@ -219,7 +221,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
 		);
-		const useTruncation = this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
+		const useTruncation = this.endpoint.apiType === 'responses' && this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
 
 		// For Anthropic models with context editing, check previous turn's token usage to determine budget
@@ -230,8 +232,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		let shouldTriggerSummarize = false;
 		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
 
-		const anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this.configurationService, this.expService);
-		if (summarizationEnabled && isAnthropicFamily(this.endpoint) && anthropicContextEditingEnabled) {
+		const anthropicContextEditingEnabled = isAnthropicContextEditingEnabled(this.endpoint, this.configurationService, this.expService);
+		if (summarizationEnabled && anthropicContextEditingEnabled) {
 			// First check current turn for token usage (from tool calling loop), then fall back to previous turn's result metadata
 			const currentTurn = promptContext.conversation?.getLatestTurn();
 			const currentTurnTokenUsage = currentTurn?.getMetadata(AnthropicTokenUsageMetadata);

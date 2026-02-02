@@ -12,7 +12,7 @@ import { deserializeStringEdit, serializeStringEdit } from '../../../src/platfor
 import { ISerializedEdit } from '../../../src/platform/workspaceRecorder/common/workspaceLog';
 import { JSONFile } from '../../../src/util/node/jsonFile';
 import { CachedFunction } from '../../../src/util/vs/base/common/cache';
-import { equalsIfDefined, itemEquals } from '../../../src/util/vs/base/common/equals';
+import { equalsIfDefined, thisEqualsC } from '../../../src/util/vs/base/common/equals';
 import { isDefined } from '../../../src/util/vs/base/common/types';
 import { StringEdit } from '../../../src/util/vs/editor/common/core/edits/stringEdit';
 import { StringText } from '../../../src/util/vs/editor/common/core/text/abstractText';
@@ -232,7 +232,7 @@ class EditMatcher {
 			return false;
 		}
 		// TODO improve! (check if strings after applied the edits are the same)
-		return equalsIfDefined(this.edit, edit?.edit, itemEquals());
+		return equalsIfDefined(this.edit, edit?.edit, thisEqualsC());
 	}
 }
 

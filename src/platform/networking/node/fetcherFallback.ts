@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
+
+import { Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { collectSingleLineErrorMessage, ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { FetcherId, FetchOptions, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
-import { Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 
 
 const fetcherConfigKeys: Partial<Record<FetcherId, Config<boolean>>> = {
@@ -107,12 +107,12 @@ async function tryFetch(fetcher: IFetcher, url: string, options: FetchOptions, l
 		}
 		const text = await response.text();
 		try {
-			const json = JSON.parse(text); // Verify JSON
+			JSON.parse(text); // Verify JSON
 			logService.debug(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded (JSON)`);
-			return { ok: true, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => json, async () => Readable.from([text]), response.fetcher) };
+			return { ok: true, response: Response.fromText(response.status, response.statusText, response.headers, text, response.fetcher) };
 		} catch (err) {
 			logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed to parse JSON: ${err.message}`);
-			return { ok: false, err, response: new Response(response.status, response.statusText, response.headers, async () => text, async () => { throw err; }, async () => Readable.from([text]), response.fetcher) };
+			return { ok: false, err, response: Response.fromText(response.status, response.statusText, response.headers, text, response.fetcher) };
 		}
 	} catch (err) {
 		logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);

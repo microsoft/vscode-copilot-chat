@@ -6,10 +6,17 @@
 import { assertNever } from '../../../../util/vs/base/common/assert';
 import { IValidator, vBoolean, vEnum, vNumber, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
+export enum IncludeLineNumbersOption {
+	WithSpaceAfter = 'withSpaceAfter',
+	WithoutSpace = 'withoutSpaceAfter',
+	None = 'none',
+}
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
 	readonly includeViewedFiles: boolean;
+	readonly includeLineNumbers: IncludeLineNumbersOption;
 }
 
 export type LanguageContextLanguages = { [languageId: string]: boolean };
@@ -32,6 +39,8 @@ export type PagedClipping = { pageSize: number };
 export type CurrentFileOptions = {
 	readonly maxTokens: number;
 	readonly includeTags: boolean;
+	readonly includeLineNumbers: IncludeLineNumbersOption;
+	readonly includeCursorTag: boolean;
 	readonly prioritizeAboveCursor: boolean;
 }
 
@@ -85,6 +94,7 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
 	PatchBased = 'patchBased',
+	PatchBased01 = 'patchBased01',
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -110,6 +120,8 @@ export namespace ResponseFormat {
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
+			case PromptingStrategy.PatchBased01:
+				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.SimplifiedSystemPrompt:
 			case PromptingStrategy.CopilotNesXtab:
 			case undefined:
@@ -125,6 +137,8 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	currentFile: {
 		maxTokens: 2000,
 		includeTags: true,
+		includeLineNumbers: IncludeLineNumbersOption.None,
+		includeCursorTag: false,
 		prioritizeAboveCursor: false,
 	},
 	pagedClipping: {
@@ -134,6 +148,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		nDocuments: 5,
 		maxTokens: 2000,
 		includeViewedFiles: false,
+		includeLineNumbers: IncludeLineNumbersOption.None,
 	},
 	languageContext: {
 		enabled: false,

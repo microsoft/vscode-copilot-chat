@@ -6,6 +6,7 @@
 import { RequestType } from '@vscode/copilot-api';
 import * as l10n from '@vscode/l10n';
 import * as readline from 'readline';
+import { Readable } from 'stream';
 import type { Selection, TextDocument, TextEditor } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey } from '../../../platform/configuration/common/configurationService';
@@ -421,14 +422,9 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 		throw new Error(`Agent returned an unexpected HTTP ${response.status} error (request id ${requestId || 'unknown'}).`);
 	}
 
-	const responseBody = await response.body();
-	if (!responseBody) {
-		throw new Error(`Agent returned an unexpected response: got 200 OK, but response body was empty (request id ${requestId || 'unknown'}).`);
-	}
-
 	return {
 		requestId,
-		rl: readline.createInterface({ input: responseBody as NodeJS.ReadableStream }),
+		rl: readline.createInterface({ input: Readable.fromWeb(response.body.toReadableStream()) }),
 	};
 }
 

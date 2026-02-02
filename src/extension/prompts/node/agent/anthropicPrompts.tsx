@@ -3,8 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
+import type { LanguageModelToolInformation } from 'vscode';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME } from '../../../../platform/networking/common/anthropic';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -15,6 +19,82 @@ import { CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabili
 import { FileLinkificationInstructions } from './fileLinkificationInstructions';
 import { IAgentPrompt, PromptRegistry, ReminderInstructionsConstructor, SystemPrompt } from './promptRegistry';
 
+interface ToolSearchToolPromptProps extends BasePromptElementProps {
+	readonly availableTools: readonly LanguageModelToolInformation[] | undefined;
+	readonly modelFamily: string | undefined;
+}
+
+/**
+ * Prompt component that provides instructions for using the tool search tool
+ * to load deferred tools before calling them directly.
+ */
+class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
+	constructor(
+		props: PromptElementProps<ToolSearchToolPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+
+		// Check if tool search is enabled for this model
+		const toolSearchEnabled = endpoint
+			? isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicToolSearchEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
+
+		if (!toolSearchEnabled || !this.props.availableTools) {
+			return;
+		}
+
+		// Get the list of deferred tools (tools not in the non-deferred set)
+		const deferredTools = this.props.availableTools
+			.filter(tool => !nonDeferredToolNames.has(tool.name))
+			.map(tool => tool.name)
+			.sort();
+
+		if (deferredTools.length === 0) {
+			return;
+		}
+
+		return <Tag name='toolSearchInstructions'>
+			Use the {TOOL_SEARCH_TOOL_NAME} tool to search for deferred tools before calling them.<br />
+			<br />
+			<Tag name='mandatory'>
+				You MUST use the {TOOL_SEARCH_TOOL_NAME} tool to load deferred tools BEFORE calling them directly.<br />
+				This is a BLOCKING REQUIREMENT - deferred tools listed below are NOT available until you load them using the {TOOL_SEARCH_TOOL_NAME} tool. Once a tool appears in the results, it is immediately available to call.<br />
+				<br />
+				Why this is required:<br />
+				- Deferred tools are not loaded until discovered via {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling a deferred tool without first loading it will fail<br />
+			</Tag>
+			<br />
+			<Tag name='regexPatternSyntax'>
+				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
+				- `^mcp_github_` - matches tools starting with "mcp_github_"<br />
+				- `issue|pull_request` - matches tools containing "issue" OR "pull_request"<br />
+				- `create.*branch` - matches tools with "create" followed by "branch"<br />
+				- `mcp_.*list` - matches MCP tools with "list" in it.<br />
+				<br />
+				The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.<br />
+			</Tag>
+			<br />
+			<Tag name='incorrectUsagePatterns'>
+				NEVER do these:<br />
+				- Calling a deferred tool directly without loading it first with {TOOL_SEARCH_TOOL_NAME}<br />
+				- Calling {TOOL_SEARCH_TOOL_NAME} again for a tool that was already returned by a previous search<br />
+			</Tag>
+			<br />
+			<Tag name='availableDeferredTools'>
+				Available deferred tools (must be loaded with {TOOL_SEARCH_TOOL_NAME} before use):<br />
+				{deferredTools.join('\n')}
+			</Tag>
+		</Tag>;
+	}
+}
+
 class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
@@ -23,6 +103,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
+				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -46,7 +127,6 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
@@ -107,8 +187,20 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 }
 
 class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
+	constructor(
+		props: PromptElementProps<DefaultAgentPromptProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const endpoint = sizing.endpoint as IChatEndpoint | undefined;
+		const contextCompactionEnabled = endpoint
+			? isAnthropicContextEditingEnabled(endpoint, this.configurationService, this.experimentationService)
+			: isAnthropicContextEditingEnabled(this.props.modelFamily ?? '', this.configurationService, this.experimentationService);
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
@@ -142,6 +234,12 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 						Skip task tracking for simple, single-step operations that can be completed directly without additional planning.<br />
 					</Tag>
 				</>}
+				{contextCompactionEnabled && <>
+					<br />
+					<Tag name='contextManagement'>
+						Your context window is automatically managed through compaction, enabling you to work on tasks of any length without interruption. Work as persistently and autonomously as needed to complete tasks fully. Do not preemptively stop work, summarize progress unnecessarily, or mention context management to the user.<br />
+					</Tag>
+				</>}
 			</Tag>
 			<Tag name='toolUseInstructions'>
 				If the user is requesting a code sample, you can answer it directly without using any tools.<br />
@@ -149,18 +247,19 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				No need to ask permission before using a tool.<br />
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
+				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
 				{tools[ToolName.ReadFile] && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{tools[ToolName.Codebase] && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
 				{tools[ToolName.CreateFile] && <>When creating files, be intentional and avoid calling the {ToolName.CreateFile} tool unnecessarily. Only create files that are essential to completing the user's request. <br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
+				<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			</Tag>
 			<Tag name='communicationStyle'>
 				Maintain clarity and directness in all responses, delivering complete information while matching response depth to the task's complexity.<br />
@@ -203,16 +302,25 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) { }
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
 		const normalizedModel = endpoint.model?.replace(/\./g, '-');
 		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
-			normalizedModel?.startsWith('claude-haiku-4-5')) {
+			normalizedModel?.startsWith('claude-haiku-4-5') ||
+			normalizedModel?.startsWith('claude-opus-4-5')) {
 			return Claude45DefaultPrompt;
 		}
 		return DefaultAnthropicAgentPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		if (isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)) {
+			return Claude45ToolSearchToolUseReminder;
+		}
 		return AnthropicReminderInstructions;
 	}
 }
@@ -222,6 +330,16 @@ class AnthropicReminderInstructions extends PromptElement<ReminderInstructionsPr
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br />
+		</>;
+	}
+}
+
+class Claude45ToolSearchToolUseReminder extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			<AnthropicReminderInstructions {...this.props} />
+			<br />
+			IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
 		</>;
 	}
 }

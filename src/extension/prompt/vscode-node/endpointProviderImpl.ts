@@ -112,16 +112,21 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		} else {
 			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
 			if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.pseudoModelId) {
-				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
+				try {
+					const allEndpoints = await this.getAllChatEndpoints();
+					return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, allEndpoints);
+				} catch {
+					return this.getChatEndpoint('copilot-base');
+				}
 			} else if (model && model.vendor === 'copilot') {
 				const modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
-				// If we fail to resolve a model since this is panel we give GPT-4.1. This really should never happen as the picker is powered by the same service.
-				endpoint = modelMetadata ? this.getOrCreateChatEndpointInstance(modelMetadata) : await this.getChatEndpoint('gpt-4.1');
+				// If we fail to resolve a model since this is panel we give copilot base. This really should never happen as the picker is powered by the same service.
+				endpoint = modelMetadata ? this.getOrCreateChatEndpointInstance(modelMetadata) : await this.getChatEndpoint('copilot-base');
 			} else if (model) {
 				endpoint = this._instantiationService.createInstance(ExtensionContributedChatEndpoint, model);
 			} else {
-				// No explicit family passed and no model picker = gpt-4.1 class model
-				endpoint = await this.getChatEndpoint('gpt-4.1');
+				// No explicit family passed and no model picker = copilot base
+				endpoint = await this.getChatEndpoint('copilot-base');
 			}
 		}
 

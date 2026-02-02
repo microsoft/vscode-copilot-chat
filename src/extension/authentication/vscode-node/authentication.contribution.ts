@@ -51,11 +51,7 @@ class AuthUpgradeAsk extends Disposable {
 
 	private async waitForChatEnabled() {
 		try {
-			const copilotToken = await this._authenticationService.getCopilotToken();
-			// The best way to determine if we have chat access
-			if (copilotToken.isChatEnabled()) {
-				return;
-			}
+			await this._authenticationService.getCopilotToken();
 		} catch (error) {
 			// likely due to the user canceling the auth flow
 			this._logService.error(error, 'Failed to get copilot token');
@@ -64,7 +60,7 @@ class AuthUpgradeAsk extends Disposable {
 		await Event.toPromise(
 			Event.filter(
 				this._authenticationService.onDidAuthenticationChange,
-				() => this._authenticationService.copilotToken?.isChatEnabled() ?? false
+				() => this._authenticationService.copilotToken !== undefined
 			)
 		);
 	}

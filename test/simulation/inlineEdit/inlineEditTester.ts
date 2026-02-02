@@ -142,7 +142,13 @@ export class InlineEditTester {
 			}));
 		}
 
-		const stestRuntime = accessor.getIfExists(ISimulationTestRuntime);
+		const stestRuntime = (() => {
+			try {
+				return accessor.get(ISimulationTestRuntime);
+			} catch {
+				return undefined;
+			}
+		})();
 
 		if (stestRuntime) {
 			const nesUserEditHistory: ISerializedNesUserEditsHistory = {

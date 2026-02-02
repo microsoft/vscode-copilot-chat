@@ -2019,6 +2019,14 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				value: item.value
 			};
 			return converted;
+		} else if (item.kind === ContextKind.DiagnosticBag) {
+			const converted: Copilot.DiagnosticBag = {
+				importance: item.priority * 100,
+				id: item.id,
+				uri: item.uri,
+				values: item.values
+			};
+			return converted;
 		}
 		return undefined;
 	}

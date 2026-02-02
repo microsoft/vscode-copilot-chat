@@ -5,6 +5,7 @@
 
 import * as http from 'http';
 import * as https from 'https';
+import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
 import { collectSingleLineErrorMessage } from '../../log/common/logService';
 import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
@@ -42,8 +43,8 @@ export class NodeFetcher implements IFetcher {
 		}
 
 		const method = options.method || 'GET';
-		if (method !== 'GET' && method !== 'POST') {
-			throw new Error(`Illegal arguments! 'method' must be either 'GET' or 'POST'!`);
+		if (method !== 'GET' && method !== 'POST' && method !== 'PUT') {
+			throw new Error(`Illegal arguments! 'method' must be 'GET', 'POST', or 'PUT'!`);
 		}
 
 		const signal = options.signal ?? new AbortController().signal;
@@ -85,7 +86,7 @@ export class NodeFetcher implements IFetcher {
 		return items;
 	}
 
-	private _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	private _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const module = url.startsWith('https:') ? https : http;
 			const req = module.request(url, { method, headers }, res => {
@@ -101,9 +102,7 @@ export class NodeFetcher implements IFetcher {
 					res.statusCode || 0,
 					res.statusMessage || '',
 					nodeFetcherResponse.headers,
-					async () => nodeFetcherResponse.text(),
-					async () => nodeFetcherResponse.json(),
-					async () => nodeFetcherResponse.body(),
+					nodeFetcherResponse.body(),
 					NodeFetcher.ID
 				));
 			});
@@ -194,12 +193,12 @@ class NodeFetcherResponse {
 		return JSON.parse(text);
 	}
 
-	public async body(): Promise<NodeJS.ReadableStream | null> {
+	public body(): ReadableStream<Uint8Array> {
 		this.signal.addEventListener('abort', () => {
 			this.res.emit('error', makeAbortError(this.signal));
 			this.res.destroy();
 			this.req.destroy();
 		});
-		return this.res;
+		return Readable.toWeb(this.res);
 	}
 }

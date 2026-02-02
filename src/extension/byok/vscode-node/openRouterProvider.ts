@@ -2,53 +2,67 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType, BYOKKnownModels } from '../common/byokProvider';
-import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
+import { BYOKModelCapabilities } from '../common/byokProvider';
+import { AbstractOpenAICompatibleLMProvider } from './abstractLanguageModelChatProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
-export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
+interface OpenRouterModelData {
+	id: string;
+	name: string;
+	supported_parameters?: string[];
+	architecture?: {
+		input_modalities?: string[];
+	};
+	top_provider: {
+		context_length: number;
+	};
+}
+
+export class OpenRouterLMProvider extends AbstractOpenAICompatibleLMProvider {
 	public static readonly providerName = 'OpenRouter';
 	constructor(
 		byokStorageService: IBYOKStorageService,
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
+		@IFetcherService fetcherService: IFetcherService,
+		@ILogService logService: ILogService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService expService: IExperimentationService
 	) {
 		super(
-			BYOKAuthType.GlobalApiKey,
+			OpenRouterLMProvider.providerName.toLowerCase(),
 			OpenRouterLMProvider.providerName,
-			'https://openrouter.ai/api/v1',
 			undefined,
 			byokStorageService,
-			_fetcherService,
-			_logService,
-			_instantiationService,
+			fetcherService,
+			logService,
+			instantiationService,
+			configurationService,
+			expService
 		);
 	}
 
-	protected override async getAllModels(): Promise<BYOKKnownModels> {
-		try {
-			const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?supported_parameters=tools', { method: 'GET' });
-			const data = await response.json();
-			const knownModels: BYOKKnownModels = {};
-			for (const model of data.data) {
-				knownModels[model.id] = {
-					name: model.name,
-					toolCalling: model.supported_parameters?.includes('tools') ?? false,
-					vision: model.architecture?.input_modalities?.includes('image') ?? false,
-					maxInputTokens: model.top_provider.context_length - 16000,
-					maxOutputTokens: 16000
-				};
-			}
-			this._knownModels = knownModels;
-			return knownModels;
-		} catch (error) {
-			this._logService.error(error, `Error fetching available OpenRouter models`);
-			throw error;
-		}
-
+	protected override getModelsBaseUrl(): string | undefined {
+		return 'https://openrouter.ai/api/v1';
 	}
+
+	protected override getModelsDiscoveryUrl(modelsBaseUrl: string): string {
+		return `${modelsBaseUrl}/models?supported_parameters=tools`;
+	}
+
+	protected override resolveModelCapabilities(modelData: unknown): BYOKModelCapabilities | undefined {
+		const openRouterModelData = modelData as OpenRouterModelData;
+		return {
+			name: openRouterModelData.name,
+			toolCalling: openRouterModelData.supported_parameters?.includes('tools') ?? false,
+			vision: openRouterModelData.architecture?.input_modalities?.includes('image') ?? false,
+			maxInputTokens: openRouterModelData.top_provider.context_length - 16000,
+			maxOutputTokens: 16000
+		};
+	}
+
 }

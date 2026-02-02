@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
-import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
-import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
+import type { ChatQuestion, ChatResponseFileTree, ChatResponseStream, ChatToolInvocationStreamData, ChatVulnerability, ChatWorkspaceFileEdit, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
+import { ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, ChatResponseWorkspaceEditPart, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
 
@@ -34,6 +34,15 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 			}, () => {
 				finalize?.();
 				return tryFinalizeResponseStream(stream);
+			},
+			(toolCallId, toolName, streamData) => {
+				stream.beginToolInvocation(toolCallId, toolName, streamData);
+			},
+			(toolCallId, streamData) => {
+				stream.updateToolInvocation(toolCallId, streamData);
+			},
+			(questions, allowSkip) => {
+				return stream.questionCarousel(questions, allowSkip);
 			}
 		);
 	}
@@ -48,7 +57,16 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		}, () => {
 			finalize?.();
 			return tryFinalizeResponseStream(stream);
-		});
+		},
+			(toolCallId, toolName, streamData) => {
+				stream.beginToolInvocation(toolCallId, toolName, streamData);
+			},
+			(toolCallId, streamData) => {
+				stream.updateToolInvocation(toolCallId, streamData);
+			},
+			(questions, allowSkip) => {
+				return stream.questionCarousel(questions, allowSkip);
+			});
 	}
 
 	public static map(stream: ChatResponseStream, callback: (part: ExtendedChatResponsePart) => ExtendedChatResponsePart | undefined, finalize?: () => void): ChatResponseStreamImpl {
@@ -62,13 +80,25 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		}, () => {
 			finalize?.();
 			return tryFinalizeResponseStream(stream);
-		});
+		},
+			(toolCallId, toolName, streamData) => {
+				stream.beginToolInvocation(toolCallId, toolName, streamData);
+			},
+			(toolCallId, streamData) => {
+				stream.updateToolInvocation(toolCallId, streamData);
+			},
+			(questions, allowSkip) => {
+				return stream.questionCarousel(questions, allowSkip);
+			});
 	}
 
 	constructor(
 		private readonly _push: (part: ExtendedChatResponsePart) => void,
 		private readonly _clearToPreviousToolInvocation: (reason: ChatResponseClearToPreviousToolInvocationReason) => void,
 		private readonly _finalize?: () => void | Promise<void>,
+		private readonly _beginToolInvocation?: (toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData) => void,
+		private readonly _updateToolInvocation?: (toolCallId: string, streamData: ChatToolInvocationStreamData) => void,
+		private readonly _questionCarousel?: (questions: ChatQuestion[], allowSkip?: boolean) => Thenable<Record<string, unknown> | undefined>,
 	) { }
 
 	async finalize(): Promise<void> {
@@ -149,6 +179,10 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		}
 	}
 
+	workspaceEdit(edits: ChatWorkspaceFileEdit[]): void {
+		this._push(new ChatResponseWorkspaceEditPart(edits));
+	}
+
 	markdownWithVulnerabilities(value: string | MarkdownString, vulnerabilities: ChatVulnerability[]): void {
 		this._push(new ChatResponseMarkdownWithVulnerabilitiesPart(value, vulnerabilities));
 	}
@@ -167,7 +201,22 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		this._push(new ChatResponseWarningPart(value));
 	}
 
-	prepareToolInvocation(toolName: string): void {
-		this._push(new ChatPrepareToolInvocationPart(toolName));
+	beginToolInvocation(toolCallId: string, toolName: string, streamData?: ChatToolInvocationStreamData): void {
+		if (this._beginToolInvocation) {
+			this._beginToolInvocation(toolCallId, toolName, streamData);
+		}
+	}
+
+	updateToolInvocation(toolCallId: string, streamData: ChatToolInvocationStreamData): void {
+		if (this._updateToolInvocation) {
+			this._updateToolInvocation(toolCallId, streamData);
+		}
+	}
+
+	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
+		if (this._questionCarousel) {
+			return this._questionCarousel(questions, allowSkip);
+		}
+		return Promise.resolve(undefined);
 	}
 }

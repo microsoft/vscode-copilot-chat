@@ -42,6 +42,7 @@ import {
 	_promptError,
 	getPromptOptions,
 	MIN_PROMPT_CHARS,
+	MIN_PROMPT_EXCLUDED_LANGUAGE_IDS,
 	PromptResponse,
 	trimLastLine,
 } from '../prompt';
@@ -248,7 +249,7 @@ export abstract class CascadingPromptFactory implements ICompletionsPromptFactor
 			return _copilotContentExclusion;
 		}
 
-		if (textDocument.getText().length < MIN_PROMPT_CHARS) {
+		if (textDocument.getText().length < MIN_PROMPT_CHARS && !MIN_PROMPT_EXCLUDED_LANGUAGE_IDS.includes(textDocument.detectedLanguageId)) {
 			// Too short context
 			return _contextTooShort;
 		}

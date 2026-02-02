@@ -48,6 +48,22 @@ function containsMicrosoftOrg(orgList: string[]): boolean {
 	return false;
 }
 
+/**
+ * A function used to determine if the org list contains a VS Code organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a VS Code org
+ */
+function containsVSCodeOrg(orgList: string[]): boolean {
+	const VSCODE_ORGANIZATIONS = ['551cca60ce19654d894e786220822482'];
+	// Check if the user is part of a VS Code organization.
+	for (const org of orgList) {
+		if (VSCODE_ORGANIZATIONS.includes(org)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export class CopilotToken {
 	private readonly tokenMap: Map<string, string>;
 	constructor(private readonly _info: ExtendedTokenInfo) {
@@ -84,6 +100,14 @@ export class CopilotToken {
 
 	get organizationList(): string[] {
 		return this._info.organization_list || [];
+	}
+
+	/**
+	 * Returns the list of organization logins that provide Copilot access to the user.
+	 * These are the organizations through which the user has a Copilot subscription (Business/Enterprise).
+	 */
+	get organizationLoginList(): string[] {
+		return this._info.organization_login_list || [];
 	}
 
 	get enterpriseList(): number[] {
@@ -127,7 +151,7 @@ export class CopilotToken {
 	}
 
 	get isVscodeTeamMember(): boolean {
-		return this._info.isVscodeTeamMember;
+		return this._info.isVscodeTeamMember || containsVSCodeOrg(this.organizationList);
 	}
 
 	get codexAgentEnabled(): boolean {
@@ -173,10 +197,6 @@ export class CopilotToken {
 			this._isPublicSuggestionsEnabled = this._info.public_suggestions === 'enabled';
 		}
 		return this._isPublicSuggestionsEnabled;
-	}
-
-	isChatEnabled(): boolean {
-		return this._info.chat_enabled ?? false;
 	}
 
 	isCopilotIgnoreEnabled(): boolean {
@@ -285,8 +305,6 @@ export interface TokenEnvelope {
 	// Feature flags
 	/** Whether client-side indexing for Blackbird is enabled. */
 	blackbird_clientside_indexing: boolean;
-	/** Whether chat features are enabled. */
-	chat_enabled: boolean;
 	/** Whether code quote/citation is enabled. */
 	code_quote_enabled: boolean;
 	/** Whether Copilot code review is enabled. */
@@ -308,7 +326,7 @@ export interface TokenEnvelope {
 	/** SKU-isolated endpoints. */
 	endpoints?: Endpoints;
 	/** Enterprise IDs if user has enterprise access. */
-	enterprise_list?: number[];
+	enterprise_list?: number[] | null;
 	/** Quota remaining for free/limited users. Null for non-free users. */
 	limited_user_quotas?: { chat: number; completions: number } | null;
 	/** Unix timestamp when quotas reset for free/limited users. Null for non-free users. */
@@ -365,7 +383,6 @@ const tokenEnvelopeValidator = vObj({
 	sku: vString(),
 	individual: vBoolean(),
 	blackbird_clientside_indexing: vBoolean(),
-	chat_enabled: vBoolean(),
 	code_quote_enabled: vBoolean(),
 	code_review_enabled: vBoolean(),
 	codesearch: vBoolean(),
@@ -379,7 +396,7 @@ const tokenEnvelopeValidator = vObj({
 		proxy: vString(),
 		telemetry: vString(),
 	}),
-	enterprise_list: vArray(vNumber()),
+	enterprise_list: vNullable(vArray(vNumber())),
 	limited_user_quotas: vNullable(vObj({
 		chat: vRequired(vNumber()),
 		completions: vRequired(vNumber()),
@@ -436,9 +453,8 @@ export function validateTokenEnvelope(obj: unknown): TokenValidationResult {
 			valid: true,
 			strategy: 'fallback',
 			strictError,
-			// Technically not a safe cast if the backend changed non-critical fields.
-			// Telemetry should be used to track how often this happens.
-			envelope: fallbackResult.content as TokenEnvelope
+			// Use the full payload, not the validator result, to preserve all server fields
+			envelope: obj as TokenEnvelope
 		};
 	}
 
@@ -479,7 +495,6 @@ export interface CopilotUserInfo extends CopilotUserQuotaInfo {
 	analytics_tracking_id: string;
 	assigned_date: string;
 	can_signup_for_limited: boolean;
-	chat_enabled: boolean;
 	copilot_plan: string;
 	organization_login_list: string[];
 	organization_list: Array<{
@@ -497,7 +512,7 @@ export type ExtendedTokenInfo = TokenEnvelope & {
 	// Extended fields added by client
 	username: string;
 	isVscodeTeamMember: boolean;
-} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
+} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled' | 'organization_login_list'>;
 
 /**
  * Creates a minimal ExtendedTokenInfo for testing purposes.
@@ -513,7 +528,6 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		individual: true,
 		// Feature flags
 		blackbird_clientside_indexing: false,
-		chat_enabled: true,
 		code_quote_enabled: false,
 		code_review_enabled: false,
 		codesearch: false,
@@ -526,6 +540,7 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		username: 'testuser',
 		isVscodeTeamMember: false,
 		copilot_plan: 'free',
+		organization_login_list: [],
 		// Apply overrides
 		...overrides,
 	};

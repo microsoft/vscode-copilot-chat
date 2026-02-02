@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponsePart, ChatResponseStream, ChatVulnerability, ThinkingDelta, Uri } from 'vscode';
+import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, ChatResponsePart, ChatResponseStream, ChatVulnerability, ThinkingDelta, Uri } from 'vscode';
 
 import { createFilepathRegexp, mdCodeBlockLangToLanguageId } from '../../../util/common/markdown';
 import { CharCode } from '../../../util/vs/base/common/charCode';
@@ -115,13 +115,20 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	reference = this.forward(this._wrapped.reference.bind(this._wrapped));
 	textEdit = this.forward(this._wrapped.textEdit.bind(this._wrapped));
 	notebookEdit = this.forward(this._wrapped.notebookEdit.bind(this._wrapped));
+	workspaceEdit = this.forward(this._wrapped.workspaceEdit?.bind(this._wrapped) || (() => { }));
 	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
 	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
 	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
 	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
 	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
 	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
-	prepareToolInvocation = this.forward(this._wrapped.prepareToolInvocation.bind(this._wrapped));
+	beginToolInvocation = this.forward(this._wrapped.beginToolInvocation.bind(this._wrapped));
+	updateToolInvocation = this.forward(this._wrapped.updateToolInvocation.bind(this._wrapped));
+
+	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
+		this._codeBlockProcessor.flush();
+		return this._wrapped.questionCarousel(questions, allowSkip);
+	}
 }
 
 

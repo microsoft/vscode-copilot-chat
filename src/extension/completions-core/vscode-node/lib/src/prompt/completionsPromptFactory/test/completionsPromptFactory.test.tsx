@@ -8,18 +8,21 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import dedent from 'ts-dedent';
+import { Diagnostic, DiagnosticSeverity, Range, Uri } from 'vscode';
 import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
 import { MutableObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILanguageDiagnosticsService } from '../../../../../../../../platform/languages/common/languageDiagnosticsService';
 import { TestingServiceCollection } from '../../../../../../../../platform/test/node/services';
+import { URI } from '../../../../../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ComponentContext, PromptElementProps, Text } from '../../../../../prompt/src/components/components';
 import { Dispatch, StateUpdater } from '../../../../../prompt/src/components/hooks';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt';
 import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
-import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
+import { CodeSnippet, ContextProvider, SupportedContextItem, Trait, type DiagnosticBag } from '../../../../../types/src';
 import { ICompletionsObservableWorkspace } from '../../../completionsObservableWorkspace';
-import { createCompletionState } from '../../../completionState';
+import { createCompletionState, type CompletionState } from '../../../completionState';
 import { ConfigKey, ICompletionsConfigProvider, InMemoryConfigProvider } from '../../../config';
 import { ICompletionsFeaturesService } from '../../../experiments/featuresService';
 import { TelemetryWithExp } from '../../../telemetry';
@@ -31,7 +34,8 @@ import { ICompletionsTextDocumentManagerService } from '../../../textDocumentMan
 import { CompletionsContext } from '../../components/completionsContext';
 import { ICompletionsContextProviderBridgeService } from '../../components/contextProviderBridge';
 import { CurrentFile } from '../../components/currentFile';
-import { ContextProviderTelemetry, ICompletionsContextProviderRegistryService } from '../../contextProviderRegistry';
+import { ContextProviderTelemetry, ICompletionsContextProviderRegistryService, type DefaultDiagnosticSettings, type ResolvedContextItem } from '../../contextProviderRegistry';
+import type { DiagnosticBagWithId } from '../../contextProviders/contextItemSchemas';
 import { _contextTooShort, _promptCancelled, _promptError } from '../../prompt';
 import { FullRecentEditsProvider, ICompletionsRecentEditsProviderService } from '../../recentEdits/recentEditsProvider';
 import { NeighborSource } from '../../similarFiles/neighborFiles';
@@ -551,14 +555,28 @@ suite('Completions Prompt Factory', function () {
 		assert.ok(result.prompt.prefix.includes('Consider this related information:') === false);
 	});
 
-	test('prompt should include traits and code snippets if the context provider API is enabled', async function () {
-		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,codeSnippetsProvider';
+	test('prompt should include traits, diagnostics and code snippets if the context provider API is enabled', async function () {
+		telemetryData.filtersAndExp.exp.variables.copilotcontextproviders = 'traitsProvider,diagnosticsProvider,codeSnippetsProvider';
 
 		const traitsProvider: ContextProvider<Trait> = {
 			id: 'traitsProvider',
 			selector: [{ language: 'typescript' }],
 			resolver: {
 				resolve: () => Promise.resolve([{ name: 'test_trait', value: 'test_value' }]),
+			},
+		};
+		const diagnosticsProvider: ContextProvider<DiagnosticBag> = {
+			id: 'diagnosticsProvider',
+			selector: [{ language: 'typescript' }],
+			resolver: {
+				resolve: () => {
+					const diag1 = new Diagnostic(new Range(0, 10, 0, 20), 'type exists', DiagnosticSeverity.Error);
+					diag1.code = 1017;
+					diag1.source = 'ts';
+					const diag2 = new Diagnostic(new Range(0, 20, 0, 25), 'unknown type', DiagnosticSeverity.Warning);
+					diag2.code = 2017;
+					return Promise.resolve([{ uri: Uri.file('something.ts'), values: [diag1, diag2] }]);
+				},
 			},
 		};
 		const codeSnippetsProvider: ContextProvider<CodeSnippet> = {
@@ -570,6 +588,7 @@ suite('Completions Prompt Factory', function () {
 		};
 		const contextProviderRegistry = accessor.get(ICompletionsContextProviderRegistryService);
 		contextProviderRegistry.registerContextProvider(traitsProvider);
+		contextProviderRegistry.registerContextProvider(diagnosticsProvider);
 		contextProviderRegistry.registerContextProvider(codeSnippetsProvider);
 
 		// Register the documents for content exclusion
@@ -584,6 +603,9 @@ suite('Completions Prompt Factory', function () {
 				// Path: basename
 				// Consider this related information:
 				// test_trait: test_value
+				// Consider the following typescript diagnostics from something.ts:
+				// 1:11 - error TS1017: type exists
+				// 1:21 - warning 2017: unknown type
 				// Compare this snippet from something.ts:
 				// function foo() { return 1; }
 			` + `\n${longPrefix}\nfunction f`
@@ -731,15 +753,19 @@ suite('Completions Prompt Factory', function () {
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[2].CodeSnippets',
+				componentPath: '$.f[0].CompletionsContext[2].Diagnostics',
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[3].SimilarFiles',
+				componentPath: '$.f[0].CompletionsContext[3].CodeSnippets',
 				updateDataTimeMs: 42,
 			},
 			{
-				componentPath: '$.f[0].CompletionsContext[4].RecentEdits',
+				componentPath: '$.f[0].CompletionsContext[4].SimilarFiles',
+				updateDataTimeMs: 42,
+			},
+			{
+				componentPath: '$.f[0].CompletionsContext[5].RecentEdits',
 				updateDataTimeMs: 42,
 			},
 			{
@@ -898,6 +924,360 @@ suite('Completions Prompt Factory', function () {
 		assert.strictEqual(reporter.events[0].properties['trait2'], undefined);
 
 		assert.strictEqual(reporter.hasException, false);
+	});
+});
+
+suite('getDefaultDiagnostics', function () {
+	type PromptFactoryWithDiagnostic = IPromptFactory & {
+		addDefaultDiagnosticBag(
+			resolvedContextItems: ResolvedContextItem[],
+			bags: DiagnosticBagWithId[] | undefined,
+			completionId: string,
+			completionState: CompletionState,
+			settings: DefaultDiagnosticSettings
+		): DiagnosticBagWithId[] | undefined;
+	};
+	let accessor: ServicesAccessor;
+	let serviceCollection: TestingServiceCollection;
+	let promptFactory: PromptFactoryWithDiagnostic;
+	const completionId = 'test-completion-id';
+
+	setup(function () {
+		serviceCollection = createLibTestingContext();
+		accessor = serviceCollection.createTestingAccessor();
+		promptFactory = accessor.get(IInstantiationService).createInstance(TestComponentsCompletionsPromptFactory, undefined, undefined);
+	});
+
+	teardown(function () {
+		sinon.restore();
+	});
+
+	test('should return undefined when diagnostics array is empty', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		// Set empty diagnostics
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), []);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings);
+		assert.strictEqual(result, undefined);
+	});
+
+	test('should return undefined when bags already contains document', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const bags = [{
+			type: 'DiagnosticBag' as const,
+			uri: URI.parse(document.uri),
+			values: [],
+			id: 'test-id'
+		}];
+
+		const result = promptFactory.addDefaultDiagnosticBag([], bags, completionId, completionState, settings);
+		assert.strictEqual(result, bags);
+	});
+
+	test('should filter out diagnostics outside maxLineDistance', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, dedent`
+			line 0
+			line 1
+			line 2
+			line 3
+			line 4
+			line 5
+		`);
+		const position = Position.create(2, 0); // At line 2
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 1, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5), // Distance: 2, should be filtered out
+				message: 'Error at line 0',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(1, 0, 1, 5), // Distance: 1, should be included
+				message: 'Error at line 1',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(3, 0, 3, 5), // Distance: 1, should be included
+				message: 'Error at line 3',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(5, 0, 5, 5), // Distance: 3, should be filtered out
+				message: 'Error at line 5',
+				severity: DiagnosticSeverity.Error
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 2);
+		assert.strictEqual(result!.values[0].message, 'Error at line 1');
+		assert.strictEqual(result!.values[1].message, 'Error at line 3');
+	});
+
+	test('should only include errors when warnings mode is "no"', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Error message',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 6, 0, 10),
+				message: 'Warning message',
+				severity: DiagnosticSeverity.Warning
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 1);
+		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
+	});
+
+	test('should include both errors and warnings when warnings mode is "yes"', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Error message',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 6, 0, 10),
+				message: 'Warning message',
+				severity: DiagnosticSeverity.Warning
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 2);
+		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
+		assert.strictEqual(result!.values[1].severity, DiagnosticSeverity.Warning);
+	});
+
+	test('should include only errors when warnings mode is "yesIfNoErrors" and errors exist', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Error message',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 6, 0, 10),
+				message: 'Warning message',
+				severity: DiagnosticSeverity.Warning
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 1);
+		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Error);
+	});
+
+	test('should include warnings when warnings mode is "yesIfNoErrors" and no errors exist', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yesIfNoErrors', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Warning message 1',
+				severity: DiagnosticSeverity.Warning
+			},
+			{
+				range: new Range(0, 6, 0, 10),
+				message: 'Warning message 2',
+				severity: DiagnosticSeverity.Warning
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 2);
+		assert.strictEqual(result!.values[0].severity, DiagnosticSeverity.Warning);
+		assert.strictEqual(result!.values[1].severity, DiagnosticSeverity.Warning);
+	});
+
+	test('should respect maxDiagnostics limit', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 2 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 2),
+				message: 'Error 1',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 3, 0, 5),
+				message: 'Error 2',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 6, 0, 8),
+				message: 'Error 3',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 9, 0, 11),
+				message: 'Error 4',
+				severity: DiagnosticSeverity.Error
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 2);
+	});
+
+	test('should sort diagnostics by distance from cursor position', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, dedent`
+			line 0
+			line 1
+			line 2
+			line 3
+			line 4
+			line 5
+		`);
+		const position = Position.create(2, 0); // At line 2
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 5, maxDiagnostics: 10 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(5, 0, 5, 5), // Distance: 3
+				message: 'Error at line 5',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(2, 0, 2, 5), // Distance: 0 (same line)
+				message: 'Error at line 2',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(0, 0, 0, 5), // Distance: 2
+				message: 'Error at line 0',
+				severity: DiagnosticSeverity.Error
+			},
+			{
+				range: new Range(3, 0, 3, 5), // Distance: 1
+				message: 'Error at line 3',
+				severity: DiagnosticSeverity.Error
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.values.length, 4);
+		// Should be sorted by distance: 0, 1, 2, 3
+		assert.strictEqual(result!.values[0].message, 'Error at line 2'); // Distance 0
+		assert.strictEqual(result!.values[1].message, 'Error at line 3'); // Distance 1
+		assert.strictEqual(result!.values[2].message, 'Error at line 0'); // Distance 2
+		assert.strictEqual(result!.values[3].message, 'Error at line 5'); // Distance 3
+	});
+
+	test('should return undefined when all diagnostics are filtered out', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'no', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Warning message',
+				severity: DiagnosticSeverity.Warning
+			},
+			{
+				range: new Range(0, 6, 0, 10),
+				message: 'Info message',
+				severity: DiagnosticSeverity.Information
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings);
+		assert.strictEqual(result, undefined);
+	});
+
+	test('should include uri and generate id in result', function () {
+		const document = createTextDocument('file:///test.ts', 'typescript', 0, 'function foo() {}\n');
+		const position = Position.create(0, 10);
+		const completionState = createCompletionState(document, position);
+		const settings: DefaultDiagnosticSettings = { warnings: 'yes', maxLineDistance: 10, maxDiagnostics: 5 };
+
+		const diagnostics: Diagnostic[] = [
+			{
+				range: new Range(0, 0, 0, 5),
+				message: 'Error message',
+				severity: DiagnosticSeverity.Error
+			}
+		];
+
+		const languageDiagnosticsService = accessor.get(ILanguageDiagnosticsService);
+		(languageDiagnosticsService as any).setDiagnostics(Uri.parse(document.uri), diagnostics);
+
+		const result = promptFactory.addDefaultDiagnosticBag([], undefined, completionId, completionState, settings)![0];
+		assert.notStrictEqual(result, undefined);
+		assert.strictEqual(result!.type, 'DiagnosticBag');
+		assert.strictEqual(result!.uri.toString(), URI.parse(document.uri).toString());
+		assert.ok(result!.id); // Should have a generated id
+		assert.ok(typeof result!.id === 'string');
 	});
 });
 
