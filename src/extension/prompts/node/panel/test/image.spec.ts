@@ -6,6 +6,13 @@
 import { describe, expect, test } from 'vitest';
 import { CopilotToken } from '../../../../../platform/authentication/common/copilotToken';
 
+/**
+ * Helper function to determine if warning should be shown based on token properties
+ */
+function shouldShowVisionWarning(token: CopilotToken | undefined): boolean {
+	return !!token && !token.isIndividual && !token.isEditorPreviewFeaturesEnabled();
+}
+
 describe('Image warning conditions', () => {
 	test('warning should be shown for business/enterprise user with preview features disabled', () => {
 		// Test the condition logic that triggers the warning
@@ -14,8 +21,7 @@ describe('Image warning conditions', () => {
 			isEditorPreviewFeaturesEnabled: () => false,
 		} as unknown as CopilotToken;
 
-		const shouldShowWarning = !mockToken.isIndividual && !mockToken.isEditorPreviewFeaturesEnabled();
-		expect(shouldShowWarning).toBe(true);
+		expect(shouldShowVisionWarning(mockToken)).toBe(true);
 	});
 
 	test('warning should not be shown for individual user', () => {
@@ -24,8 +30,7 @@ describe('Image warning conditions', () => {
 			isEditorPreviewFeaturesEnabled: () => false,
 		} as unknown as CopilotToken;
 
-		const shouldShowWarning = !mockToken.isIndividual && !mockToken.isEditorPreviewFeaturesEnabled();
-		expect(shouldShowWarning).toBe(false);
+		expect(shouldShowVisionWarning(mockToken)).toBe(false);
 	});
 
 	test('warning should not be shown when preview features are enabled', () => {
@@ -34,7 +39,6 @@ describe('Image warning conditions', () => {
 			isEditorPreviewFeaturesEnabled: () => true,
 		} as unknown as CopilotToken;
 
-		const shouldShowWarning = !mockToken.isIndividual && !mockToken.isEditorPreviewFeaturesEnabled();
-		expect(shouldShowWarning).toBe(false);
+		expect(shouldShowVisionWarning(mockToken)).toBe(false);
 	});
 });
