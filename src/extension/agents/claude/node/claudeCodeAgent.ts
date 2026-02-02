@@ -71,6 +71,8 @@ export class ClaudeAgentManager extends Disposable {
 				session = newSession;
 			}
 
+			this._langModelServer!.pendingUserRequests++;
+
 			await session.invoke(
 				this.resolvePrompt(request),
 				request.toolInvocationToken,
