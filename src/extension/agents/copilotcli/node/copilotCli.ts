@@ -383,3 +383,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 }
 
+
+export function isWelcomeView(workspaceService: IWorkspaceService) {
+	return workspaceService.getWorkspaceFolders().length === 0;
+}

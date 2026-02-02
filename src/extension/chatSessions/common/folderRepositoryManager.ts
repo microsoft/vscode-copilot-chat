@@ -81,12 +81,6 @@ export interface IFolderRepositoryManager {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Check if the current workspace is a welcome view (has no workspace folders).
-	 * TODO: @DonJayamanne Handle Session View.
-	 */
-	readonly isWelcomeView: boolean;
-
-	/**
 	 * Track the selected folder for an untitled session.
 	 */
 	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void;

@@ -13,6 +13,7 @@ import { raceCancellation } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual } from '../../../util/vs/base/common/resources';
+import { isWelcomeView } from '../../agents/copilotcli/node/copilotCli';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -87,7 +88,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		this._untitledSessionFolders.set(sessionId, folderUri);
 
 		// Update MRU tracking for untitled workspaces
-		if (this.isWelcomeView) {
+		if (isWelcomeView(this.workspaceService)) {
 			this._lastUsedFolderIdInUntitledWorkspace = folderUri.fsPath;
 		}
 	}
@@ -195,7 +196,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 
 		// If we have just one folder opened in workspace, use that as default
 		// TODO: @DonJayamanne Handle Session View.
-		if (!selectedFolder && !this.isWelcomeView && this.workspaceService.getWorkspaceFolders().length === 1) {
+		if (!selectedFolder && !isWelcomeView(this.workspaceService) && this.workspaceService.getWorkspaceFolders().length === 1) {
 			const activeRepo = this.gitService.activeRepository.get();
 			repositoryUri = activeRepo?.rootUri;
 			folderUri = repositoryUri ?? this.workspaceService.getWorkspaceFolders()[0];
@@ -383,13 +384,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	 */
 	getLastUsedFolderIdInUntitledWorkspace(): string | undefined {
 		return this._lastUsedFolderIdInUntitledWorkspace;
-	}
-
-	/**
-	 * Check if the current workspace is untitled (has no workspace folders).
-	 */
-	public get isWelcomeView(): boolean {
-		return this.workspaceService.getWorkspaceFolders().length === 0;
 	}
 
 

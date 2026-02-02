@@ -24,7 +24,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
+import { ICopilotCLIAgents, ICopilotCLIModels, isWelcomeView } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -755,7 +755,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			} else {
 				// Existing session, get worktree repository, and no need to migrate changes.
 			}
-		} else if (!this.folderRepositoryManager.isWelcomeView && this.workspaceService.getWorkspaceFolders().length === 1) {
+		} else if (!isWelcomeView(this.workspaceService) && this.workspaceService.getWorkspaceFolders().length === 1) {
 			selectedRepository = this.gitService.activeRepository.get();
 		}
 		const hasUncommittedChanges = selectedRepository?.changes
