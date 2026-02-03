@@ -124,6 +124,10 @@ export interface ILoggedToolCall {
 	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
+	toolMetadata?: unknown;
+	toolResultMessage?: string;
+	toolResultError?: string;
+	hasError?: boolean;
 	toJSON(): Promise<object>;
 }
 
