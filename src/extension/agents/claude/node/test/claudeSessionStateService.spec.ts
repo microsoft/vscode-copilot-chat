@@ -5,7 +5,7 @@
 
 import sinon from 'sinon';
 import { afterEach, assert, beforeEach, describe, it } from 'vitest';
-import { IClaudeCodeModels } from '../claudeCodeModels';
+import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../claudeCodeModels';
 import { ClaudeSessionStateService, SessionStateChangeEvent } from '../claudeSessionStateService';
 
 describe('ClaudeSessionStateService', () => {
@@ -55,6 +55,17 @@ describe('ClaudeSessionStateService', () => {
 
 			const modelId = await service.getModelIdForSession('session-1');
 			assert.strictEqual(modelId, 'claude-sonnet-4-20250514');
+		});
+
+		it('should propagate NoClaudeModelsAvailableError when getDefaultModel throws', async () => {
+			mockClaudeCodeModels.getDefaultModel.rejects(new NoClaudeModelsAvailableError());
+
+			try {
+				await service.getModelIdForSession('session-new');
+				assert.fail('Expected NoClaudeModelsAvailableError to be thrown');
+			} catch (e) {
+				assert.instanceOf(e, NoClaudeModelsAvailableError);
+			}
 		});
 	});
 

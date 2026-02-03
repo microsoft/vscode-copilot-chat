@@ -51,7 +51,7 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 					if (part instanceof vscode.LanguageModelToolResultPart2 || part instanceof vscode.LanguageModelToolResultPart) {
 						chatMessages.push(
 							<ToolMessage toolCallId={part.callId}>
-								<ToolResult content={part.content} />
+								<ToolResult content={part.content} toolCallId={part.callId} />
 							</ToolMessage>
 						);
 					} else if (isImageDataPart(part)) {

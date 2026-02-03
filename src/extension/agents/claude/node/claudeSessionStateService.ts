@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
+import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -12,6 +13,7 @@ import { IClaudeCodeModels } from './claudeCodeModels';
 export interface SessionState {
 	modelId: string | undefined;
 	permissionMode: PermissionMode;
+	capturingToken: CapturingToken | undefined;
 }
 
 /**
@@ -33,8 +35,9 @@ export interface IClaudeSessionStateService {
 
 	/**
 	 * Gets the model ID for a session. Falls back to default if not set.
+	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
 	 */
-	getModelIdForSession(sessionId: string): Promise<string | undefined>;
+	getModelIdForSession(sessionId: string): Promise<string>;
 
 	/**
 	 * Sets the model ID for a session.
@@ -50,6 +53,16 @@ export interface IClaudeSessionStateService {
 	 * Sets the permission mode for a session.
 	 */
 	setPermissionModeForSession(sessionId: string, mode: PermissionMode): void;
+
+	/**
+	 * Gets the capturing token for a session (used for request logging grouping).
+	 */
+	getCapturingTokenForSession(sessionId: string): CapturingToken | undefined;
+
+	/**
+	 * Sets the capturing token for a session.
+	 */
+	setCapturingTokenForSession(sessionId: string, token: CapturingToken | undefined): void;
 }
 
 export const IClaudeSessionStateService = createServiceIdentifier<IClaudeSessionStateService>('IClaudeSessionStateService');
@@ -70,7 +83,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		super();
 	}
 
-	async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+	async getModelIdForSession(sessionId: string): Promise<string> {
 		const state = this._sessionState.get(sessionId);
 		if (state?.modelId !== undefined) {
 			return state.modelId;
@@ -86,7 +99,8 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		}
 		this._sessionState.set(sessionId, {
 			modelId,
-			permissionMode: existing?.permissionMode ?? 'acceptEdits'
+			permissionMode: existing?.permissionMode ?? 'acceptEdits',
+			capturingToken: existing?.capturingToken
 		});
 		this._onDidChangeSessionState.fire({ sessionId, modelId });
 	}
@@ -102,9 +116,23 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		}
 		this._sessionState.set(sessionId, {
 			modelId: existing?.modelId,
-			permissionMode: mode
+			permissionMode: mode,
+			capturingToken: existing?.capturingToken
 		});
 		this._onDidChangeSessionState.fire({ sessionId, permissionMode: mode });
+	}
+
+	getCapturingTokenForSession(sessionId: string): CapturingToken | undefined {
+		return this._sessionState.get(sessionId)?.capturingToken;
+	}
+
+	setCapturingTokenForSession(sessionId: string, token: CapturingToken | undefined): void {
+		const existing = this._sessionState.get(sessionId);
+		this._sessionState.set(sessionId, {
+			modelId: existing?.modelId,
+			permissionMode: existing?.permissionMode ?? 'acceptEdits',
+			capturingToken: token
+		});
 	}
 
 	override dispose(): void {

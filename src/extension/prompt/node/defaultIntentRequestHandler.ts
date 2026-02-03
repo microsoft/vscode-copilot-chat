@@ -128,7 +128,19 @@ export class DefaultIntentRequestHandler {
 				return confirmationResult;
 			}
 
-			const resultDetails = await this._requestLogger.captureInvocation(new CapturingToken(this.request.prompt, 'comment', false), () => this.runWithToolCalling(intentInvocation));
+			// For subagent requests, use the subAgentInvocationId as the session ID.
+			// This enables explicit linking between the parent's runSubagent tool call and the subagent trajectory.
+			// For main requests, use the VS Code chat sessionId directly as the trajectory session ID.
+			const capturingToken = new CapturingToken(
+				this.request.prompt,
+				'comment',
+				false,
+				false,
+				this.request.subAgentInvocationId,
+				this.request.subAgentName,
+				this.request.sessionId,
+			);
+			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);
@@ -533,7 +545,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
 
-		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
+		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
 				this.toolGrouping?.didInvalidateCache();
 			}
@@ -547,7 +559,8 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				result.references,
 				options.invocation.endpoint,
 				result.metadata.getAll(TelemetryData) ?? [],
-				tools.length
+				tools.length,
+				toolTokenCount
 			);
 		}));
 
@@ -711,6 +724,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				messageId: this.telemetry.telemetryMessageId,
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
+				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 			},
 			enableRetryOnFilter: true
 		}, token);

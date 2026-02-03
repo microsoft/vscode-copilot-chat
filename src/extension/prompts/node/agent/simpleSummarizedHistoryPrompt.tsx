@@ -108,7 +108,7 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		return <ChunkTag name='tool'>
 			Used tool "{toolCall.name}" with arguments: {truncate(toolCall.arguments, 200)}<br />
 			{result ?
-				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} /> :
+				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} toolCallId={toolCall.id} sessionId={this.props.promptContext.request?.sessionId} /> :
 				<>Tool result empty</>}
 		</ChunkTag>;
 	}

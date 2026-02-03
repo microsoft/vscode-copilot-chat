@@ -6,9 +6,11 @@
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -38,7 +40,9 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISearchSubagentParams>, token: vscode.CancellationToken) {
 		const searchInstruction = [
@@ -51,13 +55,21 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 		const request = this._inputContext!.request!;
 		const parentSessionId = this._inputContext?.conversation?.sessionId ?? generateUuid();
+		// Generate a stable session ID for this subagent invocation that will be used:
+		// 1. As subAgentInvocationId in the subagent's tool context
+		// 2. As subAgentInvocationId in toolMetadata for parent trajectory linking
+		// 3. As the session_id in the subagent's own trajectory
+		const subAgentInvocationId = generateUuid();
+
+		const toolCallLimit = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolCallLimit, this.experimentationService);
 
 		const loop = this.instantiationService.createInstance(SearchSubagentToolCallingLoop, {
-			toolCallLimit: 4,
+			toolCallLimit,
 			conversation: new Conversation(parentSessionId, [new Turn(generateUuid(), { type: 'user', message: searchInstruction })]),
 			request: request,
 			location: request.location,
 			promptText: options.input.query,
+			subAgentInvocationId: subAgentInvocationId,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
@@ -67,10 +79,14 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 
 		// Create a new capturing token to group this search subagent and all its nested tool calls
 		// Similar to how DefaultIntentRequestHandler does it
+		// Pass the subAgentInvocationId so the trajectory uses this ID for explicit linking
 		const searchSubagentToken = new CapturingToken(
 			`Search: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
 			'search',
-			false
+			false,
+			false,
+			subAgentInvocationId,
+			'search'  // subAgentName for trajectory tracking
 		);
 
 		// Wrap the loop execution in captureInvocation with the new token
@@ -81,8 +97,10 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 		// All nested tool calls are already logged by ToolCallingLoop.logToolResult()
 		const toolMetadata = {
 			query: options.input.query,
-			description: options.input.description
-			// details: options.input.details
+			description: options.input.description,
+			// The subAgentInvocationId links this tool call to the subagent's trajectory
+			subAgentInvocationId: subAgentInvocationId,
+			agentName: 'search'
 		};
 
 		let subagentResponse = '';

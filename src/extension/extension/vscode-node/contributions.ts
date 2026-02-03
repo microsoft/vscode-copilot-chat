@@ -24,6 +24,7 @@ import { DiagnosticsContextContribution } from '../../diagnosticsContext/vscode/
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
+import { ScmContextProviderContribution } from '../../git/vscode/scmContextprovider';
 import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
@@ -38,13 +39,13 @@ import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
-import { RelatedFilesProviderContribution } from '../../relatedFiles/vscode-node/relatedFiles.contribution';
 import { ChatReplayContribution } from '../../replay/vscode-node/chatReplayContrib';
 import { SearchPanelCommands } from '../../search/vscode-node/commands';
 import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settingsSchemaFeature';
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
+import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
 import * as workspaceChunkSearchContribution from '../../workspaceChunkSearch/node/workspaceChunkSearch.contribution';
@@ -86,6 +87,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
+	asContributionFactory(ScmContextProviderContribution),
 	asContributionFactory(DiagnosticsContextContribution),
 	asContributionFactory(ChatSessionContextContribution),
 	asContributionFactory(ChatReplayContribution),
@@ -114,10 +116,10 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(SetupTestsContribution),
 	asContributionFactory(FixTestFailureContribution),
 	asContributionFactory(IgnoredFileProviderContribution),
-	asContributionFactory(RelatedFilesProviderContribution),
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
+	asContributionFactory(TrajectoryExportCommands),
 ];

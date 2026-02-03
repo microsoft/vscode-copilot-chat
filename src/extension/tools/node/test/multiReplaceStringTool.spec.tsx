@@ -102,7 +102,6 @@ suite('MultiReplaceString', () => {
 			explanation: 'Replace line 2 with "new line 2"',
 			replacements: [{
 				filePath: '/workspace/file.ts',
-				explanation: 'Replace line 2 with "new line 2"',
 				newString: 'new line 2',
 				oldString: 'line 2',
 			}]
@@ -125,13 +124,11 @@ suite('MultiReplaceString', () => {
 			'explanation': 'Update session imports and type annotations to use IModifiedFileEntryInternal',
 			'replacements': [
 				{
-					'explanation': 'Update imports to include IModifiedFileEntryInternal',
 					'filePath': '/workspace/multi-sr-bug.ts',
 					'newString': `import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IModifiedFileEntryInternal, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';`,
 					'oldString': `import { ChatEditingSessionState, ChatEditKind, getMultiDiffSourceUri, IChatEditingSession, IModifiedEntryTelemetryInfo, IModifiedFileEntry, IPendingFileOperation, ISnapshotEntry, IStreamingEdits, ModifiedFileEntryState } from '../../common/chatEditingService.js';`
 				},
 				{
-					'explanation': 'Remove unused IFile import',
 					'filePath': '/workspace/multi-sr-bug.ts',
 					'newString': `import { URI } from '../../../../../base/common/uri.js';
 import { IBulkEditService } from '../../../../../editor/browser/services/bulkEditService.js';`,
@@ -140,7 +137,6 @@ import { IBulkEditService } from '../../../../../editor/browser/services/bulkEdi
 import { IFile } from '../../../../../base/node/zip.js';`
 				},
 				{
-					'explanation': 'Update _entriesObs type to use IModifiedFileEntryInternal',
 					'filePath': '/workspace/multi-sr-bug.ts',
 					'newString': `	private readonly _entriesObs = observableValue<readonly IModifiedFileEntryInternal[]>(this, []);
 	public get entries(): IObservable<readonly IModifiedFileEntry[]> {
@@ -188,7 +184,6 @@ export function div(a, b) {
 	// console.log fff fff
 	return a / b;
 }`,
-					'explanation': 'Add JSDoc to div function'
 				},
 				{
 					'filePath': '/workspace/math.js',
@@ -226,7 +221,6 @@ export function mul(a, b) {
 }
 
 export function sumThreeFloats(a, b, c) {`,
-					'explanation': 'Add JSDoc to mul function'
 				}
 			]
 		};

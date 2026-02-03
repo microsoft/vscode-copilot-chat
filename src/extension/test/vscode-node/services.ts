@@ -108,6 +108,8 @@ import { IPromptVariablesService } from '../../prompt/node/promptVariablesServic
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
@@ -188,6 +190,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
 	testingServiceCollection.define(IPromptsService, new SyncDescriptor(PromptsServiceImpl));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(NullToolsService));
+	testingServiceCollection.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(TestChatSessionService));
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));

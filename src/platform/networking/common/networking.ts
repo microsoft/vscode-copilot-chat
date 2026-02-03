@@ -124,7 +124,7 @@ export interface IEndpointFetchOptions {
 
 export interface IEndpoint {
 	readonly urlOrRequestMetadata: string | RequestMetadata;
-	getExtraHeaders?(): Record<string, string>;
+	getExtraHeaders?(location?: ChatLocation): Record<string, string>;
 	getEndpointFetchOptions?(): IEndpointFetchOptions;
 	interceptBody?(body: IEndpointBody | undefined): void;
 	acquireTokenizer(): ITokenizer;
@@ -189,6 +189,8 @@ export type IChatRequestTelemetryProperties = {
 	connectivityTestError?: string;
 	connectivityTestErrorGitHubRequestId?: string;
 	retryAfterFilterCategory?: string;
+	/** A subtype for categorizing the request with a messageSource- eg subagent */
+	subType?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
@@ -211,7 +213,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly degradationReason?: string;
 	readonly multiplier?: number;
 	readonly restrictedToSkus?: string[];
-	readonly isDefault: boolean;
 	readonly isFallback: boolean;
 	readonly customModel?: CustomModel;
 	readonly isExtensionContributed?: boolean;
@@ -235,7 +236,8 @@ export interface IChatEndpoint extends IEndpoint {
 		expectedNumChoices: number,
 		finishCallback: FinishedCallback,
 		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken
+		cancellationToken?: CancellationToken,
+		location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>>;
 
 	/**
@@ -311,6 +313,7 @@ function networkRequest(
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
 	canRetryOnce: boolean = true,
+	location?: ChatLocation,
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
@@ -331,7 +334,7 @@ function networkRequest(
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,
-		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders() : {}),
+		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
 
 	if (endpoint.interceptBody) {
@@ -406,6 +409,7 @@ export function postRequest(
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
 	canRetryOnce: boolean = true,
+	location?: ChatLocation,
 ): Promise<Response> {
 	return networkRequest(fetcherService,
 		telemetryService,
@@ -420,6 +424,7 @@ export function postRequest(
 		cancelToken,
 		useFetcher,
 		canRetryOnce,
+		location,
 	);
 }
 

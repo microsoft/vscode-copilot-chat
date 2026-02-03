@@ -23,6 +23,17 @@ type RawStoredSDKMessage = SDKMessage & {
 	readonly timestamp: string;
 	readonly isMeta?: boolean;
 }
+
+/**
+ * Minimal entry used only for parent-chain resolution.
+ * These entries lack a message field and are marked as meta entries
+ * so they're filtered from final output but still enable parent traversal.
+ */
+interface ChainLinkEntry {
+	readonly uuid: string;
+	readonly parentUuid: string | null;
+}
+
 interface SummaryEntry {
 	readonly type: 'summary';
 	readonly summary: string;
@@ -37,7 +48,7 @@ type StoredSDKMessage = SDKMessage & {
 }
 
 interface ParsedSessionMessage {
-	readonly raw: RawStoredSDKMessage;
+	readonly raw: RawStoredSDKMessage | ChainLinkEntry;
 	readonly isMeta: boolean;
 }
 
@@ -67,6 +78,26 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	) { }
 
 	/**
+	 * Read a directory, returning an empty array if the directory doesn't exist.
+	 */
+	private async _tryReadDirectory(dirUri: URI): Promise<[string, FileType][]> {
+		try {
+			return await this._fileSystem.readDirectory(dirUri);
+		} catch (e) {
+			switch (e.code) {
+				case 'FileNotFound':
+				case 'DirectoryNotFound':
+				case 'ENOENT':
+					break;
+				default:
+					this._logService.error(e, `[ClaudeCodeSessionService] Failed to read directory: ${dirUri}`);
+					break;
+			}
+			return [];
+		}
+	}
+
+	/**
 	 * Collect messages from all sessions in all workspace folders.
 	 * - Read all .jsonl files in the .claude/projects/<folder> dir
 	 * - Create a map of all messages by uuid
@@ -77,13 +108,22 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
 		const folders = this._workspace.getWorkspaceFolders();
 		const items: IClaudeCodeSession[] = [];
+		const slugs: string[] = [];
 
-		for (const folderUri of folders) {
+		// Build list of project directory slugs to scan
+		if (folders.length === 1) {
+			// Single folder - use its slug directly
+			slugs.push(this._computeFolderSlug(folders[0]));
+		} else {
+			// Multi-root or no folder - add the no-project slug
+			slugs.push(this._computeFolderSlug(URI.file(process.cwd())));
+		}
+
+		for (const slug of slugs) {
 			if (token.isCancellationRequested) {
 				return items;
 			}
 
-			const slug = this._computeFolderSlug(folderUri);
 			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
 
 			// Check if we can use cached data
@@ -116,67 +156,59 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return null; // No cache entry
 		}
 
-		try {
-			const entries = await this._fileSystem.readDirectory(projectDirUri);
-			if (token.isCancellationRequested) {
-				return null;
+		const entries = await this._tryReadDirectory(projectDirUri);
+		if (entries.length === 0) {
+			return null; // Directory empty or gone, invalidate cache
+		}
+		if (token.isCancellationRequested) {
+			return null;
+		}
+
+		const currentFiles = new ResourceSet();
+
+		// Check if any .jsonl files have changed since our last cache
+		for (const [name, type] of entries) {
+			if (type !== FileType.File || !name.endsWith('.jsonl')) {
+				continue;
 			}
 
-			const currentFiles = new ResourceSet();
+			const fileUri = URI.joinPath(projectDirUri, name);
+			currentFiles.add(fileUri);
 
-			// Check if any .jsonl files have changed since our last cache
-			for (const [name, type] of entries) {
-				if (type !== FileType.File || !name.endsWith('.jsonl')) {
-					continue;
+			try {
+				const stat = await this._fileSystem.stat(fileUri);
+				const cachedMtime = this._fileMtimes.get(fileUri);
+
+				if (!cachedMtime || stat.mtime > cachedMtime) {
+					// File has changed or is new
+					return null;
 				}
+			} catch (e) {
+				// File might have been deleted, invalidate cache
+				return null;
+			}
+		}
 
-				const fileUri = URI.joinPath(projectDirUri, name);
-				currentFiles.add(fileUri);
-
-				try {
-					const stat = await this._fileSystem.stat(fileUri);
-					const cachedMtime = this._fileMtimes.get(fileUri);
-
-					if (!cachedMtime || stat.mtime > cachedMtime) {
-						// File has changed or is new
-						return null;
-					}
-				} catch (e) {
-					// File might have been deleted, invalidate cache
+		// Check if any previously cached files have been deleted
+		for (const cachedFileUri of this._fileMtimes.keys()) {
+			if (isEqualOrParent(cachedFileUri, projectDirUri) && cachedFileUri.path.endsWith('.jsonl')) {
+				if (!currentFiles.has(cachedFileUri)) {
+					// A previously cached file has been deleted
 					return null;
 				}
 			}
-
-			// Check if any previously cached files have been deleted
-			for (const cachedFileUri of this._fileMtimes.keys()) {
-				if (isEqualOrParent(cachedFileUri, projectDirUri) && cachedFileUri.path.endsWith('.jsonl')) {
-					if (!currentFiles.has(cachedFileUri)) {
-						// A previously cached file has been deleted
-						return null;
-					}
-				}
-			}
-
-			// All files are unchanged, return cached sessions
-			return this._sessionCache.get(projectDirUri) || null;
-		} catch (e) {
-			// Directory read failed, invalidate cache
-			this._logService.error(e, `[ClaudeCodeSessionLoader] Failed to check cache validity for: ${projectDirUri}`);
-			return null;
 		}
+
+		// All files are unchanged, return cached sessions
+		return this._sessionCache.get(projectDirUri) || null;
 	}
 
 	/**
 	 * Load sessions from disk and update file modification time tracking
 	 */
 	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
-		let entries: [string, FileType][] = [];
-		try {
-			entries = await this._fileSystem.readDirectory(projectDirUri);
-		} catch (e) {
-			if (e.code !== 'FileNotFound') {
-				this._logService.error(e, `[ClaudeChatSessionItemProvider] ${e.code} Failed to read directory: ${projectDirUri}`);
-			}
+		const entries = await this._tryReadDirectory(projectDirUri);
+		if (entries.length === 0) {
 			return [];
 		}
 
@@ -317,7 +349,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		const summaries = new Map<string, SummaryEntry>();
 		try {
 			// Read and parse the JSONL file
-			const content = await this._fileSystem.readFile(fileUri);
+			// Claude session files can be large (>5MB), so we disable the size limit
+			const content = await this._fileSystem.readFile(fileUri, true);
 			if (token.isCancellationRequested) {
 				throw new CancellationError();
 			}
@@ -350,6 +383,21 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 							raw: normalizedRaw,
 							isMeta: Boolean(isMeta)
 						});
+					} else if ('uuid' in entry && entry.uuid && 'parentUuid' in entry) {
+						// Handle entries without 'message' field (e.g., system messages, metadata entries)
+						// These are needed for parent chain linking but should not appear in final output
+						const uuid = entry.uuid;
+						const parentUuid = ('parentUuid' in entry ? entry.parentUuid : null) as string | null;
+
+						const chainLink: ChainLinkEntry = {
+							uuid,
+							parentUuid: parentUuid ?? null
+						};
+
+						rawMessages.set(uuid, {
+							raw: chainLink,
+							isMeta: true  // Mark as meta so it's used for linking but filtered from output
+						});
 					} else if ('summary' in entry && entry.summary && !entry.summary.toLowerCase().startsWith('api error: 401') && !entry.summary.toLowerCase().startsWith('invalid api key')) {
 						const summaryEntry = entry as SummaryEntry;
 						const uuid = summaryEntry.leafUuid;
@@ -373,7 +421,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	private _computeFolderSlug(folderUri: URI): string {
 		return folderUri.path
 			.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
-			.replace(/[\/\.]/g, '-');
+			.replace(/[\/ .]/g, '-');
 	}
 
 	private _generateSessionLabel(summaryEntry: SummaryEntry | undefined, messages: SDKMessage[]): string {
@@ -444,11 +492,20 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			.trim();
 	}
 
+	private _isRawStoredSDKMessage(entry: RawStoredSDKMessage | ChainLinkEntry): entry is RawStoredSDKMessage {
+		return 'type' in entry && 'sessionId' in entry && 'timestamp' in entry;
+	}
+
 	private _reviveStoredMessages(rawMessages: Map<string, ParsedSessionMessage>): Map<string, StoredSDKMessage> {
 		const messages = new Map<string, StoredSDKMessage>();
 
 		for (const [uuid, entry] of rawMessages) {
 			if (entry.isMeta) {
+				continue;
+			}
+
+			// Non-meta entries should always be RawStoredSDKMessage, not ChainLinkEntry
+			if (!this._isRawStoredSDKMessage(entry.raw)) {
 				continue;
 			}
 

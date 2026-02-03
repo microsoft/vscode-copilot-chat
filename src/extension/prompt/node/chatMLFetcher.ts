@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import type { OpenAI } from 'openai';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
@@ -16,11 +17,13 @@ import { IInteractionService } from '../../../platform/chat/common/interactionSe
 import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpoint/node/responsesApi';
 import { collectSingleLineErrorMessage, ILogService } from '../../../platform/log/common/logService';
+import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, getRequestId, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../../platform/networking/common/networking';
-import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
+import { CAPIChatMessage, ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../../platform/networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../../platform/networking/node/stream';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, FetchResponseKind } from '../../../platform/openai/node/fetch';
@@ -167,7 +170,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		let actualStatusCode: number | undefined;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
-			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
+			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions, chatEndpoint, this._configurationService, this._experimentationService);
 			if (!payloadValidationResult.isValid) {
 				response = {
 					type: FetchResponseKind.Failed,
@@ -643,7 +646,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				nChoices ?? /* OpenAI's default */ 1,
 				finishedCb,
 				extendedBaseTelemetryData,
-				cancellationToken
+				cancellationToken,
+				location,
 			);
 			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
 				try {
@@ -744,6 +748,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			cancellationToken,
 			useFetcher,
 			canRetryOnce,
+			location,
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {
@@ -792,7 +797,20 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				throw error;
 			})
 			.finally(() => {
-				sendEngineMessagesTelemetry(this._telemetryService, request.messages ?? [], telemetryData, false, this._logService);
+				let messagesToLog = request.messages;
+
+				// For Response API (has input but no messages), convert input to messages for logging
+				if ((!messagesToLog || messagesToLog.length === 0) && (request as OpenAI.Responses.ResponseCreateParams).input) {
+					try {
+						const rawMessages = responseApiInputToRawMessagesForLogging(request as OpenAI.Responses.ResponseCreateParams);
+						messagesToLog = rawMessageToCAPI(rawMessages);
+					} catch (e) {
+						this._logService.error(`Failed to convert Response API input to messages for telemetry:`, e);
+						messagesToLog = [];
+					}
+				}
+
+				sendEngineMessagesTelemetry(this._telemetryService, messagesToLog ?? [], telemetryData, false, this._logService);
 			});
 	}
 
@@ -1360,7 +1378,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
  * @param params The params being sent in the chat request
  * @returns Whether the chat payload is valid
  */
-function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams): { isValid: boolean; reason: string } {
+function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams, endpoint: IChatEndpoint, configurationService: IConfigurationService, experimentationService: IExperimentationService): { isValid: boolean; reason: string } {
 	if (messages.length === 0) {
 		return { isValid: false, reason: asUnexpected('No messages provided') };
 	}
@@ -1376,7 +1394,7 @@ function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalCh
 		return { isValid: false, reason: asUnexpected('Function names must match ^[a-zA-Z0-9_-]+$') };
 	}
 
-	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT) {
+	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT && !isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService)) {
 		return { isValid: false, reason: `Tool limit exceeded (${postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 

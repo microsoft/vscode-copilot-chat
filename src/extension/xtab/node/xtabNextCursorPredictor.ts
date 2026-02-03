@@ -12,12 +12,13 @@ import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTyp
 import { parseLintOptionString } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogger } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { backwardCompatSetting } from '../../../util/common/backwardCompatSetting';
 import { fromUnknown } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { TokenizerType } from '../../../util/common/tokenizer';
-import { ITracer } from '../../../util/common/tracing';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -66,9 +67,9 @@ export class XtabNextCursorPredictor {
 	}
 
 
-	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ITracer, telemetryBuilder: StatelessNextEditTelemetryBuilder | undefined, cancellationToken: CancellationToken): Promise<Result</* zero-based line number */ number, Error>> {
+	public async predictNextCursorPosition(promptPieces: PromptPieces, parentTracer: ILogger, telemetryBuilder: StatelessNextEditTelemetryBuilder | undefined, cancellationToken: CancellationToken): Promise<Result</* zero-based line number */ number, Error>> {
 
-		const tracer = parentTracer.sub('predictNextCursorPosition');
+		const tracer = parentTracer.createSubLogger('predictNextCursorPosition');
 
 		const systemMessage = `Your task is to predict the next line number in the current file where the developer is most likely to make their next edit, using the provided context. If you don't think anywhere is a good next line jump target, just output the current line number of the cursor. Make sure to just output the line number and nothing else (no explanation, reasoning, etc.).`;
 
@@ -87,7 +88,12 @@ export class XtabNextCursorPredictor {
 				}
 			},
 			this.computeTokens,
-			{ includeLineNumbers: { areaAroundCodeToEdit: false, currentFileContent: true } }
+			{
+				includeLineNumbers: {
+					areaAroundCodeToEdit: xtabPromptOptions.IncludeLineNumbersOption.None,
+					currentFileContent: xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter
+				}
+			}
 		);
 
 		if (currentFileContentR.isError()) {
@@ -101,7 +107,15 @@ export class XtabNextCursorPredictor {
 		const lintOptions = this.determineLintOptions();
 		const lintErrors = lintOptions ? new LintErrors(lintOptions, promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService) : undefined;
 
-		const includeLineNumbersInRecentSnippets = this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers, this.expService);
+		const includeLineNumbersInRecentSnippets = backwardCompatSetting<boolean, xtabPromptOptions.IncludeLineNumbersOption>(
+			this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers, this.expService),
+			(oldValue) => {
+				if (typeof oldValue === 'boolean') {
+					return oldValue ? xtabPromptOptions.IncludeLineNumbersOption.WithSpaceAfter : xtabPromptOptions.IncludeLineNumbersOption.None;
+				}
+				return oldValue;
+			}
+		);
 
 		const newPromptPieces = new PromptPieces(
 			promptPieces.currentDocument,
@@ -140,6 +154,7 @@ export class XtabNextCursorPredictor {
 			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
 			return Result.fromString('modelNameNotDefined');
 		}
+		telemetryBuilder?.setCursorJumpModelName(modelName);
 
 		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
 		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);

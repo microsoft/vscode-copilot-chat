@@ -7,7 +7,8 @@
 
 import { compareBy, numberComparator } from './arrays';
 import { groupBy } from './collections';
-import { SetMap } from './map';
+import { SetMap, ResourceMap } from './map';
+import { URI } from './uri';
 import { createSingleCallFunction } from './functional';
 import { Iterable } from './iterator';
 import { BugIndicatingError, onUnexpectedError } from './errors';
@@ -317,7 +318,7 @@ export interface IDisposable {
 /**
  * Check if `thing` is {@link IDisposable disposable}.
  */
-export function isDisposable<E extends any>(thing: E): thing is E & IDisposable {
+export function isDisposable<E>(thing: E): thing is E & IDisposable {
 	// eslint-disable-next-line local/code-no-any-casts
 	return typeof thing === 'object' && thing !== null && typeof (<IDisposable><any>thing).dispose === 'function' && (<IDisposable><any>thing).dispose.length === 0;
 }
@@ -507,8 +508,7 @@ export class DisposableStore implements IDisposable {
 		if (!o) {
 			return;
 		}
-		if (this._toDispose.has(o)) {
-			this._toDispose.delete(o);
+		if (this._toDispose.delete(o)) {
 			setParentOfDisposable(o, null);
 		}
 	}
@@ -758,10 +758,11 @@ export function disposeOnReturn(fn: (store: DisposableStore) => void): void {
  */
 export class DisposableMap<K, V extends IDisposable = IDisposable> implements IDisposable {
 
-	private readonly _store = new Map<K, V>();
+	private readonly _store: Map<K, V>;
 	private _isDisposed = false;
 
-	constructor() {
+	constructor(store: Map<K, V> = new Map<K, V>()) {
+		this._store = store;
 		trackDisposable(this);
 	}
 
@@ -880,4 +881,10 @@ export function thenRegisterOrDispose<T extends IDisposable>(promise: Promise<T>
 		}
 		return disposable;
 	});
+}
+
+export class DisposableResourceMap<V extends IDisposable = IDisposable> extends DisposableMap<URI, V> {
+	constructor() {
+		super(new ResourceMap());
+	}
 }

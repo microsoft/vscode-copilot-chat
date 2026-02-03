@@ -8,7 +8,6 @@ import { TodoWriteInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -52,10 +51,11 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
-			const serverConfig = (await this.getLangModelServer()).getConfig();
+			const langModelServer = await this.getLangModelServer();
+			const serverConfig = langModelServer.getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
 			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
@@ -65,7 +65,7 @@ export class ClaudeAgentManager extends Disposable {
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -172,9 +172,9 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _editTracker = new ExternalEditTracker();
+	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
-	private _currentModelId: string | undefined;
+	private _currentModelId: string;
 	private _currentPermissionMode: PermissionMode;
 
 	/**
@@ -203,11 +203,11 @@ export class ClaudeCodeSession extends Disposable {
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
+		private readonly langModelServer: ClaudeLanguageModelServer,
 		public sessionId: string | undefined,
-		initialModelId: string | undefined,
+		initialModelId: string,
 		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -218,6 +218,9 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		// Initialize edit tracker with plan directory as ignored
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		this._editTracker = new ExternalEditTracker([planDirUri]);
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
@@ -286,14 +289,14 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
-	 * @param modelId Optional model ID to use for this request
+	 * @param modelId Model ID to use for this request
 	 */
 	public async invoke(
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string,
+		modelId: string,
 		permissionMode?: PermissionMode
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -311,9 +314,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		// Update model and permission mode on active session if they changed
-		if (modelId !== undefined) {
-			await this._setModel(modelId);
-		}
+		await this._setModel(modelId);
+
 		if (permissionMode !== undefined) {
 			await this._setPermissionMode(permissionMode);
 		}
@@ -344,12 +346,30 @@ export class ClaudeCodeSession extends Disposable {
 	 * Starts a new Claude Code session with the configured options
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
+		const directories = this.workspaceService.getWorkspaceFolders().map(folder => folder.fsPath);
+		let additionalDirectories: string[] | undefined = directories;
+		let cwd: string | undefined;
+		// For single-root workspaces, set cwd to the root and no additional directories
+		// For empty or multi-root workspaces, don't set cwd
+		if (directories.length === 1) {
+			cwd = directories[0];
+			additionalDirectories = [];
+		}
+
 		// Build options for the Claude Code SDK
-		const isDebugEnabled = this.configService.getConfig(ConfigKey.Advanced.ClaudeCodeDebugEnabled);
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			// cwd being undefined means the SDK will use process.cwd()
+			// we do this for multi-root workspaces or no workspace
+			// ideally there would be a better value for multi-root workspaces
+			// but the SDK currently only supports a single cwd which is used
+			// for history files
+			cwd,
+			additionalDirectories,
+			// We allow this because we handle the visibility of
+			// the permission mode ourselves in the options
+			allowDangerouslySkipPermissions: true,
 			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			// TODO: CAPI does not yet support the WebSearch tool
@@ -365,7 +385,7 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
-			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			model: this._currentModelId,
 			// Pass the permission mode to the SDK
 			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
 			hooks: this._buildHooks(token),
@@ -384,11 +404,7 @@ export class ClaudeCodeSession extends Disposable {
 				preset: 'claude_code'
 			},
 			settingSources: ['user', 'project', 'local'],
-			...(isDebugEnabled && {
-				stderr: data => {
-					this.logService.trace(`claude-agent-sdk stderr: ${data}`);
-				}
-			})
+			stderr: data => this.logService.error(`claude-agent-sdk stderr: ${data}`)
 		};
 
 		this.logService.trace(`claude-agent-sdk: Starting query`);
@@ -465,6 +481,10 @@ export class ClaudeCodeSession extends Disposable {
 				toolInvocationToken: request.toolInvocationToken,
 				token: request.token
 			};
+
+			// Increment user-initiated message count for this model
+			// This is used by the language model server to track which requests are user-initiated
+			this.langModelServer.incrementUserInitiatedMessageCount(this._currentModelId);
 
 			yield {
 				type: 'user',

@@ -42,7 +42,7 @@ import {
 	ResolvedContextItem,
 	telemetrizeContextItems,
 	useContextProviderAPI,
-	type DefaultDiagnosticSettings,
+	type DefaultDiagnosticSettings
 } from '../contextProviderRegistry';
 import { getCodeSnippetsFromContextItems } from '../contextProviders/codeSnippets';
 import {
@@ -51,7 +51,7 @@ import {
 	TraitWithId,
 	type DiagnosticBagWithId,
 } from '../contextProviders/contextItemSchemas';
-import { getDiagnosticsFromContextItems } from '../contextProviders/diagnostics';
+import { getDiagnosticsFromContextItems as getDiagnosticBagsFromContextItems } from '../contextProviders/diagnostics';
 import { getTraitsFromContextItems, ReportTraitsTelemetry } from '../contextProviders/traits';
 import { componentStatisticsToPromptMatcher, ICompletionsContextProviderService } from '../contextProviderStatistics';
 import {
@@ -330,7 +330,7 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		let resolvedContextItems: ResolvedContextItem[] = [];
 		let traits: TraitWithId[] | undefined;
 		let codeSnippets: CodeSnippetWithId[] | undefined;
-		let diagnostics: DiagnosticBagWithId[] | undefined;
+		let diagnosticBags: DiagnosticBagWithId[] | undefined;
 		let turnOffSimilarFiles = false;
 		if (this.instantiationService.invokeFunction(useContextProviderAPI, completionState.textDocument.detectedLanguageId, telemetryData)) {
 			resolvedContextItems = await this.contextProviderBridge.resolution(completionId);
@@ -358,22 +358,14 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 				textDocument.detectedLanguageId
 			);
 
-			diagnostics = await this.instantiationService.invokeFunction(getDiagnosticsFromContextItems,
+			diagnosticBags = await this.instantiationService.invokeFunction(getDiagnosticBagsFromContextItems,
 				completionId,
 				matchedContextItems
 			);
 		}
-		const diagnosticSettings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
-		if (diagnosticSettings !== undefined) {
-			const defaultDiagnostics = this.getDefaultDiagnostics(diagnostics, completionState, diagnosticSettings);
-			if (defaultDiagnostics !== undefined) {
-				if (diagnostics === undefined) {
-					diagnostics = [];
-				}
-				diagnostics.push(defaultDiagnostics);
-			}
-		}
-		return { traits, codeSnippets, diagnostics, turnOffSimilarFiles, resolvedContextItems };
+		const settings = this.instantiationService.invokeFunction(getDefaultDiagnosticSettings);
+		diagnosticBags = this.addDefaultDiagnosticBag(resolvedContextItems, diagnosticBags, completionId, completionState, settings);
+		return { traits, codeSnippets, diagnostics: diagnosticBags, turnOffSimilarFiles, resolvedContextItems };
 	}
 
 	private async failFastPrompt(
@@ -488,14 +480,20 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		return new promptInfo.renderer();
 	}
 
-	private getDefaultDiagnostics(bags: DiagnosticBagWithId[] | undefined, completionState: CompletionState, settings: DefaultDiagnosticSettings): DiagnosticBagWithId | undefined {
+	/** Public for testing */
+	public addDefaultDiagnosticBag(resolvedContextItems: ResolvedContextItem[], bags: DiagnosticBagWithId[] | undefined, completionId: string, completionState: CompletionState, settings: DefaultDiagnosticSettings | undefined): DiagnosticBagWithId[] | undefined {
+		if (settings === undefined) {
+			return bags;
+		}
+
 		const document = completionState.textDocument;
 		if (bags !== undefined && bags.some(bag => bag.uri.toString() === document.uri)) {
-			return undefined;
+			return bags;
 		}
+		const startTime = performance.now();
 		const diagnostics = this.languageDiagnosticsService.getDiagnostics(URI.parse(document.uri));
 		if (diagnostics.length === 0) {
-			return undefined;
+			return bags;
 		}
 		const errors: Diagnostic[] = [];
 		const warnings: Diagnostic[] = [];
@@ -514,21 +512,38 @@ abstract class BaseComponentsCompletionsPromptFactory implements IPromptFactory 
 		}
 		const filterDiagnostics = [...errors, ...(settings.warnings === 'yes' ? warnings : (settings.warnings === 'yesIfNoErrors' && errors.length === 0 ? warnings : []))];
 		if (filterDiagnostics.length === 0) {
-			return undefined;
+			return bags;
 		}
 		filterDiagnostics.sort((a, b) => {
 			const aDist = Math.abs(a.range.start.line - position.line);
 			const bDist = Math.abs(b.range.start.line - position.line);
 			return aDist - bDist;
 		});
-		return {
+		const result: DiagnosticBagWithId = {
 			type: 'DiagnosticBag',
 			uri: URI.parse(document.uri),
 			values: filterDiagnostics.slice(0, settings.maxDiagnostics),
 			id: generateUuid()
 		};
+		const providerId = 'copilot.chat.defaultDiagnostics';
+		const statistics = this.contextProviderStatistics.getStatisticsForCompletion(completionId);
+		statistics.addExpectations(providerId, [[result, 'included']]);
+		resolvedContextItems.push({
+			providerId: providerId,
+			matchScore: 10,
+			resolution: 'full',
+			resolutionTimeMs: performance.now() - startTime,
+			data: [result]
+		});
+		statistics.setLastResolution(providerId, 'full');
+		if (bags === undefined) {
+			return [result];
+		}
+		bags.push(result);
+		return bags;
 	}
 }
+
 export class ComponentsCompletionsPromptFactory extends BaseComponentsCompletionsPromptFactory {
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,

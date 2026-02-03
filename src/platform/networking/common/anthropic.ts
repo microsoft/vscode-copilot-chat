@@ -87,7 +87,18 @@ export const nonDeferredToolNames = new Set([
 	// Other high-usage tools
 	'get_errors',
 	'manage_todo_list',
+	// Subagent tools
+	'runSubagent',
+	'search_subagent',
+	// Testing
+	'runTests',
+	// Misc
+	'ask_questions',
+	'switch_agent',
 ]);
+
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
 /**
  * Context management types for Anthropic Messages API
@@ -273,19 +284,6 @@ export function buildContextManagement(
 }
 
 /**
- * Default values for context editing configuration.
- */
-export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
-	triggerType: 'input_tokens',
-	triggerValue: 80000,
-	keepCount: 3,
-	clearAtLeastTokens: 10000,
-	excludeTools: [],
-	clearInputs: true,
-	thinkingKeepTurns: 1,
-};
-
-/**
  * Reads context editing configuration from settings and builds the context_management object.
  * This is a convenience function that combines reading configuration with buildContextManagement.
  * @param configurationService The configuration service to read settings from
@@ -298,18 +296,15 @@ export function getContextManagementFromConfig(
 ): ContextManagement | undefined {
 
 	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
-	if (!userConfig) {
-		return buildContextManagement(CONTEXT_EDITING_DEFAULTS, thinkingEnabled);
-	}
 
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
-		triggerValue: userConfig.triggerValue ?? CONTEXT_EDITING_DEFAULTS.triggerValue,
-		keepCount: userConfig.keepCount ?? CONTEXT_EDITING_DEFAULTS.keepCount,
-		clearAtLeastTokens: userConfig.clearAtLeastTokens ?? CONTEXT_EDITING_DEFAULTS.clearAtLeastTokens,
-		excludeTools: userConfig.excludeTools ?? CONTEXT_EDITING_DEFAULTS.excludeTools,
-		clearInputs: userConfig.clearInputs ?? CONTEXT_EDITING_DEFAULTS.clearInputs,
-		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
+		triggerType: userConfig?.triggerType ?? 'input_tokens',
+		triggerValue: userConfig?.triggerValue ?? 100000,
+		keepCount: userConfig?.keepCount ?? 3,
+		clearAtLeastTokens: userConfig?.clearAtLeastTokens,
+		excludeTools: userConfig?.excludeTools ?? [],
+		clearInputs: userConfig?.clearInputs ?? false,
+		thinkingKeepTurns: userConfig?.thinkingKeepTurns ?? 1,
 	};
 
 	return buildContextManagement(contextEditingConfig, thinkingEnabled);

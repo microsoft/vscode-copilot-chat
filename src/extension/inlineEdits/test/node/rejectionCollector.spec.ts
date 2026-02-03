@@ -7,6 +7,7 @@ import { outdent } from 'outdent';
 import { describe, expect, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { runOnChange } from '../../../../util/vs/base/common/observableInternal';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -25,7 +26,7 @@ describe('RejectionCollector[visualizable]', () => {
 			ctx => {
 				const rejs: (boolean | string)[] = [];
 
-				const rejectionCollector = ctx.store.add(new RejectionCollector(ctx.workspace, console.log));
+				const rejectionCollector = ctx.store.add(new RejectionCollector(ctx.workspace, new TestLogService()));
 
 				ctx.workspace.lastActiveDocument.recomputeInitiallyAndOnChange(ctx.store);
 
@@ -134,7 +135,7 @@ class Point {
 `.trim()
 		});
 
-		const rejectionCollector = new RejectionCollector(observableWorkspace, console.log);
+		const rejectionCollector = new RejectionCollector(observableWorkspace, new TestLogService());
 		try {
 			const edit1 = StringReplacement.replace(OffsetRange.fromTo(96, 107), 'fo');
 			expect(rejectionCollector.isRejected(doc.id, edit1)).toBe(false);

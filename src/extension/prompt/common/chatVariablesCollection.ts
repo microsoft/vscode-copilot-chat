@@ -110,6 +110,14 @@ export function isPromptInstruction(variable: PromptVariable): boolean {
 }
 
 /**
+ * Check if provided variable is a "prompt instruction text" (index file).
+ */
+export function isPromptInstructionText(variable: PromptVariable): variable is PromptVariable & { value: string } {
+	return variable.reference.id === 'vscode.prompt.instructions.text';
+}
+
+
+/**
  * Check if provided variable is a "prompt file".
  */
 export function isPromptFile(variable: PromptVariable): boolean {

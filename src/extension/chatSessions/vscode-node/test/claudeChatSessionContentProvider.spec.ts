@@ -22,10 +22,10 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { IClaudeCodeModels } from '../../../agents/claude/node/claudeCodeModels';
+import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
+import { ClaudeChatSessionContentProvider, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
 
 // Mock types for testing
 interface MockClaudeSession {
@@ -456,6 +456,51 @@ describe('ChatSessionContentProvider', () => {
 		const sessionUri = createClaudeSessionUri('4c289ca8-f8bb-4588-8400-88b78beb784d');
 		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
+	});
+
+	describe('unavailable model handling', () => {
+		it('shows unavailable option when no models available', async () => {
+			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
+
+			const options = await provider.provideChatSessionProviderOptions();
+			const modelGroup = options.optionGroups?.find(g => g.id === 'model');
+
+			expect(modelGroup?.items).toHaveLength(1);
+			expect(modelGroup?.items[0]).toEqual({
+				id: UNAVAILABLE_MODEL_ID,
+				name: 'Unavailable',
+				description: 'No Claude models with Messages API found',
+			});
+		});
+
+		it('ignores unavailable model selection in provideHandleOptionsChange', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+			await provider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'model', value: UNAVAILABLE_MODEL_ID }],
+				CancellationToken.None
+			);
+
+			expect(mockClaudeCodeModels.setDefaultModel).not.toHaveBeenCalled();
+		});
+
+		it('throws NoClaudeModelsAvailableError from getModelIdForSession when no models exist', async () => {
+			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
+			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
+
+			await expect(provider.getModelIdForSession('test-session')).rejects.toThrow(NoClaudeModelsAvailableError);
+		});
+
+		it('returns unavailable model in provideChatSessionContent when no models exist', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			vi.mocked(mockClaudeCodeModels.getModels).mockResolvedValue([]);
+			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockRejectedValue(new NoClaudeModelsAvailableError());
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(result.options?.['model']).toBe(UNAVAILABLE_MODEL_ID);
+		});
 	});
 });
 

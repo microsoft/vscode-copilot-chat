@@ -240,6 +240,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			quota_snapshots: userInfo?.quota_snapshots,
 			quota_reset_date: userInfo?.quota_reset_date,
 			codex_agent_enabled: userInfo?.codex_agent_enabled,
+			organization_login_list: userInfo?.organization_login_list ?? [],
 			username: login,
 			isVscodeTeamMember,
 		};
@@ -448,7 +449,7 @@ export abstract class RefreshableCopilotTokenManager extends BaseCopilotTokenMan
 	protected abstract authenticateAndGetToken(): Promise<TokenInfoOrError & NotGitHubLoginFailed>;
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
+		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() + (60 * 5 /* 5min */) || force) {
 			const tokenResult = await this.authenticateAndGetToken();
 			if (tokenResult.kind === 'failure') {
 				throw Error(

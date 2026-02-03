@@ -58,6 +58,8 @@ import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifySer
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
@@ -103,6 +105,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(MockChatMLFetcher));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
+	testingServiceCollection.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
 	testingServiceCollection.define(IClaudeToolPermissionService, new SyncDescriptor(MockClaudeToolPermissionService));
 	testingServiceCollection.define(IClaudeCodeModels, new SyncDescriptor(MockClaudeCodeModels));

@@ -68,6 +68,8 @@ import { IWorkspaceMutationManager } from '../../../platform/testing/common/work
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
+import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
+import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
 import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
@@ -105,6 +107,8 @@ import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVaria
 import { RequestLogger } from '../../prompt/vscode-node/requestLoggerImpl';
 import { ScenarioAutomationEndpointProviderImpl } from '../../prompt/vscode-node/scenarioAutomationEndpointProviderImpl';
 import { SettingsEditorSearchServiceImpl } from '../../prompt/vscode-node/settingsEditorSearchServiceImpl';
+import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionResources';
+import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
@@ -135,6 +139,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
 	builder.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
+	builder.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	builder.define(IRequestLogger, new SyncDescriptor(RequestLogger));
 	builder.define(INativeEnvService, new SyncDescriptor(NativeEnvServiceImpl));
 
@@ -218,6 +223,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
 	builder.define(ICopilotInlineCompletionItemProviderService, new SyncDescriptor(CopilotInlineCompletionItemProviderService));
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
+	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

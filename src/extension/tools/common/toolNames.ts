@@ -29,7 +29,6 @@ export enum ToolName {
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	GetScmChanges = 'get_changed_files',
-	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
@@ -69,7 +68,8 @@ export enum ToolName {
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
-	AskQuestions = 'ask_questions'
+	AskQuestions = 'ask_questions',
+	SwitchAgent = 'switch_agent'
 }
 
 export enum ContributedToolName {
@@ -77,7 +77,6 @@ export enum ContributedToolName {
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
 	Usages = 'copilot_listCodeUsages',
-	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
 	/** @deprecated moving to core soon */
@@ -114,6 +113,7 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	AskQuestions = 'copilot_askQuestions',
+	SwitchAgent = 'copilot_switchAgent',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -222,11 +222,11 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
 
 	// Other tools - categorize appropriately
-	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
+	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
 } as const;
 
 

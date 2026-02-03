@@ -28,7 +28,7 @@ import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
+import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelTextPart, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -101,7 +101,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
 
-	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number }>());
+	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
 
 	private readonly _onDidReceiveResponse = this._register(new Emitter<IToolCallingResponseEvent>());
@@ -364,8 +364,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
+		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
 		await this.throwIfCancelled(token);
-		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
+		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?
@@ -456,7 +457,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.serverToolCalls) {
 					for (const serverCall of delta.serverToolCalls) {
-						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.arguments);
+						const result: LanguageModelToolResult2 = {
+							content: [new LanguageModelTextPart(JSON.stringify(serverCall.result, undefined, 2))]
+						};
+						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.args, result);
 					}
 				}
 				if (delta.statefulMarker) {
@@ -487,17 +491,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			tools: availableTools,
 		});
 		fetchStreamSource?.resolve();
-		let chatResult = await processResponsePromise ?? undefined;
+		const chatResult = await processResponsePromise ?? undefined;
 
-		// hydrate the token usage into the chat result as this renders the context window widget
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
-			chatResult = {
-				...chatResult, usage: {
-					completionTokens: fetchResult.usage.completion_tokens,
-					promptTokens: fetchResult.usage.prompt_tokens,
-					promptTokenDetails,
-				}
-			};
+		// Report token usage to the stream for rendering the context window widget
+		const stream = streamParticipants[streamParticipants.length - 1];
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+			stream.usage({
+				completionTokens: fetchResult.usage.completion_tokens,
+				promptTokens: fetchResult.usage.prompt_tokens,
+				promptTokenDetails,
+			});
 		}
 
 		// Validate authentication session upgrade and handle accordingly
