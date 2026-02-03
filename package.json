@@ -3728,6 +3728,7 @@
 						"default": "",
 						"scope": "resource",
 						"markdownDescription": "%github.copilot.config.planAgent.model%",
+						"markdownDeprecationMessage": "%github.copilot.config.planAgent.model.deprecated%",
 						"tags": [
 							"experimental"
 						]
