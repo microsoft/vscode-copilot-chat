@@ -375,12 +375,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
 		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
-		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
-			// TODO:@rebornix @lszomoru
-			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
-			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-
+		// Sometimes we don't get a tool call id for the edit permission request
+		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : Uri.file(permissionRequest.fileName)) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
