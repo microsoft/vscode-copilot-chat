@@ -51,10 +51,11 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
-			const serverConfig = (await this.getLangModelServer()).getConfig();
+			const langModelServer = await this.getLangModelServer();
+			const serverConfig = langModelServer.getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
 			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
@@ -64,7 +65,7 @@ export class ClaudeAgentManager extends Disposable {
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -173,7 +174,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _abortController = new AbortController();
 	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
-	private _currentModelId: string | undefined;
+	private _currentModelId: string;
 	private _currentPermissionMode: PermissionMode;
 
 	/**
@@ -202,8 +203,9 @@ export class ClaudeCodeSession extends Disposable {
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
+		private readonly langModelServer: ClaudeLanguageModelServer,
 		public sessionId: string | undefined,
-		initialModelId: string | undefined,
+		initialModelId: string,
 		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -287,14 +289,14 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
-	 * @param modelId Optional model ID to use for this request
+	 * @param modelId Model ID to use for this request
 	 */
 	public async invoke(
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string,
+		modelId: string,
 		permissionMode?: PermissionMode
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -312,9 +314,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		// Update model and permission mode on active session if they changed
-		if (modelId !== undefined) {
-			await this._setModel(modelId);
-		}
+		await this._setModel(modelId);
+
 		if (permissionMode !== undefined) {
 			await this._setPermissionMode(permissionMode);
 		}
@@ -384,7 +385,7 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
-			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			model: this._currentModelId,
 			// Pass the permission mode to the SDK
 			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
 			hooks: this._buildHooks(token),
@@ -480,6 +481,10 @@ export class ClaudeCodeSession extends Disposable {
 				toolInvocationToken: request.toolInvocationToken,
 				token: request.token
 			};
+
+			// Increment user-initiated message count for this model
+			// This is used by the language model server to track which requests are user-initiated
+			this.langModelServer.incrementUserInitiatedMessageCount(this._currentModelId);
 
 			yield {
 				type: 'user',

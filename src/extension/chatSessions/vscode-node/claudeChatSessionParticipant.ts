@@ -35,7 +35,7 @@ export class ClaudeChatSessionParticipant {
 			return slashResult.result ?? {};
 		}
 
-		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
+		const create = async (modelId: string, permissionMode?: PermissionMode) => {
 			const result = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
 			if (!result.claudeSessionId) {
 				// Only show generic warning if we didn't already show a specific error
