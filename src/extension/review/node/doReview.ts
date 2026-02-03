@@ -4,9 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import type { TextEditor, Uri } from 'vscode';
+import type { Selection, TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -33,6 +32,8 @@ import { githubReview } from './githubReviewAgent';
 
 
 export class ReviewSession {
+	private inProgress?: CancellationTokenSource;
+
 	constructor(
 		@IScopeSelector private readonly scopeSelector: IScopeSelector,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -47,7 +48,6 @@ export class ReviewSession {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IRunCommandExecutionService private readonly commandService: IRunCommandExecutionService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
 	) { }
@@ -57,27 +57,185 @@ export class ReviewSession {
 		progressLocation: ProgressLocation,
 		cancellationToken?: CancellationToken
 	): Promise<FeedbackResult | undefined> {
-		return doReview(
-			this.scopeSelector,
-			this.instantiationService,
-			this.reviewService,
-			this.authService,
-			this.logService,
-			this.gitExtensionService,
-			this.capiClientService,
-			this.domainService,
-			this.fetcherService,
-			this.envService,
-			this.ignoreService,
-			this.tabsAndEditorsService,
-			this.workspaceService,
-			this.commandService,
-			this.notificationService,
-			this.customInstructionsService,
-			group,
-			progressLocation,
-			cancellationToken
-		);
+		if (!await this.checkAuthentication()) {
+			return undefined;
+		}
+
+		const editor = this.tabsAndEditorsService.activeTextEditor;
+		const selection = await this.resolveSelection(group, editor);
+		if (group === 'selection' && selection === undefined) {
+			return undefined;
+		}
+
+		const title = getReviewTitle(group, editor);
+		return this.executeWithProgress(group, editor, title, progressLocation, cancellationToken);
+	}
+
+	/**
+	 * Checks if the user is authenticated. Shows sign-in dialog if not.
+	 * @returns true if authenticated, false if user needs to sign in
+	 */
+	private async checkAuthentication(): Promise<boolean> {
+		if (this.authService.copilotToken?.isNoAuthUser) {
+			await this.notificationService.showQuotaExceededDialog({ isNoAuthUser: true });
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Resolves the selection for 'selection' group reviews.
+	 * @returns The selection range, or undefined if selection cannot be determined
+	 */
+	private async resolveSelection(group: ReviewGroup, editor: TextEditor | undefined): Promise<Selection | undefined> {
+		if (group !== 'selection') {
+			return editor?.selection;
+		}
+		if (!editor) {
+			return undefined;
+		}
+		let selection = editor.selection;
+		if (!selection || selection.isEmpty) {
+			try {
+				const rangeOfEnclosingSymbol = await this.scopeSelector.selectEnclosingScope(editor, {
+					reason: l10n.t('Select an enclosing range to review'),
+					includeBlocks: true
+				});
+				if (!rangeOfEnclosingSymbol) {
+					return undefined;
+				}
+				selection = rangeOfEnclosingSymbol;
+			} catch (err) {
+				if (isCancellationError(err)) {
+					return undefined;
+				}
+				throw err;
+			}
+		}
+		return selection;
+	}
+
+	/**
+	 * Executes the review with progress UI.
+	 */
+	private async executeWithProgress(
+		group: ReviewGroup,
+		editor: TextEditor | undefined,
+		title: string,
+		progressLocation: ProgressLocation,
+		cancellationToken?: CancellationToken
+	): Promise<FeedbackResult | undefined> {
+		return this.notificationService.withProgress({
+			location: progressLocation,
+			title,
+			cancellable: true,
+		}, async (_progress, progressToken) => {
+			if (this.inProgress) {
+				this.inProgress.cancel();
+			}
+			const tokenSource = this.inProgress = new CancellationTokenSource(
+				cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken
+			);
+
+			this.reviewService.removeReviewComments(this.reviewService.getReviewComments());
+			const progress: Progress<ReviewComment[]> = {
+				report: comments => {
+					if (!tokenSource.token.isCancellationRequested) {
+						this.reviewService.addReviewComments(comments);
+					}
+				}
+			};
+
+			const result = await this.performReview(group, editor, progress, tokenSource);
+
+			if (tokenSource.token.isCancellationRequested) {
+				return { type: 'cancelled' };
+			}
+
+			await this.handleResult(result);
+			return result;
+		});
+	}
+
+	/**
+	 * Performs the actual code review using either GitHub agent or legacy feedback generator.
+	 */
+	private async performReview(
+		group: ReviewGroup,
+		editor: TextEditor | undefined,
+		progress: Progress<ReviewComment[]>,
+		tokenSource: CancellationTokenSource
+	): Promise<FeedbackResult> {
+		try {
+			const copilotToken = await this.authService.getCopilotToken();
+			const canUseGitHubAgent = copilotToken.isCopilotCodeReviewEnabled;
+
+			if (canUseGitHubAgent) {
+				return await githubReview(
+					this.logService, this.gitExtensionService, this.authService,
+					this.capiClientService, this.domainService, this.fetcherService,
+					this.envService, this.ignoreService, this.workspaceService,
+					this.customInstructionsService, group, editor, progress, tokenSource.token
+				);
+			} else {
+				const legacyGroup = typeof group === 'object' && 'group' in group ? group.group : group;
+				return await review(
+					this.instantiationService, this.gitExtensionService, this.workspaceService,
+					legacyGroup, editor, progress, tokenSource.token
+				);
+			}
+		} catch (err) {
+			this.logService.error(err, 'Error during code review');
+			return { type: 'error', reason: err.message, severity: err.severity };
+		} finally {
+			if (tokenSource === this.inProgress) {
+				this.inProgress = undefined;
+			}
+			tokenSource.dispose();
+		}
+	}
+
+	/**
+	 * Handles the review result by showing appropriate notifications.
+	 */
+	private async handleResult(result: FeedbackResult): Promise<void> {
+		if (result.type === 'error') {
+			const showLog = l10n.t('Show Log');
+			const res = await (result.severity === 'info'
+				? this.notificationService.showInformationMessage(result.reason, { modal: true })
+				: this.notificationService.showInformationMessage(
+					l10n.t('Code review generation failed.'),
+					{ modal: true, detail: result.reason },
+					showLog
+				)
+			);
+			if (res === showLog) {
+				this.logService.show();
+			}
+		} else if (result.type === 'success' && result.comments.length === 0) {
+			if (result.excludedComments?.length) {
+				const show = l10n.t('Show Skipped');
+				const res = await this.notificationService.showInformationMessage(
+					l10n.t('Reviewing your code did not provide any feedback.'),
+					{
+						modal: true,
+						detail: l10n.t('{0} comments were skipped due to low confidence.', result.excludedComments.length)
+					},
+					show
+				);
+				if (res === show) {
+					this.reviewService.addReviewComments(result.excludedComments);
+				}
+			} else {
+				await this.notificationService.showInformationMessage(
+					l10n.t('Reviewing your code did not provide any feedback.'),
+					{
+						modal: true,
+						detail: result.reason || l10n.t('Copilot only keeps its highest confidence comments to reduce noise and keep you focused.')
+					}
+				);
+			}
+		}
 	}
 }
 
@@ -127,114 +285,6 @@ export function combineCancellationTokens(token1: CancellationToken, token2: Can
 	}
 
 	return combinedSource.token;
-}
-
-let inProgress: CancellationTokenSource | undefined;
-async function doReview(
-	scopeSelector: IScopeSelector,
-	instantiationService: IInstantiationService,
-	reviewService: IReviewService,
-	authService: IAuthenticationService,
-	logService: ILogService,
-	gitExtensionService: IGitExtensionService,
-	capiClientService: ICAPIClientService,
-	domainService: IDomainService,
-	fetcherService: IFetcherService,
-	envService: IEnvService,
-	ignoreService: IIgnoreService,
-	tabsAndEditorsService: ITabsAndEditorsService,
-	workspaceService: IWorkspaceService,
-	commandService: IRunCommandExecutionService,
-	notificationService: INotificationService,
-	customInstructionsService: ICustomInstructionsService,
-	group: ReviewGroup,
-	progressLocation: ProgressLocation,
-	cancellationToken?: CancellationToken
-): Promise<FeedbackResult | undefined> {
-
-	if (authService.copilotToken?.isNoAuthUser) {
-		// Review requires a logged in user, so best we can do is prompt them to sign in
-		await notificationService.showQuotaExceededDialog({ isNoAuthUser: true });
-		return undefined;
-	}
-
-	const editor = tabsAndEditorsService.activeTextEditor;
-	let selection = editor?.selection;
-	if (group === 'selection') {
-		if (!editor) {
-			return;
-		}
-		if (!selection || selection.isEmpty) {
-			try {
-				const rangeOfEnclosingSymbol = await scopeSelector.selectEnclosingScope(editor, { reason: l10n.t('Select an enclosing range to review'), includeBlocks: true });
-				if (!rangeOfEnclosingSymbol) {
-					return;
-				}
-				selection = rangeOfEnclosingSymbol;
-			} catch (err) {
-				if (isCancellationError(err)) {
-					return;
-				}
-			}
-		}
-	}
-	const title = getReviewTitle(group, editor);
-	return notificationService.withProgress({
-		location: progressLocation,
-		title,
-		cancellable: true,
-	}, async (_progress, progressToken) => {
-		if (inProgress) {
-			inProgress.cancel();
-		}
-		const tokenSource = inProgress = new CancellationTokenSource(cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken);
-		reviewService.removeReviewComments(reviewService.getReviewComments());
-		const progress: Progress<ReviewComment[]> = {
-			report: comments => {
-				if (!tokenSource.token.isCancellationRequested) {
-					reviewService.addReviewComments(comments);
-				}
-			}
-		};
-		let result: FeedbackResult;
-		try {
-			const copilotToken = await authService.getCopilotToken();
-			const canUseGitHubAgent = copilotToken.isCopilotCodeReviewEnabled;
-			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, customInstructionsService, group, editor, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
-		} catch (err) {
-			logService.error(err, 'Error during code review');
-			result = { type: 'error', reason: err.message, severity: err.severity };
-		} finally {
-			if (tokenSource === inProgress) {
-				inProgress = undefined;
-			}
-			tokenSource.dispose();
-		}
-		if (tokenSource.token.isCancellationRequested) {
-			return { type: 'cancelled' };
-		}
-		if (result.type === 'error') {
-			const showLog = l10n.t('Show Log');
-			const res = await (result.severity === 'info' ?
-				notificationService.showInformationMessage(result.reason, { modal: true }) :
-				notificationService.showInformationMessage(l10n.t('Code review generation failed.'), { modal: true, detail: result.reason }, showLog)
-			);
-			if (res === showLog) {
-				logService.show();
-			}
-		} else if (result.type === 'success' && result.comments.length === 0) {
-			if (result.excludedComments?.length) {
-				const show = l10n.t('Show Skipped');
-				const res = await notificationService.showInformationMessage(l10n.t('Reviewing your code did not provide any feedback.'), { modal: true, detail: l10n.t('{0} comments were skipped due to low confidence.', result.excludedComments.length) }, show);
-				if (res === show) {
-					reviewService.addReviewComments(result.excludedComments);
-				}
-			} else {
-				await notificationService.showInformationMessage(l10n.t('Reviewing your code did not provide any feedback.'), { modal: true, detail: result.reason || l10n.t('Copilot only keeps its highest confidence comments to reduce noise and keep you focused.') });
-			}
-		}
-		return result;
-	});
 }
 
 async function review(
