@@ -16,6 +16,8 @@ import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest,
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
+import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
+import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
@@ -42,6 +44,7 @@ describe('NextEditProvider Caching', () => {
 	let expService: IExperimentationService;
 	let disposableStore: DisposableStore;
 	let workspaceService: IWorkspaceService;
+	let requestLogger: IRequestLogger;
 	beforeAll(() => {
 		disposableStore = new DisposableStore();
 		workspaceService = disposableStore.add(new TestWorkspaceService());
@@ -50,6 +53,7 @@ describe('NextEditProvider Caching', () => {
 		gitExtensionService = new NullGitExtensionService();
 		logService = new LogServiceImpl([]);
 		expService = new NullExperimentationService();
+		requestLogger = new NullRequestLogger();
 	});
 	afterAll(() => {
 		disposableStore.dispose();
@@ -89,7 +93,7 @@ describe('NextEditProvider Caching', () => {
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService, requestLogger);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),
