@@ -48,7 +48,7 @@ interface FileChange {
 /**
  * Normalizes a file path to use forward slashes on all platforms.
  */
-function normalizePath(relativePath: string): string {
+export function normalizePath(relativePath: string): string {
 	return process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath;
 }
 
@@ -405,15 +405,37 @@ export interface ExcludedFile {
 	};
 }
 
+/**
+ * Raw reference structure from the API response before type validation.
+ */
+interface RawReference {
+	type?: string;
+	data?: unknown;
+}
+
+/**
+ * Raw parsed response structure from the streaming API.
+ */
+interface ParsedResponse {
+	copilot_references?: RawReference[];
+}
+
+/**
+ * Type guard to check if a raw reference has a valid type field.
+ */
+function hasType(ref: RawReference): ref is RawReference & { type: string } {
+	return typeof ref.type === 'string';
+}
+
 export function parseLine(line: string): ResponseReference[] {
 
 	if (line === 'data: [DONE]') { return []; }
 	if (line === '') { return []; }
 
-	const parsedLine = JSON.parse(line.replace('data: ', ''));
+	const parsedLine: ParsedResponse = JSON.parse(line.replace('data: ', ''));
 
 	if (Array.isArray(parsedLine.copilot_references) && parsedLine.copilot_references.length > 0) {
-		return parsedLine.copilot_references.filter((ref: any) => ref.type) as ResponseReference[];
+		return parsedLine.copilot_references.filter(hasType) as ResponseReference[];
 	} else {
 		return [];
 	}
