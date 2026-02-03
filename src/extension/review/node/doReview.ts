@@ -30,6 +30,63 @@ import { FeedbackGenerator, FeedbackResult } from '../../prompt/node/feedbackGen
 import { CurrentChange, CurrentChangeInput } from '../../prompts/node/feedback/currentChange';
 import { githubReview } from './githubReviewAgent';
 
+/**
+ * Dependencies for handleReviewResult function.
+ */
+export interface HandleResultDependencies {
+	notificationService: INotificationService;
+	logService: ILogService;
+	reviewService: IReviewService;
+}
+
+/**
+ * Handles the review result by showing appropriate notifications.
+ * Extracted for testability.
+ */
+export async function handleReviewResult(
+	result: FeedbackResult,
+	deps: HandleResultDependencies
+): Promise<void> {
+	const { notificationService, logService, reviewService } = deps;
+
+	if (result.type === 'error') {
+		const showLog = l10n.t('Show Log');
+		const res = await (result.severity === 'info'
+			? notificationService.showInformationMessage(result.reason, { modal: true })
+			: notificationService.showInformationMessage(
+				l10n.t('Code review generation failed.'),
+				{ modal: true, detail: result.reason },
+				showLog
+			)
+		);
+		if (res === showLog) {
+			logService.show();
+		}
+	} else if (result.type === 'success' && result.comments.length === 0) {
+		if (result.excludedComments?.length) {
+			const show = l10n.t('Show Skipped');
+			const res = await notificationService.showInformationMessage(
+				l10n.t('Reviewing your code did not provide any feedback.'),
+				{
+					modal: true,
+					detail: l10n.t('{0} comments were skipped due to low confidence.', result.excludedComments.length)
+				},
+				show
+			);
+			if (res === show) {
+				reviewService.addReviewComments(result.excludedComments);
+			}
+		} else {
+			await notificationService.showInformationMessage(
+				l10n.t('Reviewing your code did not provide any feedback.'),
+				{
+					modal: true,
+					detail: result.reason || l10n.t('Copilot only keeps its highest confidence comments to reduce noise and keep you focused.')
+				}
+			);
+		}
+	}
+}
 
 export class ReviewSession {
 	private inProgress?: CancellationTokenSource;
@@ -199,43 +256,11 @@ export class ReviewSession {
 	 * Handles the review result by showing appropriate notifications.
 	 */
 	private async handleResult(result: FeedbackResult): Promise<void> {
-		if (result.type === 'error') {
-			const showLog = l10n.t('Show Log');
-			const res = await (result.severity === 'info'
-				? this.notificationService.showInformationMessage(result.reason, { modal: true })
-				: this.notificationService.showInformationMessage(
-					l10n.t('Code review generation failed.'),
-					{ modal: true, detail: result.reason },
-					showLog
-				)
-			);
-			if (res === showLog) {
-				this.logService.show();
-			}
-		} else if (result.type === 'success' && result.comments.length === 0) {
-			if (result.excludedComments?.length) {
-				const show = l10n.t('Show Skipped');
-				const res = await this.notificationService.showInformationMessage(
-					l10n.t('Reviewing your code did not provide any feedback.'),
-					{
-						modal: true,
-						detail: l10n.t('{0} comments were skipped due to low confidence.', result.excludedComments.length)
-					},
-					show
-				);
-				if (res === show) {
-					this.reviewService.addReviewComments(result.excludedComments);
-				}
-			} else {
-				await this.notificationService.showInformationMessage(
-					l10n.t('Reviewing your code did not provide any feedback.'),
-					{
-						modal: true,
-						detail: result.reason || l10n.t('Copilot only keeps its highest confidence comments to reduce noise and keep you focused.')
-					}
-				);
-			}
-		}
+		return handleReviewResult(result, {
+			notificationService: this.notificationService,
+			logService: this.logService,
+			reviewService: this.reviewService,
+		});
 	}
 }
 
