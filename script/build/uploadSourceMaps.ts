@@ -11,6 +11,7 @@ import * as path from 'path';
 const root = path.dirname(path.dirname(__dirname));
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
 const version = packageJson.version;
+const extensionId = `${packageJson.publisher}.${packageJson.name}`.toLowerCase();
 
 // CLI arguments
 const args = process.argv.slice(2);
@@ -48,7 +49,7 @@ async function main(): Promise<void> {
 
 	const storageAccount = process.env.AZURE_STORAGE_ACCOUNT;
 	const blobServiceUrl = `https://${storageAccount}.blob.core.windows.net`;
-	const prefix = `sourcemaps/${uploadVersion}`;
+	const prefix = `sourcemaps/${extensionId}/${uploadVersion}`;
 
 	console.log(`Version: ${uploadVersion}`);
 	console.log(`Uploading ${files.length} source maps to: ${blobServiceUrl}/$web/${prefix}/`);

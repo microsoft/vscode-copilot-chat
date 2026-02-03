@@ -117,7 +117,7 @@ extends:
       - script: npm run build
         displayName: npm run build
 
-    postPublishSteps:
+    postPackageSteps:
       - task: AzureCLI@2
         displayName: Upload source maps to CDN
         inputs:

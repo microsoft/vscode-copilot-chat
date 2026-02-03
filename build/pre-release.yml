@@ -126,9 +126,9 @@ extends:
       - script: npm run build -- --prerelease
         displayName: npm run build
 
+    postPackageSteps:
       - task: AzureCLI@2
         displayName: Upload source maps to CDN
-        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
         inputs:
           azureSubscription: 'vscode-builds-subscription'
           scriptType: 'bash'
