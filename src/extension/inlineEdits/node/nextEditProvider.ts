@@ -17,7 +17,7 @@ import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/work
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assert } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/common/async';
@@ -187,7 +187,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			result = await this._getNextEditCanThrow(docId, context, now, shouldExpandEditWindow, logger, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
-			telemetryBuilder.setNextEditProviderError(errors.toString(error));
+			telemetryBuilder.setNextEditProviderError(ErrorUtils.toString(ErrorUtils.fromUnknown(error)));
 			throw error;
 		} finally {
 			telemetryBuilder.markEndTime();

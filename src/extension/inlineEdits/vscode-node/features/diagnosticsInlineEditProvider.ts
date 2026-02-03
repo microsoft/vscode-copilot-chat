@@ -10,7 +10,7 @@ import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/co
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService, ILogger } from '../../../../platform/log/common/logService';
-import * as errors from '../../../../util/common/errors';
+import { ErrorUtils } from '../../../../util/common/errors';
 import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
@@ -97,7 +97,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 			return asyncResult ?? initialResult;
 		} catch (error) {
-			const errorMessage = `Error occurred while waiting for diagnostic edit: ${errors.toString(errors.fromUnknown(error))}`;
+			const errorMessage = `Error occurred while waiting for diagnostic edit: ${ErrorUtils.toString(ErrorUtils.fromUnknown(error))}`;
 			logContext.addLog(errorMessage);
 			this._logger.trace(errorMessage);
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined);

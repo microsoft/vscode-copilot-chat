@@ -33,7 +33,7 @@ import { ITelemetryService, TelemetryProperties } from '../../../platform/teleme
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
 import { createRequestHMAC } from '../../../util/common/crypto';
-import * as errorsUtil from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -1330,7 +1330,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: gitHubRequestId,
 			};
 		}
-		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._logService.error(ErrorUtils.fromUnknown(err), `Error on conversation request`);
 		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 		const userMessage = fetcher.getUserMessageForFetcherError(err);
 		const errorDetail = collectSingleLineErrorMessage(err, true);

@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
 import { Event } from '../../../util/vs/base/common/event';
@@ -397,7 +397,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
 				}
 			*/
-			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
+			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: ErrorUtils.toString(ErrorUtils.fromUnknown(e)), configValue: configString });
 		}
 
 		return parsedConfig;

@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { Diagnostic, InlineCompletionContext, Uri } from 'vscode';
 import * as yaml from 'yaml';
-import * as errors from '../../../util/common/errors';
+import { ErrorUtils } from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -107,7 +107,7 @@ export class InlineEditRequestLogContext {
 		if (this.error) {
 			lines.push(`## Error ${isCachedStr}`);
 			lines.push('```');
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
@@ -179,7 +179,7 @@ export class InlineEditRequestLogContext {
 		if (this.error) {
 			lines.push(`## Error:`);
 			lines.push('```');
-			lines.push(errors.toString(errors.fromUnknown(this.error)));
+			lines.push(ErrorUtils.toString(ErrorUtils.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
