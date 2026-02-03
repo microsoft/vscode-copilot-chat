@@ -10,16 +10,12 @@ declare module 'vscode' {
 	/**
 	 * The type of hook to execute.
 	 */
-	export type ChatHookType = 'sessionStart' | 'sessionEnd' | 'userPromptSubmitted' | 'preToolUse' | 'postToolUse' | 'errorOccurred';
+	export type ChatHookType = 'sessionStart' | 'userPromptSubmitted' | 'preToolUse' | 'postToolUse' | 'postToolUseFailure' | 'subagentStart' | 'subagentStop' | 'stop';
 
 	/**
 	 * Options for executing a hook command.
 	 */
 	export interface ChatHookExecutionOptions {
-		/**
-		 * The type of hook to execute.
-		 */
-		readonly hookType: ChatHookType;
 		/**
 		 * Input data to pass to the hook via stdin (will be JSON-serialized).
 		 */
@@ -32,21 +28,32 @@ declare module 'vscode' {
 	}
 
 	/**
+	 * The kind of result from a hook execution.
+	 */
+	export enum ChatHookResultKind {
+		/**
+		 * Hook executed successfully (exit code 0).
+		 */
+		Success = 1,
+		/**
+		 * Hook returned an error (any non-zero exit code).
+		 */
+		Error = 2
+	}
+
+	/**
 	 * Result of executing a hook command.
 	 */
 	export interface ChatHookResult {
 		/**
-		 * Exit code from the process.
+		 * The kind of result.
 		 */
-		readonly exitCode: number;
+		readonly kind: ChatHookResultKind;
 		/**
-		 * Standard output from the process.
+		 * The result from the hook. For success, this is stdout parsed as JSON.
+		 * For errors, this is stderr.
 		 */
-		readonly stdout: string;
-		/**
-		 * Standard error from the process.
-		 */
-		readonly stderr: string;
+		readonly result: string | object;
 	}
 
 	export namespace chat {
@@ -54,10 +61,11 @@ declare module 'vscode' {
 		 * Execute all hooks of the specified type for the current chat session.
 		 * Hooks are configured in hooks.json files in the workspace.
 		 *
-		 * @param options Hook execution options including the hook type and input data.
+		 * @param hookType The type of hook to execute.
+		 * @param options Hook execution options including the input data.
 		 * @param token Optional cancellation token.
 		 * @returns A promise that resolves to an array of hook execution results.
 		 */
-		export function executeHook(options: ChatHookExecutionOptions, token?: CancellationToken): Thenable<ChatHookResult[]>;
+		export function executeHook(hookType: ChatHookType, options: ChatHookExecutionOptions, token?: CancellationToken): Thenable<ChatHookResult[]>;
 	}
 }

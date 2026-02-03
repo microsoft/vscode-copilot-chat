@@ -15,9 +15,10 @@ export interface IChatHookService {
 	 * Execute all hooks of the specified type for the current chat session.
 	 * Hooks are configured in hooks.json files in the workspace.
 	 *
-	 * @param options Hook execution options including the hook type and input data.
+	 * @param hookType The type of hook to execute.
+	 * @param options Hook execution options including the input data.
 	 * @param token Optional cancellation token.
 	 * @returns A promise that resolves to an array of hook execution results.
 	 */
-	executeHook(options: vscode.ChatHookExecutionOptions, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
+	executeHook(hookType: vscode.ChatHookType, options: vscode.ChatHookExecutionOptions, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
 }
