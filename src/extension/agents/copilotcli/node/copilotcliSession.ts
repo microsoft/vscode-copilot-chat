@@ -18,19 +18,26 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
+import { convertBackgroundQuestionToolResponseToAnswers, UserInputRequest, UserInputResponse } from './userInputHelpers';
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
 	toolCall: ToolCall | undefined,
 	token: CancellationToken,
 ) => Promise<boolean>;
+
+type UserInputHandler = (
+	userInputRequest: UserInputRequest,
+	toolCall: ToolCall | undefined,
+	token: CancellationToken,
+) => Promise<UserInputResponse>;
 
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
@@ -76,6 +83,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public readonly onPermissionRequested = this._onPermissionRequested.event;
 	private _permissionHandler?: PermissionHandler;
 	private readonly _permissionHandlerSet = this.add(new Emitter<void>());
+	private readonly _onUserInputRequested = this.add(new EventEmitter<UserInputRequest>());
+	public readonly onUserInputRequested = this._onUserInputRequested.event;
+	private _userInputHandler?: UserInputHandler;
+	private readonly _userInputHandlerSet = this.add(new Emitter<void>());
+	private _userInputRequested?: UserInputRequest;
+	public get userInputRequested(): UserInputRequest | undefined {
+		return this._userInputRequested;
+	}
+
 	private _stream?: vscode.ChatResponseStream;
 	public get sdkSession() {
 		return this._sdkSession;
@@ -121,6 +137,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return toDisposable(() => {
 			if (this._permissionHandler === handler) {
 				this._permissionHandler = undefined;
+			}
+		});
+	}
+
+	attachUserInputHandler(handler: UserInputHandler): IDisposable {
+		this._userInputHandler = handler;
+		this._userInputHandlerSet.fire();
+		return toDisposable(() => {
+			if (this._userInputHandler === handler) {
+				this._userInputHandler = undefined;
 			}
 		});
 	}
@@ -184,6 +210,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			});
 
 			return response;
+		}));
+		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
+			if (!this._stream) {
+				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
+
+				return {
+					answer: '',
+					wasFreeform: false
+				};
+			}
+
+			const chatQuestion = new ChatQuestion(userInputRequest.question,
+				userInputRequest.choices && userInputRequest.choices.length > 0 ? ChatQuestionType.MultiSelect : ChatQuestionType.Text,
+				userInputRequest.question,
+				{
+					message: userInputRequest.question,
+					options: userInputRequest.choices?.map(choice => ({ label: choice, id: choice, value: choice })),
+					allowFreeformInput: userInputRequest.allowFreeform
+				}
+			);
+			const carouselAnswers = await this._stream.questionCarousel([chatQuestion], false);
+			const answers = convertBackgroundQuestionToolResponseToAnswers([chatQuestion], carouselAnswers, this.logService);
+			const answer = chatQuestion.id in answers.answers ? answers.answers[chatQuestion.id] : undefined;
+			if (answer) {
+				return {
+					answer: answer.freeText ? answer.freeText : (answer.selected.length ? answer.selected.join(', ') : ''),
+					wasFreeform: !!answer.freeText
+				};
+			}
+			return {
+				answer: '',
+				wasFreeform: false
+			};
 		}));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
