@@ -17,7 +17,7 @@ import {
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { CapturingToken } from '../../../../../platform/requestLogger/common/capturingToken';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
-import { registerClaudeHook } from './claudeHookRegistry';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for Notification events.
