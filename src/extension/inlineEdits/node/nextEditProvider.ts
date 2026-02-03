@@ -237,7 +237,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections, nesConfigs);
+		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections);
 		if (cachedEdit?.rejected) {
 			logger.trace('cached edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejectedCache');
@@ -342,7 +342,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
-		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit)) {
 			logger.trace('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
@@ -467,7 +467,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				// Needs rebasing.
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime, nesConfigs);
+					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
 					if (rebasedCachedEdit) {
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 						return Result.ok(rebasedCachedEdit);
@@ -872,7 +872,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const rootedEdit = new RootedEdit(result.documentBeforeEdits, new StringEdit([result.edit]));
 
 		const postEditContentST = new StringText(postEditContent);
-		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections, { isAsyncCompletions: false });
+		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections);
 		if (cachedEdit) {
 			// first cachedEdit should be without edits because of noSuggestions caching
 			if (cachedEdit.edit) {
@@ -880,7 +880,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				return;
 			} else if (cachedEdit.editWindow) {
 				const shiftedSelection = new OffsetRange(cachedEdit.editWindow.endExclusive, cachedEdit.editWindow.endExclusive);
-				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection], { isAsyncCompletions: false });
+				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
 				if (cachedEdit?.edit) {
 					logger.trace('already have cached edit for post-edit state (after shifting selection)');
 					return;
