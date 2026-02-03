@@ -5,15 +5,25 @@
 
 import assert from 'assert';
 import { describe, suite, test } from 'vitest';
+import type { TextDocument } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
+import { ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
+import { ICAPIClientService } from '../../../../platform/endpoint/common/capiClient';
+import { IDomainService } from '../../../../platform/endpoint/common/domainService';
+import { IEnvService } from '../../../../platform/env/common/envService';
+import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../../../platform/git/common/nullGitExtensionService';
+import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockCAPIClientService } from '../../../../platform/ignore/node/test/mockCAPIClientService';
 import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
-import { NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
-import { ReviewRequest } from '../../../../platform/review/common/reviewService';
+import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
+import { ReviewComment, ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
 import { createFakeStreamResponse } from '../../../../platform/test/node/fetcher';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
@@ -540,10 +550,10 @@ suite('githubReviewAgent', () => {
 
 	describe('loadCustomInstructions', () => {
 
-		function createMockWorkspaceService() {
+		function createMockWorkspaceService(): IWorkspaceService {
 			return {
 				asRelativePath: (uri: URI) => uri.path.split('/').pop() || uri.path
-			};
+			} as IWorkspaceService;
 		}
 
 		test('returns empty array when no instructions configured', async () => {
@@ -553,7 +563,7 @@ suite('githubReviewAgent', () => {
 
 			const result = await loadCustomInstructions(
 				customInstructionsService,
-				workspaceService as any,
+				workspaceService,
 				'diff',
 				languageIdToFilePatterns,
 				1
@@ -569,7 +579,7 @@ suite('githubReviewAgent', () => {
 
 			const result = await loadCustomInstructions(
 				customInstructionsService,
-				workspaceService as any,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				5 // Starting from 5
@@ -587,7 +597,7 @@ suite('githubReviewAgent', () => {
 			// Test with 'selection' kind - should include CodeFeedbackInstructions
 			const selectionResult = await loadCustomInstructions(
 				customInstructionsService,
-				workspaceService as any,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				1
@@ -596,7 +606,7 @@ suite('githubReviewAgent', () => {
 			// Test with 'diff' kind - should NOT include CodeFeedbackInstructions
 			const diffResult = await loadCustomInstructions(
 				customInstructionsService,
-				workspaceService as any,
+				workspaceService,
 				'diff',
 				languageIdToFilePatterns,
 				1
@@ -622,8 +632,8 @@ suite('githubReviewAgent', () => {
 			const languageIdToFilePatterns = new Map<string, Set<string>>();
 
 			const result = await loadCustomInstructions(
-				customInstructionsService as any,
-				workspaceService as any,
+				customInstructionsService as unknown as ICustomInstructionsService,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				1
@@ -649,8 +659,8 @@ suite('githubReviewAgent', () => {
 			const languageIdToFilePatterns = new Map<string, Set<string>>();
 
 			const result = await loadCustomInstructions(
-				customInstructionsService as any,
-				workspaceService as any,
+				customInstructionsService as unknown as ICustomInstructionsService,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				1
@@ -683,8 +693,8 @@ suite('githubReviewAgent', () => {
 			]);
 
 			const result = await loadCustomInstructions(
-				customInstructionsService as any,
-				workspaceService as any,
+				customInstructionsService as unknown as ICustomInstructionsService,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				1
@@ -724,8 +734,8 @@ suite('githubReviewAgent', () => {
 			]);
 
 			const result = await loadCustomInstructions(
-				customInstructionsService as any,
-				workspaceService as any,
+				customInstructionsService as unknown as ICustomInstructionsService,
+				workspaceService,
 				'selection',
 				languageIdToFilePatterns,
 				1
@@ -744,16 +754,18 @@ suite('githubReviewAgent', () => {
 		// Following the pattern from chatMLFetcherRetry.spec.ts for extending mocks
 
 		// Common mock services shared across tests
+		const createMockFetcherService = (): IFetcherService => ({
+			makeAbortController: () => ({ abort: () => { }, signal: {} }),
+			isAbortError: () => false,
+		} as unknown as IFetcherService);
+
 		const createBaseMocks = () => ({
-			domainService: { _serviceBrand: undefined, onDidChangeDomains: Event.None },
-			fetcherService: {
-				makeAbortController: () => ({ abort: () => { }, signal: {} }),
-				isAbortError: () => false,
-			},
-			envService: { sessionId: 'test' },
+			domainService: { _serviceBrand: undefined, onDidChangeDomains: Event.None } as IDomainService,
+			fetcherService: createMockFetcherService(),
+			envService: { sessionId: 'test' } as IEnvService,
 		});
 
-		const createMockGitExtensionService = () => {
+		const createMockGitExtensionService = (): IGitExtensionService => {
 			const mockGitApi = {
 				getRepository: () => ({ rootUri: URI.file('/test') }),
 				repositories: [],
@@ -761,7 +773,7 @@ suite('githubReviewAgent', () => {
 			return {
 				getExtensionApi: () => mockGitApi,
 				extensionAvailable: true,
-			};
+			} as unknown as IGitExtensionService;
 		};
 
 		test('returns success with empty comments when git extension is not available', async () => {
@@ -769,16 +781,16 @@ suite('githubReviewAgent', () => {
 			const { domainService, fetcherService, envService } = createBaseMocks();
 
 			const result = await githubReview(
-				new TestLogService() as any,
-				new NullGitExtensionService() as any,
-				new MockAuthenticationService() as any,
-				new MockCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				new NullIgnoreService() as any,
-				new MockWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				new NullGitExtensionService(),
+				new MockAuthenticationService() as unknown as IAuthenticationService,
+				new MockCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				new NullIgnoreService(),
+				new MockWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{ repositoryRoot: '/test', commitMessages: [], patches: [] },
 				undefined,
 				{ report: () => { } },
@@ -796,16 +808,16 @@ suite('githubReviewAgent', () => {
 			const { domainService, fetcherService, envService } = createBaseMocks();
 
 			const result = await githubReview(
-				new TestLogService() as any,
-				createMockGitExtensionService() as any,
-				new MockAuthenticationService() as any,
-				new MockCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				new NullIgnoreService() as any,
-				new MockWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				createMockGitExtensionService(),
+				new MockAuthenticationService() as unknown as IAuthenticationService,
+				new MockCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				new NullIgnoreService(),
+				new MockWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{ repositoryRoot: '/test', commitMessages: [], patches: [] },
 				undefined,
 				{ report: () => { } },
@@ -824,12 +836,8 @@ suite('githubReviewAgent', () => {
 
 			// Extend MockAuthenticationService to return a valid token (following chatMLFetcherRetry.spec.ts pattern)
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						isCopilotCodeReviewEnabled: true,
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token', code_review_enabled: true })));
 				}
 			}
 
@@ -857,7 +865,7 @@ suite('githubReviewAgent', () => {
 			const fileUri = URI.file('/test/file.ts');
 			const docData = createTextDocumentData(fileUri, 'let x = 1;', 'typescript');
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -865,22 +873,22 @@ suite('githubReviewAgent', () => {
 				}
 			}
 
-			const reportedComments: any[] = [];
+			const reportedComments: ReviewComment[] = [];
 			const progress = {
-				report: (comments: any[]) => reportedComments.push(...comments)
+				report: (comments: ReviewComment[]) => reportedComments.push(...comments)
 			};
 
 			const result = await githubReview(
-				new TestLogService() as any,
-				createMockGitExtensionService() as any,
-				new TestAuthenticationService() as any,
-				new TestCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				new NullIgnoreService() as any,
-				new TestWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				createMockGitExtensionService(),
+				new TestAuthenticationService() as unknown as IAuthenticationService,
+				new TestCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				new NullIgnoreService(),
+				new TestWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{
 					repositoryRoot: '/test',
 					commitMessages: ['test commit'],
@@ -914,7 +922,7 @@ suite('githubReviewAgent', () => {
 			const fileUri = URI.file('/test/file.ts');
 			const docData = createTextDocumentData(fileUri, 'let x = 1;', 'typescript');
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -923,16 +931,16 @@ suite('githubReviewAgent', () => {
 			}
 
 			const result = await githubReview(
-				new TestLogService() as any,
-				createMockGitExtensionService() as any,
-				new MockAuthenticationService() as any,
-				new MockCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				ignoreService as any,
-				new TestWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				createMockGitExtensionService(),
+				new MockAuthenticationService() as unknown as IAuthenticationService,
+				new MockCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				ignoreService as unknown as IIgnoreService,
+				new TestWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{
 					repositoryRoot: '/test',
 					commitMessages: [],
@@ -959,13 +967,8 @@ suite('githubReviewAgent', () => {
 
 			// Create auth service with token
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						refresh_in: 1800,
-						envelope: { token: 'test-token' },
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token' })));
 				}
 			}
 
@@ -973,7 +976,7 @@ suite('githubReviewAgent', () => {
 			const docData = createTextDocumentData(fileUri, 'const x = 1;', 'typescript');
 
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -986,14 +989,14 @@ suite('githubReviewAgent', () => {
 
 			// Mock fetcher with abort support
 			const abortError = new Error('Aborted');
-			const fetcherService = {
+			const fetcherService: IFetcherService = {
 				makeAbortController: () => ({ abort: () => { }, signal: {} }),
-				isAbortError: (err: any) => err === abortError,
-			};
+				isAbortError: (err: unknown) => err === abortError,
+			} as unknown as IFetcherService;
 
 			// Create CAPI client that throws abort error
 			class TestCAPIClientService extends MockCAPIClientService {
-				buildUrl(_ep: any, path: string): URL {
+				buildUrl(_ep: unknown, path: string): URL {
 					return new URL('https://api.github.com' + path);
 				}
 				override makeRequest<T>(): Promise<T> {
@@ -1002,16 +1005,16 @@ suite('githubReviewAgent', () => {
 			}
 
 			const result = await githubReview(
-				new TestLogService() as any,
-				createMockGitExtensionService() as any,
-				new TestAuthenticationService() as any,
-				new TestCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				new NullIgnoreService() as any,
-				new TestWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				createMockGitExtensionService(),
+				new TestAuthenticationService() as unknown as IAuthenticationService,
+				new TestCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				new NullIgnoreService(),
+				new TestWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{
 					repositoryRoot: '/test',
 					commitMessages: ['test commit'],
@@ -1035,13 +1038,8 @@ suite('githubReviewAgent', () => {
 
 			// Create auth service with token
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						refresh_in: 1800,
-						envelope: { token: 'test-token' },
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token' })));
 				}
 			}
 
@@ -1049,7 +1047,7 @@ suite('githubReviewAgent', () => {
 			const docData = createTextDocumentData(fileUri, 'const x = 1;', 'typescript');
 
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -1062,7 +1060,7 @@ suite('githubReviewAgent', () => {
 
 			// Create CAPI client that returns 402
 			class TestCAPIClientService extends MockCAPIClientService {
-				buildUrl(_ep: any, path: string): URL {
+				buildUrl(_ep: unknown, path: string): URL {
 					return new URL('https://api.github.com' + path);
 				}
 				override makeRequest<T>(): Promise<T> {
@@ -1076,16 +1074,16 @@ suite('githubReviewAgent', () => {
 
 			try {
 				await githubReview(
-					new TestLogService() as any,
-					createMockGitExtensionService() as any,
-					new TestAuthenticationService() as any,
-					new TestCAPIClientService() as any,
-					domainService as any,
-					fetcherService as any,
-					envService as any,
-					new NullIgnoreService() as any,
-					new TestWorkspaceService() as any,
-					new MockCustomInstructionsService() as any,
+					new TestLogService(),
+					createMockGitExtensionService(),
+					new TestAuthenticationService() as unknown as IAuthenticationService,
+					new TestCAPIClientService() as unknown as ICAPIClientService,
+					domainService,
+					fetcherService,
+					envService,
+					new NullIgnoreService(),
+					new TestWorkspaceService(),
+					new MockCustomInstructionsService(),
 					{
 						repositoryRoot: '/test',
 						commitMessages: ['test commit'],
@@ -1099,9 +1097,10 @@ suite('githubReviewAgent', () => {
 					CancellationToken.None
 				);
 				assert.fail('Should have thrown an error');
-			} catch (err: any) {
-				assert.ok(err.message.includes('quota'));
-				assert.strictEqual(err.severity, 'info');
+			} catch (err: unknown) {
+				const error = err as Error & { severity?: string };
+				assert.ok(error.message.includes('quota'));
+				assert.strictEqual(error.severity, 'info');
 			}
 		});
 
@@ -1111,13 +1110,8 @@ suite('githubReviewAgent', () => {
 
 			// Create auth service with token
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						refresh_in: 1800,
-						envelope: { token: 'test-token' },
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token' })));
 				}
 			}
 
@@ -1125,7 +1119,7 @@ suite('githubReviewAgent', () => {
 			const docData = createTextDocumentData(fileUri, 'const x = 1;', 'typescript');
 
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -1138,7 +1132,7 @@ suite('githubReviewAgent', () => {
 
 			// Create CAPI client that returns 500
 			class TestCAPIClientService extends MockCAPIClientService {
-				buildUrl(_ep: any, path: string): URL {
+				buildUrl(_ep: unknown, path: string): URL {
 					return new URL('https://api.github.com' + path);
 				}
 				override makeRequest<T>(): Promise<T> {
@@ -1152,16 +1146,16 @@ suite('githubReviewAgent', () => {
 
 			try {
 				await githubReview(
-					new TestLogService() as any,
-					createMockGitExtensionService() as any,
-					new TestAuthenticationService() as any,
-					new TestCAPIClientService() as any,
-					domainService as any,
-					fetcherService as any,
-					envService as any,
-					new NullIgnoreService() as any,
-					new TestWorkspaceService() as any,
-					new MockCustomInstructionsService() as any,
+					new TestLogService(),
+					createMockGitExtensionService(),
+					new TestAuthenticationService() as unknown as IAuthenticationService,
+					new TestCAPIClientService() as unknown as ICAPIClientService,
+					domainService,
+					fetcherService,
+					envService,
+					new NullIgnoreService(),
+					new TestWorkspaceService(),
+					new MockCustomInstructionsService(),
 					{
 						repositoryRoot: '/test',
 						commitMessages: ['test commit'],
@@ -1175,9 +1169,10 @@ suite('githubReviewAgent', () => {
 					CancellationToken.None
 				);
 				assert.fail('Should have thrown an error');
-			} catch (err: any) {
-				assert.ok(err.message.includes('500'));
-				assert.ok(err.message.includes('test-req-id'));
+			} catch (err: unknown) {
+				const error = err as Error;
+				assert.ok(error.message.includes('500'));
+				assert.ok(error.message.includes('test-req-id'));
 			}
 		});
 
@@ -1187,13 +1182,8 @@ suite('githubReviewAgent', () => {
 
 			// Create auth service with token
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						refresh_in: 1800,
-						envelope: { token: 'test-token' },
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token' })));
 				}
 			}
 
@@ -1201,7 +1191,7 @@ suite('githubReviewAgent', () => {
 			const docData = createTextDocumentData(fileUri, 'const x = 1;', 'typescript');
 
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -1214,14 +1204,14 @@ suite('githubReviewAgent', () => {
 
 			// Mock fetcher that does NOT recognize this error as abort
 			const networkError = new Error('Network failure');
-			const fetcherService = {
+			const fetcherService: IFetcherService = {
 				makeAbortController: () => ({ abort: () => { }, signal: {} }),
 				isAbortError: () => false, // Not an abort error
-			};
+			} as unknown as IFetcherService;
 
 			// Create CAPI client that throws a network error
 			class TestCAPIClientService extends MockCAPIClientService {
-				buildUrl(_ep: any, path: string): URL {
+				buildUrl(_ep: unknown, path: string): URL {
 					return new URL('https://api.github.com' + path);
 				}
 				override makeRequest<T>(): Promise<T> {
@@ -1231,16 +1221,16 @@ suite('githubReviewAgent', () => {
 
 			try {
 				await githubReview(
-					new TestLogService() as any,
-					createMockGitExtensionService() as any,
-					new TestAuthenticationService() as any,
-					new TestCAPIClientService() as any,
-					domainService as any,
-					fetcherService as any,
-					envService as any,
-					new NullIgnoreService() as any,
-					new TestWorkspaceService() as any,
-					new MockCustomInstructionsService() as any,
+					new TestLogService(),
+					createMockGitExtensionService(),
+					new TestAuthenticationService() as unknown as IAuthenticationService,
+					new TestCAPIClientService() as unknown as ICAPIClientService,
+					domainService,
+					fetcherService,
+					envService,
+					new NullIgnoreService(),
+					new TestWorkspaceService(),
+					new MockCustomInstructionsService(),
 					{
 						repositoryRoot: '/test',
 						commitMessages: ['test commit'],
@@ -1254,24 +1244,20 @@ suite('githubReviewAgent', () => {
 					CancellationToken.None
 				);
 				assert.fail('Should have thrown an error');
-			} catch (err: any) {
-				assert.strictEqual(err.message, 'Network failure');
+			} catch (err: unknown) {
+				const error = err as Error;
+				assert.strictEqual(error.message, 'Network failure');
 			}
 		});
 
 		test('ignores comments with paths not matching any change', async () => {
 			const { githubReview } = await import('../githubReviewAgent');
-			const { domainService, envService } = createBaseMocks();
+			const { domainService, fetcherService, envService } = createBaseMocks();
 
 			// Extend MockAuthenticationService to return a valid token
 			class TestAuthenticationService extends MockAuthenticationService {
-				override getCopilotToken(_force?: boolean): Promise<any> {
-					return Promise.resolve({
-						token: 'test-token',
-						expiresAt: Date.now() + 3600000,
-						refresh_in: 1800,
-						envelope: { token: 'test-token' },
-					});
+				override getCopilotToken(_force?: boolean): Promise<CopilotToken> {
+					return Promise.resolve(new CopilotToken(createTestExtendedTokenInfo({ token: 'test-token' })));
 				}
 			}
 
@@ -1280,7 +1266,7 @@ suite('githubReviewAgent', () => {
 			const docData = createTextDocumentData(fileUri, 'const x = 1;', 'typescript');
 
 			class TestWorkspaceService extends MockWorkspaceService {
-				override openTextDocument(uri: URI): Promise<any> {
+				override openTextDocument(uri: URI): Promise<TextDocument> {
 					if (uri.toString() === fileUri.toString()) {
 						return Promise.resolve(docData.document);
 					}
@@ -1311,22 +1297,17 @@ suite('githubReviewAgent', () => {
 				}
 			}
 
-			const fetcherService = {
-				makeAbortController: () => ({ abort: () => { }, signal: {} }),
-				isAbortError: () => false,
-			};
-
 			const result = await githubReview(
-				new TestLogService() as any,
-				createMockGitExtensionService() as any,
-				new TestAuthenticationService() as any,
-				new TestCAPIClientService() as any,
-				domainService as any,
-				fetcherService as any,
-				envService as any,
-				new NullIgnoreService() as any,
-				new TestWorkspaceService() as any,
-				new MockCustomInstructionsService() as any,
+				new TestLogService(),
+				createMockGitExtensionService(),
+				new TestAuthenticationService() as unknown as IAuthenticationService,
+				new TestCAPIClientService() as unknown as ICAPIClientService,
+				domainService,
+				fetcherService,
+				envService,
+				new NullIgnoreService(),
+				new TestWorkspaceService(),
+				new MockCustomInstructionsService(),
 				{
 					repositoryRoot: '/test',
 					commitMessages: ['test commit'],
