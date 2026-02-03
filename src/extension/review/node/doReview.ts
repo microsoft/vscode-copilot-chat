@@ -53,7 +53,7 @@ export class ReviewSession {
 	) { }
 
 	async review(
-		group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+		group: ReviewGroup,
 		progressLocation: ProgressLocation,
 		cancellationToken?: CancellationToken
 	): Promise<FeedbackResult | undefined> {
@@ -79,6 +79,33 @@ export class ReviewSession {
 			cancellationToken
 		);
 	}
+}
+
+export type ReviewGroup = 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] };
+
+/**
+ * Gets the progress title for a review operation based on the review group type.
+ */
+export function getReviewTitle(group: ReviewGroup, editor?: TextEditor): string {
+	if (group === 'selection') {
+		return l10n.t('Reviewing selected code in {0}...', path.posix.basename(editor!.document.uri.path));
+	}
+	if (group === 'index') {
+		return l10n.t('Reviewing staged changes...');
+	}
+	if (group === 'workingTree') {
+		return l10n.t('Reviewing unstaged changes...');
+	}
+	if (group === 'all') {
+		return l10n.t('Reviewing uncommitted changes...');
+	}
+	if ('repositoryRoot' in group) {
+		return l10n.t('Reviewing changes...');
+	}
+	if (group.group === 'index') {
+		return l10n.t('Reviewing staged changes in {0}...', path.posix.basename(group.file.path));
+	}
+	return l10n.t('Reviewing unstaged changes in {0}...', path.posix.basename(group.file.path));
 }
 
 export function combineCancellationTokens(token1: CancellationToken, token2: CancellationToken): CancellationToken {
@@ -120,7 +147,7 @@ async function doReview(
 	commandService: IRunCommandExecutionService,
 	notificationService: INotificationService,
 	customInstructionsService: ICustomInstructionsService,
-	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: ReviewGroup,
 	progressLocation: ProgressLocation,
 	cancellationToken?: CancellationToken
 ): Promise<FeedbackResult | undefined> {
@@ -151,13 +178,7 @@ async function doReview(
 			}
 		}
 	}
-	const title = group === 'selection' ? l10n.t('Reviewing selected code in {0}...', path.posix.basename(editor!.document.uri.path))
-		: group === 'index' ? l10n.t('Reviewing staged changes...')
-			: group === 'workingTree' ? l10n.t('Reviewing unstaged changes...')
-				: group === 'all' ? l10n.t('Reviewing uncommitted changes...')
-					: 'repositoryRoot' in group ? l10n.t('Reviewing changes...')
-						: group.group === 'index' ? l10n.t('Reviewing staged changes in {0}...', path.posix.basename(group.file.path))
-							: l10n.t('Reviewing unstaged changes in {0}...', path.posix.basename(group.file.path));
+	const title = getReviewTitle(group, editor);
 	return notificationService.withProgress({
 		location: progressLocation,
 		title,
