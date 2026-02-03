@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart } from '../../../vscodeTypes';
+import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart } from '../../../vscodeTypes';
 import { coalesce } from '../../vs/base/common/arrays';
 import { ChatResponseStreamImpl } from '../chatResponseStreamImpl';
 import { isLocation, isSymbolInformation, isUri } from '../types';
@@ -46,7 +46,20 @@ export class SpyChatResponseStream extends ChatResponseStreamImpl {
 		return this.items.filter((part): part is ChatResponseCommandButtonPart => part instanceof ChatResponseCommandButtonPart).map(part => part.value);
 	}
 
+	get externalEditUris(): vscode.Uri[] {
+		return this.items
+			.filter((part): part is ChatResponseExternalEditPart => part instanceof ChatResponseExternalEditPart)
+			.flatMap(part => part.uris);
+	}
+
 	constructor() {
 		super((part) => this.items.push(part), () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
+	}
+
+	override async externalEdit(target: vscode.Uri | vscode.Uri[], callback: () => Thenable<unknown>): Promise<string> {
+		const uris = Array.isArray(target) ? target : [target];
+		this.items.push(new ChatResponseExternalEditPart(uris, callback));
+		await callback();
+		return '';
 	}
 }
