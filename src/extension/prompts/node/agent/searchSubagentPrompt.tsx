@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { AssistantMessage, PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { CopilotToolMode } from '../../../tools/common/toolsRegistry';
 import { ChatToolCalls } from '../panel/toolCalling';
@@ -50,9 +50,9 @@ export class SearchSubagentPrompt extends PromptElement<GenericBasePromptElement
 					toolCallMode={CopilotToolMode.FullContext}
 				/>
 				{isLastTurn && (
-					<AssistantMessage priority={898}>
-						OK, my allotted iterations are finished -- I must produce a list of code references as the final answer. &lt;final_answer&gt;
-					</AssistantMessage>
+					<UserMessage priority={900}>
+						OK, your allotted iterations are finished -- you must produce a list of code references as the final answer, starting and ending with &lt;final_answer&gt;.
+					</UserMessage>
 				)}
 			</>
 		);
