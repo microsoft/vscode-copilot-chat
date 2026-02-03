@@ -12,8 +12,7 @@ import { ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequ
 import { IAgentStepContext, type IObservationResult, type IStepMetrics, type IToolCall, ITrajectoryLogger } from '../common/trajectoryLogger';
 import { IToolDefinition, TRAJECTORY_FILE_EXTENSION } from '../common/trajectoryTypes';
 
-const MAIN_AGENT_NAME = 'GitHub Copilot Chat';
-const SUBAGENT_NAME = 'subagent';
+const AGENT_NAME = 'GitHub Copilot Chat';
 
 /**
  * Function type for rendering PromptTsx parts to strings.
@@ -82,8 +81,8 @@ export class TrajectoryLoggerAdapter extends Disposable {
 
 			// Get or create session for this token
 			let sessionId = this.sessionMap.get(entry.token);
-			// Use 'subagent' for subagent trajectories, main agent name otherwise
-			const agentName = entry.token.subAgentInvocationId !== undefined ? SUBAGENT_NAME : MAIN_AGENT_NAME;
+			// Use subAgentName as agent name for subagent trajectories
+			const agentName = entry.token.subAgentName ?? AGENT_NAME;
 
 			if (!sessionId) {
 				// Use the following priority for session ID:
