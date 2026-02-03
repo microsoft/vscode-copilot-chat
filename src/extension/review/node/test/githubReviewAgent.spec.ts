@@ -5,9 +5,18 @@
 
 import assert from 'assert';
 import { describe, suite, test } from 'vitest';
+import { NullGitExtensionService } from '../../../../platform/git/common/nullGitExtensionService';
+import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
+import { MockCAPIClientService } from '../../../../platform/ignore/node/test/mockCAPIClientService';
+import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
+import { NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ReviewRequest } from '../../../../platform/review/common/reviewService';
 import { MockCustomInstructionsService } from '../../../../platform/test/common/testCustomInstructionsService';
+import { createFakeStreamResponse } from '../../../../platform/test/node/fetcher';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import {
 	createReviewComment,
@@ -595,6 +604,221 @@ suite('githubReviewAgent', () => {
 			// Both should be empty with mock service returning no instructions
 			assert.deepStrictEqual(selectionResult, []);
 			assert.deepStrictEqual(diffResult, []);
+		});
+	});
+
+	describe('githubReview', () => {
+		// These tests verify the integration of githubReview with mocked services
+		// Following the pattern from chatMLFetcherRetry.spec.ts for extending mocks
+
+		// Common mock services shared across tests
+		const createBaseMocks = () => ({
+			domainService: { _serviceBrand: undefined, onDidChangeDomains: Event.None },
+			fetcherService: {
+				makeAbortController: () => ({ abort: () => { }, signal: {} }),
+				isAbortError: () => false,
+			},
+			envService: { sessionId: 'test' },
+		});
+
+		const createMockGitExtensionService = () => {
+			const mockGitApi = {
+				getRepository: () => ({ rootUri: URI.file('/test') }),
+				repositories: [],
+			};
+			return {
+				getExtensionApi: () => mockGitApi,
+				extensionAvailable: true,
+			};
+		};
+
+		test('returns success with empty comments when git extension is not available', async () => {
+			const { githubReview } = await import('../githubReviewAgent');
+			const { domainService, fetcherService, envService } = createBaseMocks();
+
+			const result = await githubReview(
+				new TestLogService() as any,
+				new NullGitExtensionService() as any,
+				new MockAuthenticationService() as any,
+				new MockCAPIClientService() as any,
+				domainService as any,
+				fetcherService as any,
+				envService as any,
+				new NullIgnoreService() as any,
+				new MockWorkspaceService() as any,
+				new MockCustomInstructionsService() as any,
+				{ repositoryRoot: '/test', commitMessages: [], patches: [] },
+				undefined,
+				{ report: () => { } },
+				CancellationToken.None
+			);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.deepStrictEqual(result.comments, []);
+			}
+		});
+
+		test('returns success with empty comments when no patches provided', async () => {
+			const { githubReview } = await import('../githubReviewAgent');
+			const { domainService, fetcherService, envService } = createBaseMocks();
+
+			const result = await githubReview(
+				new TestLogService() as any,
+				createMockGitExtensionService() as any,
+				new MockAuthenticationService() as any,
+				new MockCAPIClientService() as any,
+				domainService as any,
+				fetcherService as any,
+				envService as any,
+				new NullIgnoreService() as any,
+				new MockWorkspaceService() as any,
+				new MockCustomInstructionsService() as any,
+				{ repositoryRoot: '/test', commitMessages: [], patches: [] },
+				undefined,
+				{ report: () => { } },
+				CancellationToken.None
+			);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.deepStrictEqual(result.comments, []);
+			}
+		});
+
+		test('processes patches and returns review comments from API response', async () => {
+			const { githubReview } = await import('../githubReviewAgent');
+			const { domainService, fetcherService, envService } = createBaseMocks();
+
+			// Extend MockAuthenticationService to return a valid token (following chatMLFetcherRetry.spec.ts pattern)
+			class TestAuthenticationService extends MockAuthenticationService {
+				override getCopilotToken(_force?: boolean): Promise<any> {
+					return Promise.resolve({
+						token: 'test-token',
+						expiresAt: Date.now() + 3600000,
+						isCopilotCodeReviewEnabled: true,
+					});
+				}
+			}
+
+			// Set up CAPI client to return a streaming response with a comment
+			const sseResponse = [
+				`data: ${JSON.stringify({
+					copilot_references: [{
+						type: 'github.generated-pull-request-comment',
+						data: {
+							path: 'file.ts',
+							line: 1,
+							body: 'Consider using const instead of let.'
+						}
+					}]
+				})}\n`,
+				'data: [DONE]\n'
+			];
+			class TestCAPIClientService extends MockCAPIClientService {
+				override makeRequest<T>(): Promise<T> {
+					return Promise.resolve(createFakeStreamResponse(sseResponse) as unknown as T);
+				}
+			}
+
+			// Set up workspace service with a document (inline extension pattern)
+			const fileUri = URI.file('/test/file.ts');
+			const docData = createTextDocumentData(fileUri, 'let x = 1;', 'typescript');
+			class TestWorkspaceService extends MockWorkspaceService {
+				override openTextDocument(uri: URI): Promise<any> {
+					if (uri.toString() === fileUri.toString()) {
+						return Promise.resolve(docData.document);
+					}
+					return Promise.reject(new Error(`Document not found: ${uri.toString()}`));
+				}
+			}
+
+			const reportedComments: any[] = [];
+			const progress = {
+				report: (comments: any[]) => reportedComments.push(...comments)
+			};
+
+			const result = await githubReview(
+				new TestLogService() as any,
+				createMockGitExtensionService() as any,
+				new TestAuthenticationService() as any,
+				new TestCAPIClientService() as any,
+				domainService as any,
+				fetcherService as any,
+				envService as any,
+				new NullIgnoreService() as any,
+				new TestWorkspaceService() as any,
+				new MockCustomInstructionsService() as any,
+				{
+					repositoryRoot: '/test',
+					commitMessages: ['test commit'],
+					patches: [{
+						patch: '@@ -1,1 +1,1 @@\n-const x = 1;\n+let x = 1;',
+						fileUri: fileUri.toString(),
+					}]
+				},
+				undefined,
+				progress,
+				CancellationToken.None
+			);
+
+			assert.strictEqual(result.type, 'success');
+			if (result.type === 'success') {
+				assert.strictEqual(result.comments.length, 1);
+				assert.strictEqual(reportedComments.length, 1);
+			}
+		});
+
+		test('returns info error when all files are ignored', async () => {
+			const { githubReview } = await import('../githubReviewAgent');
+			const { domainService, fetcherService, envService } = createBaseMocks();
+
+			// Create an ignore service that ignores all files
+			const ignoreService = {
+				isCopilotIgnored: () => Promise.resolve(true),
+			};
+
+			// Set up workspace service with a document (inline extension pattern)
+			const fileUri = URI.file('/test/file.ts');
+			const docData = createTextDocumentData(fileUri, 'let x = 1;', 'typescript');
+			class TestWorkspaceService extends MockWorkspaceService {
+				override openTextDocument(uri: URI): Promise<any> {
+					if (uri.toString() === fileUri.toString()) {
+						return Promise.resolve(docData.document);
+					}
+					return Promise.reject(new Error(`Document not found: ${uri.toString()}`));
+				}
+			}
+
+			const result = await githubReview(
+				new TestLogService() as any,
+				createMockGitExtensionService() as any,
+				new MockAuthenticationService() as any,
+				new MockCAPIClientService() as any,
+				domainService as any,
+				fetcherService as any,
+				envService as any,
+				ignoreService as any,
+				new TestWorkspaceService() as any,
+				new MockCustomInstructionsService() as any,
+				{
+					repositoryRoot: '/test',
+					commitMessages: [],
+					patches: [{
+						patch: '@@ -1,1 +1,1 @@\n-const x = 1;\n+let x = 1;',
+						fileUri: fileUri.toString(),
+					}]
+				},
+				undefined,
+				{ report: () => { } },
+				CancellationToken.None
+			);
+
+			assert.strictEqual(result.type, 'error');
+			if (result.type === 'error') {
+				assert.strictEqual(result.severity, 'info');
+				assert.ok(result.reason.includes('ignored'));
+			}
 		});
 	});
 });
