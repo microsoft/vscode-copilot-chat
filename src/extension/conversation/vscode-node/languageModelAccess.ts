@@ -179,22 +179,16 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
-		let defaultChatEndpoint: IChatEndpoint | undefined;
+		let defaultChatEndpoint: IChatEndpoint;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
-		if (this._authenticationService.copilotToken?.isNoAuthUser) {
-			// No Auth users always get Auto as the default model
+		if (this._authenticationService.copilotToken?.isNoAuthUser || !defaultExpModel || defaultExpModel === AutoChatEndpoint.pseudoModelId) {
+			// No auth, no experiment, and exp that sets auto to default all get default model
 			defaultChatEndpoint = autoEndpoint;
-		} else if (defaultExpModel === AutoChatEndpoint.pseudoModelId) {
-			// Auto is a fake model id so force map it
-			defaultChatEndpoint = autoEndpoint;
-		} else if (defaultExpModel) {
+		} else {
 			// Find exp default
-			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel);
+			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel) || autoEndpoint;
 		}
-		if (!defaultChatEndpoint) {
-			// Find a default set by CAPI
-			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? chatEndpoints.find(e => e.showInModelPicker) ?? chatEndpoints[0];
-		}
+
 		const seenFamilies = new Set<string>();
 
 		for (const endpoint of chatEndpoints) {

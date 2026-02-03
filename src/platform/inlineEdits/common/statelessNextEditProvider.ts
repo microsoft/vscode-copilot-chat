@@ -361,6 +361,7 @@ export interface IStatelessNextEditTelemetry {
 	readonly xtabUserHappinessScore: number | undefined;
 
 	/* cursor jump info */
+	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
 }
@@ -436,6 +437,7 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
 		};
@@ -529,6 +531,11 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _cursorJumpModelName: string | undefined;
+	public setCursorJumpModelName(modelName: string | undefined): this {
+		this._cursorJumpModelName = modelName;
+		return this;
+	}
 
 	private _cursorJumpPrompt: Raw.ChatMessage[] | undefined;
 	public setCursorJumpPrompt(prompt: Raw.ChatMessage[] | undefined): this {

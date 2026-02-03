@@ -42,6 +42,42 @@ import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 
+/**
+ * Computes a reduced window range that encompasses both the original window (shrunk by one line
+ * on each end) and the full line where the cursor is located.
+ *
+ * This ensures the cache invalidation window always includes the cursor's line while trimming
+ * the edges of the original window.
+ */
+function computeReducedWindow(
+	window: OffsetRange,
+	activeDocSelection: OffsetRange | undefined,
+	documentBeforeEdits: StringText
+): OffsetRange {
+	if (!activeDocSelection) {
+		return window;
+	}
+	const cursorOffset = activeDocSelection.endExclusive;
+	const t = documentBeforeEdits.getTransformer();
+	const cursorPosition = t.getPosition(cursorOffset);
+	const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
+	const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
+	const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
+	const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
+	const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
+	return new OffsetRange(
+		Math.min(reducedOffset, lineOffset),
+		Math.max(reducedEndOffset, lineEndOffset)
+	);
+}
+
+function convertLineEditToEdit(nextLineEdit: LineEdit, projectedDocuments: readonly ProcessedDoc[], docId: DocumentId): StringEdit {
+	const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
+	const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
+	const suggestedEdit = rootedLineEdit.toEdit();
+	return suggestedEdit;
+}
+
 export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
 	enforceCacheDelay: boolean;
 	changeHint?: NesChangeHint;
@@ -477,13 +513,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const xtabEditHistory = this._xtabHistoryTracker.getHistory();
 
-		function convertLineEditToEdit(nextLineEdit: LineEdit, docId: DocumentId): StringEdit {
-			const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
-			const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
-			const suggestedEdit = rootedLineEdit.toEdit();
-			return suggestedEdit;
-		}
-
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
 		const nLinesEditWindow = (shouldExpandEditWindow
@@ -575,21 +604,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 						myLogger.trace(`no edit, reason: ${result.err.kind}`);
 						if (result.err instanceof NoNextEditReason.NoSuggestions) {
 							const { documentBeforeEdits, window } = result.err;
-							let reducedWindow = window;
-							if (activeDocSelection && window) {
-								const cursorOffset = activeDocSelection.endExclusive;
-								const t = documentBeforeEdits.getTransformer();
-								const cursorPosition = t.getPosition(cursorOffset);
-								const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
-								const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
-								const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
-								const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
-								const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
-								reducedWindow = new OffsetRange(
-									Math.min(reducedOffset, lineOffset),
-									Math.max(reducedEndOffset, lineEndOffset)
-								);
-							}
+							const reducedWindow = window ? computeReducedWindow(window, activeDocSelection, documentBeforeEdits) : undefined;
 							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
 						}
 					}
@@ -611,7 +626,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				const singleLineEdit = result.val.edit;
 				const lineEdit = new LineEdit([singleLineEdit]);
-				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
+				const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
 
 				if (rebasedEdit === undefined) {

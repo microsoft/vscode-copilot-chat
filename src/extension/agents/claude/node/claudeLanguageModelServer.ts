@@ -26,11 +26,6 @@ import { SSEParser } from '../../../../util/vs/base/common/sseParser';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
-/**
- * Marker string to identify user-initiated messages from VS Code in the Messages API.
- */
-export const VSCODE_USER_INITIATED_MESSAGE_MARKER = '__vscode_user_initiated_message__';
-
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
 	readonly nonce: string;
@@ -64,6 +59,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 64_000;
 export class ClaudeLanguageModelServer extends Disposable {
 	private server: http.Server;
 	private config: IClaudeLanguageModelServerConfig;
+	private readonly _userInitiatedMessageCounts = new Map<string, number>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -164,38 +160,6 @@ export class ClaudeLanguageModelServer extends Disposable {
 		try {
 			const requestBody: AnthropicMessagesRequest = JSON.parse(bodyString);
 
-			// Determine if this is a user-initiated message
-			const lastMessage = requestBody.messages?.at(-1);
-			const lastContentItems = !lastMessage || typeof lastMessage.content === 'string'
-				? []
-				: lastMessage.content;
-
-			// Find the index of the marker content item if it exists
-			const markerIndex = lastContentItems.findIndex(
-				c => c.type === 'text' &&
-					// Our marker
-					c.text.includes(VSCODE_USER_INITIATED_MESSAGE_MARKER) &&
-					// The name of the hook we are using
-					c.text.includes('UserPromptSubmit')
-			);
-
-			const isUserInitiatedMessage =
-				// A user initiated message would only be of role 'user'
-				lastMessage?.role === 'user' &&
-				// We expect our marker AND the user's actual message so there will be multiple content items
-				lastContentItems.length > 1 &&
-				// The marker must be in a preceding content item, not the last one (which is the actual user message)
-				markerIndex !== -1 &&
-				markerIndex !== lastContentItems.length - 1;
-
-			// Remove the marker content item and the one before it (which just provides the status of our hook)
-			// so they don't influence the request
-			if (isUserInitiatedMessage) {
-				// Remove marker and its preceding item (if it exists)
-				const indicesToRemove = markerIndex > 0 ? [markerIndex - 1, markerIndex] : [markerIndex];
-				lastMessage.content = lastContentItems.filter((_, i) => !indicesToRemove.includes(i));
-			}
-
 			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
 			// Filter to only endpoints that support the Messages API
 			const endpoints = allEndpoints.filter(e => e.apiType === 'messages');
@@ -212,6 +176,12 @@ export class ClaudeLanguageModelServer extends Disposable {
 				return;
 			}
 			requestBody.model = selectedEndpoint.model;
+			// Determine if this is a user-initiated message using counter-based approach
+			const count = this._userInitiatedMessageCounts.get(selectedEndpoint.model) ?? 0;
+			const isUserInitiatedMessage = count > 0;
+			if (isUserInitiatedMessage) {
+				this._userInitiatedMessageCounts.set(selectedEndpoint.model, count - 1);
+			}
 
 			// Set up streaming response
 			res.writeHead(200, {
@@ -353,6 +323,15 @@ export class ClaudeLanguageModelServer extends Disposable {
 
 	public getConfig(): IClaudeLanguageModelServerConfig {
 		return { ...this.config };
+	}
+
+	/**
+	 * Increments the user-initiated message count for a given model.
+	 * Called when a user sends a new message in a Claude session.
+	 */
+	public incrementUserInitiatedMessageCount(modelId: string): void {
+		const current = this._userInitiatedMessageCounts.get(modelId) ?? 0;
+		this._userInitiatedMessageCounts.set(modelId, current + 1);
 	}
 
 	private info(message: string): void {
@@ -519,10 +498,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get restrictedToSkus(): string[] | undefined {
 		return this.base.restrictedToSkus;
-	}
-
-	public get isDefault(): boolean {
-		return this.base.isDefault;
 	}
 
 	public get isFallback(): boolean {

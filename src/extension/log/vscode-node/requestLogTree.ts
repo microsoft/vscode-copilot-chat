@@ -490,19 +490,21 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				// Write to the selected file
 				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));
 
-				// Show success message with option to reveal the file
-				const revealAction = 'Reveal in Explorer';
-				const openAction = 'Open File';
-				const result = await vscode.window.showInformationMessage(
-					`Successfully exported ${exportData.totalPrompts} prompts with ${exportData.totalLogEntries} log entries to ${saveUri.fsPath}`,
-					revealAction,
-					openAction
-				);
+				// Show success message with option to reveal the file (only for user-initiated calls)
+				if (!savePath) {
+					const revealAction = 'Reveal in Explorer';
+					const openAction = 'Open File';
+					const result = await vscode.window.showInformationMessage(
+						`Successfully exported ${exportData.totalPrompts} prompts with ${exportData.totalLogEntries} log entries to ${saveUri.fsPath}`,
+						revealAction,
+						openAction
+					);
 
-				if (result === revealAction) {
-					await vscode.commands.executeCommand('revealFileInOS', saveUri);
-				} else if (result === openAction) {
-					await vscode.commands.executeCommand('vscode.open', saveUri);
+					if (result === revealAction) {
+						await vscode.commands.executeCommand('revealFileInOS', saveUri);
+					} else if (result === openAction) {
+						await vscode.commands.executeCommand('vscode.open', saveUri);
+					}
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);

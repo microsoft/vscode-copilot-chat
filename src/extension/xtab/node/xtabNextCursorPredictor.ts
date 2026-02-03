@@ -154,6 +154,7 @@ export class XtabNextCursorPredictor {
 			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
 			return Result.fromString('modelNameNotDefined');
 		}
+		telemetryBuilder?.setCursorJumpModelName(modelName);
 
 		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
 		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);
