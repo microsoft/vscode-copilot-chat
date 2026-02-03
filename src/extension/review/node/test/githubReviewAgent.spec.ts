@@ -334,20 +334,19 @@ suite('githubReviewAgent', () => {
 		});
 
 		test('reverses a replacement (delete then add)', () => {
-			// After state: line1, new, line3 (old was replaced with new)
-			// The function processes changes in order:
-			// 1. remove type -> insert 'old' at position 1 -> ['line1', 'old', 'new', 'line3']
-			// 2. add type -> delete at position 1 -> ['line1', 'new', 'line3']
-			// This test verifies the actual behavior - reversing requires proper ordering
+			// After state: ['line1', 'new', 'line3'] where 'old' was replaced with 'new'
+			// parsePatch would produce a delete at line 2 and an add at line 3:
+			//  -old  => { beforeLineNumber: 2, content: 'old', type: 'remove' }
+			//  +new  => { beforeLineNumber: 3, content: 'new', type: 'add' }
+			// reverseParsedPatch should reconstruct the original ['line1', 'old', 'line3']
 			const afterLines = ['line1', 'new', 'line3'];
 			const patch: LineChange[] = [
 				{ beforeLineNumber: 2, content: 'old', type: 'remove' },
-				{ beforeLineNumber: 2, content: 'new', type: 'add' }
+				{ beforeLineNumber: 3, content: 'new', type: 'add' }
 			];
 			const result = reverseParsedPatch([...afterLines], patch);
 
-			// The current implementation processes sequentially which results in this
-			assert.deepStrictEqual(result, ['line1', 'new', 'line3']);
+			assert.deepStrictEqual(result, ['line1', 'old', 'line3']);
 		});
 	});
 
