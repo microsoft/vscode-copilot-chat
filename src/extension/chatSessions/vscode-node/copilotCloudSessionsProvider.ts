@@ -653,19 +653,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			try {
 				const items = await this.getRepositoriesOptionItems(repoIds);
-				if (items.length > 0) {
-					optionGroups.push({
-						id: REPOSITORIES_OPTION_GROUP_ID,
-						name: vscode.l10n.t('Repository'),
-						description: vscode.l10n.t('Select repository'),
-						icon: new vscode.ThemeIcon('repo'),
-						items,
-						commands: [{
-							command: OPEN_REPOSITORY_COMMAND_ID,
-							title: vscode.l10n.t('Browse repositories...'),
-						}]
-					});
-				}
+				optionGroups.push({
+					id: REPOSITORIES_OPTION_GROUP_ID,
+					name: vscode.l10n.t('Repository'),
+					description: vscode.l10n.t('Select repository'),
+					icon: new vscode.ThemeIcon('repo'),
+					items,
+					commands: [{
+						command: OPEN_REPOSITORY_COMMAND_ID,
+						title: vscode.l10n.t('Browse repositories...'),
+					}]
+				});
 
 			} catch (error) {
 				this.logService.error(`Error fetching repositories: ${error}`);
