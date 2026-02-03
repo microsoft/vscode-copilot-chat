@@ -5568,14 +5568,12 @@
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
 		"test:prompt": "mocha \"src/extension/completions-core/vscode-node/prompt/**/test/**/*.test.{ts,tsx}\"",
-		"test:completions-core": "tsx src/extension/completions-core/vscode-node/extension/test/runTest.ts",
-		"upload-sourcemaps": "tsx script/build/uploadSourceMaps.ts"
+		"test:completions-core": "tsx src/extension/completions-core/vscode-node/extension/test/runTest.ts"
 	},
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
 		"@azure/keyvault-secrets": "^4.10.0",
 		"@azure/msal-node": "^3.6.3",
-		"@azure/storage-blob": "^12.29.1",
 		"@c4312/scip": "^0.1.0",
 		"@fluentui/react-components": "^9.66.6",
 		"@fluentui/react-icons": "^2.0.305",
