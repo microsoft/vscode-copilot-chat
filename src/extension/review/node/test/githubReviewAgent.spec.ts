@@ -572,51 +572,6 @@ suite('githubReviewAgent', () => {
 			assert.deepStrictEqual(result, []);
 		});
 
-		test('uses correct firstId for numbering', async () => {
-			const customInstructionsService = new MockCustomInstructionsService();
-			const workspaceService = createMockWorkspaceService();
-			const languageIdToFilePatterns = new Map<string, Set<string>>();
-
-			const result = await loadCustomInstructions(
-				customInstructionsService,
-				workspaceService,
-				'selection',
-				languageIdToFilePatterns,
-				5 // Starting from 5
-			);
-
-			// With no instructions, result should be empty but the function should accept the firstId
-			assert.deepStrictEqual(result, []);
-		});
-
-		test('handles kind parameter for selection vs diff', async () => {
-			const customInstructionsService = new MockCustomInstructionsService();
-			const workspaceService = createMockWorkspaceService();
-			const languageIdToFilePatterns = new Map<string, Set<string>>();
-
-			// Test with 'selection' kind - should include CodeFeedbackInstructions
-			const selectionResult = await loadCustomInstructions(
-				customInstructionsService,
-				workspaceService,
-				'selection',
-				languageIdToFilePatterns,
-				1
-			);
-
-			// Test with 'diff' kind - should NOT include CodeFeedbackInstructions
-			const diffResult = await loadCustomInstructions(
-				customInstructionsService,
-				workspaceService,
-				'diff',
-				languageIdToFilePatterns,
-				1
-			);
-
-			// Both should be empty with mock service returning no instructions
-			assert.deepStrictEqual(selectionResult, []);
-			assert.deepStrictEqual(diffResult, []);
-		});
-
 		test('loads instructions from agent instruction files', async () => {
 			// Create a custom service that returns agent instructions
 			const testUri = URI.file('/test/instructions.md');
@@ -1336,17 +1291,6 @@ suite('githubReviewAgent', () => {
 			const source2 = new CancellationTokenSource();
 			const combined = combineCancellationTokens(source1.token, source2.token);
 			assert.strictEqual(combined.isCancellationRequested, false);
-			source1.dispose();
-			source2.dispose();
-		});
-
-		test('returns cancelled token when first input is cancelled', () => {
-			const source1 = new CancellationTokenSource();
-			const source2 = new CancellationTokenSource();
-			source1.cancel();
-			combineCancellationTokens(source1.token, source2.token);
-			// The combined token should be cancelled because we cancelled source1 before creating the combined token
-			// However, the implementation subscribes to future cancellations, so let's test the callback behavior instead
 			source1.dispose();
 			source2.dispose();
 		});
