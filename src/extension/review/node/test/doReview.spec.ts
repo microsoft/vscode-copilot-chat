@@ -15,59 +15,43 @@ suite('doReview', () => {
 		test('returns token that is not cancelled when both inputs are not cancelled', () => {
 			const source1 = new CancellationTokenSource();
 			const source2 = new CancellationTokenSource();
-			try {
-				const combined = combineCancellationTokens(source1.token, source2.token);
-				assert.strictEqual(combined.isCancellationRequested, false);
-			} finally {
-				source1.dispose();
-				source2.dispose();
-			}
+			const combined = combineCancellationTokens(source1.token, source2.token);
+			assert.strictEqual(combined.isCancellationRequested, false);
+			source1.dispose();
+			source2.dispose();
 		});
 
 		test('cancels combined token when first token is cancelled after creation', () => {
 			const source1 = new CancellationTokenSource();
 			const source2 = new CancellationTokenSource();
-			try {
-				const combined = combineCancellationTokens(source1.token, source2.token);
-				assert.strictEqual(combined.isCancellationRequested, false);
-				source1.cancel();
-				assert.strictEqual(combined.isCancellationRequested, true);
-			} finally {
-				source1.dispose();
-				source2.dispose();
-			}
+			const combined = combineCancellationTokens(source1.token, source2.token);
+			assert.strictEqual(combined.isCancellationRequested, false);
+			source1.cancel();
+			assert.strictEqual(combined.isCancellationRequested, true);
+			source2.dispose();
 		});
 
 		test('cancels combined token when second token is cancelled after creation', () => {
 			const source1 = new CancellationTokenSource();
 			const source2 = new CancellationTokenSource();
-			try {
-				const combined = combineCancellationTokens(source1.token, source2.token);
-				assert.strictEqual(combined.isCancellationRequested, false);
-				source2.cancel();
-				assert.strictEqual(combined.isCancellationRequested, true);
-			} finally {
-				source1.dispose();
-				source2.dispose();
-			}
+			const combined = combineCancellationTokens(source1.token, source2.token);
+			assert.strictEqual(combined.isCancellationRequested, false);
+			source2.cancel();
+			assert.strictEqual(combined.isCancellationRequested, true);
+			source1.dispose();
 		});
 
 		test('only cancels combined token once when both tokens are cancelled', () => {
 			const source1 = new CancellationTokenSource();
 			const source2 = new CancellationTokenSource();
-			try {
-				const combined = combineCancellationTokens(source1.token, source2.token);
-				let cancelCount = 0;
-				combined.onCancellationRequested(() => cancelCount++);
+			const combined = combineCancellationTokens(source1.token, source2.token);
+			let cancelCount = 0;
+			combined.onCancellationRequested(() => cancelCount++);
 
-				source1.cancel();
-				source2.cancel();
-				// The combined token should only fire once despite both being cancelled
-				assert.strictEqual(cancelCount, 1);
-			} finally {
-				source1.dispose();
-				source2.dispose();
-			}
+			source1.cancel();
+			source2.cancel();
+			// The combined token should only fire once despite both being cancelled
+			assert.strictEqual(cancelCount, 1);
 		});
 	});
 });

@@ -25,10 +25,9 @@ import { createFakeStreamResponse } from '../../../../platform/test/node/fetcher
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
-import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { combineCancellationTokens } from '../doReview';
 import {
 	createReviewComment,
 	ExcludedComment,
@@ -1281,51 +1280,6 @@ suite('githubReviewAgent', () => {
 			if (result.type === 'success') {
 				assert.strictEqual(result.comments.length, 0);
 			}
-		});
-	});
-
-	describe('combineCancellationTokens', () => {
-
-		test('returns token that is not cancelled when both inputs are not cancelled', () => {
-			const source1 = new CancellationTokenSource();
-			const source2 = new CancellationTokenSource();
-			const combined = combineCancellationTokens(source1.token, source2.token);
-			assert.strictEqual(combined.isCancellationRequested, false);
-			source1.dispose();
-			source2.dispose();
-		});
-
-		test('cancels combined token when first token is cancelled after creation', () => {
-			const source1 = new CancellationTokenSource();
-			const source2 = new CancellationTokenSource();
-			const combined = combineCancellationTokens(source1.token, source2.token);
-			assert.strictEqual(combined.isCancellationRequested, false);
-			source1.cancel();
-			assert.strictEqual(combined.isCancellationRequested, true);
-			source2.dispose();
-		});
-
-		test('cancels combined token when second token is cancelled after creation', () => {
-			const source1 = new CancellationTokenSource();
-			const source2 = new CancellationTokenSource();
-			const combined = combineCancellationTokens(source1.token, source2.token);
-			assert.strictEqual(combined.isCancellationRequested, false);
-			source2.cancel();
-			assert.strictEqual(combined.isCancellationRequested, true);
-			source1.dispose();
-		});
-
-		test('only cancels combined token once when both tokens are cancelled', () => {
-			const source1 = new CancellationTokenSource();
-			const source2 = new CancellationTokenSource();
-			const combined = combineCancellationTokens(source1.token, source2.token);
-			let cancelCount = 0;
-			combined.onCancellationRequested(() => cancelCount++);
-
-			source1.cancel();
-			source2.cancel();
-			// The combined token should only fire once despite both being cancelled
-			assert.strictEqual(cancelCount, 1);
 		});
 	});
 });
