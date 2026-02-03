@@ -28,7 +28,7 @@ import { createFormattedToolInvocation } from '../common/toolInvocationFormatter
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { buildHooksFromRegistry } from './hooks/index';
+import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
