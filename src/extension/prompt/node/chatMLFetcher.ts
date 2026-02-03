@@ -646,7 +646,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				nChoices ?? /* OpenAI's default */ 1,
 				finishedCb,
 				extendedBaseTelemetryData,
-				cancellationToken
+				cancellationToken,
+				location,
 			);
 			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
 				try {
@@ -747,6 +748,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			cancellationToken,
 			useFetcher,
 			canRetryOnce,
+			location,
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {

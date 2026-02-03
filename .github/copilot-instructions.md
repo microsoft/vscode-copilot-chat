@@ -337,5 +337,9 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 This extension is a complex, multi-layered system that provides comprehensive AI assistance within VS Code. Understanding the service architecture, contribution system, and separation between platform and extension layers is crucial for making effective changes.
 
 ## Best Practices
-- Use services and dependency injection whenever possible instead of using node or vscode APIs directly. For example, use `IFileSystemService` instead of node's `fs`.
+- Use services and dependency injection over VS Code extension APIs when possible:
+  - Use `IFileSystemService` instead of Node's `fs` or `vscode.workspace.fs`
+  - Use `ILogService` instead of `console.log`
+  - Look for existing `I*Service` interfaces before reaching for raw APIs
+  - **Why**: Enables unit testing without VS Code host, supports simulation tests, provides cross-platform abstractions (Node vs web), and adds features like caching and size limits
 - Always use the URI type instead of using string file paths. There are many helpers available for working with URIs.

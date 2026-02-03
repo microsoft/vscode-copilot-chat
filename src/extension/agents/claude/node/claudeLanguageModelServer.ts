@@ -422,7 +422,7 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		const headers = this.base.getExtraHeaders?.() ?? {};
+		const headers = this.base.getExtraHeaders?.(ChatLocation.MessagesProxy) ?? {};
 		if (this.requestHeaders['user-agent']) {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
 		}
