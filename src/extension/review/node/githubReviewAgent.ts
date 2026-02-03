@@ -16,7 +16,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { Repository } from '../../../platform/git/vscode/git';
+import { API, Repository } from '../../../platform/git/vscode/git';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
@@ -31,6 +31,160 @@ import { FeedbackResult } from '../../prompt/node/feedbackGenerator';
 
 
 const testing = false;
+
+/**
+ * Represents a file change to be reviewed.
+ */
+interface FileChange {
+	repository: Repository | undefined;
+	uri?: Uri;
+	relativePath: string;
+	before: string;
+	after: string;
+	selection?: Selection;
+	document: TextDocument;
+}
+
+/**
+ * Normalizes a file path to use forward slashes on all platforms.
+ */
+function normalizePath(relativePath: string): string {
+	return process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath;
+}
+
+/**
+ * Collects file change data for a selection-based review.
+ */
+function collectSelectionChanges(
+	git: API,
+	editor: TextEditor,
+	workspaceService: IWorkspaceService
+): FileChange[] {
+	return [{
+		repository: git.getRepository(editor.document.uri) || undefined,
+		uri: editor.document.uri,
+		relativePath: workspaceService.asRelativePath(editor.document.uri),
+		before: '',
+		after: editor.document.getText(),
+		selection: editor.selection,
+		document: editor.document,
+	}];
+}
+
+/**
+ * Collects file change data for diff-based reviews (index, workingTree, or all).
+ */
+async function collectDiffChanges(
+	git: API,
+	group: 'index' | 'workingTree' | 'all',
+	workspaceService: IWorkspaceService
+): Promise<(FileChange | undefined)[]> {
+	const repositoryChanges = await Promise.all(git.repositories.map(async repository => {
+		const uris = new Set<Uri>();
+		if (group === 'all' || group === 'index') {
+			repository.state.indexChanges.forEach(c => uris.add(c.uri));
+		}
+		if (group === 'all' || group === 'workingTree') {
+			repository.state.workingTreeChanges.forEach(c => uris.add(c.uri));
+			repository.state.untrackedChanges.forEach(c => uris.add(c.uri));
+		}
+		const changes = await Promise.all(Array.from(uris).map(async uri => {
+			const document = await workspaceService.openTextDocument(uri).then(undefined, () => undefined);
+			if (!document) {
+				return undefined; // Deleted files can be skipped.
+			}
+			const before = await (group === 'index' || group === 'all' ? repository.show('HEAD', uri.fsPath).catch(() => '') : repository.show('', uri.fsPath).catch(() => ''));
+			const after = group === 'index' ? await (repository.show('', uri.fsPath).catch(() => '')) : document.getText();
+			const relativePath = path.relative(repository.rootUri.fsPath, uri.fsPath);
+			return {
+				repository,
+				uri,
+				relativePath: normalizePath(relativePath),
+				before,
+				after,
+				document,
+			};
+		}));
+		return changes;
+	}));
+	return repositoryChanges.flat();
+}
+
+/**
+ * Collects file change data for patch-based reviews (e.g., PR reviews).
+ */
+async function collectPatchChanges(
+	git: API,
+	group: { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	workspaceService: IWorkspaceService
+): Promise<(FileChange | undefined)[]> {
+	return Promise.all(group.patches.map(async patch => {
+		const uri = Uri.parse(patch.fileUri);
+		const document = await workspaceService.openTextDocument(uri).then(undefined, () => undefined);
+		if (!document) {
+			return undefined; // Deleted files can be skipped.
+		}
+		const after = document.getText();
+		const before = reversePatch(after, patch.patch);
+		const relativePath = path.relative(group.repositoryRoot, uri.fsPath);
+		return {
+			repository: git.getRepository(Uri.parse(group.repositoryRoot))!,
+			relativePath: normalizePath(relativePath),
+			before,
+			after,
+			document,
+		};
+	}));
+}
+
+/**
+ * Collects file change data for single-file reviews.
+ */
+async function collectSingleFileChanges(
+	git: API,
+	group: { group: 'index' | 'workingTree'; file: Uri },
+	workspaceService: IWorkspaceService
+): Promise<FileChange[]> {
+	const { group: g, file } = group;
+	const repository = git.getRepository(file);
+	const document = await workspaceService.openTextDocument(file).then(undefined, () => undefined);
+	if (!repository || !document) {
+		return [];
+	}
+	const before = await (g === 'index' ? repository.show('HEAD', file.fsPath).catch(() => '') : repository.show('', file.fsPath).catch(() => ''));
+	const after = g === 'index' ? await (repository.show('', file.fsPath).catch(() => '')) : document.getText();
+	const relativePath = path.relative(repository.rootUri.fsPath, file.fsPath);
+	return [{
+		repository,
+		relativePath: normalizePath(relativePath),
+		before,
+		after,
+		document,
+	}];
+}
+
+/**
+ * Collects all file changes based on the review group type.
+ */
+async function collectChanges(
+	git: API,
+	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	editor: TextEditor | undefined,
+	workspaceService: IWorkspaceService
+): Promise<FileChange[]> {
+	if (group === 'selection') {
+		return collectSelectionChanges(git, editor!, workspaceService);
+	}
+	if (typeof group === 'string') {
+		const changes = await collectDiffChanges(git, group, workspaceService);
+		return changes.filter((change): change is FileChange => !!change);
+	}
+	if ('repositoryRoot' in group) {
+		const changes = await collectPatchChanges(git, group, workspaceService);
+		return changes.filter((change): change is FileChange => !!change);
+	}
+	return collectSingleFileChanges(git, group, workspaceService);
+}
 
 export async function githubReview(
 	logService: ILogService,
@@ -52,82 +206,7 @@ export async function githubReview(
 	if (!git) {
 		return { type: 'success', comments: [] };
 	}
-	const changes = group === 'selection' ? [
-		{
-			repository: git.getRepository(editor!.document.uri) || undefined,
-			uri: editor!.document.uri,
-			relativePath: workspaceService.asRelativePath(editor!.document.uri),
-			before: '',
-			after: editor!.document.getText(),
-			selection: editor!.selection,
-			document: editor!.document,
-		}
-	] : (typeof group === 'string'
-		? (await Promise.all(git.repositories.map(async repository => {
-			const uris = new Set<Uri>();
-			if (group === 'all' || group === 'index') {
-				repository.state.indexChanges.forEach(c => uris.add(c.uri));
-			}
-			if (group === 'all' || group === 'workingTree') {
-				repository.state.workingTreeChanges.forEach(c => uris.add(c.uri));
-				repository.state.untrackedChanges.forEach(c => uris.add(c.uri));
-			}
-			const changes = await Promise.all(Array.from(uris).map(async uri => {
-				const document = await workspaceService.openTextDocument(uri).then(undefined, () => undefined);
-				if (!document) {
-					return undefined; // Deleted files can be skipped.
-				}
-				const before = await (group === 'index' || group === 'all' ? repository.show('HEAD', uri.fsPath).catch(() => '') : repository.show('', uri.fsPath).catch(() => ''));
-				const after = group === 'index' ? await (repository.show('', uri.fsPath).catch(() => '')) : document.getText();
-				const relativePath = path.relative(repository.rootUri.fsPath, uri.fsPath);
-				return {
-					repository,
-					uri,
-					relativePath: process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath,
-					before,
-					after,
-					document,
-				};
-			}));
-			return changes;
-		}))).flat()
-		: 'repositoryRoot' in group ? await Promise.all(group.patches.map(async patch => {
-			const uri = Uri.parse(patch.fileUri);
-			const document = await workspaceService.openTextDocument(uri).then(undefined, () => undefined);
-			if (!document) {
-				return undefined; // Deleted files can be skipped.
-			}
-			const after = document.getText();
-			const before = reversePatch(after, patch.patch);
-			const relativePath = path.relative(group.repositoryRoot, uri.fsPath);
-			return {
-				repository: git.getRepository(Uri.parse(group.repositoryRoot))!,
-				relativePath: process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath,
-				before,
-				after,
-				document,
-			};
-		}))
-			: await (async () => {
-				const { group: g, file } = group;
-				const repository = git.getRepository(file);
-				const document = await workspaceService.openTextDocument(file).then(undefined, () => undefined);
-				if (!repository || !document) {
-					return [];
-				}
-				const before = await (g === 'index' ? repository.show('HEAD', file.fsPath).catch(() => '') : repository.show('', file.fsPath).catch(() => ''));
-				const after = g === 'index' ? await (repository.show('', file.fsPath).catch(() => '')) : document.getText();
-				const relativePath = path.relative(repository.rootUri.fsPath, file.fsPath);
-				return [
-					{
-						repository,
-						relativePath: process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath,
-						before,
-						after,
-						document,
-					}
-				];
-			})()).filter((change): change is NonNullable<typeof change> => !!change);
+	const changes = await collectChanges(git, group, editor, workspaceService);
 
 	if (!changes.length) {
 		return { type: 'success', comments: [] };
