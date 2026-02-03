@@ -32,6 +32,7 @@ import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/co
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
@@ -41,6 +42,7 @@ import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
+import { FolderRepositoryManager } from './folderRepositoryManagerImpl';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -124,6 +126,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],
+				[IFolderRepositoryManager, new SyncDescriptor(FolderRepositoryManager)],
 			));
 
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
@@ -142,9 +145,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
 		const copilotCLIWorkspaceFolderSessions = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorkspaceFolderService));
+		const folderRepositoryManager = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFolderRepositoryManager));
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager));
 	}
 
 	private registerCopilotCloudAgent() {
