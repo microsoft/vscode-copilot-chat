@@ -1348,6 +1348,18 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	return disposableStore;
 }
 
+/**
+ * Resolves the first available model from a list of model identifiers.
+ * 
+ * When multiple models are specified in a prompt file's frontmatter (e.g., `model: [GPT-4.1, GPT-4o, Claude-3.5-Sonnet]`),
+ * this function iterates through them in order (first to last) and returns the first model that can be successfully
+ * resolved by the copilotCLIModels service. This allows prompt files to specify a priority list of models,
+ * where the first model is the most preferred and subsequent models serve as fallbacks.
+ * 
+ * @param models - Array of model identifiers to try, in priority order (first = highest priority)
+ * @param copilotCLIModels - Service for resolving model identifiers to actual model IDs
+ * @returns The ID of the first successfully resolved model, or undefined if none can be resolved
+ */
 async function getModelFromPromptFile(models: readonly string[], copilotCLIModels: ICopilotCLIModels): Promise<string | undefined> {
 	for (const model of models) {
 		let modelId = await copilotCLIModels.resolveModel(model);
