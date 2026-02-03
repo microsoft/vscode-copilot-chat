@@ -232,7 +232,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 			);
 			const carouselAnswers = await this._stream.questionCarousel([chatQuestion], false);
 			const answers = convertBackgroundQuestionToolResponseToAnswers([chatQuestion], carouselAnswers, this.logService);
-			const answer = chatQuestion.id in answers.answers ? answers.answers[chatQuestion.id] : undefined;
+			const answer = chatQuestion.title in answers.answers ? answers.answers[chatQuestion.title] : undefined;
 			if (answer) {
 				return {
 					answer: answer.freeText ? answer.freeText : (answer.selected.length ? answer.selected.join(', ') : ''),
