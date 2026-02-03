@@ -1,5 +1,4 @@
 **
-dist-sourcemaps/
 !assets/
 assets/walkthroughs/**
 !dist/compiled/**
