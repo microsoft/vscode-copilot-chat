@@ -97,6 +97,7 @@ import { DebuggableCommandIdentifier, IDebuggableCommandIdentifier } from '../..
 import { ILanguageToolsProvider, LanguageToolsProvider } from '../../onboardDebug/node/languageToolsProvider';
 import { ChatMLFetcherImpl } from '../../prompt/node/chatMLFetcher';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
+import { IPromptCategorizerService, PromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { DevContainerConfigurationServiceImpl } from '../../prompt/vscode-node/devContainerConfigurationServiceImpl';
@@ -193,6 +194,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
 	builder.define(IDevContainerConfigurationService, new SyncDescriptor(DevContainerConfigurationServiceImpl));
 	builder.define(IChatAgentService, new SyncDescriptor(ChatAgentService));
+	builder.define(IPromptCategorizerService, new SyncDescriptor(PromptCategorizerService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
