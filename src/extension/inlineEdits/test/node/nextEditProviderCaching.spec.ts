@@ -12,7 +12,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
@@ -59,7 +59,7 @@ describe('NextEditProvider Caching', () => {
 		const obsGit = new ObservableGit(gitExtensionService);
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
-			provideNextEdit: async (request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) => {
+			provideNextEdit: async function* (request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
 				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[
@@ -81,9 +81,11 @@ describe('NextEditProvider Caching', () => {
 						)
 					]
 				);
-				lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit, isFromCursorJump: false })));
-				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
-				return StatelessNextEditResult.streaming(telemetryBuilder);
+				for (const edit of lineEdit.replacements) {
+					yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+				}
+				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 			}
 		};
 
