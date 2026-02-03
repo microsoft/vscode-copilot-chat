@@ -6,6 +6,7 @@
 import * as os from 'os';
 import * as vscode from 'vscode';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
@@ -29,6 +30,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 		@ITrajectoryLogger private readonly trajectoryLogger: ITrajectoryLogger,
 		@IRequestLogger requestLogger: IRequestLogger,
 		@IConfigurationService configService: IConfigurationService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 	) {
 		super();
 		// Initialize adapter to bridge RequestLogger to TrajectoryLogger
@@ -93,7 +95,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 			const filename = this.getTrajectoryFilename(sessionId, pathMapping);
 			const fileUri = vscode.Uri.joinPath(saveDir, filename);
 			const content = JSON.stringify(trajectory, null, 2);
-			await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
+			await this.fileSystemService.writeFile(fileUri, Buffer.from(content, 'utf8'));
 		}
 	}
 
@@ -212,7 +214,7 @@ export class TrajectoryExportCommands extends Disposable implements IExtensionCo
 				// Export single file using the user-specified path
 				const [, trajectory] = [...trajectoriesToExport][0];
 				const content = JSON.stringify(trajectory, null, 2);
-				await vscode.workspace.fs.writeFile(singleFileUri, Buffer.from(content, 'utf8'));
+				await this.fileSystemService.writeFile(singleFileUri, Buffer.from(content, 'utf8'));
 			} else {
 				await this.writeTrajectoriesToFolder(trajectoriesToExport, saveDir, pathMapping);
 			}
