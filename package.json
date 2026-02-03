@@ -3051,6 +3051,26 @@
 						"tags": [
 							"preview"
 						]
+					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
+						"type": "number",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
+						"minimum": 0,
+						"maximum": 32000,
+						"default": 16000,
+						"tags": [
+							"preview",
+							"onExp"
+						]
 					}
 				}
 			},
@@ -3535,15 +3555,6 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.anthropic.useMessagesApi": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useMessagesApi%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3588,17 +3599,6 @@
 						"enum": [
 							"off",
 							"detailed"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": "number",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 0,
-						"maximum": 32000,
-						"default": 16000,
-						"tags": [
-							"experimental",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
