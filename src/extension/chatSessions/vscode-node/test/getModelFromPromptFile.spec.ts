@@ -15,7 +15,6 @@ class MockCopilotCLIModels {
 			'gpt-4.1': 'gpt-4.1',
 			'gpt-4o': 'gpt-4o',
 			'claude-3.5-sonnet': 'claude-3.5-sonnet',
-			'invalid-model': undefined as any,
 		};
 		return knownModels[modelId];
 	}
