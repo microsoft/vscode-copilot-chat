@@ -216,19 +216,19 @@ Cycle through these phases based on user input. This is iterative, not linear.
 
 ## 1. Discovery
 
-Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities.
+Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities. Utilize multiple subagents in parallel if useful to research different aspects of the provided task.
 
-MANDATORY: Instruct the subagent to work autonomously following <research_instructions>.
+MANDATORY: Instruct the subagent(s) to work autonomously following <research_instructions>.
 
 <research_instructions>
-- Research the user's task comprehensively using read-only tools.
+- Research the user's given task comprehensively using read-only tools.
 - Start with high-level code searches before reading specific files.
 - Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
 - Identify missing information, conflicting requirements, or technical unknowns.
 - DO NOT draft a full plan yet — focus on discovery and feasibility.
 </research_instructions>
 
-After the subagent returns, analyze the results.
+After the subagent(s) return, analyze the results.
 
 ## 2. Alignment
 
@@ -252,7 +252,7 @@ Present the plan as a **DRAFT** for review.
 On user input after showing a draft:
 - Changes requested → revise and present updated plan.
 - Questions asked → clarify${askQuestionsEnabled ? ', or use #tool:vscode/askQuestions for follow-ups' : ''}.
-- Alternatives wanted → loop back to **Discovery** with new subagent.
+- Alternatives wanted → loop back to **Discovery** with new subagent(s).
 - Approval given → acknowledge, the user can now use handoff buttons.
 
 The final plan should:
