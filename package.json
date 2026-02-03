@@ -4288,13 +4288,12 @@
 							"onExp"
 						]
 					},
-					"github.copilot.chat.advanced.searchSubagent.useAgenticProxy": {
+					"github.copilot.chat.searchSubagent.useAgenticProxy": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.advanced.searchSubagent.useAgenticProxy%",
+						"markdownDescription": "%github.copilot.config.searchSubagent.useAgenticProxy%",
 						"tags": [
-							"advanced",
-							"experimental"
+							"advanced"
 						]
 					},
 					"github.copilot.chat.searchSubagent.model": {
