@@ -21,19 +21,19 @@ export interface IAnswerResult {
 	answers: Record<string, IQuestionAnswer>;
 }
 
-export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQuestion[], carouselAnswers: Record<string, unknown> | undefined, _logService: ILogService): IAnswerResult {
+export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQuestion[], carouselAnswers: Record<string, unknown> | undefined, logService: ILogService): IAnswerResult {
 	const result: IAnswerResult = { answers: {} };
 
 	// Log all available keys in carouselAnswers for debugging
 	if (carouselAnswers) {
-		_logService.trace(`[AskQuestionsTool] Carousel answer keys: ${Object.keys(carouselAnswers).join(', ')}`);
-		_logService.trace(`[AskQuestionsTool] Question titles: ${questions.map(q => q.title).join(', ')}`);
+		logService.trace(`[AskQuestionsTool] Carousel answer keys: ${Object.keys(carouselAnswers).join(', ')}`);
+		logService.trace(`[AskQuestionsTool] Question titles: ${questions.map(q => q.title).join(', ')}`);
 	}
 
 	for (const question of questions) {
 		if (!carouselAnswers) {
 			// User skipped all questions
-			result.answers[question.title] = {
+			result.answers[question.id] = {
 				selected: [],
 				freeText: null,
 				skipped: true
@@ -41,11 +41,11 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 			continue;
 		}
 
-		const answer = carouselAnswers[question.title];
-		_logService.trace(`[AskQuestionsTool] Processing question "${question.title}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
+		const answer = carouselAnswers[question.id];
+		logService.trace(`[AskQuestionsTool] Processing question "${question.title}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
 
 		if (answer === undefined) {
-			result.answers[question.title] = {
+			result.answers[question.id] = {
 				selected: [],
 				freeText: null,
 				skipped: true
@@ -53,13 +53,13 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 		} else if (typeof answer === 'string') {
 			// Free text answer or single selection
 			if (question.options?.some(opt => opt.label === answer)) {
-				result.answers[question.title] = {
+				result.answers[question.id] = {
 					selected: [answer],
 					freeText: null,
 					skipped: false
 				};
 			} else {
-				result.answers[question.title] = {
+				result.answers[question.id] = {
 					selected: [],
 					freeText: answer,
 					skipped: false
@@ -67,7 +67,7 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 			}
 		} else if (Array.isArray(answer)) {
 			// Multi-select answer
-			result.answers[question.title] = {
+			result.answers[question.id] = {
 				selected: answer.map(a => String(a)),
 				freeText: null,
 				skipped: false
@@ -84,7 +84,7 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 
 			if ('selectedValues' in answerObj && Array.isArray(answerObj.selectedValues)) {
 				// Multi-select answer
-				result.answers[question.title] = {
+				result.answers[question.id] = {
 					selected: answerObj.selectedValues.map(v => String(v)),
 					freeText: freeformValue,
 					skipped: false
@@ -93,21 +93,21 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 				const value = answerObj.selectedValue;
 				if (typeof value === 'string') {
 					if (question.options?.some(opt => opt.label === value)) {
-						result.answers[question.title] = {
+						result.answers[question.id] = {
 							selected: [value],
 							freeText: freeformValue,
 							skipped: false
 						};
 					} else {
 						// selectedValue is not a known option - treat it as free text
-						result.answers[question.title] = {
+						result.answers[question.id] = {
 							selected: [],
 							freeText: freeformValue ?? value,
 							skipped: false
 						};
 					}
 				} else if (Array.isArray(value)) {
-					result.answers[question.title] = {
+					result.answers[question.id] = {
 						selected: value.map(v => String(v)),
 						freeText: freeformValue,
 						skipped: false
@@ -115,13 +115,13 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 				} else if (value === undefined || value === null) {
 					// No selection made, but might have freeform text
 					if (freeformValue) {
-						result.answers[question.title] = {
+						result.answers[question.id] = {
 							selected: [],
 							freeText: freeformValue,
 							skipped: false
 						};
 					} else {
-						result.answers[question.title] = {
+						result.answers[question.id] = {
 							selected: [],
 							freeText: null,
 							skipped: true
@@ -130,22 +130,22 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 				}
 			} else if ('freeformValue' in answerObj && freeformValue) {
 				// Only freeform text provided, no selection
-				result.answers[question.title] = {
+				result.answers[question.id] = {
 					selected: [],
 					freeText: freeformValue,
 					skipped: false
 				};
 			} else if ('label' in answerObj && typeof answerObj.label === 'string') {
 				// Answer might be the raw option object
-				result.answers[question.title] = {
+				result.answers[question.id] = {
 					selected: [answerObj.label],
 					freeText: null,
 					skipped: false
 				};
 			} else {
 				// Unknown object format
-				_logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.title}": ${JSON.stringify(answer)}`);
-				result.answers[question.title] = {
+				logService.warn(`[AskQuestionsTool] Unknown answer object format for "${question.title}": ${JSON.stringify(answer)}`);
+				result.answers[question.id] = {
 					selected: [],
 					freeText: null,
 					skipped: true
@@ -153,8 +153,8 @@ export function convertBackgroundQuestionToolResponseToAnswers(questions: ChatQu
 			}
 		} else {
 			// Unknown format, treat as skipped
-			_logService.warn(`[AskQuestionsTool] Unknown answer format for "${question.title}": ${typeof answer}`);
-			result.answers[question.title] = {
+			logService.warn(`[AskQuestionsTool] Unknown answer format for "${question.title}": ${typeof answer}`);
+			result.answers[question.id] = {
 				selected: [],
 				freeText: null,
 				skipped: true
