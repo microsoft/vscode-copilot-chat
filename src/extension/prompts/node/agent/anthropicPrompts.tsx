@@ -308,9 +308,7 @@ class AnthropicPromptResolver implements IAgentPrompt {
 	) { }
 
 	private isSonnet4(endpoint: IChatEndpoint): boolean {
-		const normalizedModel = endpoint.model?.toLowerCase().replace(/\./g, '-');
-		// Match claude-sonnet-4-YYYYMMDD pattern (Sonnet 4, not 4.5)
-		return /^claude-sonnet-4-\d{8}$/.test(normalizedModel ?? '');
+		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
 	}
 
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
