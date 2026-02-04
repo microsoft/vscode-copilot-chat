@@ -866,14 +866,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!this.isGitHubRepoOrEmpty(repoIds)) {
+			// (unless we're in an agent sessions workspace)
+			if (!vscode.workspace.isAgentSessionsWorkspace && !this.isGitHubRepoOrEmpty(repoIds)) {
 				return [];
 			}
 			let sessions = [];
-			if (repoIds && repoIds.length > 0) {
-				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
-			} else {
+			if (vscode.workspace.isAgentSessionsWorkspace || !repoIds || repoIds.length === 0) {
 				sessions = await this._octoKitService.getAllSessions(undefined, true, { createIfNone: false });
+			} else {
+				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
 			}
 			this.cachedSessionsSize = sessions.length;
 
@@ -1690,17 +1691,27 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return {};
 		}
 
+		// Look up the partner agent and model for telemetry
+		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
+		const partnerAgentId = chatResource ? this.sessionPartnerAgentMap.get(chatResource) : undefined;
+		const partnerAgent = HARDCODED_PARTNER_AGENTS.find(agent => agent.id === partnerAgentId);
+		const modelId = chatResource ? this.sessionModelMap.get(chatResource) : undefined;
+
 		/* __GDPR__
 			"copilotcloud.chat.invoke" : {
 				"owner": "joshspicer",
 				"comment": "Event sent when a Copilot Cloud chat request is made.",
 				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
-				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." }
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
+				"partnerAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The partner agent name (e.g., Copilot, Claude, Codex)." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The selected model ID." }
 			}
 		*/
 		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
 			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
-			isUntitled: String(context.chatSessionContext?.isUntitled)
+			isUntitled: String(context.chatSessionContext?.isUntitled),
+			partnerAgent: partnerAgent?.name ?? 'unknown',
+			model: modelId ?? 'unknown'
 		});
 
 		// Follow up

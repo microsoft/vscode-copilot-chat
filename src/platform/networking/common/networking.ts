@@ -176,6 +176,8 @@ export interface IMakeChatRequestOptions {
 	disableThinking?: boolean;
 	/** Enable retrying once on simple network errors like ECONNRESET. */
 	canRetryOnceWithoutRollback?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export type IChatRequestTelemetryProperties = {
