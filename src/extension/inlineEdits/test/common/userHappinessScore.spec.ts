@@ -5,13 +5,17 @@
 
 import { describe, expect, test } from 'vitest';
 import { DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { ActionKind, getUserHappinessScore, getWindowWithIgnoredLimit, MAX_INTERACTIONS_CONSIDERED } from '../../common/userInteractionMonitor';
+import { ActionKind, getUserHappinessScore, getWindowWithIgnoredLimit, MAX_INTERACTIONS_CONSIDERED, NESUserAction } from '../../common/userInteractionMonitor';
+
+function action(kind: ActionKind): NESUserAction {
+	return { time: 0, kind };
+}
 
 /**
  * v1 algorithm from main branch (only accepted/rejected).
  * Used as reference to verify the new configurable algorithm can mimic the original behavior.
  */
-function v1GetUserHappinessScore(actions: { kind: ActionKind.Accepted | ActionKind.Rejected }[]): number {
+function v1GetUserHappinessScore(actions: NESUserAction[]): number {
 	if (actions.length === 0) {
 		return 0.5; // neutral score when no data
 	}
@@ -20,13 +24,13 @@ function v1GetUserHappinessScore(actions: { kind: ActionKind.Accepted | ActionKi
 	let totalWeight = 0;
 
 	for (let i = 0; i < actions.length; i++) {
-		const action = actions[i];
+		const a = actions[i];
 		// Calculate weight based on position (more recent = higher weight)
 		// Position 0 (oldest) has lowest weight, last position has highest weight
 		const weight = i + 1;
 
 		// Accepted = 1, Rejected = 0
-		const score = action.kind === ActionKind.Accepted ? 1 : 0;
+		const score = a.kind === ActionKind.Accepted ? 1 : 0;
 
 		weightedScore += score * weight;
 		totalWeight += weight;
@@ -85,9 +89,9 @@ describe('UserHappinessScore', () => {
 				// For v1, filter out ignored actions
 				const v1Actions = testCase.actions
 					.filter((a): a is ActionKind.Accepted | ActionKind.Rejected => a !== ActionKind.Ignored)
-					.map(kind => ({ kind }));
+					.map(kind => action(kind));
 
-				const newActions = testCase.actions.map(kind => ({ kind }));
+				const newActions = testCase.actions.map(kind => action(kind));
 
 				const v1Score = v1GetUserHappinessScore(v1Actions);
 				const newScore = getUserHappinessScore(newActions, CONFIG_MIMICS_V1);
@@ -105,9 +109,9 @@ describe('UserHappinessScore', () => {
 			};
 
 			const actions = [
-				{ kind: accepted },
-				{ kind: ignored },
-				{ kind: rejected },
+				action(accepted),
+				action(ignored),
+				action(rejected),
 			];
 
 			const score = getUserHappinessScore(actions, config);
@@ -126,13 +130,13 @@ describe('UserHappinessScore', () => {
 			};
 
 			// Many consecutive ignored followed by accept
-			const actions: { kind: ActionKind }[] = [
-				{ kind: ignored },
-				{ kind: ignored },
-				{ kind: ignored },
-				{ kind: ignored },
-				{ kind: ignored },
-				{ kind: accepted },
+			const actions: NESUserAction[] = [
+				action(ignored),
+				action(ignored),
+				action(ignored),
+				action(ignored),
+				action(ignored),
+				action(accepted),
 			];
 
 			const window = getWindowWithIgnoredLimit(actions, config);
@@ -150,13 +154,13 @@ describe('UserHappinessScore', () => {
 			};
 
 			// Scattered ignored actions
-			const actions: { kind: ActionKind }[] = [
-				{ kind: ignored },
-				{ kind: accepted },
-				{ kind: ignored },
-				{ kind: rejected },
-				{ kind: ignored },
-				{ kind: accepted },
+			const actions: NESUserAction[] = [
+				action(ignored),
+				action(accepted),
+				action(ignored),
+				action(rejected),
+				action(ignored),
+				action(accepted),
 			];
 
 			const window = getWindowWithIgnoredLimit(actions, config);
@@ -168,9 +172,9 @@ describe('UserHappinessScore', () => {
 		test('different score weights affect result', () => {
 			// Test that including ignored with a specific score affects the result
 			const actions = [
-				{ kind: accepted },
-				{ kind: ignored },
-				{ kind: rejected },
+				action(accepted),
+				action(ignored),
+				action(rejected),
 			];
 
 			// Config where ignored is included but scores as neutral (0.5)
@@ -213,9 +217,9 @@ describe('UserHappinessScore', () => {
 			};
 
 			const actions = [
-				{ kind: ignored },
-				{ kind: ignored },
-				{ kind: ignored },
+				action(ignored),
+				action(ignored),
+				action(ignored),
 			];
 
 			const score = getUserHappinessScore(actions, config);
@@ -226,13 +230,13 @@ describe('UserHappinessScore', () => {
 			const config = DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 
 			// Single accept should give score above 0.5 but not too high
-			const singleAccept = getUserHappinessScore([{ kind: accepted }], config);
+			const singleAccept = getUserHappinessScore([action(accepted)], config);
 			expect(singleAccept).toBeGreaterThan(0.5);
 			expect(singleAccept).toBeLessThan(0.6); // Pulled towards neutral due to low confidence
 
 			// 10 accepts should give score closer to 1
 			const manyAccepts = getUserHappinessScore(
-				Array(10).fill(null).map(() => ({ kind: accepted })),
+				Array(10).fill(null).map(() => action(accepted)),
 				config
 			);
 			expect(manyAccepts).toBeGreaterThan(0.9);
@@ -243,13 +247,13 @@ describe('UserHappinessScore', () => {
 
 			// Accepts followed by rejects (recent rejects should lower score)
 			const acceptsThenRejects = getUserHappinessScore(
-				[{ kind: accepted }, { kind: accepted }, { kind: rejected }, { kind: rejected }],
+				[action(accepted), action(accepted), action(rejected), action(rejected)],
 				config
 			);
 
 			// Rejects followed by accepts (recent accepts should raise score)
 			const rejectsThenAccepts = getUserHappinessScore(
-				[{ kind: rejected }, { kind: rejected }, { kind: accepted }, { kind: accepted }],
+				[action(rejected), action(rejected), action(accepted), action(accepted)],
 				config
 			);
 
@@ -288,9 +292,9 @@ describe('UserHappinessScore', () => {
 			const config = parseUserHappinessScoreConfigurationString(configString);
 
 			const actions = [
-				{ kind: 'accepted' as const },
-				{ kind: 'ignored' as const },
-				{ kind: 'rejected' as const },
+				action(accepted),
+				action(ignored),
+				action(rejected),
 			];
 
 			const score = getUserHappinessScore(actions, config);
