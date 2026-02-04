@@ -270,7 +270,7 @@ export class UserInteractionMonitor {
 		return { aggressivenessLevel: level, userHappinessScore };
 	}
 
-	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+	protected _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
 		const configKey = ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString;
 		const configString = this._configurationService.getExperimentBasedConfig(configKey, this._experimentationService);
 		if (configString === undefined) {

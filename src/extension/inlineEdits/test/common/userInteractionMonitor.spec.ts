@@ -34,6 +34,13 @@ class TestUserInteractionMonitor extends UserInteractionMonitor {
 	getActionsForTiming(): { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] {
 		return [...this._recentUserActionsForTiming];
 	}
+
+	/**
+	 * Get the parsed user happiness score configuration.
+	 */
+	getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+		return this._getUserHappinessScoreConfiguration();
+	}
 }
 
 /**
@@ -388,9 +395,11 @@ describe('UserInteractionMonitor', () => {
 				'invalid'
 			);
 
-			// Should not throw, should return a valid aggressiveness level using default config
-			const result = monitor.getAggressivenessLevel();
-			expect([AggressivenessLevel.Low, AggressivenessLevel.Medium, AggressivenessLevel.High]).toContain(result.aggressivenessLevel);
+			// Get the config that was parsed (should fall back to default)
+			const parsedConfig = monitor.getUserHappinessScoreConfiguration();
+
+			// Should be exactly equal to the default config
+			expect(parsedConfig).toEqual(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
 		});
 
 		test('does not emit telemetry for valid config', () => {
@@ -404,8 +413,14 @@ describe('UserInteractionMonitor', () => {
 				JSON.stringify(validConfig)
 			);
 
-			monitor.getAggressivenessLevel();
+			// Get the config that was parsed
+			const parsedConfig = monitor.getUserHappinessScoreConfiguration();
 
+			// Should be exactly equal to the custom config (not the default)
+			expect(parsedConfig).toEqual(validConfig);
+			expect(parsedConfig).not.toEqual(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+
+			// No telemetry should be emitted
 			expect(mockTelemetryService.msftEvents).toHaveLength(0);
 		});
 	});
