@@ -655,7 +655,58 @@ base (See <attachments> above for file contents. You may not need to search or r
 "
 `;
 
-exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > parses locations including files with spaces 2`] = `[]`;
+exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > parses locations including files with spaces 2`] = `
+[
+  {
+    "displayName": "file:file.ts",
+    "filePath": "/workspace/file.ts",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 5,
+      },
+      "start": {
+        "character": 1,
+        "line": 5,
+      },
+    },
+    "text": "			function sub",
+    "type": "selection",
+  },
+  {
+    "displayName": "file:sample.ts",
+    "filePath": "/workspace/hello world/sample.ts",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 5,
+      },
+      "start": {
+        "character": 1,
+        "line": 5,
+      },
+    },
+    "text": "",
+    "type": "selection",
+  },
+  {
+    "displayName": "file:sample.py",
+    "filePath": "/workspace/sample.py",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 4,
+      },
+      "start": {
+        "character": 1,
+        "line": 4,
+      },
+    },
+    "text": "			def subtract",
+    "type": "selection",
+  },
+]
+`;
 
 exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > parses locations including files with spaces 3`] = `
 [
@@ -822,7 +873,28 @@ explain #sym:add (See <attachments> above for file contents. You may not need to
 "
 `;
 
-exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > uses attachment id attribute for name/id 2`] = `[]`;
+exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > uses attachment id attribute for name/id 2`] = `
+[
+  {
+    "displayName": "sym:add",
+    "filePath": "/workspace/add.py",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 4,
+      },
+      "start": {
+        "character": 1,
+        "line": 2,
+      },
+    },
+    "text": "			def add(a, b):
+				return a + b
+			}",
+    "type": "selection",
+  },
+]
+`;
 
 exports[`CopilotCLI Generate & parse prompts > emptyWorkspace > uses attachment id attribute for name/id 3`] = `
 [
@@ -1509,7 +1581,58 @@ base (See <attachments> above for file contents. You may not need to search or r
 "
 `;
 
-exports[`CopilotCLI Generate & parse prompts > workspace > parses locations including files with spaces 2`] = `[]`;
+exports[`CopilotCLI Generate & parse prompts > workspace > parses locations including files with spaces 2`] = `
+[
+  {
+    "displayName": "file:file.ts",
+    "filePath": "/workspace/file.ts",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 5,
+      },
+      "start": {
+        "character": 1,
+        "line": 5,
+      },
+    },
+    "text": "			function sub",
+    "type": "selection",
+  },
+  {
+    "displayName": "file:sample.ts",
+    "filePath": "/workspace/hello world/sample.ts",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 5,
+      },
+      "start": {
+        "character": 1,
+        "line": 5,
+      },
+    },
+    "text": "",
+    "type": "selection",
+  },
+  {
+    "displayName": "file:sample.py",
+    "filePath": "/workspace/sample.py",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 4,
+      },
+      "start": {
+        "character": 1,
+        "line": 4,
+      },
+    },
+    "text": "			def subtract",
+    "type": "selection",
+  },
+]
+`;
 
 exports[`CopilotCLI Generate & parse prompts > workspace > parses locations including files with spaces 3`] = `
 [
@@ -1676,7 +1799,28 @@ explain #sym:add (See <attachments> above for file contents. You may not need to
 "
 `;
 
-exports[`CopilotCLI Generate & parse prompts > workspace > uses attachment id attribute for name/id 2`] = `[]`;
+exports[`CopilotCLI Generate & parse prompts > workspace > uses attachment id attribute for name/id 2`] = `
+[
+  {
+    "displayName": "sym:add",
+    "filePath": "/workspace/add.py",
+    "selection": {
+      "end": {
+        "character": 16,
+        "line": 4,
+      },
+      "start": {
+        "character": 1,
+        "line": 2,
+      },
+    },
+    "text": "			def add(a, b):
+				return a + b
+			}",
+    "type": "selection",
+  },
+]
+`;
 
 exports[`CopilotCLI Generate & parse prompts > workspace > uses attachment id attribute for name/id 3`] = `
 [
