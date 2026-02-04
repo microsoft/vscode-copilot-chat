@@ -7,6 +7,7 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
+import { IPromptCategorizerService } from '../../prompt/node/promptCategorizer';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
@@ -66,6 +67,7 @@ class ChatAgents implements IDisposable {
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptCategorizerService private readonly promptCategorizerService: IPromptCategorizerService,
 	) { }
 
 	dispose() {
@@ -253,6 +255,9 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			request = await this.switchToBaseModel(request, stream);
 			// The user is starting an interaction with the chat
 			this.interactionService.startInteraction();
+
+			// Categorize the first prompt (fire-and-forget)
+			this.promptCategorizerService.categorizePrompt(request, context);
 
 			const defaultIntentId = typeof defaultIntentIdOrGetter === 'function' ?
 				defaultIntentIdOrGetter(request) :
