@@ -451,7 +451,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (requestToReuse) {
 			// Nice! No need to make another request, we can reuse the result from a pending request.
 			if (speculativeRequest) {
-				logger.trace('reusing speculative pending request');
+				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.id})`);
 				// Clear the speculative request since we're using it
 				this._speculativePendingRequest = null;
 			}
@@ -915,8 +915,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 
-		logger.trace('triggering speculative request for post-edit state');
-
 		// Cancel any previous speculative request
 		this._speculativePendingRequest?.request.cancellationTokenSource.cancel();
 		this._speculativePendingRequest = null;
@@ -931,6 +929,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Use a dummy version since this is speculative and we don't have the actual post-edit version
 		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
 		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined);
+
+		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
 		try {
 			const speculativeRequest = await this._createSpeculativeRequest(

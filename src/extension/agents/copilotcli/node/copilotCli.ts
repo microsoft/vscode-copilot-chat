@@ -94,6 +94,7 @@ export class CopilotCLISessionOptions {
 
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
+			clientName: 'vscode',
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
 			},
