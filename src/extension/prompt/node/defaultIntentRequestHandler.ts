@@ -333,7 +333,11 @@ export class DefaultIntentRequestHandler {
 		const pauseCtrl = store.add(new PauseController(this.onPaused, this.token));
 
 		try {
-			await this._chatHookService.executeHook('userPromptSubmitted', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
+			try {
+				await this._chatHookService.executeHook('userPromptSubmitted', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
+			} catch (error) {
+				this._logService.error('[DefaultIntentRequestHandler] Error executing userPromptSubmitted hook', error);
+			}
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
