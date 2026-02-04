@@ -41,6 +41,161 @@ export class PromptPieces {
 	}
 }
 
+/**
+ * Constructs a prompt for the Sweep next-edit-1.5B model.
+ *
+ * Format:
+ *   <|file_sep|>{file_path_1}
+ *   {file_content_1}
+ *   <|file_sep|>{changed_file}.diff
+ *   original:
+ *   {before_changes}
+ *   updated:
+ *   {after_changes}
+ *   <|file_sep|>original/{file_path}
+ *   {contents_prior_to_most_recent_change}
+ *   <|file_sep|>current/{file_path}
+ *   {current_state_of_contents}
+ *   <|file_sep|>updated/{file_path}
+ */
+export function NextEditConstructPrompt(promptPieces: PromptPieces): string {
+	const FILE_SEP = '<|file_sep|>';
+	const parts: string[] = [];
+
+	const { activeDoc, xtabHistory, computeTokens, opts } = promptPieces;
+
+	// 1. Add context files (recently viewed files)
+	const recentFiles = getRecentFilesForSweep(activeDoc, xtabHistory, computeTokens, opts);
+	for (const file of recentFiles) {
+		parts.push(`${FILE_SEP}${file.path}`);
+		parts.push(file.content);
+	}
+
+	// 2. Add recent diffs in original/updated format
+	const diffs = getRecentDiffsForSweep(activeDoc, xtabHistory, computeTokens, opts);
+	for (const diff of diffs) {
+		// Extract just filename for cleaner diff headers
+		const diffFileName = diff.path.includes('/') ? diff.path.split('/').pop()! : diff.path;
+		parts.push(`${FILE_SEP}${diffFileName}.diff`);
+		parts.push('original:');
+		parts.push(diff.original);
+		parts.push('updated:');
+		parts.push(diff.updated);
+	}
+
+	// 3. Add original/current/updated sections for active file
+	const filePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
+	// Extract just the filename for cleaner paths in original/current/updated headers
+	const fileName = filePath.includes('/') ? filePath.split('/').pop()! : filePath;
+
+	// Original = document before recent edits
+	parts.push(`${FILE_SEP}original/${fileName}`);
+	parts.push(activeDoc.documentBeforeEdits.value);
+
+	// Current = document after recent edits
+	parts.push(`${FILE_SEP}current/${fileName}`);
+	parts.push(promptPieces.currentDocument.content.value);
+
+	// Updated = prompt for model to complete
+	parts.push(`${FILE_SEP}updated/${fileName}`);
+
+	return parts.join('\n');
+}
+
+/**
+ * Get recently viewed files formatted for Sweep prompt.
+ */
+function getRecentFilesForSweep(
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
+	computeTokens: (s: string) => number,
+	opts: PromptOptions,
+): { path: string; content: string }[] {
+	const result: { path: string; content: string }[] = [];
+	const seenDocs = new Set<DocumentId>();
+	let tokenBudget = opts.recentlyViewedDocuments.maxTokens;
+
+	// Traverse from most recent to least recent
+	for (let i = xtabHistory.length - 1; i >= 0 && result.length < opts.recentlyViewedDocuments.nDocuments; --i) {
+		const entry = xtabHistory[i];
+
+		// Skip active document and already seen documents
+		if (entry.docId === activeDoc.id || seenDocs.has(entry.docId)) {
+			continue;
+		}
+
+		// Skip view entries if not configured to include them
+		if (!opts.recentlyViewedDocuments.includeViewedFiles && entry.kind === 'visibleRanges') {
+			continue;
+		}
+
+		seenDocs.add(entry.docId);
+
+		const content = entry.kind === 'edit'
+			? entry.edit.edit.applyOnText(entry.edit.base)
+			: entry.documentContent;
+
+		const contentStr = content.value;
+		const tokens = computeTokens(contentStr);
+
+		if (tokenBudget - tokens < 0) {
+			break;
+		}
+
+		tokenBudget -= tokens;
+		const path = toUniquePath(entry.docId, activeDoc.workspaceRoot?.path);
+		result.push({ path, content: contentStr });
+	}
+
+	return result.reverse(); // Return from oldest to newest
+}
+
+/**
+ * Get recent diffs formatted for Sweep prompt (original/updated blocks).
+ * Each diff represents one complete edit with before/after content.
+ */
+function getRecentDiffsForSweep(
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
+	computeTokens: (s: string) => number,
+	opts: PromptOptions,
+): { path: string; original: string; updated: string }[] {
+	const result: { path: string; original: string; updated: string }[] = [];
+	let tokenBudget = opts.diffHistory.maxTokens;
+
+	// Traverse from most recent to least recent
+	for (let i = xtabHistory.length - 1; i >= 0 && result.length < opts.diffHistory.nEntries; --i) {
+		const entry = xtabHistory[i];
+
+		// Only process edit entries
+		if (entry.kind !== 'edit') {
+			continue;
+		}
+
+		const path = toUniquePath(entry.docId, activeDoc.workspaceRoot?.path);
+
+		// Get the full before/after content for this edit
+		const originalContent = entry.edit.base.value;
+		const updatedContent = entry.edit.edit.applyOnText(entry.edit.base).value;
+
+		// Skip if no meaningful change
+		if (originalContent === updatedContent) {
+			continue;
+		}
+
+		const tokens = computeTokens(originalContent) + computeTokens(updatedContent);
+
+		if (tokenBudget - tokens < 0) {
+			break;
+		}
+
+		tokenBudget -= tokens;
+		result.push({ path, original: originalContent, updated: updatedContent });
+	}
+
+	return result.reverse(); // Return from oldest to newest
+}
+
 export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
@@ -122,6 +277,7 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 	switch (strategy) {
 		case PromptingStrategy.PatchBased01:
 		case PromptingStrategy.Codexv21NesUnified:
+		case PromptingStrategy.nextEdit:
 			break;
 		case PromptingStrategy.UnifiedModel:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;

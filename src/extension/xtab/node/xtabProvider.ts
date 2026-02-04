@@ -51,14 +51,14 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, NextEditConstructPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
-import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { charCount, constructMessages, linesWithBackticksRemoved, stripEmptyLinesFromStream, toLines } from './xtabUtils';
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -226,7 +226,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
+		// const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
+		let editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
+
+		// For nextEdit (Sweep), use the entire document as the edit window
+		if (promptOptions.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
+			editWindowLinesRange = new OffsetRange(0, currentDocument.lines.length);
+		}
 
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
@@ -310,7 +316,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? NextEditConstructPrompt(promptPieces) : getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -691,7 +697,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			cleanedLinesStream = linesStream;
+			// For nextEdit (Sweep), strip leading/trailing empty lines from response
+			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
+				cleanedLinesStream = stripEmptyLinesFromStream(linesStream);
+			} else {
+				cleanedLinesStream = linesStream;
+			}
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent ||
 			opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
 			// Determine parse mode based on response format
@@ -1142,6 +1153,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
+			case xtabPromptOptions.PromptingStrategy.nextEdit:
+				return ''; // Sweep next-edit model doesn't use a system prompt
 			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
 			case undefined:
 				return systemPromptTemplate;

@@ -189,6 +189,7 @@ export enum PromptingStrategy {
 	 * followed by the edit window content.
 	 */
 	Xtab275EditIntentShort = 'xtab275EditIntentShort',
+	nextEdit = 'nextEdit'
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -213,6 +214,7 @@ export namespace ResponseFormat {
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
 			case PromptingStrategy.XtabAggressiveness:
+			case PromptingStrategy.nextEdit:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
