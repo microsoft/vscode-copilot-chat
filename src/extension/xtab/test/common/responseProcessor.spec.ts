@@ -25,7 +25,7 @@ suite('stream diffing', () => {
 
 		return {
 			lineEdit,
-			patch: lineEdit.humanReadablePatch(editWindow),
+			patch: lineEdit.humanReadablePatch(editWindow).split('\n'),
 		};
 	}
 
@@ -53,13 +53,15 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {
-				    2   2 	const printedNodes: string[] = [];
-				-   3     	traverseDFPreOrder(node, (cursor, depth) => {
-				+       3 	traverse(node, (cursor, depth) => {
-				    4   4 		const currentNode = cursor.currentNode();
-				    5   5 		if (options.printOnlyNamed && !currentNode.isNamed()) {
-				    6   6 			return;"
+				[
+				  "    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {",
+				  "    2   2 	const printedNodes: string[] = [];",
+				  "-   3     	traverseDFPreOrder(node, (cursor, depth) => {",
+				  "+       3 	traverse(node, (cursor, depth) => {",
+				  "    4   4 		const currentNode = cursor.currentNode();",
+				  "    5   5 		if (options.printOnlyNamed && !currentNode.isNamed()) {",
+				  "    6   6 			return;",
+				]
 			`);
 		});
 
@@ -70,14 +72,16 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {
-				    2   2 	const printedNodes: string[] = [];
-				-   3     	traverseDFPreOrder(node, (cursor, depth) => {
-				+       3 	traverse(node, (cursor, depth) => {
-				+       4 		console.log("new line");
-				    4   5 		const currentNode = cursor.currentNode();
-				    5   6 		if (options.printOnlyNamed && !currentNode.isNamed()) {
-				    6   7 			return;"
+				[
+				  "    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {",
+				  "    2   2 	const printedNodes: string[] = [];",
+				  "-   3     	traverseDFPreOrder(node, (cursor, depth) => {",
+				  "+       3 	traverse(node, (cursor, depth) => {",
+				  "+       4 		console.log("new line");",
+				  "    4   5 		const currentNode = cursor.currentNode();",
+				  "    5   6 		if (options.printOnlyNamed && !currentNode.isNamed()) {",
+				  "    6   7 			return;",
+				]
 			`);
 		});
 
@@ -92,21 +96,23 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {
-				    2   2 	const printedNodes: string[] = [];
-				-   3     	traverseDFPreOrder(node, (cursor, depth) => {
-				+       3 	traverse(node, (cursor, depth) => {
-				    4   4 		const currentNode = cursor.currentNode();
-				    5   5 		if (options.printOnlyNamed && !currentNode.isNamed()) {
-				    6   6 			return;
-				    7   7 		}
-				-   8     		const printedNode = print(currentNode, depth, cursor.currentFieldName());
-				-   9     		printedNodes.push(printedNode);
-				+       8 		const myPrintedNode = print(currentNode, depth, cursor.currentFieldName());
-				+       9 		printedNodes.push(myPrintedNode);
-				   10  10 	});
-				   11  11 	return printedNodes;
-				   12  12 }"
+				[
+				  "    1   1 export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {",
+				  "    2   2 	const printedNodes: string[] = [];",
+				  "-   3     	traverseDFPreOrder(node, (cursor, depth) => {",
+				  "+       3 	traverse(node, (cursor, depth) => {",
+				  "    4   4 		const currentNode = cursor.currentNode();",
+				  "    5   5 		if (options.printOnlyNamed && !currentNode.isNamed()) {",
+				  "    6   6 			return;",
+				  "    7   7 		}",
+				  "-   8     		const printedNode = print(currentNode, depth, cursor.currentFieldName());",
+				  "-   9     		printedNodes.push(printedNode);",
+				  "+       8 		const myPrintedNode = print(currentNode, depth, cursor.currentFieldName());",
+				  "+       9 		printedNodes.push(myPrintedNode);",
+				  "   10  10 	});",
+				  "   11  11 	return printedNodes;",
+				  "   12  12 }",
+				]
 			`);
 		});
 
@@ -117,12 +123,14 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"-   1     export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {
-				-   2     	const printedNodes: string[] = [];
-				-   3     	traverseDFPreOrder(node, (cursor, depth) => {
-				    4   1 		const currentNode = cursor.currentNode();
-				    5   2 		if (options.printOnlyNamed && !currentNode.isNamed()) {
-				    6   3 			return;"
+				[
+				  "-   1     export function printParseTree(node: Parser.SyntaxNode, options: PrintingOptions, print: NodePrinter = ParseTreeEditor.renderNode): string[] {",
+				  "-   2     	const printedNodes: string[] = [];",
+				  "-   3     	traverseDFPreOrder(node, (cursor, depth) => {",
+				  "    4   1 		const currentNode = cursor.currentNode();",
+				  "    5   2 		if (options.printOnlyNamed && !currentNode.isNamed()) {",
+				  "    6   3 			return;",
+				]
 			`);
 		});
 
@@ -133,11 +141,13 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    8   8 		const printedNode = print(currentNode, depth, cursor.currentFieldName());
-				    9   9 		printedNodes.push(printedNode);
-				-  10     	});
-				-  11     	return printedNodes;
-				-  12     }"
+				[
+				  "    8   8 		const printedNode = print(currentNode, depth, cursor.currentFieldName());",
+				  "    9   9 		printedNodes.push(printedNode);",
+				  "-  10     	});",
+				  "-  11     	return printedNodes;",
+				  "-  12     }",
+				]
 			`);
 		});
 
@@ -167,13 +177,15 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    2   2 
-				    3   3 int multiply(int a, int b = 1, int c = 2) {
-				-   4     	return a * b;
-				+       4 	return a * b * c;
-				    5   5 }
-				    6   6 
-				    7   7 template<typename... Args> auto sum(Args... args) {"
+				[
+				  "    2   2 ",
+				  "    3   3 int multiply(int a, int b = 1, int c = 2) {",
+				  "-   4     	return a * b;",
+				  "+       4 	return a * b * c;",
+				  "    5   5 }",
+				  "    6   6 ",
+				  "    7   7 template<typename... Args> auto sum(Args... args) {",
+				]
 			`);
 		});
 
@@ -203,15 +215,17 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    1   1 			if (!document) {
-				    2   2 				return;
-				-   3     			}				document.selection.set(e.selections.map(s => new OffsetRange(e.textEditor.document.offsetAt(s.start), e.textEditor.document.offsetAt(s.end)), undefined);		}));
-				+       3 			}
-				+       4 			document.selection.set(e.selections.map(s => new OffsetRange(e.textEditor.document.offsetAt(s.start), e.textEditor.document.offsetAt(s.end)), undefined));
-				+       5 		}));
-				    4   6 
-				    5   7 		this._register(workspace.onDidCloseTextDocument(e => {
-				    6   8 			if (!this.filter.isTrackingEnabled(e)) {"
+				[
+				  "    1   1 			if (!document) {",
+				  "    2   2 				return;",
+				  "-   3     			}				document.selection.set(e.selections.map(s => new OffsetRange(e.textEditor.document.offsetAt(s.start), e.textEditor.document.offsetAt(s.end)), undefined);		}));",
+				  "+       3 			}",
+				  "+       4 			document.selection.set(e.selections.map(s => new OffsetRange(e.textEditor.document.offsetAt(s.start), e.textEditor.document.offsetAt(s.end)), undefined));",
+				  "+       5 		}));",
+				  "    4   6 ",
+				  "    5   7 		this._register(workspace.onDidCloseTextDocument(e => {",
+				  "    6   8 			if (!this.filter.isTrackingEnabled(e)) {",
+				]
 			`);
 		});
 
@@ -253,21 +267,23 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    2   2     x: number;
-				    3   3     y: number;
-				-   4     
-				-   5         constructor(x: number, y: number) {
-				+       4     z: number;
-				+       5 
-				+       6     constructor(x: number, y: number, z: number) {
-				    6   7         this.x = x;
-				    7   8         this.y = y;
-				+       9         this.z = z;
-				    8  10     }
-				    9  11 
-				   10  12     spaghetti(): number {
-				-  11             return this.x + this.y;
-				+      13         return this.x + this.y + this.z;"
+				[
+				  "    2   2     x: number;",
+				  "    3   3     y: number;",
+				  "-   4     ",
+				  "-   5         constructor(x: number, y: number) {",
+				  "+       4     z: number;",
+				  "+       5 ",
+				  "+       6     constructor(x: number, y: number, z: number) {",
+				  "    6   7         this.x = x;",
+				  "    7   8         this.y = y;",
+				  "+       9         this.z = z;",
+				  "    8  10     }",
+				  "    9  11 ",
+				  "   10  12     spaghetti(): number {",
+				  "-  11             return this.x + this.y;",
+				  "+      13         return this.x + this.y + this.z;",
+				]
 			`);
 		});
 
@@ -292,13 +308,15 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"    1   1 a
-				    2   2 b
-				-   3     c
-				-   4     d
-				+       3 c1
-				    5   4 e
-				    6   5 f"
+				[
+				  "    1   1 a",
+				  "    2   2 b",
+				  "-   3     c",
+				  "-   4     d",
+				  "+       3 c1",
+				  "    5   4 e",
+				  "    6   5 f",
+				]
 			`);
 		});
 
@@ -335,17 +353,38 @@ suite('stream diffing', () => {
 
 			const { patch } = await run(editWindow, updatedEditWindow);
 			expect(patch).toMatchInlineSnapshot(`
-				"-   1     function updateKthEntry<T>() {}
-				+       1 function updateKthEntry<T>(cache: Cache, documentId: DocumentId, k: number, entry: T) {
-				+       2     const cachedEntries = cache.get(documentId);
-				+       3     if (cachedEntries === undefined) {
-				+       4         return;
-				+       5     }
-				+       6     cachedEntries[k] = entry;
-				+       7 }
-				    2   8 
-				    3   9 function updateAllEntries<T>(cache: Cache, documentId: DocumentId, entries: T[]) {
-				    4  10     const cachedEntries = cache.get(documentId);"
+				[
+				  "-   1     function updateKthEntry<T>() {}",
+				  "+       1 function updateKthEntry<T>(cache: Cache, documentId: DocumentId, k: number, entry: T) {",
+				  "+       2     const cachedEntries = cache.get(documentId);",
+				  "+       3     if (cachedEntries === undefined) {",
+				  "+       4         return;",
+				  "+       5     }",
+				  "+       6     cachedEntries[k] = entry;",
+				  "+       7 }",
+				  "    2   8 ",
+				  "    3   9 function updateAllEntries<T>(cache: Cache, documentId: DocumentId, entries: T[]) {",
+				  "    4  10     const cachedEntries = cache.get(documentId);",
+				]
+			`);
+		});
+
+		test('no edits', async () => {
+			const editWindow = [
+				`		const logger = this._logger.createSubLogger('_trigger');`,
+				``,
+				`		const result = suggestion.result;`,
+				`		if (!result?.edit) {`,
+				``,
+				`			return;`,
+				`		}`,
+				``,
+			];
+			const { patch } = await run(editWindow, editWindow);
+			expect(patch).toMatchInlineSnapshot(`
+				[
+				  "",
+				]
 			`);
 		});
 
@@ -379,7 +418,7 @@ describe('emitFastCursorLineChange with empty lines', () => {
 		return {
 			lineEdit,
 			edits,
-			patch: lineEdit.humanReadablePatch(editWindow),
+			patch: lineEdit.humanReadablePatch(editWindow).split('\n'),
 		};
 	}
 
@@ -415,10 +454,12 @@ describe('emitFastCursorLineChange with empty lines', () => {
 		// Since 'unique_after' exists at index 2 in original, candidates won't be empty.
 		// Fast-emit won't trigger. The algorithm will try convergence instead.
 		expect(patch).toMatchInlineSnapshot(`
-			"    1   1 before
-			-   2     
-			-   3     unique_after
-			+       2 unique_after"
+			[
+			  "    1   1 before",
+			  "-   2     ",
+			  "-   3     unique_after",
+			  "+       2 unique_after",
+			]
 		`);
 	});
 

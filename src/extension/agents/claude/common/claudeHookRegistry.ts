@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
-import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
 /**
  * Constructor type for a hook handler class that implements HookCallbackMatcher.

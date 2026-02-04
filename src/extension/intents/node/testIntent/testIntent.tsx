@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import type { CancellationToken, ChatPromptReference, ChatRequest, ChatResponseStream, ChatResult } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../../platform/chat/common/conversationOptions';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
@@ -240,8 +241,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IChatHookService chatHookService: IChatHookService,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, endpointProvider);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, endpointProvider, chatHookService);
 	}
 
 	/**

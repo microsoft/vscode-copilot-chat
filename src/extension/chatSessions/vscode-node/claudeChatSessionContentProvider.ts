@@ -214,7 +214,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return;
 		}
 
-		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined, undefined);
+		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined);
 	}
 
 	private _assistantMessageToResponse(message: SDKAssistantMessage['message'], toolContext: ToolContext): vscode.ChatResponseTurn2 {

@@ -121,10 +121,6 @@ declare module 'vscode' {
 	 */
 	export class ChatRequestTurn2 {
 		/**
-		 * The id of the chat request. Used to identity an interaction with any of the chat surfaces.
-		 */
-		readonly id?: string;
-		/**
 		 * The prompt as entered by the user.
 		 *
 		 * Information about references used in this request is stored in {@link ChatRequestTurn.references}.
@@ -162,10 +158,15 @@ declare module 'vscode' {
 		/**
 		 * @hidden
 		 */
-		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined);
+		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined);
 	}
 
 	export class ChatResponseTurn2 {
+		/**
+		 * The id of the chat response. Used to identity an interaction with any of the chat surfaces.
+		 */
+		readonly id?: string;
+
 		/**
 		 * The content that was received from the chat participant. Only the stream parts that represent actual content (not metadata) are represented.
 		 */

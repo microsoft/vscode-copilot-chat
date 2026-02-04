@@ -15,7 +15,7 @@ import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStor
 import { isPreRelease, packageJson } from '../../env/common/packagejson';
 import { JointCompletionsProviderStrategy, JointCompletionsProviderTriggerChangeStrategy } from '../../inlineEdits/common/dataTypes/jointCompletionsProviderOptions';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
+import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages, SpeculativeRequestsEnablement } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
 import { FetcherId } from '../../networking/common/fetcherService';
 import { AlternativeNotebookFormat } from '../../notebook/common/alternativeContentFormat';
@@ -783,6 +783,7 @@ export namespace ConfigKey {
 		export const InlineEditsRebasedCacheDelay = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.rebasedCacheDelay', ConfigType.ExperimentBased, 0);
 		export const InlineEditsBackoffDebounceEnabled = defineTeamInternalSetting<boolean>('chat.advanced.inlineEdits.backoffDebounceEnabled', ConfigType.ExperimentBased, true);
 		export const InlineEditsExtraDebounceEndOfLine = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.extraDebounceEndOfLine', ConfigType.ExperimentBased, 2000);
+		export const InlineEditsSpeculativeRequests = defineTeamInternalSetting<SpeculativeRequestsEnablement>('chat.advanced.inlineEdits.speculativeRequests', ConfigType.ExperimentBased, SpeculativeRequestsEnablement.Off);
 		export const InlineEditsExtraDebounceInlineSuggestion = defineTeamInternalSetting<number>('chat.advanced.inlineEdits.extraDebounceInlineSuggestion', ConfigType.ExperimentBased, 0);
 		export const InlineEditsDebounceOnSelectionChange = defineTeamInternalSetting<number | undefined>('chat.advanced.inlineEdits.debounceOnSelectionChange', ConfigType.ExperimentBased, undefined);
 		export const InlineEditsProviderId = defineTeamInternalSetting<string | undefined>('chat.advanced.inlineEdits.providerId', ConfigType.ExperimentBased, undefined);
@@ -873,7 +874,7 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningSummary = defineSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', ConfigType.ExperimentBased, 'detailed');
 	export const EnableChatImageUpload = defineSetting<boolean>('chat.imageUpload.enabled', ConfigType.ExperimentBased, true);
 	/** Thinking token budget for Anthropic extended thinking. If set, enables extended thinking. */
-	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 4000);
+	export const AnthropicThinkingBudget = defineSetting<number>('chat.anthropic.thinking.budgetTokens', ConfigType.ExperimentBased, 16000);
 	/** Enable Anthropic web search tool for BYOK Claude models */
 	export const AnthropicWebSearchToolEnabled = defineSetting<boolean>('chat.anthropic.tools.websearch.enabled', ConfigType.ExperimentBased, false);
 	/** Maximum number of web searches allowed per request */
