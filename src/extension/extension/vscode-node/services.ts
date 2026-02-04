@@ -85,6 +85,8 @@ import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/nod
 import { ChatAgentService } from '../../conversation/vscode-node/chatParticipants';
 import { FeedbackReporter } from '../../conversation/vscode-node/feedbackReporter';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
+import { IChatTipService } from '../../chatTips/common/chatTipService';
+import { ChatTipService } from '../../chatTips/vscode-node/chatTipServiceImpl';
 import { ConversationStore, IConversationStore } from '../../conversationStore/node/conversationStore';
 import { IIntentService, IntentService } from '../../intents/node/intentService';
 import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerImpl } from '../../intents/node/newIntent';
@@ -193,6 +195,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
 	builder.define(IDevContainerConfigurationService, new SyncDescriptor(DevContainerConfigurationServiceImpl));
 	builder.define(IChatAgentService, new SyncDescriptor(ChatAgentService));
+	builder.define(IChatTipService, new SyncDescriptor(ChatTipService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));

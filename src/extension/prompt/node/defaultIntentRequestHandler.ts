@@ -35,6 +35,8 @@ import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import { IChatTipService } from '../../chatTips/common/chatTipService';
+import { ChatTipStreamParticipant } from '../../chatTips/vscode-node/chatTipStreamParticipant';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
@@ -97,6 +99,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IChatTipService private readonly _chatTipService: IChatTipService,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -218,6 +221,10 @@ export class DefaultIntentRequestHandler {
 
 	private makeResponseStreamParticipants(intentInvocation: IIntentInvocation): ResponseStreamParticipant[] {
 		const participants: ResponseStreamParticipant[] = [];
+
+		// 0. Show educational tips while Copilot is working
+		const tipParticipant = new ChatTipStreamParticipant(this._chatTipService);
+		participants.push(tipParticipant.createParticipant());
 
 		// 1. Tracking of code blocks. Currently used in stests. todo@connor4312:
 		// can we simplify this so it's not used otherwise?
