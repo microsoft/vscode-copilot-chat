@@ -8,6 +8,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -69,6 +70,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
 	) { }
 
 	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void {
@@ -103,6 +105,9 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		const startTime = Date.now();
 		let success = false;
 		let classification: PromptClassification | undefined;
+
+		// Gather context signals (outside try block for telemetry access)
+		const currentLanguage = this.tabsAndEditorsService.activeTextEditor?.document.languageId;
 
 		try {
 			const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
@@ -162,6 +167,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				sessionId: request.sessionId ?? '',
 				requestId: request.id ?? '',
 				modeName: request.modeInstructions2?.name,
+				currentLanguage: currentLanguage ?? '',
 				intent: classification?.intent ?? 'unknown',
 				domain: classification?.domain ?? 'unknown',
 				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
