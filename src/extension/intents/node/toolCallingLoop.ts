@@ -45,6 +45,45 @@ import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
 
+/**
+ * Input passed to the Stop hook.
+ */
+export interface StopHookInput {
+	/**
+	 * True when the agent is already continuing as a result of a stop hook.
+	 * Check this value or process the transcript to prevent the agent from running indefinitely.
+	 */
+	readonly stop_hook_active: boolean;
+}
+
+/**
+ * Output from the Stop hook.
+ */
+export interface StopHookOutput {
+	/**
+	 * Set to "block" to prevent the agent from stopping.
+	 * Omit or set to undefined to allow the agent to stop.
+	 */
+	readonly decision?: 'block';
+	/**
+	 * Required when decision is "block". Tells the agent why it should continue.
+	 */
+	readonly reason?: string;
+}
+
+/**
+ * Result of calling the stop hook.
+ */
+export interface StopHookResult {
+	/**
+	 * Whether the agent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reason the agent should continue, if shouldContinue is true.
+	 */
+	readonly reason?: string;
+}
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -74,6 +113,11 @@ export interface IToolCallingLoopOptions {
 	 * The current chat request
 	 */
 	request: ChatRequest;
+	/**
+	 * Whether this run was triggered by a stop hook blocking the previous stop.
+	 * Used to set stop_hook_active in the Stop hook input.
+	 */
+	stopHookActive?: boolean;
 }
 
 export interface IToolCallingResponseEvent {
@@ -169,6 +213,32 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
+	/**
+	 * Called before the loop stops to give hooks a chance to block the stop.
+	 * Override in subclasses to implement hook execution.
+	 * @param input The stop hook input containing stop_hook_active flag
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result indicating whether to continue and the reason
+	 */
+	protected async executeStopHook(_input: StopHookInput, _outputStream: ChatResponseStream | undefined, _token: CancellationToken | PauseController): Promise<StopHookResult> {
+		// Default implementation: allow stopping
+		return { shouldContinue: false };
+	}
+
+	/**
+	 * Shows a message when the stop hook blocks the agent from stopping.
+	 * Override in subclasses to customize the display.
+	 * @param outputStream The output stream for displaying messages
+	 * @param reason The reason the stop hook blocked stopping
+	 */
+	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
+		if (outputStream) {
+			outputStream.progress(l10n.t('Stop hook blocked: {0}', reason));
+		}
+		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
+	}
+
 	private async throwIfCancelled(token: CancellationToken | PauseController) {
 		if (await this.checkAsync(token)) {
 			throw new CancellationError();
@@ -179,6 +249,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		let stopHookActive = this.options.stopHookActive ?? false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -198,6 +269,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+					// Before stopping, execute the stop hook
+					const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
+					if (stopHookResult.shouldContinue && stopHookResult.reason) {
+						// The stop hook blocked stopping - show reason and continue
+						this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
+						stopHookActive = true;
+						continue;
+					}
 					lastResult = lastResult;
 					break;
 				}
