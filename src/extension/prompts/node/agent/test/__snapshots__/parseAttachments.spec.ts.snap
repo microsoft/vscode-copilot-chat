@@ -9,7 +9,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="file:folder" folderPath="/workspace/folder" />
 </attachments>
 <userRequest>
-list files in #file:folder (See <attachments> above for file contents. You may not need to search or read the file again.)
+list files in #file:folder
 </userRequest>
 "
 `;
@@ -66,7 +66,7 @@ Msg2
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -295,7 +295,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="sample.py" filePath="/workspace/sample.py" />
 </attachments>
 <userRequest>
-explain contents of #file:file.ts and other files (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain contents of #file:file.ts and other files
 </userRequest>
 "
 `;
@@ -364,7 +364,7 @@ MsgD
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -491,7 +491,7 @@ This is a prompt file
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -537,7 +537,7 @@ function example() {
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -573,7 +573,7 @@ This is a prompt file
 <attachment id="regular.ts" filePath="/workspace/regular.ts" />
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -650,7 +650,7 @@ def subtract
 
 </attachments>
 <userRequest>
-base (See <attachments> above for file contents. You may not need to search or read the file again.)
+base
 </userRequest>
 "
 `;
@@ -740,7 +740,7 @@ Unterminated string
 
 </attachments>
 <userRequest>
-Fix this error (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix this error
 </userRequest>
 "
 `;
@@ -817,7 +817,7 @@ def add(a, b):
 
 </attachments>
 <userRequest>
-explain #sym:add (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain #sym:add
 </userRequest>
 "
 `;
@@ -863,7 +863,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="file:folder" folderPath="/workspace/folder" />
 </attachments>
 <userRequest>
-list files in #file:folder (See <attachments> above for file contents. You may not need to search or read the file again.)
+list files in #file:folder
 </userRequest>
 "
 `;
@@ -920,7 +920,7 @@ Msg2
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -1149,7 +1149,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="sample.py" filePath="/workspace/sample.py" />
 </attachments>
 <userRequest>
-explain contents of #file:file.ts and other files (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain contents of #file:file.ts and other files
 </userRequest>
 "
 `;
@@ -1218,7 +1218,7 @@ MsgD
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -1345,7 +1345,7 @@ This is a prompt file
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -1391,7 +1391,7 @@ function example() {
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -1427,7 +1427,7 @@ This is a prompt file
 <attachment id="regular.ts" filePath="/workspace/regular.ts" />
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -1504,7 +1504,7 @@ def subtract
 
 </attachments>
 <userRequest>
-base (See <attachments> above for file contents. You may not need to search or read the file again.)
+base
 </userRequest>
 "
 `;
@@ -1594,7 +1594,7 @@ Unterminated string
 
 </attachments>
 <userRequest>
-Fix this error (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix this error
 </userRequest>
 "
 `;
@@ -1671,7 +1671,7 @@ def add(a, b):
 
 </attachments>
 <userRequest>
-explain #sym:add (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain #sym:add
 </userRequest>
 "
 `;
@@ -1717,7 +1717,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="file:folder" folderPath="/worktree/folder" />
 </attachments>
 <userRequest>
-list files in #file:folder (See <attachments> above for file contents. You may not need to search or read the file again.)
+list files in #file:folder
 </userRequest>
 "
 `;
@@ -1774,7 +1774,7 @@ Msg2
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -2003,7 +2003,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 <attachment id="sample.py" filePath="/worktree/sample.py" />
 </attachments>
 <userRequest>
-explain contents of #file:file.ts and other files (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain contents of #file:file.ts and other files
 </userRequest>
 "
 `;
@@ -2072,7 +2072,7 @@ MsgD
 
 </attachments>
 <userRequest>
-Fix these errors (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix these errors
 </userRequest>
 "
 `;
@@ -2199,7 +2199,7 @@ This is a prompt file
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -2245,7 +2245,7 @@ function example() {
 
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -2281,7 +2281,7 @@ This is a prompt file
 <attachment id="regular.ts" filePath="/worktree/regular.ts" />
 </attachments>
 <userRequest>
-Process these files (See <attachments> above for file contents. You may not need to search or read the file again.)
+Process these files
 </userRequest>
 "
 `;
@@ -2337,7 +2337,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 
 </attachments>
 <userRequest>
-base (See <attachments> above for file contents. You may not need to search or read the file again.)
+base
 </userRequest>
 "
 `;
@@ -2358,7 +2358,7 @@ Unterminated string
 
 </attachments>
 <userRequest>
-Fix this error (See <attachments> above for file contents. You may not need to search or read the file again.)
+Fix this error
 </userRequest>
 "
 `;
@@ -2426,7 +2426,7 @@ IMPORTANT: this context may or may not be relevant to your tasks. You should not
 
 </attachments>
 <userRequest>
-explain #sym:add (See <attachments> above for file contents. You may not need to search or read the file again.)
+explain #sym:add
 </userRequest>
 "
 `;
