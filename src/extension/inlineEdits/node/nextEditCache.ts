@@ -16,7 +16,6 @@ import { AnnotatedStringReplacement, StringEdit, StringReplacement } from '../..
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { checkEditConsistency, EditDataWithIndex, tryRebase } from '../common/editRebase';
-import { INesConfigs } from './nesConfigs';
 import { NextEditFetchRequest } from './nextEditProvider';
 
 export interface CachedEditOpts {
@@ -102,20 +101,20 @@ export class NextEditCache extends Disposable {
 		docCache.setNoNextEdit(documentContents, editWindow, source);
 	}
 
-	public lookupNextEdit(docId: DocumentId, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedOrRebasedEdit | undefined {
+	public lookupNextEdit(docId: DocumentId, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.lookupNextEdit(currentDocumentContents, currentSelection, nesConfigs);
+		return docCache.lookupNextEdit(currentDocumentContents, currentSelection);
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedOrRebasedEdit | undefined {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
 		const docCache = this._documentCaches.get(cachedEdit.docId);
 		if (!docCache) {
 			return undefined;
 		}
-		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesConfigs);
+		return docCache.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection);
 	}
 
 	public rejectedNextEdit(requestId: string): void {
@@ -124,12 +123,12 @@ export class NextEditCache extends Disposable {
 			.forEach(v => v.rejected = true);
 	}
 
-	public isRejectedNextEdit(docId: DocumentId, currentDocumentContents: StringText, edit: StringReplacement, nesConfigs: INesConfigs) {
+	public isRejectedNextEdit(docId: DocumentId, currentDocumentContents: StringText, edit: StringReplacement) {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return false;
 		}
-		return docCache.isRejectedNextEdit(currentDocumentContents, edit, nesConfigs);
+		return docCache.isRejectedNextEdit(currentDocumentContents, edit);
 	}
 
 	public evictedCachedEdit(cachedEdit: CachedEdit) {
@@ -218,7 +217,7 @@ class DocumentEditCache {
 		}
 	}
 
-	public lookupNextEdit(currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedOrRebasedEdit | undefined {
+	public lookupNextEdit(currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedOrRebasedEdit | undefined {
 		// TODO@chrmarti: Update entries i > 1 with user edits and edit window and start tracking.
 		const key = this._getKey(currentDocumentContents.value);
 		const cachedEdit = this._sharedCache.get(key);
@@ -231,7 +230,7 @@ class DocumentEditCache {
 			return cachedEdit;
 		}
 		for (const cachedEdit of this._trackedCachedEdits) {
-			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesConfigs);
+			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection);
 			if (rebased) {
 				return rebased;
 			}
@@ -239,11 +238,11 @@ class DocumentEditCache {
 		return undefined;
 	}
 
-	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedEdit | undefined {
+	public tryRebaseCacheEntry(cachedEdit: CachedEdit, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[]): CachedEdit | undefined {
 		const logger = this._logger.createSubLogger('tryRebaseCacheEntry');
 		if (cachedEdit.userEditSince && !cachedEdit.rebaseFailed) {
 			const originalEdits = cachedEdit.edits || (cachedEdit.edit ? [cachedEdit.edit] : []);
-			const res = tryRebase(cachedEdit.documentBeforeEdit.value, cachedEdit.editWindow, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger, nesConfigs);
+			const res = tryRebase(cachedEdit.documentBeforeEdit.value, cachedEdit.editWindow, originalEdits, cachedEdit.detailedEdits, cachedEdit.userEditSince, currentDocumentContents.value, currentSelection, 'strict', logger);
 			if (res === 'rebaseFailed') {
 				cachedEdit.rebaseFailed = true;
 			} else if (res === 'inconsistentEdits' || res === 'error') {
@@ -251,7 +250,7 @@ class DocumentEditCache {
 			} else if (res === 'outsideEditWindow') {
 				// miss
 			} else if (res.length) {
-				if (!cachedEdit.rejected && this.isRejectedNextEdit(currentDocumentContents, res[0].rebasedEdit, nesConfigs)) {
+				if (!cachedEdit.rejected && this.isRejectedNextEdit(currentDocumentContents, res[0].rebasedEdit)) {
 					cachedEdit.rejected = true;
 				}
 				return { ...cachedEdit, ...res[0] };
@@ -262,7 +261,7 @@ class DocumentEditCache {
 		return undefined;
 	}
 
-	public isRejectedNextEdit(currentDocumentContents: StringText, edit: StringReplacement, nesConfigs: INesConfigs) {
+	public isRejectedNextEdit(currentDocumentContents: StringText, edit: StringReplacement) {
 		const logger = this._logger.createSubLogger('isRejectedNextEdit');
 		const resultEdit = edit.removeCommonSuffixAndPrefix(currentDocumentContents.value);
 		for (const rejectedEdit of this._trackedCachedEdits.filter(edit => edit.rejected)) {
@@ -273,7 +272,7 @@ class DocumentEditCache {
 			if (!edits.length) {
 				continue; // cached 'no edits'
 			}
-			const rejectedEdits = tryRebase(rejectedEdit.documentBeforeEdit.value, undefined, edits, rejectedEdit.detailedEdits, rejectedEdit.userEditSince, currentDocumentContents.value, [], 'lenient', logger, nesConfigs);
+			const rejectedEdits = tryRebase(rejectedEdit.documentBeforeEdit.value, undefined, edits, rejectedEdit.detailedEdits, rejectedEdit.userEditSince, currentDocumentContents.value, [], 'lenient', logger);
 			if (typeof rejectedEdits === 'string') {
 				continue;
 			}
