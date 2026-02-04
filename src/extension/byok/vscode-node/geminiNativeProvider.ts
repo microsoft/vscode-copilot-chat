@@ -312,7 +312,12 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 				// This ensures we capture prompt token info even if stream is cancelled mid-way
 				if (chunk.usageMetadata) {
 					const promptTokens = chunk.usageMetadata.promptTokenCount;
-					const completionTokens = chunk.usageMetadata.candidatesTokenCount;
+					// For thinking models (e.g., gemini-3-pro-high), candidatesTokenCount only includes
+					// regular output tokens. thoughtsTokenCount contains the thinking/reasoning tokens.
+					// We include both in the completion token count.
+					const candidateTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
+					const thoughtTokens = chunk.usageMetadata.thoughtsTokenCount ?? 0;
+					const completionTokens = candidateTokens + thoughtTokens > 0 ? candidateTokens + thoughtTokens : undefined;
 					const cachedTokens = chunk.usageMetadata.cachedContentTokenCount;
 
 					if (!usage) {
