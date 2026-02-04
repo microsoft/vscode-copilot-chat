@@ -346,9 +346,9 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			try {
-				await this._chatHookService.executeHook('userPromptSubmitted', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
+				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
 			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing userPromptSubmitted hook', error);
+				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
