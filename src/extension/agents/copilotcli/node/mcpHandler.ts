@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Session } from '@github/copilot/sdk';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -13,29 +14,9 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { McpHttpServerDefinition, McpStdioServerDefinition } from '../../../../vscodeTypes';
 import { GitHubMcpDefinitionProvider } from '../../../githubMcp/common/githubMcpDefinitionProvider';
 
+const toolInvalidCharRe = /[^a-z0-9_-]/gi;
 
-// MCP Server Config types (not exported by @github/copilot/sdk)
-interface MCPServerConfigBase {
-	tools: string[];
-	type?: string;
-	isDefaultServer?: boolean;
-}
-
-interface MCPLocalServerConfig extends MCPServerConfigBase {
-	type?: 'stdio';
-	command: string;
-	args: string[];
-	env?: Record<string, string>;
-	cwd?: string;
-}
-
-interface MCPRemoteServerConfig extends MCPServerConfigBase {
-	type: 'http' | 'sse';
-	url: string;
-	headers?: Record<string, string>;
-}
-
-export type MCPServerConfig = MCPLocalServerConfig | MCPRemoteServerConfig;
+export type MCPServerConfig = NonNullable<Session['mcpServers']>[string];
 
 export interface ICopilotCLIMCPHandler {
 	readonly _serviceBrand: undefined;
@@ -63,14 +44,18 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			if (definition instanceof McpStdioServerDefinition) {
 				const localConfig = this.processLocalServerConfig(definition);
 				if (localConfig) {
-					const id = processedConfig[definition.label] ? `${definition.label}-${generateUuid()}` : definition.label;
-					processedConfig[id] = localConfig;
+					const id = this.generateUniqueServerId(definition.label, processedConfig);
+					if (id) {
+						processedConfig[id] = localConfig;
+					}
 				}
 			} else {
 				const remoteConfig = this.processRemoteServerConfig(definition);
 				if (remoteConfig) {
-					const id = processedConfig[definition.label] ? `${definition.label}-${generateUuid()}` : definition.label;
-					processedConfig[id] = remoteConfig;
+					const id = this.generateUniqueServerId(definition.label, processedConfig);
+					if (id) {
+						processedConfig[id] = remoteConfig;
+					}
 				}
 			}
 		});
@@ -80,8 +65,50 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		return Object.keys(processedConfig).length > 0 ? processedConfig : undefined;
 	}
 
+	private normalizeServerName(originalName: string): string | undefined {
+		// Convert to lowercase and replace invalid characters with underscore
+		let normalized = originalName.toLowerCase().replace(toolInvalidCharRe, '_');
 
-	private processLocalServerConfig(def: McpStdioServerDefinition): MCPLocalServerConfig | undefined {
+		// Trim leading and trailing underscores
+		normalized = normalized.replace(/^_+|_+$/g, '');
+
+		// Return undefined if normalization results in empty string
+		if (!normalized) {
+			this.logService.error(`[CopilotCLIMCPHandler] Failed to normalize server name '${originalName}' - result is empty`);
+			return undefined;
+		}
+
+		if (normalized !== originalName) {
+			this.logService.trace(`[CopilotCLIMCPHandler] Normalized server '${originalName}' to '${normalized}'`);
+		}
+
+		return normalized;
+	}
+
+	private generateUniqueServerId(label: string, existingConfig: Record<string, MCPServerConfig>): string | undefined {
+		const baseId = this.normalizeServerName(label);
+
+		// Return undefined if normalization failed
+		if (!baseId) {
+			return undefined;
+		}
+
+		// If no collision, use the base ID
+		if (!(baseId in existingConfig)) {
+			return baseId;
+		}
+
+		// Handle collision by appending normalized UUID
+		const uuid = generateUuid();
+		const normalizedUuid = uuid.toLowerCase().replace(/-/g, '').substring(0, 8);
+		const uniqueId = `${baseId}_${normalizedUuid}`;
+
+		this.logService.trace(`[CopilotCLIMCPHandler] Generated unique ID '${uniqueId}' for server '${label}' due to collision`);
+
+		return uniqueId;
+	}
+
+	private processLocalServerConfig(def: McpStdioServerDefinition): MCPServerConfig | undefined {
 		const serverName = def.label;
 		const command = def.command;
 		if (!command) {
@@ -93,23 +120,28 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 		const env = Object.fromEntries(Object.entries(def.env).filter(([, value]) => typeof value === 'string').map(([key, value]) => [key, String(value)]));
 		const cwd = def.cwd?.fsPath;
 
-		return { type: 'stdio', command, args, env, cwd, tools: ['*'] };
+		return { type: 'stdio', command, args, env, cwd, tools: ['*'], displayName: def.label };
 	}
 
-	private processRemoteServerConfig(def: McpHttpServerDefinition): MCPRemoteServerConfig | undefined {
+	private processRemoteServerConfig(def: McpHttpServerDefinition): MCPServerConfig | undefined {
 		const url = def.uri.toString();
 
 		const headers = def.headers;
 
-		return { type: 'http', url, headers, tools: ['*'] };
+		return { type: 'http', url, headers, tools: ['*'], displayName: def.label };
 	}
 
 	private async addBuiltInGitHubServer(config: Record<string, MCPServerConfig>): Promise<void> {
 		try {
+			const githubId = this.normalizeServerName('gitHub');
+			if (!githubId) {
+				return;
+			}
+
 			// Override only if no GitHub MCP server is already configured
-			if (config['github'] && config['github'].type === 'http') {
+			if (config[githubId] && config[githubId].type === 'http') {
 				// We have headers, do not override
-				if (Object.keys(config['github'].headers || {}).length > 0) {
+				if (Object.keys(config[githubId].headers || {}).length > 0) {
 					return;
 				}
 			}
@@ -132,12 +164,13 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 			// Resolve the definition to get the access token
 			const resolvedDefinition = await definitionProvider.resolveMcpServerDefinition(definition, {} as CancellationToken);
 
-			config['github'] = {
+			config[githubId] = {
 				type: 'http',
 				url: resolvedDefinition.uri.toString(),
 				isDefaultServer: true,
 				headers: resolvedDefinition.headers,
-				tools: ['*']
+				tools: ['*'],
+				displayName: 'Github',
 			};
 			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
 		} catch (error) {

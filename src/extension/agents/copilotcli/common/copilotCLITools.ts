@@ -226,7 +226,11 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
 	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
 
-export type ToolCall = ToolInfo & { toolCallId: string };
+export type ToolCall = ToolInfo & {
+	toolCallId: string;
+	mcpServerName?: string | undefined;
+	mcpToolName?: string | undefined;
+};
 export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 function isInstructionAttachmentPath(path: string): boolean {
@@ -591,13 +595,27 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 				invocation[0].toolSpecificData = {
 					input,
 					output
-				} as ChatMcpToolInvocationData;
+				} satisfies ChatMcpToolInvocationData;
 			}
 		}
 
 		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
 			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
 			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+		} else if (toolCall.mcpServerName && toolCall.mcpToolName) {
+			const toolCall = invocation[1];
+			// Use tool arguments as input, formatted as JSON
+			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
+			const mimeType = 'text/plain';
+			const output: McpToolInvocationContentData[] = [new McpToolInvocationContentData(
+				new TextEncoder().encode(event.data.result?.content || ''),
+				mimeType
+			)];
+
+			invocation[0].toolSpecificData = {
+				input,
+				output
+			} satisfies ChatMcpToolInvocationData;
 		}
 	}
 
@@ -607,12 +625,17 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 /**
  * Creates a formatted tool invocation part for CopilotCLI tools
  */
-export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function createCopilotCLIToolInvocation(data: {
+	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
+	mcpToolName?: string | undefined;
+}, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
-		const invocation = new ChatToolInvocationPart(data.toolName ?? 'unknown', data.toolCallId ?? '', false);
+		const mcpServer = l10n.t('MCP Server');
+		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
-		formatGenericInvocation(invocation, data as ToolCall);
+		invocation.invocationMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
 		return invocation;
 	}
 
@@ -875,9 +898,6 @@ function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, tool
 	invocation.originMessage = toolCall.arguments.reply;
 }
 
-function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall): void {
-	invocation.invocationMessage = l10n.t("Used tool: {0}", toolCall.toolName ?? 'unknown');
-}
 
 /**
  * Parse markdown todo list into structured ChatTodoToolInvocationData.
