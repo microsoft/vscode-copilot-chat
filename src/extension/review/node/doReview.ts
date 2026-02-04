@@ -88,8 +88,11 @@ export async function handleReviewResult(
 	}
 }
 
+// Module-level variable to track in-progress review across all sessions.
+// This ensures that starting a new review cancels any previous in-progress review.
+let inProgress: CancellationTokenSource | undefined;
+
 export class ReviewSession {
-	private inProgress?: CancellationTokenSource;
 
 	constructor(
 		@IScopeSelector private readonly scopeSelector: IScopeSelector,
@@ -166,7 +169,9 @@ export class ReviewSession {
 				if (isCancellationError(err)) {
 					return undefined;
 				}
-				throw err;
+				// Original behavior: non-cancellation errors are silently ignored
+				// and we fall through with whatever selection we have
+				// Possibly causes https://github.com/microsoft/vscode/issues/276240
 			}
 		}
 		return selection;
@@ -187,10 +192,10 @@ export class ReviewSession {
 			title,
 			cancellable: true,
 		}, async (_progress, progressToken) => {
-			if (this.inProgress) {
-				this.inProgress.cancel();
+			if (inProgress) {
+				inProgress.cancel();
 			}
-			const tokenSource = this.inProgress = new CancellationTokenSource(
+			const tokenSource = inProgress = new CancellationTokenSource(
 				cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken
 			);
 
@@ -245,8 +250,8 @@ export class ReviewSession {
 			this.logService.error(err, 'Error during code review');
 			return { type: 'error', reason: err.message, severity: err.severity };
 		} finally {
-			if (tokenSource === this.inProgress) {
-				this.inProgress = undefined;
+			if (tokenSource === inProgress) {
+				inProgress = undefined;
 			}
 			tokenSource.dispose();
 		}

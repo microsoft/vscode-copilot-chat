@@ -422,9 +422,10 @@ interface ParsedResponse {
 
 /**
  * Type guard to check if a raw reference has a valid type field.
+ * Matches original behavior: filters to refs where ref.type is truthy.
  */
 function hasType(ref: RawReference): ref is RawReference & { type: string } {
-	return typeof ref.type === 'string';
+	return !!ref.type;
 }
 
 export function parseLine(line: string): ResponseReference[] {
