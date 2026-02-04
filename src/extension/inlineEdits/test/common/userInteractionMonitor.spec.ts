@@ -10,6 +10,8 @@ import { InMemoryConfigurationService } from '../../../../platform/configuration
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { ActionKind, MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
 
@@ -47,13 +49,15 @@ describe('UserInteractionMonitor', () => {
 	let configurationService: MockConfigurationService;
 	let experimentationService: IExperimentationService;
 	let logService: ILogService;
+	let telemetryService: ITelemetryService;
 	let monitor: TestUserInteractionMonitor;
 
 	beforeEach(() => {
 		configurationService = new MockConfigurationService();
 		experimentationService = new NullExperimentationService();
 		logService = new TestLogService();
-		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
+		telemetryService = new NullTelemetryService();
+		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService, telemetryService);
 	});
 
 	describe('history logging', () => {
@@ -218,7 +222,7 @@ describe('UserInteractionMonitor', () => {
 			const levelRejectionsRecent = monitor.getAggressivenessLevel().aggressivenessLevel;
 
 			// Reset and do opposite order
-			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
+			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService, telemetryService);
 			for (let i = 0; i < 5; i++) {
 				monitor.handleRejection();
 			}
