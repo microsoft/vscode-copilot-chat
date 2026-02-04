@@ -472,9 +472,15 @@ export function generateScopePromptSection(): string {
 	return header + categories;
 }
 
+/** Classification guidance for the LLM */
+const CLASSIFICATION_GUIDANCE = `# CLASSIFICATION GUIDANCE
+
+Keywords, signals, and examples are **illustrative, not exhaustive**. Focus on semantic intent, not keyword matching.`;
+
 /** Generate full taxonomy prompt */
 export function generateTaxonomyPrompt(): string {
 	return [
+		CLASSIFICATION_GUIDANCE,
 		generateIntentPromptSection(),
 		generateDomainPromptSection(),
 		'# TIME ESTIMATE',
