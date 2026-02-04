@@ -212,6 +212,12 @@ export const INTENT_DEFINITIONS = {
 		examples: ['Hello', 'What can you do?', 'Help'],
 		notes: 'Use when message does not clearly fit other categories',
 	},
+	unknown_intent: {
+		description: 'Intent cannot be determined from message',
+		keywords: [],
+		examples: [],
+		notes: 'Use when the request is too ambiguous to classify',
+	},
 } as const satisfies Record<string, CategoryDefinition>;
 
 // ============================================================================
