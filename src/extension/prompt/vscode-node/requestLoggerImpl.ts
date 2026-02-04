@@ -637,6 +637,14 @@ export class RequestLogger extends AbstractRequestLogger {
 				`</details>`
 			);
 		}
+		if (entry.customMetadata) {
+			for (const [key, value] of Object.entries(entry.customMetadata)) {
+				if (value !== undefined) {
+					const paddedKey = key.padEnd(16);
+					result.push(`${paddedKey} : ${value}`);
+				}
+			}
+		}
 		result.push(`</code></pre>`);
 
 		result.push(`## Request Messages`);

@@ -58,6 +58,7 @@ export interface IStatelessNextEditProvider {
 	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
+	handleIgnored?(): void;
 }
 
 export class StatelessNextEditRequest<TFirstEdit = any> {
@@ -368,9 +369,13 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineDistance: number | undefined;
 	};
 
-	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness) */
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
+
+	/* edit intent telemetry (only set when promptingStrategy is Xtab275EditIntent or Xtab275EditIntentShort) */
+	readonly editIntent: string | undefined;
+	readonly editIntentParseError: string | undefined;
 
 	/* cursor jump info */
 	readonly cursorJumpModelName: string | undefined;
@@ -449,6 +454,8 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			editIntent: this._editIntent,
+			editIntentParseError: this._editIntentParseError,
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
@@ -606,6 +613,18 @@ export class StatelessNextEditTelemetryBuilder {
 	private _xtabUserHappinessScore: number | undefined;
 	public setXtabUserHappinessScore(score: number): this {
 		this._xtabUserHappinessScore = score;
+		return this;
+	}
+
+	private _editIntent: string | undefined;
+	public setEditIntent(editIntent: string): this {
+		this._editIntent = editIntent;
+		return this;
+	}
+
+	private _editIntentParseError: string | undefined;
+	public setEditIntentParseError(error: string): this {
+		this._editIntentParseError = error;
 		return this;
 	}
 }
