@@ -1690,17 +1690,24 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return {};
 		}
 
+		// Look up the partner agent for telemetry
+		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
+		const partnerAgentId = chatResource ? this.sessionPartnerAgentMap.get(chatResource) : undefined;
+		const partnerAgent = HARDCODED_PARTNER_AGENTS.find(agent => agent.id === partnerAgentId);
+
 		/* __GDPR__
 			"copilotcloud.chat.invoke" : {
 				"owner": "joshspicer",
 				"comment": "Event sent when a Copilot Cloud chat request is made.",
 				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
-				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." }
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
+				"partnerAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The partner agent name (e.g., Copilot, Claude, Codex)." }
 			}
 		*/
 		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
 			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
-			isUntitled: String(context.chatSessionContext?.isUntitled)
+			isUntitled: String(context.chatSessionContext?.isUntitled),
+			partnerAgent: partnerAgent?.name ?? 'unknown'
 		});
 
 		// Follow up
