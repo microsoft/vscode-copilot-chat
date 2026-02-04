@@ -28,7 +28,7 @@ import { createFormattedToolInvocation } from '../common/toolInvocationFormatter
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { buildHooksFromRegistry } from './hooks/index';
+import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -396,7 +396,8 @@ export class ClaudeCodeSession extends Disposable {
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
 					toolInvocationToken: this._currentRequest.toolInvocationToken,
-					permissionMode: this._currentPermissionMode
+					permissionMode: this._currentPermissionMode,
+					stream: this._currentRequest.stream
 				});
 			},
 			systemPrompt: {
