@@ -588,7 +588,6 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
 			if (mcpContent && mcpContent.length > 0) {
 				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
-				const toolCall = invocation[1];
 				// Use tool arguments as input, formatted as JSON
 				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
 
