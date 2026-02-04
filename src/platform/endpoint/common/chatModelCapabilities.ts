@@ -255,6 +255,32 @@ export function isGptFamily(model: LanguageModelChat | IChatEndpoint | string | 
 }
 
 /**
+ * Check if the model is a Gemini model
+ */
+export function isGeminiFamily(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
+	if (!model) {
+		return false;
+	}
+
+	const family = typeof model === 'string' ? model : model.family;
+	// Use case-insensitive startsWith to match Gemini models more precisely
+	// This matches: gemini, Gemini, gemini-1.5-pro, etc.
+	return family?.toLowerCase().startsWith('gemini') ?? false;
+}
+
+/**
+ * Supported image MIME types for Gemini models
+ * See: https://ai.google.dev/gemini-api/docs/image-understanding#supported-formats
+ */
+export const GEMINI_SUPPORTED_IMAGE_MIME_TYPES = [
+	'image/png',
+	'image/jpeg',
+	'image/webp',
+	'image/heic',
+	'image/heif'
+] as const;
+
+/**
  * Any GPT-5.1+ model
  */
 export function isGpt51Family(model: LanguageModelChat | IChatEndpoint | string | undefined): boolean {
@@ -264,6 +290,21 @@ export function isGpt51Family(model: LanguageModelChat | IChatEndpoint | string 
 
 	const family = typeof model === 'string' ? model : model.family;
 	return !!family.startsWith('gpt-5.1');
+}
+
+/**
+ * Check if a model supports a given image MIME type
+ * Gemini models do not support GIF images
+ * See: https://ai.google.dev/gemini-api/docs/image-understanding#supported-formats
+ */
+export function modelSupportsImageMimeType(model: LanguageModelChat | IChatEndpoint, mimeType: string): boolean {
+	if (isGeminiFamily(model)) {
+		// Gemini supports: PNG, JPEG, WEBP, HEIC, HEIF (but NOT GIF)
+		return GEMINI_SUPPORTED_IMAGE_MIME_TYPES.includes(mimeType as any);
+	}
+
+	// Other models support all common image formats
+	return true;
 }
 
 /**
