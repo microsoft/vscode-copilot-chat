@@ -5,7 +5,6 @@
 
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -30,16 +29,6 @@ import { isUntitledSessionId } from '../common/utils';
  * Message shown when user needs to trust a folder to continue.
  */
 const UNTRUSTED_FOLDER_MESSAGE = l10n.t('The selected folder is not trusted. Please trust the folder to continue with the {0}.', 'Background Agent');
-
-/**
- * Maximum number of MRU items to return.
- */
-const MAX_MRU_ITEMS = 10;
-
-/**
- * Maximum number of MRU items to check for existence (performance optimization).
- */
-const MAX_MRU_ITEMS_TO_CHECK = 20;
 
 /**
  * Implementation of IFolderRepositoryManager.
@@ -71,7 +60,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 		@IGitService private readonly gitService: IGitService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -331,7 +319,7 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 	/**
 	 * @inheritdoc
 	 */
-	async getFolderMRU(): Promise<FolderRepositoryMRUEntry[]> {
+	getFolderMRU(): FolderRepositoryMRUEntry[] {
 		const latestReposAndFolders: FolderRepositoryMRUEntry[] = [];
 		const seenUris = new ResourceSet();
 
@@ -343,7 +331,8 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			latestReposAndFolders.push({
 				folder: uri,
 				repository: undefined,
-				lastAccessed: lastAccessTime
+				lastAccessed: lastAccessTime,
+				isUntitledSessionSelection: true
 			});
 		}
 
@@ -356,7 +345,8 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			latestReposAndFolders.push({
 				folder: repo.rootUri,
 				repository: repo.rootUri,
-				lastAccessed: repo.lastAccessTime
+				lastAccessed: repo.lastAccessTime,
+				isUntitledSessionSelection: false
 			});
 		}
 
@@ -369,27 +359,27 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 			latestReposAndFolders.push({
 				folder: folder.folder,
 				repository: undefined,
-				lastAccessed: folder.lastAccessTime
+				lastAccessed: folder.lastAccessTime,
+				isUntitledSessionSelection: false
 			});
 		}
 
-		// Filter out items that no longer exist (check first N for performance)
-		const existingItems: FolderRepositoryMRUEntry[] = [];
-		await Promise.all(
-			latestReposAndFolders.slice(0, MAX_MRU_ITEMS_TO_CHECK).map(async (item) => {
-				if (await this.checkPathExists(item.folder)) {
-					existingItems.push(item);
-				}
-			})
-		);
-
 		// Sort by last access time descending and limit
-		existingItems.sort((a, b) => b.lastAccessed - a.lastAccessed);
+		latestReposAndFolders.sort((a, b) => b.lastAccessed - a.lastAccessed);
 
-		return existingItems.slice(0, MAX_MRU_ITEMS);
+		return latestReposAndFolders;
 	}
 
+	async deleteMRUEntry(folder: vscode.Uri): Promise<void> {
+		// Remove from untitled session folders if present
+		for (const [sessionId, entry] of this._untitledSessionFolders.entries()) {
+			if (isEqual(entry.uri, folder)) {
+				this._untitledSessionFolders.delete(sessionId);
+			}
+		}
 
+		await this.workspaceFolderService.deleteRecentFolder(folder);
+	}
 	/**
 	 * Get the last used folder ID in untitled workspace.
 	 * Used for defaulting the selection in the folder dropdown.
@@ -414,18 +404,6 @@ export class FolderRepositoryManager extends Disposable implements IFolderReposi
 		}
 
 		return true;
-	}
-
-	/**
-	 * Check if a path exists and is a directory.
-	 */
-	private async checkPathExists(filePath: vscode.Uri): Promise<boolean> {
-		try {
-			const stat = await this.fileSystemService.stat(filePath);
-			return stat.type === vscode.FileType.Directory;
-		} catch {
-			return false;
-		}
 	}
 
 	/**

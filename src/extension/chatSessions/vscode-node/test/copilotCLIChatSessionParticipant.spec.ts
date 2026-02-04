@@ -188,7 +188,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let mcpHandler: ICopilotCLIMCPHandler;
 	let folderRepositoryManager: FolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
-	let fileSystemService: MockFileSystemService;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -216,7 +215,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git = new FakeGitService();
 		models = new FakeModels();
 		cliSessionServiceForFolderManager = new FakeCopilotCLISessionService();
-		fileSystemService = new MockFileSystemService();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
@@ -267,7 +265,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,
 			git,
 			workspaceService,
-			fileSystemService,
 			logService
 		);
 		participant = new CopilotCLIChatSessionParticipant(

@@ -5,7 +5,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -19,28 +18,6 @@ import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWork
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
 import { FolderRepositoryManager } from '../folderRepositoryManagerImpl';
-
-/**
- * Mock file system service that tracks which paths exist.
- */
-class MockTestFileSystemService extends mock<IFileSystemService>() {
-	private _existingPaths = new Set<string>();
-
-	override async stat(resource: vscode.Uri): Promise<vscode.FileStat> {
-		if (this._existingPaths.has(resource.fsPath)) {
-			return { type: vscode.FileType.Directory, ctime: 0, mtime: 0, size: 0 };
-		}
-		throw new Error('File not found');
-	}
-
-	addExistingPath(path: string): void {
-		this._existingPaths.add(path);
-	}
-
-	clearPaths(): void {
-		this._existingPaths.clear();
-	}
-}
 
 /**
  * Fake implementation of IChatSessionWorktreeService for testing.
@@ -86,6 +63,10 @@ class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFo
 
 	override deleteTrackedWorkspaceFolder = vi.fn(async (sessionId: string): Promise<void> => {
 		this._sessionWorkspaceFolders.delete(sessionId);
+	});
+
+	override deleteRecentFolder = vi.fn(async (folder: vscode.Uri): Promise<void> => {
+		this._recentFolders = this._recentFolders.filter(entry => entry.folder.fsPath !== folder.fsPath);
 	});
 
 	override getSessionWorkspaceFolder = vi.fn((sessionId: string): vscode.Uri | undefined => {
@@ -221,7 +202,7 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 		};
 	});
 
-	override getFolderMRU = vi.fn(async () => {
+	override getFolderMRU = vi.fn(() => {
 		return [];
 	});
 
@@ -252,7 +233,6 @@ describe('FolderRepositoryManager', () => {
 	let sessionService: FakeCopilotCLISessionService;
 	let gitService: FakeGitService;
 	let workspaceService: MockWorkspaceService;
-	let fileSystemService: MockTestFileSystemService;
 	let logService: ILogService;
 
 	beforeEach(() => {
@@ -261,7 +241,6 @@ describe('FolderRepositoryManager', () => {
 		sessionService = new FakeCopilotCLISessionService();
 		gitService = new FakeGitService();
 		workspaceService = new MockWorkspaceService([URI.file('/workspace')]);
-		fileSystemService = new MockTestFileSystemService();
 		logService = new class extends mock<ILogService>() {
 			override trace = vi.fn();
 			override info = vi.fn();
@@ -275,7 +254,6 @@ describe('FolderRepositoryManager', () => {
 			sessionService,
 			gitService,
 			workspaceService,
-			fileSystemService,
 			logService
 		);
 	});
@@ -527,7 +505,6 @@ describe('FolderRepositoryManager', () => {
 				sessionService,
 				gitService,
 				workspaceService,
-				fileSystemService,
 				logService
 			);
 
@@ -549,12 +526,7 @@ describe('FolderRepositoryManager', () => {
 				{ folder: vscode.Uri.file('/folder1'), lastAccessTime: 1500 }
 			]);
 
-			// Mock file existence check
-			fileSystemService.addExistingPath(vscode.Uri.file('/repo1').fsPath);
-			fileSystemService.addExistingPath(vscode.Uri.file('/repo2').fsPath);
-			fileSystemService.addExistingPath(vscode.Uri.file('/folder1').fsPath);
-
-			const result = await manager.getFolderMRU();
+			const result = manager.getFolderMRU();
 
 			// Should have items from both sources
 			expect(result.length).toBeGreaterThan(0);
@@ -569,9 +541,7 @@ describe('FolderRepositoryManager', () => {
 				{ folder: duplicateUri, lastAccessTime: 2000 }
 			]);
 
-			fileSystemService.addExistingPath(vscode.Uri.file('/same/path').fsPath);
-
-			const result = await manager.getFolderMRU();
+			const result = manager.getFolderMRU();
 
 			// Should only have one entry for the duplicate path
 			const paths = result.map(r => r.folder.fsPath);
@@ -586,28 +556,11 @@ describe('FolderRepositoryManager', () => {
 				{ rootUri: vscode.Uri.file('/middle'), lastAccessTime: 2000 }
 			]);
 
-			fileSystemService.addExistingPath(vscode.Uri.file('/old').fsPath);
-			fileSystemService.addExistingPath(vscode.Uri.file('/new').fsPath);
-			fileSystemService.addExistingPath(vscode.Uri.file('/middle').fsPath);
-
-			const result = await manager.getFolderMRU();
+			const result = manager.getFolderMRU();
 
 			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/new').fsPath);
 			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/middle').fsPath);
 			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/old').fsPath);
-		});
-
-		it('limits to 10 items', async () => {
-			const repos = [];
-			for (let i = 0; i < 15; i++) {
-				repos.push({ rootUri: vscode.Uri.file(`/repo${i}`), lastAccessTime: i * 100 });
-				fileSystemService.addExistingPath(vscode.Uri.file(`/repo${i}`).fsPath);
-			}
-			gitService.setTestRecentRepositories(repos);
-
-			const result = await manager.getFolderMRU();
-
-			expect(result.length).toBeLessThanOrEqual(10);
 		});
 	});
 
@@ -625,6 +578,102 @@ describe('FolderRepositoryManager', () => {
 		});
 	});
 
+	describe('deleteMRUEntry', () => {
+		it('removes entry from untitled session folders', async () => {
+			const sessionId = 'untitled:test-123';
+			const folderUri = vscode.Uri.file('/my/folder');
+
+			manager.setUntitledSessionFolder(sessionId, folderUri);
+			expect(manager.getUntitledSessionFolder(sessionId)).toBeDefined();
+
+			await manager.deleteMRUEntry(folderUri);
+
+			expect(manager.getUntitledSessionFolder(sessionId)).toBeUndefined();
+		});
+
+		it('removes entry from workspace folder service', async () => {
+			const folderUri = vscode.Uri.file('/workspace/folder');
+
+			workspaceFolderService.setTestRecentFolders([
+				{ folder: folderUri, lastAccessTime: Date.now() }
+			]);
+
+			// Verify it's there before deletion
+			const result = manager.getFolderMRU();
+			expect(result.length).toBeGreaterThan(0);
+
+			await manager.deleteMRUEntry(folderUri);
+
+			// Verify deleteRecentFolder was called on workspace folder service
+			expect((workspaceFolderService.deleteRecentFolder as any).mock.calls.length).toBe(1);
+		});
+
+		it('handles URI equality comparison', async () => {
+			const folderPath = '/my/folder';
+			const sessionId = 'untitled:test-456';
+
+			manager.setUntitledSessionFolder(sessionId, vscode.Uri.file(folderPath));
+
+			// Delete using a different URI instance with same path
+			await manager.deleteMRUEntry(vscode.Uri.file(folderPath));
+
+			expect(manager.getUntitledSessionFolder(sessionId)).toBeUndefined();
+		});
+
+		it('removes all matching entries', async () => {
+			const folderUri = vscode.Uri.file('/duplicate/folder');
+			const session1 = 'untitled:dup-1';
+			const session2 = 'untitled:dup-2';
+
+			manager.setUntitledSessionFolder(session1, folderUri);
+			manager.setUntitledSessionFolder(session2, folderUri);
+
+			await manager.deleteMRUEntry(folderUri);
+
+			expect(manager.getUntitledSessionFolder(session1)).toBeUndefined();
+			expect(manager.getUntitledSessionFolder(session2)).toBeUndefined();
+		});
+
+		it('does not affect other folders when deleting one', async () => {
+			const folder1 = vscode.Uri.file('/folder/1');
+			const folder2 = vscode.Uri.file('/folder/2');
+			const session1 = 'untitled:test-1';
+			const session2 = 'untitled:test-2';
+
+			manager.setUntitledSessionFolder(session1, folder1);
+			manager.setUntitledSessionFolder(session2, folder2);
+
+			await manager.deleteMRUEntry(folder1);
+
+			expect(manager.getUntitledSessionFolder(session1)).toBeUndefined();
+			expect(manager.getUntitledSessionFolder(session2)).toBeDefined();
+		});
+
+		it('handles non-existent folder deletion gracefully', async () => {
+			const nonExistentUri = vscode.Uri.file('/non/existent/path');
+
+			// Should not throw
+			await expect(manager.deleteMRUEntry(nonExistentUri)).resolves.toBeUndefined();
+		});
+
+		it('deduplicates after deletion from untitled session folders', async () => {
+			const folderUri = vscode.Uri.file('/my/folder');
+
+			manager.setUntitledSessionFolder('untitled:1', folderUri);
+			manager.setUntitledSessionFolder('untitled:2', folderUri);
+
+			let mru = manager.getFolderMRU();
+			const beforeCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
+
+			await manager.deleteMRUEntry(folderUri);
+
+			mru = manager.getFolderMRU();
+			const afterCount = mru.filter(entry => entry.folder.fsPath === folderUri.fsPath).length;
+
+			expect(afterCount).toBeLessThan(beforeCount);
+		});
+	});
+
 	describe('edge cases', () => {
 		it('handles empty workspace scenarios', async () => {
 			// Create manager with no workspace folders
@@ -635,7 +684,6 @@ describe('FolderRepositoryManager', () => {
 				sessionService,
 				gitService,
 				workspaceService,
-				fileSystemService,
 				logService
 			);
 
