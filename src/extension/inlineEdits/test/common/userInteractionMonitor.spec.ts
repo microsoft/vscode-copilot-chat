@@ -166,8 +166,7 @@ describe('UserInteractionMonitor', () => {
 
 	describe('aggressiveness level calculation', () => {
 		test('returns neutral aggressiveness with no history', () => {
-			// With no data, score is 0.5, which is between low and medium thresholds
-			// Default: highThreshold = 0.6, mediumThreshold = 0.4
+			// With no data, score is 0.5, which is between low and medium thresholds for the default config
 			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.Medium);
 		});
