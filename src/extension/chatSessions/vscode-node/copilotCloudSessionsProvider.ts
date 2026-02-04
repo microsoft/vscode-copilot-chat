@@ -866,14 +866,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!this.isGitHubRepoOrEmpty(repoIds)) {
+			// (unless we're in an agent sessions workspace)
+			if (!vscode.workspace.isAgentSessionsWorkspace && !this.isGitHubRepoOrEmpty(repoIds)) {
 				return [];
 			}
 			let sessions = [];
-			if (repoIds && repoIds.length > 0) {
-				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
-			} else {
+			if (vscode.workspace.isAgentSessionsWorkspace || !repoIds || repoIds.length === 0) {
 				sessions = await this._octoKitService.getAllSessions(undefined, true, { createIfNone: false });
+			} else {
+				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
 			}
 			this.cachedSessionsSize = sessions.length;
 
