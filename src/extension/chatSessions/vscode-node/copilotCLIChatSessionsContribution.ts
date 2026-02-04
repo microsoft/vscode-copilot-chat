@@ -139,7 +139,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private shouldShowSession(sessionId: string): boolean | undefined {
 		if (
 			isUntitledSessionId(sessionId) ||			// always show untitled sessions
-			vscode.workspace?.isAgentSessionsWorkspace 	// always all sessions in agent sessions workspace
+			vscode.workspace.isAgentSessionsWorkspace	// always all sessions in agent sessions workspace
 		) {
 			return true;
 		}
