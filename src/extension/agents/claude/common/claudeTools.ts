@@ -13,10 +13,10 @@ import {
 	FileWriteInput,
 	GlobInput,
 	GrepInput,
-	KillShellInput,
 	NotebookEditInput,
 	ExitPlanModeInput as SDKExitPlanModeInput,
 	TaskOutputInput,
+	TaskStopInput,
 	TodoWriteInput,
 	WebFetchInput,
 	WebSearchInput,
@@ -38,6 +38,7 @@ export interface EnterPlanModeInput {
 	// EnterPlanMode takes no input parameters
 }
 
+// TODO: How can we verify these when we bump the SDK version?
 export enum ClaudeToolNames {
 	Task = 'Task',
 	Bash = 'Bash',
@@ -88,7 +89,7 @@ export interface ClaudeToolInputMap {
 	[ClaudeToolNames.TodoWrite]: TodoWriteInput;
 	[ClaudeToolNames.WebSearch]: WebSearchInput;
 	[ClaudeToolNames.BashOutput]: TaskOutputInput;
-	[ClaudeToolNames.KillBash]: KillShellInput;
+	[ClaudeToolNames.KillBash]: TaskStopInput;
 	[ClaudeToolNames.AskUserQuestion]: AskUserQuestionInput;
 }
 
