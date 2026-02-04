@@ -124,7 +124,7 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
 	beginToolInvocation = this.forward(this._wrapped.beginToolInvocation.bind(this._wrapped));
 	updateToolInvocation = this.forward(this._wrapped.updateToolInvocation.bind(this._wrapped));
-	usage = this.forward(() => { });
+	usage = this.forward(this._wrapped.usage.bind(this._wrapped));
 
 	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
 		this._codeBlockProcessor.flush();
