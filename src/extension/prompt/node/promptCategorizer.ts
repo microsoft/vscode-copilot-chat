@@ -32,8 +32,8 @@ export interface IPromptCategorizerService {
 	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void;
 }
 
-// ISO 8601 duration regex: PT followed by optional hours (H), minutes (M), seconds (S)
-const ISO_8601_DURATION_REGEX = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
+// ISO 8601 duration regex: PT followed by at least one of hours (H), minutes (M), seconds (S)
+const ISO_8601_DURATION_REGEX = /^PT(?!$)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
 
 function isValidIsoDuration(duration: string): boolean {
 	return ISO_8601_DURATION_REGEX.test(duration);
