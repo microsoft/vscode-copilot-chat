@@ -400,9 +400,12 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 			return { content: undefined, error: { message: 'acceptedScore must be greater than rejectedScore to prevent division by zero' } };
 		}
 
-		// Validate ignoredScore > rejectedScore to prevent exceeding bounds
-		if (config.ignoredScore <= config.rejectedScore) {
-			return { content: undefined, error: { message: 'ignoredScore must be greater than rejectedScore to prevent exceeding bounds' } };
+		// Validate acceptedScore >= ignoredScore >= rejectedScore to prevent exceeding bounds
+		if (config.ignoredScore < config.rejectedScore) {
+			return { content: undefined, error: { message: 'ignoredScore must be greater than or equal to rejectedScore to prevent exceeding bounds' } };
+		}
+		if (config.acceptedScore < config.ignoredScore) {
+			return { content: undefined, error: { message: 'acceptedScore must be greater than or equal to ignoredScore to prevent exceeding bounds' } };
 		}
 
 		// Validate highThreshold > mediumThreshold for logical consistency
