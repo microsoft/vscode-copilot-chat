@@ -479,8 +479,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			const folder1 = service.getSessionWorkspaceFolder('session-1');
 			const folder3 = service.getSessionWorkspaceFolder('session-3');
-			expect(folder1?.fsPath).toBe('/path/1');
-			expect(folder3?.fsPath).toBe('/path/3');
+			expect(folder1?.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
+			expect(folder3?.fsPath).toBe(vscode.Uri.file('/path/3').fsPath);
 		});
 
 		it('should handle rapid concurrent operations', async () => {
