@@ -144,7 +144,10 @@ export class CopilotCLIPromptResolver {
 			if (isLocation(ref.value)) {
 				try {
 					// Open the document and get the text for the range.
-					const document = await this.workspaceService.openTextDocument(ref.value.uri);
+					const document = await raceCancellation(this.workspaceService.openTextDocument(ref.value.uri), token);
+					if (!document) {
+						return;
+					}
 					attachments.push({
 						type: 'selection',
 						displayName: ref.name,
