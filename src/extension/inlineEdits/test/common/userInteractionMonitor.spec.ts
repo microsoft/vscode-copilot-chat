@@ -8,28 +8,11 @@ import { ConfigKey } from '../../../../platform/configuration/common/configurati
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
-import { MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { ActionKind, MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
 
-/**
- * Null log service for testing.
- */
-class NullLogService implements ILogService {
-	declare _serviceBrand: undefined;
-	trace(_message: string): void { }
-	debug(_message: string): void { }
-	info(_message: string): void { }
-	warn(_message: string): void { }
-	error(_error: string | Error, _message?: string): void { }
-	show(_preserveFocus?: boolean): void { }
-	createSubLogger(_topic: string | readonly string[]): ILogger {
-		return this;
-	}
-	withExtraTarget(_target: unknown): ILogger {
-		return this;
-	}
-}
 
 /**
  * Test-friendly subclass of UserInteractionMonitor that exposes internal state for verification.
@@ -69,7 +52,7 @@ describe('UserInteractionMonitor', () => {
 	beforeEach(() => {
 		configurationService = new MockConfigurationService();
 		experimentationService = new NullExperimentationService();
-		logService = new NullLogService();
+		logService = new TestLogService();
 		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
 	});
 
@@ -81,10 +64,10 @@ describe('UserInteractionMonitor', () => {
 			const timingActions = monitor.getActionsForTiming();
 
 			expect(aggressivenessActions).toHaveLength(1);
-			expect(aggressivenessActions[0].kind).toBe('accepted');
+			expect(aggressivenessActions[0].kind).toBe(ActionKind.Accepted);
 
 			expect(timingActions).toHaveLength(1);
-			expect(timingActions[0].kind).toBe('accepted');
+			expect(timingActions[0].kind).toBe(ActionKind.Accepted);
 		});
 
 		test('handleRejection logs rejected action to both histories', () => {
@@ -94,10 +77,10 @@ describe('UserInteractionMonitor', () => {
 			const timingActions = monitor.getActionsForTiming();
 
 			expect(aggressivenessActions).toHaveLength(1);
-			expect(aggressivenessActions[0].kind).toBe('rejected');
+			expect(aggressivenessActions[0].kind).toBe(ActionKind.Rejected);
 
 			expect(timingActions).toHaveLength(1);
-			expect(timingActions[0].kind).toBe('rejected');
+			expect(timingActions[0].kind).toBe(ActionKind.Rejected);
 		});
 
 		test('handleIgnored logs only to aggressiveness history, not timing', () => {
@@ -107,7 +90,7 @@ describe('UserInteractionMonitor', () => {
 			const timingActions = monitor.getActionsForTiming();
 
 			expect(aggressivenessActions).toHaveLength(1);
-			expect(aggressivenessActions[0].kind).toBe('ignored');
+			expect(aggressivenessActions[0].kind).toBe(ActionKind.Ignored);
 
 			// Ignored actions should NOT be recorded for timing
 			expect(timingActions).toHaveLength(0);
@@ -131,17 +114,17 @@ describe('UserInteractionMonitor', () => {
 
 			const aggressivenessActions = monitor.getActionsForAggressiveness();
 			expect(aggressivenessActions).toHaveLength(4);
-			expect(aggressivenessActions[0].kind).toBe('accepted');
-			expect(aggressivenessActions[1].kind).toBe('rejected');
-			expect(aggressivenessActions[2].kind).toBe('ignored');
-			expect(aggressivenessActions[3].kind).toBe('accepted');
+			expect(aggressivenessActions[0].kind).toBe(ActionKind.Accepted);
+			expect(aggressivenessActions[1].kind).toBe(ActionKind.Rejected);
+			expect(aggressivenessActions[2].kind).toBe(ActionKind.Ignored);
+			expect(aggressivenessActions[3].kind).toBe(ActionKind.Accepted);
 
 			// Timing history should only have accepts and rejects
 			const timingActions = monitor.getActionsForTiming();
 			expect(timingActions).toHaveLength(3);
-			expect(timingActions[0].kind).toBe('accepted');
-			expect(timingActions[1].kind).toBe('rejected');
-			expect(timingActions[2].kind).toBe('accepted');
+			expect(timingActions[0].kind).toBe(ActionKind.Accepted);
+			expect(timingActions[1].kind).toBe(ActionKind.Rejected);
+			expect(timingActions[2].kind).toBe(ActionKind.Accepted);
 		});
 
 		test('aggressiveness history is limited to MAX_INTERACTIONS_STORED', () => {

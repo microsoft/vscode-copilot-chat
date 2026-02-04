@@ -221,7 +221,7 @@ export class UserInteractionMonitor {
 
 			// Exponential decay: impact decreases as time passes
 			const decayFactor = Math.exp(-timeSinceAction / DEBOUNCE_DECAY_TIME_MS);
-			const actionWeight = action.kind === 'rejected' ? REJECTION_WEIGHT : ACCEPTANCE_WEIGHT;
+			const actionWeight = action.kind === ActionKind.Rejected ? REJECTION_WEIGHT : ACCEPTANCE_WEIGHT;
 			multiplier *= 1 + ((actionWeight - 1) * decayFactor);
 		}
 
