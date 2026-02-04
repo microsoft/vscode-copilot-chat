@@ -169,20 +169,18 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		// Register temporary commands for testing
 		this._register(vscode.commands.registerCommand('github.copilot.growth.showNeedsInputMessage', async () => {
-			await this.showGrowthMessage(growthChatSessionParticipant, vscode.l10n.t('👋 Welcome to Copilot! To get started, try asking a question about your code or selecting some code and using inline chat (Ctrl+I).'));
+			await growthChatSessionParticipant.sendNeedsInputMessage(
+				vscode.l10n.t('👋 Welcome to Copilot! To get started, try asking a question about your code or selecting some code and using inline chat (Ctrl+I).'),
+				{ command: 'inlineChat.start', title: vscode.l10n.t('Start Inline Chat') }
+			);
 		}));
 
 		this._register(vscode.commands.registerCommand('github.copilot.growth.showFeatureTip', async () => {
-			await this.showGrowthMessage(growthChatSessionParticipant, vscode.l10n.t('💡 **Tip**: You can use @workspace to ask questions about your entire codebase, or @terminal to get help with terminal commands.'));
+			await growthChatSessionParticipant.sendFeatureTip(
+				vscode.l10n.t('💡 **Tip**: You can use @workspace to ask questions about your entire codebase, or @terminal to get help with terminal commands.')
+			);
 		}));
 		// #endregion
-	}
-
-	private async showGrowthMessage(participant: GrowthChatSessionParticipant, message: string): Promise<void> {
-		// This will be called by the temporary commands to show educational messages
-		// For now, we'll just show an info message. In the future, this could
-		// create a chat session and send the message through the participant.
-		await vscode.window.showInformationMessage(message);
 	}
 
 	private registerCopilotCloudAgent() {
