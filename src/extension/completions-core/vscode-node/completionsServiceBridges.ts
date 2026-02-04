@@ -139,6 +139,8 @@ export function setup(serviceAccessor: ServicesAccessor, disposables: Disposable
 	const defaultContextProviders = serviceAccessor.get(ICompletionsDefaultContextProviders);
 	defaultContextProviders.add('ms-vscode.cpptools');
 	defaultContextProviders.add('promptfile-ai-context-provider');
+	defaultContextProviders.add('scm-context-provider');
+	defaultContextProviders.add('chat-session-context-provider');
 
 	disposables.add(setupCompletionsExperimentationService(serviceAccessor));
 }

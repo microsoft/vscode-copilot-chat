@@ -87,7 +87,18 @@ export const nonDeferredToolNames = new Set([
 	// Other high-usage tools
 	'get_errors',
 	'manage_todo_list',
+	// Subagent tools
+	'runSubagent',
+	'search_subagent',
+	// Testing
+	'runTests',
+	// Misc
+	'ask_questions',
+	'switch_agent',
 ]);
+
+export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
+export const TOOL_SEARCH_TOOL_TYPE = 'tool_search_tool_regex_20251119';
 
 /**
  * Context management types for Anthropic Messages API
@@ -175,6 +186,24 @@ export function modelSupportsToolSearch(modelId: string): boolean {
 }
 
 /**
+ * Interleaved thinking is supported by:
+ * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
+ * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
+ * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
+ * @param modelId The model ID to check
+ * @returns true if the model supports interleaved thinking
+ */
+export function modelSupportsInterleavedThinking(modelId: string): boolean {
+	// Normalize: lowercase and replace dots with dashes so "4.5" matches "4-5"
+	const normalized = modelId.toLowerCase().replace(/\./g, '-');
+	return normalized.startsWith('claude-sonnet-4-5') ||
+		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-haiku-4-5') ||
+		normalized.startsWith('claude-opus-4-5');
+}
+
+/**
  * Memory is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
@@ -193,21 +222,6 @@ export function modelSupportsMemory(modelId: string): boolean {
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
-}
-
-
-export function isAnthropicMemoryEnabled(
-	endpoint: IChatEndpoint | string,
-	configurationService: IConfigurationService,
-	experimentationService: IExperimentationService,
-): boolean {
-
-	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
-	if (!modelSupportsMemory(effectiveModelId)) {
-		return false;
-	}
-
-	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
 export function isAnthropicToolSearchEnabled(
@@ -288,19 +302,6 @@ export function buildContextManagement(
 }
 
 /**
- * Default values for context editing configuration.
- */
-export const CONTEXT_EDITING_DEFAULTS: ContextEditingConfig = {
-	triggerType: 'input_tokens',
-	triggerValue: 80000,
-	keepCount: 3,
-	clearAtLeastTokens: 10000,
-	excludeTools: [],
-	clearInputs: true,
-	thinkingKeepTurns: 1,
-};
-
-/**
  * Reads context editing configuration from settings and builds the context_management object.
  * This is a convenience function that combines reading configuration with buildContextManagement.
  * @param configurationService The configuration service to read settings from
@@ -313,18 +314,15 @@ export function getContextManagementFromConfig(
 ): ContextManagement | undefined {
 
 	const userConfig = configurationService.getConfig(ConfigKey.Advanced.AnthropicContextEditingConfig);
-	if (!userConfig) {
-		return buildContextManagement(CONTEXT_EDITING_DEFAULTS, thinkingEnabled);
-	}
 
 	const contextEditingConfig: ContextEditingConfig = {
-		triggerType: userConfig.triggerType ?? CONTEXT_EDITING_DEFAULTS.triggerType,
-		triggerValue: userConfig.triggerValue ?? CONTEXT_EDITING_DEFAULTS.triggerValue,
-		keepCount: userConfig.keepCount ?? CONTEXT_EDITING_DEFAULTS.keepCount,
-		clearAtLeastTokens: userConfig.clearAtLeastTokens ?? CONTEXT_EDITING_DEFAULTS.clearAtLeastTokens,
-		excludeTools: userConfig.excludeTools ?? CONTEXT_EDITING_DEFAULTS.excludeTools,
-		clearInputs: userConfig.clearInputs ?? CONTEXT_EDITING_DEFAULTS.clearInputs,
-		thinkingKeepTurns: userConfig.thinkingKeepTurns ?? CONTEXT_EDITING_DEFAULTS.thinkingKeepTurns,
+		triggerType: userConfig?.triggerType ?? 'input_tokens',
+		triggerValue: userConfig?.triggerValue ?? 100000,
+		keepCount: userConfig?.keepCount ?? 3,
+		clearAtLeastTokens: userConfig?.clearAtLeastTokens,
+		excludeTools: userConfig?.excludeTools ?? [],
+		clearInputs: userConfig?.clearInputs ?? false,
+		thinkingKeepTurns: userConfig?.thinkingKeepTurns ?? 1,
 	};
 
 	return buildContextManagement(contextEditingConfig, thinkingEnabled);

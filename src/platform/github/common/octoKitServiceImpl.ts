@@ -9,7 +9,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { AssignableActor, getAssignableActorsWithAssignableUsers, getAssignableActorsWithSuggestedActors, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CCAEnabledResult, CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions, ErrorResponseWithStatusCode, IOctoKitService, IOctoKitUser, JobInfo, PermissiveAuthRequiredError, PullRequestFile, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -329,22 +329,57 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getFileContentWithToken(owner, repo, ref, path, authToken);
 	}
 
-	async getUserOrganizations(authOptions: { createIfNone?: boolean }): Promise<string[]> {
+	async getUserOrganizations(authOptions: { createIfNone?: boolean }, pageSize?: number): Promise<string[]> {
 		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
 			this._logService.trace('No authentication token available for getUserOrganizations');
 			throw new PermissiveAuthRequiredError();
 		}
-		return this.getUserOrganizationsWithToken(authToken);
+		return this.getUserOrganizationsWithToken(authToken, pageSize);
 	}
 
-	async getOrganizationRepositories(org: string, authOptions: { createIfNone?: boolean }): Promise<string[]> {
+	async isUserMemberOfOrg(org: string, authOptions: { createIfNone?: boolean }): Promise<boolean> {
+		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+		if (!authToken) {
+			this._logService.trace('No authentication token available for isUserMemberOfOrg');
+			return false;
+		}
+		return this.isUserMemberOfOrgWithToken(org, authToken);
+	}
+
+	async getOrganizationRepositories(org: string, authOptions: { createIfNone?: boolean }, pageSize?: number): Promise<string[]> {
 		const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
 		if (!authToken) {
 			this._logService.trace('No authentication token available for getOrganizationRepositories');
 			throw new PermissiveAuthRequiredError();
 		}
-		return this.getOrganizationRepositoriesWithToken(org, authToken);
+		return this.getOrganizationRepositoriesWithToken(org, authToken, pageSize);
+	}
+
+	async getOrgCustomInstructions(orgLogin: string, authOptions: { createIfNone?: boolean }): Promise<string | undefined> {
+		try {
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+			if (!authToken) {
+				throw new Error('No authentication token available');
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, {
+				type: RequestType.OrgCustomInstructions,
+				orgLogin
+			});
+			if (!response.ok) {
+				throw new Error(`Failed to fetch custom instructions for org ${orgLogin}: ${response.statusText}`);
+			}
+			const data = await response.json() as { prompt: string };
+			return data.prompt;
+		} catch (e) {
+			this._logService.error(e);
+			return undefined;
+		}
 	}
 
 	async getUserRepositories(authOptions: { createIfNone?: boolean }, query?: string): Promise<{ owner: string; name: string }[]> {
@@ -432,6 +467,45 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		} catch (e) {
 			this._logService.error(`Error fetching assignable actors: ${e}`);
 			return [];
+		}
+	}
+
+	async isCCAEnabled(owner: string, repo: string, authOptions: { createIfNone?: boolean }): Promise<CCAEnabledResult> {
+		try {
+			const authToken = (await this._authService.getGitHubSession('permissive', authOptions.createIfNone ? { createIfNone: true } : { silent: true }))?.accessToken;
+			if (!authToken) {
+				this._logService.trace('No authentication token available for isCCAEnabled');
+				return { enabled: undefined };
+			}
+			const response = await this._capiClientService.makeRequest<Response>({
+				method: 'GET',
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				}
+			}, { type: RequestType.CopilotAgentJobEnabled, owner, repo });
+
+			if (response.ok) {
+				// 200 - OK - CCA is enabled and repository rules pass
+				return { enabled: true };
+			}
+
+			switch (response.status) {
+				case 401:
+					// 401 - Unauthorized - Unauthenticated request
+					return { enabled: false, statusCode: 401 };
+				case 403:
+					// 403 - Forbidden - CCA disabled
+					return { enabled: false, statusCode: 403 };
+				case 422:
+					// 422 - Unprocessable entity - Repository rules violation
+					return { enabled: false, statusCode: 422 };
+				default:
+					this._logService.trace(`Unexpected status code for isCCAEnabled: ${response.status}`);
+					return { enabled: undefined };
+			}
+		} catch (e) {
+			this._logService.error(`Error checking if CCA is enabled: ${e}`);
+			return { enabled: undefined };
 		}
 	}
 }

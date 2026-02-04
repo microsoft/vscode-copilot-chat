@@ -471,6 +471,8 @@ function fixFilePathsForTestComparison(attachments: Attachment[]): Attachment[] 
 			attachment.path = attachment.path.replace(/\\/g, '/');
 		} else if (attachment.type === 'directory') {
 			attachment.path = attachment.path.replace(/\\/g, '/');
+		} else if (attachment.type === 'selection') {
+			attachment.filePath = attachment.filePath.replace(/\\/g, '/');
 		}
 	});
 	return attachments;

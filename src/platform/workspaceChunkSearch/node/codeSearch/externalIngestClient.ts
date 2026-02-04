@@ -6,10 +6,10 @@
 import { canIngestDocument, canIngestPathAndSize, createCodedSymbols, DocumentContents, GeoFilter, IngestFilter, setupPanicHooks } from '@github/blackbird-external-ingest-utils';
 import * as l10n from '@vscode/l10n';
 import crypto from 'crypto';
-import fs from 'fs';
 import { CancellationToken } from 'vscode-languageserver-protocol';
 import { Result } from '../../../../util/common/result';
 import { raceCancellationError } from '../../../../util/vs/base/common/async';
+import { encodeBase64, VSBuffer } from '../../../../util/vs/base/common/buffer';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -20,7 +20,8 @@ import { FileChunkAndScore } from '../../../chunking/common/chunk';
 import { EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../log/common/logService';
 import { CodeSearchResult } from '../../../remoteCodeSearch/common/remoteCodeSearch';
-import { ApiClient } from './externalIngestApi';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
+import { ApiClient, githubHeaders } from './externalIngestApi';
 
 
 export interface ExternalIngestFile {
@@ -63,7 +64,7 @@ export interface IExternalIngestClient {
 // You can change this to `null` to ignore the throttle
 
 export class ExternalIngestClient extends Disposable implements IExternalIngestClient {
-	private static readonly PROMISE_POOL_SIZE = 32;
+	private static readonly PROMISE_POOL_SIZE = 64;
 	private static baseUrl = 'https://api.github.com';
 
 	private readonly _ingestFilter = new IngestFilter();
@@ -71,8 +72,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ILogService private readonly logService: ILogService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService,
 	) {
 		super();
 
@@ -82,8 +84,8 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	public async getAuthToken(): Promise<string | undefined> {
-		return (await this._authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
-			?? (await this._authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
+		return (await this.authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken
+			?? (await this.authenticationService.getGitHubSession('any', { silent: true }))?.accessToken;
 	}
 
 	public canIngestPathAndSize(filePath: string, size: number): boolean {
@@ -109,13 +111,27 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		const url = `${ExternalIngestClient.baseUrl}${path}`;
 		const response = await this.apiClient.makeRequest(url, this.getHeaders(authToken), 'POST', body, token);
 
-		// Retry on 500 errors as these can be transient
-		if (response.status === 500 && retries > 0) {
-			this.logService.warn(`ExternalIngestClient::post(): Got 500, retrying... (${retries} retries remaining)`);
+		// Retry on 500 errors as these are often transient
+		const shouldRetry = response.status.toString().startsWith('5') && retries > 0;
+
+		/* __GDPR__
+			"externalIngestClient.post.error" : {
+				"owner": "copilot-core",
+				"comment": "Logging when a external ingest POST request fails",
+				"path": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API path that was called" },
+				"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+				"willRetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request will be retried" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('externalIngestClient.post.error', { path }, { statusCode: response.status, willRetry: shouldRetry ? 1 : 0 });
+
+		if (shouldRetry) {
+			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, retrying... (${retries} retries remaining)`);
 			return this.post(authToken, path, body, { retries: retries - 1 }, token);
 		}
 
 		if (!response.ok) {
+			this.logService.warn(`ExternalIngestClient::post(${path}): Got ${response.status}, request failed`);
 			throw new Error(`POST to ${url} failed with status ${response.status}`);
 		}
 
@@ -130,7 +146,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 		}
 
 		// Initial setup
-		const mappings = new Map<string, { full: string; relative: string }>();
+		const mappings = new Map</* sha */ string, ExternalIngestFile>();
 		const geoFilter = new GeoFilter();
 
 		this.logService.info(`ExternalIngestClient::updateIndex(). Creating ingest for fileset: ${filesetName}`);
@@ -145,14 +161,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				throw new CancellationError();
 			}
 
-			const relativePath = file.relativePath;
-			const full = file.uri.fsPath;
-
 			geoFilter.push(file.docSha);
 			allDocShas.push(file.docSha);
 
 			const docShaBase64 = Buffer.from(file.docSha).toString('base64');
-			mappings.set(docShaBase64, { full, relative: relativePath });
+			mappings.set(docShaBase64, file);
 		}
 
 		this.logService.debug(`ExternalIngestClient::updateIndex(). Found ${mappings.size} ingestable files in ${Math.round(performance.now() - ingestableCheckStart)}ms`,);
@@ -211,8 +224,12 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 			// If we still get 429 after cleanup and retry, fail with a clear error
 			if (createIngestResponse.status === 429) {
-				throw new Error('Create ingest failed with 429 Too Many Requests even after cleanup.');
+				throw new Error('Create ingest failed with 429 even after cleanup.');
 			}
+		}
+		// Handle 409 (conflict) by retrying once
+		else if (createIngestResponse.status === 409) {
+			createIngestResponse = await createIngest();
 		}
 
 		// Fail fast on non-OK responses before attempting to parse JSON
@@ -233,13 +250,13 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			codedSymbolRange.start === 0 &&
 			codedSymbolRange.end === 0
 		) {
-			this.logService.info('Ingest has already run successfully');
+			this.logService.info('ExternalIngestClient::updateIndex(): Ingest has already run successfully');
 			return Result.ok({ checkpoint: newCheckpoint });
 		}
-		this.logService.debug(`Got ingest ID: ${ingestId}`);
+		this.logService.debug(`ExternalIngestClient::updateIndex(): Got ingest ID: ${ingestId}`);
 
 		onProgress?.(l10n.t('Reconciling with server...'));
-		this.logService.debug('Starting set reconciliation...');
+		this.logService.debug('ExternalIngestClient::updateIndex(): Starting set reconciliation...');
 
 		// Create snapshot
 		while (codedSymbolRange) {
@@ -247,9 +264,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				throw new CancellationError();
 			}
 
-			this.logService.debug(
-				`Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`,
-			);
+			this.logService.debug(`ExternalIngestClient::updateIndex(): Creating coded symbols for ${codedSymbolRange.start} to ${codedSymbolRange.end}`);
 			const codedSymbols = createCodedSymbols(
 				allDocShas,
 				codedSymbolRange.start,
@@ -278,7 +293,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Document upload
 		onProgress?.(l10n.t('Uploading documents...'));
-		this.logService.debug('Starting document upload...');
+		this.logService.debug('ExternalIngestClient::updateIndex(): Starting document upload...');
 
 		let pageToken = undefined;
 		const seenDocShas = new Set<string>();
@@ -287,7 +302,6 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 		// Tracking for performance reporting.
 		let uploaded = 0;
-		let totalToUpload = 0;
 		const uploadStart = performance.now();
 
 		do {
@@ -301,7 +315,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 				this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 			}
 
-			this.logService.debug(`ExternalIngestClient::updateIndex(): calling batch API with pageToken: ${pageToken}`);
+			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch started with pageToken: ${pageToken}`);
 
 			const getBatchResponse = await this.post(authToken, '/external/code/ingest/batch', {
 				ingest_id: ingestId,
@@ -309,7 +323,9 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			}, {}, token);
 
 			const { doc_ids: docIds, next_page_token: nextPageToken } =
-				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[]; next_page_token: string | undefined };
+				await raceCancellationError(getBatchResponse.json(), token) as { doc_ids: string[] | undefined; next_page_token: string | undefined };
+
+			this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds?.length ?? 0} doc IDs for upload. Next page token: ${nextPageToken}`);
 
 			// Need to check that there are some docIds to process. It can be the case where you get a page
 			// token to continue pulling batches, but the batch is empty. Just keep pulling until we have
@@ -317,8 +333,10 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			if (docIds) {
 				const newSet = new Set(docIds);
 				const toUpload = new Set([...newSet].filter(x => !seenDocShas.has(x)));
-				totalToUpload += toUpload.size;
-				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch returned ${docIds.length} doc IDs for upload, seeing ${toUpload.size} new documents.`);
+				this.logService.debug(`ExternalIngestClient::updateIndex(): /batch seeing ${toUpload.size} new documents.`);
+				if (toUpload.size === 0) {
+					break;
+				}
 
 				for (const requestedDocSha of toUpload) {
 					if (token.isCancellationRequested) {
@@ -327,29 +345,34 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 
 					seenDocShas.add(requestedDocSha);
 					const p = (async () => {
-						const paths = mappings.get(requestedDocSha);
-						if (!paths) {
-							throw new Error(`No mapping for docSha: ${requestedDocSha}`);
+						try {
+							const fileEntry = mappings.get(requestedDocSha);
+							if (!fileEntry) {
+								throw new Error(`No mapping for docSha: ${requestedDocSha}`);
+							}
+							this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${fileEntry.relativePath}`);
+							const bytes = await fileEntry.read();
+							const content = encodeBase64(VSBuffer.wrap(bytes));
+							const res = await this.post(authToken, '/external/code/ingest/document', {
+								ingest_id: ingestId,
+								content,
+								file_path: fileEntry.relativePath,
+								doc_id: requestedDocSha,
+							}, { retries: 3 }, token);
+							if (!res.ok) {
+								const requestId = res.headers.get(githubHeaders.requestId);
+								const responseBody = await res.text();
+								this.logService.error(`ExternalIngestClient::updateIndex(): Document upload for ${fileEntry.relativePath} failed with status: '${res.status}', requestId: '${requestId}', body: ${responseBody}`);
+							}
+						} catch (e) {
+							this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
 						}
-						this.logService.debug(`ExternalIngestClient::updateIndex(): Uploading file: ${paths.relative}`);
-						const bytes = await fs.promises.readFile(paths.full);
-						const content = bytes.toString('base64');
-						const res = await this.post(authToken, '/external/code/ingest/document', {
-							ingest_id: ingestId,
-							content,
-							file_path: paths.relative,
-						}, { retries: 3 }, token);
-						this.logService.debug(`ExternalIngestClient::updateIndex(): Document upload response status: ${res.status}`);
 					})();
-					p.catch(e => {
-						this.logService.error('ExternalIngestClient::updateIndex(): Error uploading document:', e);
-						// throw e;
-					});
 					p.finally(() => {
 						uploading.delete(p);
 						uploaded += 1;
 						if (uploaded % 10 === 0) {
-							const remaining = totalToUpload - uploaded;
+							const remaining = mappings.size - uploaded;
 							onProgress?.(l10n.t('Uploading documents... ({0} remaining)', remaining));
 							const elapsed = Math.round(performance.now() - uploadStart);
 							const docsPerSecond = Math.round(uploaded / (elapsed / 1000));
@@ -360,16 +383,11 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 					});
 					uploading.add(p);
 
-					// Have a max of $PROMISE_POOL_SIZE in-flight uploads. For me, at 32 we seem to be limited
-					// by vLLM/Metis so a larger batch size might not yield improvements. YMMV.
+					// Have a max of $PROMISE_POOL_SIZE in-flight uploads
 					if (uploading.size >= ExternalIngestClient.PROMISE_POOL_SIZE) {
 						await Promise.race(uploading);
 					}
 				}
-			}
-
-			if (pageToken === nextPageToken) {
-				break;
 			}
 
 			pageToken = nextPageToken;
@@ -387,7 +405,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 			ingest_id: ingestId,
 		}, {}, token);
 
-		this.logService.info('ExternalIngestClient::updateIndex(): SUCCESS!!');
+		this.logService.info('ExternalIngestClient::updateIndex(): Successfully finalized ingest.');
 		const requestId = resp.headers.get('x-github-request-id');
 		const body = await resp.text();
 		this.logService.debug(`requestId: '${requestId}', body: ${body}`);

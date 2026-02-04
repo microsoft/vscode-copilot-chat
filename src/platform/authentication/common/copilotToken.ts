@@ -48,6 +48,22 @@ function containsMicrosoftOrg(orgList: string[]): boolean {
 	return false;
 }
 
+/**
+ * A function used to determine if the org list contains a VS Code organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a VS Code org
+ */
+function containsVSCodeOrg(orgList: string[]): boolean {
+	const VSCODE_ORGANIZATIONS = ['551cca60ce19654d894e786220822482'];
+	// Check if the user is part of a VS Code organization.
+	for (const org of orgList) {
+		if (VSCODE_ORGANIZATIONS.includes(org)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export class CopilotToken {
 	private readonly tokenMap: Map<string, string>;
 	constructor(private readonly _info: ExtendedTokenInfo) {
@@ -84,6 +100,14 @@ export class CopilotToken {
 
 	get organizationList(): string[] {
 		return this._info.organization_list || [];
+	}
+
+	/**
+	 * Returns the list of organization logins that provide Copilot access to the user.
+	 * These are the organizations through which the user has a Copilot subscription (Business/Enterprise).
+	 */
+	get organizationLoginList(): string[] {
+		return this._info.organization_login_list || [];
 	}
 
 	get enterpriseList(): number[] {
@@ -127,7 +151,7 @@ export class CopilotToken {
 	}
 
 	get isVscodeTeamMember(): boolean {
-		return this._info.isVscodeTeamMember;
+		return this._info.isVscodeTeamMember || containsVSCodeOrg(this.organizationList);
 	}
 
 	get codexAgentEnabled(): boolean {
@@ -302,7 +326,7 @@ export interface TokenEnvelope {
 	/** SKU-isolated endpoints. */
 	endpoints?: Endpoints;
 	/** Enterprise IDs if user has enterprise access. */
-	enterprise_list?: number[];
+	enterprise_list?: number[] | null;
 	/** Quota remaining for free/limited users. Null for non-free users. */
 	limited_user_quotas?: { chat: number; completions: number } | null;
 	/** Unix timestamp when quotas reset for free/limited users. Null for non-free users. */
@@ -372,7 +396,7 @@ const tokenEnvelopeValidator = vObj({
 		proxy: vString(),
 		telemetry: vString(),
 	}),
-	enterprise_list: vArray(vNumber()),
+	enterprise_list: vNullable(vArray(vNumber())),
 	limited_user_quotas: vNullable(vObj({
 		chat: vRequired(vNumber()),
 		completions: vRequired(vNumber()),
@@ -429,9 +453,8 @@ export function validateTokenEnvelope(obj: unknown): TokenValidationResult {
 			valid: true,
 			strategy: 'fallback',
 			strictError,
-			// Technically not a safe cast if the backend changed non-critical fields.
-			// Telemetry should be used to track how often this happens.
-			envelope: fallbackResult.content as TokenEnvelope
+			// Use the full payload, not the validator result, to preserve all server fields
+			envelope: obj as TokenEnvelope
 		};
 	}
 
@@ -489,7 +512,7 @@ export type ExtendedTokenInfo = TokenEnvelope & {
 	// Extended fields added by client
 	username: string;
 	isVscodeTeamMember: boolean;
-} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled'>;
+} & Pick<CopilotUserInfo, 'copilot_plan' | 'quota_snapshots' | 'quota_reset_date' | 'codex_agent_enabled' | 'organization_login_list'>;
 
 /**
  * Creates a minimal ExtendedTokenInfo for testing purposes.
@@ -517,6 +540,7 @@ export function createTestExtendedTokenInfo(overrides?: Partial<ExtendedTokenInf
 		username: 'testuser',
 		isVscodeTeamMember: false,
 		copilot_plan: 'free',
+		organization_login_list: [],
 		// Apply overrides
 		...overrides,
 	};

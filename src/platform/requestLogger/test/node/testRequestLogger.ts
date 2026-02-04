@@ -54,9 +54,8 @@ export class TestRequestLogger extends AbstractRequestLogger {
 		this._onDidChangeRequests.fire();
 	}
 
-	public override logServerToolCall(id: string, name: string, args: unknown): void {
-		// Server tool calls are logged but don't have responses yet
-		this._entries.push(new TestLoggedToolCall(id, name, args, { content: [] }, this.currentRequest, Date.now()));
+	public override logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void {
+		this._entries.push(new TestLoggedToolCall(id, name, args, result, this.currentRequest, Date.now()));
 		this._onDidChangeRequests.fire();
 	}
 
@@ -122,6 +121,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 		if (this.entry.type === LoggedRequestKind.ChatMLSuccess ||
 			this.entry.type === LoggedRequestKind.ChatMLFailure ||
 			this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+
 			const metadata = {
 				model: this.entry.chatParams?.model,
 				location: this.entry.chatParams?.location,
@@ -131,9 +131,35 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 				maxResponseTokens: this.entry.chatParams?.body?.max_tokens ?? this.entry.chatParams?.body?.max_output_tokens,
 			};
 
+			// Build response data matching the real LoggedRequestInfo.toJSON() format
+			let responseData;
+			let errorInfo;
+
+			if (this.entry.type === LoggedRequestKind.ChatMLSuccess) {
+				responseData = {
+					type: 'success',
+					message: this.entry.result.value
+				};
+			} else if (this.entry.type === LoggedRequestKind.ChatMLFailure) {
+				errorInfo = {
+					type: 'failure',
+					reason: this.entry.result.reason
+				};
+			} else if (this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+				errorInfo = {
+					type: 'canceled'
+				};
+			}
+
+			const response = responseData || errorInfo ? {
+				...responseData,
+				...errorInfo
+			} : undefined;
+
 			return {
 				...baseInfo,
 				metadata,
+				response,
 				isConversationRequest: this.entry.isConversationRequest
 			};
 		}
@@ -145,6 +171,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 
 class TestLoggedToolCall {
 	public readonly kind = LoggedInfoKind.ToolCall;
+	public readonly toolMetadata: unknown;
 
 	constructor(
 		public readonly id: string,
@@ -153,16 +180,19 @@ class TestLoggedToolCall {
 		public readonly response: LanguageModelToolResult2,
 		public readonly token: CapturingToken | undefined,
 		public readonly time: number,
-		public readonly thinking?: ThinkingData
-	) { }
+		public readonly thinking?: ThinkingData,
+	) {
+		// Extract toolMetadata from response if it exists
+		this.toolMetadata = 'toolMetadata' in response ? (response as { toolMetadata?: unknown }).toolMetadata : undefined;
+	}
 
 	async toJSON(): Promise<object> {
 		return {
 			id: this.id,
 			kind: 'toolCall',
-			name: this.name,
+			tool: this.name,
 			args: this.args,
-			time: new Date(this.time).toISOString()
+			time: new Date(this.time).toISOString(),
 		};
 	}
 }

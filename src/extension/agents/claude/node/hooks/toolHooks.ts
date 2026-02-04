@@ -12,10 +12,12 @@ import {
 	PostToolUseHookInput,
 	PreToolUseHookInput
 } from '@anthropic-ai/claude-agent-sdk';
+import { LanguageModelTextPart } from '../../../../../vscodeTypes';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { ClaudeToolNames } from '../../common/claudeTools';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
-import { registerClaudeHook } from './claudeHookRegistry';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for PreToolUse events.
@@ -40,20 +42,45 @@ registerClaudeHook('PreToolUse', PreToolUseLoggingHook);
 
 /**
  * Logging hook for PostToolUse events.
+ * Also logs tool calls to the request logger for debugging and analysis.
  */
 export class PostToolUseLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
 	private async _handle(input: HookInput, toolID: string | undefined): Promise<HookJSONOutput> {
 		const hookInput = input as PostToolUseHookInput;
-		// Should we log tool output here? It can be large and contain sensitive info.
+		const id = toolID ?? hookInput.session_id;
+		const response = hookInput.tool_response;
+
 		this.logService.trace(`[ClaudeCodeSession] PostToolUse Hook: tool=${hookInput.tool_name}, toolUseID=${toolID}`);
+
+		// Log the tool call to the request logger with the tool response as text content
+		const capturingToken = this.sessionStateService.getCapturingTokenForSession(hookInput.session_id);
+		const logToolCall = () => {
+			this.requestLogger.logToolCall(
+				id,
+				hookInput.tool_name,
+				hookInput.tool_input,
+				{
+					content: [new LanguageModelTextPart(typeof response === 'string' ? response : JSON.stringify(response, undefined, 2))]
+				}
+			);
+		};
+
+		if (capturingToken) {
+			await this.requestLogger.captureInvocation(capturingToken, async () => logToolCall());
+		} else {
+			logToolCall();
+		}
+
 		return { continue: true };
 	}
 }
@@ -61,19 +88,44 @@ registerClaudeHook('PostToolUse', PostToolUseLoggingHook);
 
 /**
  * Logging hook for PostToolUseFailure events.
+ * Also logs failed tool calls to the request logger for debugging and analysis.
  */
 export class PostToolUseFailureLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
 
-	private async _handle(input: HookInput): Promise<HookJSONOutput> {
+	private async _handle(input: HookInput, toolID: string | undefined): Promise<HookJSONOutput> {
 		const hookInput = input as PostToolUseFailureHookInput;
+		const id = toolID ?? hookInput.session_id;
+
 		this.logService.trace(`[ClaudeCodeSession] PostToolUseFailure Hook: tool=${hookInput.tool_name}, error=${hookInput.error}, isInterrupt=${hookInput.is_interrupt}`);
+
+		// Log the failed tool call to the request logger with the error as text content
+		const capturingToken = this.sessionStateService.getCapturingTokenForSession(hookInput.session_id);
+		const logToolCall = () => {
+			this.requestLogger.logToolCall(
+				id,
+				hookInput.tool_name,
+				hookInput.tool_input,
+				{
+					content: [new LanguageModelTextPart(`Error: ${hookInput.error}${hookInput.is_interrupt ? ' (interrupted)' : ''}`)]
+				}
+			);
+		};
+
+		if (capturingToken) {
+			await this.requestLogger.captureInvocation(capturingToken, async () => logToolCall());
+		} else {
+			logToolCall();
+		}
+
 		return { continue: true };
 	}
 }

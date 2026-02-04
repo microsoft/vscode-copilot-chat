@@ -349,17 +349,17 @@ export class RequestLogger extends AbstractRequestLogger {
 		));
 	}
 
-	public override logServerToolCall(id: string, name: string, args: unknown): void {
-		const syntheticResponse: LanguageModelToolResult2 = {
-			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
-		};
+	public override logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void {
 		this._addEntry(new LoggedToolCall(
 			id,
 			`${name} [server]`,
 			args,
-			syntheticResponse,
+			result,
 			this.currentRequest,
-			Date.now()
+			Date.now(),
+			undefined, // thinking
+			undefined, // edits
+			undefined  // toolMetadata
 		));
 	}
 
@@ -636,6 +636,14 @@ export class RequestLogger extends AbstractRequestLogger {
 				`<summary>tools ${numToolsString}${' '.repeat(9 - numToolsString.length)}: ${toolNames.join(', ')}</summary>${JSON.stringify(entry.chatParams.body.tools, undefined, 4)}`,
 				`</details>`
 			);
+		}
+		if (entry.customMetadata) {
+			for (const [key, value] of Object.entries(entry.customMetadata)) {
+				if (value !== undefined) {
+					const paddedKey = key.padEnd(16);
+					result.push(`${paddedKey} : ${value}`);
+				}
+			}
 		}
 		result.push(`</code></pre>`);
 

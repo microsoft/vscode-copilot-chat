@@ -260,10 +260,6 @@ class DefaultGpt5PromptResolver implements IAgentPrompt {
 	resolveSafetyRules(endpoint: IChatEndpoint): SafetyRulesConstructor | undefined {
 		return Gpt5SafetyRule;
 	}
-
-	resolveAttachmentHint(endpoint: IChatEndpoint): string | undefined {
-		return ' (See <attachments> above for file contents. You may not need to search or read the file again.)';
-	}
 }
 
 class Gpt5ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {

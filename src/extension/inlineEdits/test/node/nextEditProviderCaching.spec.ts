@@ -12,17 +12,18 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { MutableObservableWorkspace } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, NoNextEditReason, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
+import { ILogger, ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
+import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
+import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Result } from '../../../../util/common/result';
-import { ITracer } from '../../../../util/common/tracing';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -43,6 +44,7 @@ describe('NextEditProvider Caching', () => {
 	let expService: IExperimentationService;
 	let disposableStore: DisposableStore;
 	let workspaceService: IWorkspaceService;
+	let requestLogger: IRequestLogger;
 	beforeAll(() => {
 		disposableStore = new DisposableStore();
 		workspaceService = disposableStore.add(new TestWorkspaceService());
@@ -51,6 +53,7 @@ describe('NextEditProvider Caching', () => {
 		gitExtensionService = new NullGitExtensionService();
 		logService = new LogServiceImpl([]);
 		expService = new NullExperimentationService();
+		requestLogger = new NullRequestLogger();
 	});
 	afterAll(() => {
 		disposableStore.dispose();
@@ -60,7 +63,7 @@ describe('NextEditProvider Caching', () => {
 		const obsGit = new ObservableGit(gitExtensionService);
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
-			provideNextEdit: async (request: StatelessNextEditRequest, pushEdit: PushEdit, tracer: ITracer, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) => {
+			provideNextEdit: async function* (request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
 				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[
@@ -82,13 +85,15 @@ describe('NextEditProvider Caching', () => {
 						)
 					]
 				);
-				lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit, isFromCursorJump: false })));
-				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
-				return StatelessNextEditResult.streaming(telemetryBuilder);
+				for (const edit of lineEdit.replacements) {
+					yield new WithStatelessProviderTelemetry({ edit, isFromCursorJump: false }, telemetryBuilder.build(Result.ok(undefined)));
+				}
+				const noSuggestions = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined);
+				return new WithStatelessProviderTelemetry(noSuggestions, telemetryBuilder.build(Result.error(noSuggestions)));
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService, requestLogger);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),

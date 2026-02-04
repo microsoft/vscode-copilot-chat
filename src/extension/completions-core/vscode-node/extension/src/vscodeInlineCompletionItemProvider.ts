@@ -9,20 +9,26 @@ import {
 	InlineCompletionEndOfLifeReason,
 	InlineCompletionItemProvider,
 	InlineCompletionList,
+	InlineCompletionsDisposeReason,
+	InlineCompletionsDisposeReasonKind,
 	InlineCompletionTriggerKind,
 	PartialAcceptInfo,
 	Position,
 	TextDocument,
 	workspace
 } from 'vscode';
+import { ILogger, ILogService, LogTarget } from '../../../../../platform/log/common/logService';
+import { softAssert } from '../../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../../../util/vs/base/common/stopwatch';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { TextEdit, TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { LineBasedText } from '../../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService, ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { InlineEditLogger } from '../../../../inlineEdits/vscode-node/parts/inlineEditLogger';
-import { GhostTextContext } from '../../../common/ghostTextContext';
+import { GhostTextLogContext } from '../../../common/ghostTextContext';
 import { ICompletionsTelemetryService } from '../../bridge/src/completionsTelemetryServiceBridge';
 import { BuildInfo } from '../../lib/src/config';
 import { CopilotConfigPrefix } from '../../lib/src/constants';
@@ -33,12 +39,12 @@ import { CopilotCompletionFeedbackTracker, sendCompletionFeedbackCommand } from 
 import { ICompletionsExtensionStatus } from './extensionStatus';
 import { GhostTextCompletionItem, GhostTextCompletionList, GhostTextProvider } from './ghostText/ghostTextProvider';
 
-const logger = new Logger('inlineCompletionItemProvider');
-
 function quickSuggestionsDisabled() {
 	const qs = workspace.getConfiguration('editor.quickSuggestions');
 	return qs.get('other') !== 'on' && qs.get('comments') !== 'on' && qs.get('strings') !== 'on';
 }
+
+const myLogger = new Logger('CopilotInlineCompletionItemProvider');
 
 export function exception(accessor: ServicesAccessor, error: unknown, origin: string, logger?: Logger) {
 	if (error instanceof Error && error.name === 'Canceled') {
@@ -56,22 +62,31 @@ export function exception(accessor: ServicesAccessor, error: unknown, origin: st
 
 /** @public */
 export class CopilotInlineCompletionItemProvider extends Disposable implements InlineCompletionItemProvider {
+
 	private readonly copilotCompletionFeedbackTracker: CopilotCompletionFeedbackTracker;
+
 	private readonly ghostTextProvider: GhostTextProvider;
+
 	private readonly inlineEditLogger: InlineEditLogger;
 
+	private readonly telemetrySender: TelemetrySender;
+
 	public onDidChange = undefined;
-	public handleListEndOfLifetime: InlineCompletionItemProvider['handleListEndOfLifetime'] = undefined;
+
+	private readonly logger: ILogger;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ICompletionsTelemetryService private readonly telemetryService: ICompletionsTelemetryService,
 		@ICompletionsExtensionStatus private readonly extensionStatusService: ICompletionsExtensionStatus,
+		@ILogService logService: ILogService,
 	) {
 		super();
 		this.copilotCompletionFeedbackTracker = this._register(this.instantiationService.createInstance(CopilotCompletionFeedbackTracker));
 		this.ghostTextProvider = this.instantiationService.createInstance(GhostTextProvider);
 		this.inlineEditLogger = this.instantiationService.createInstance(InlineEditLogger);
+		this.telemetrySender = this.instantiationService.createInstance(TelemetrySender);
+		this.logger = logService.createSubLogger(['Ghost', 'CopilotInlineCompletionItemProvider']);
 	}
 
 	async provideInlineCompletionItems(
@@ -80,24 +95,8 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<GhostTextCompletionList | undefined> {
-		const logContext = new GhostTextContext(doc.uri.toString(), doc.version, context);
-		try {
-			return await this._provideInlineCompletionItems(doc, position, context, logContext, token);
-		} catch (e) {
-			logContext.setError(e);
-			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
-		} finally {
-			this.inlineEditLogger.add(logContext);
-		}
-	}
 
-	private async _provideInlineCompletionItems(
-		doc: TextDocument,
-		position: Position,
-		context: InlineCompletionContext,
-		logContext: GhostTextContext,
-		token: CancellationToken
-	): Promise<GhostTextCompletionList | undefined> {
+		// it's ok to return an undefined here because we don't want telemetry for when automatic completions are disabled
 		if (context.triggerKind === InlineCompletionTriggerKind.Automatic) {
 			if (!this.instantiationService.invokeFunction(isCompletionEnabledForDocument, doc)) {
 				return;
@@ -106,6 +105,44 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 				return;
 			}
 		}
+
+		const sw = new StopWatch();
+
+		const logContext = new GhostTextLogContext(doc.uri.toString(), doc.version, context);
+
+		const logger = this.logger.createSubLogger('provideInlineCompletionItems').withExtraTarget(LogTarget.fromCallback((_level, msg) => {
+			logContext.trace(`[${Math.floor(sw.elapsed()).toString().padStart(4, ' ')}ms] ${msg}`);
+		}));
+
+		logger.trace('Started providing inline completion items');
+
+		const telemetryBuilder = this.createTelemetryBuilder();
+		telemetryBuilder.setOpportunityId(context.requestUuid);
+
+		try {
+			return await this._provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, logger, token);
+		} catch (e) {
+			logContext.setError(e);
+			this.telemetryService.sendGHTelemetryException(e, 'codeUnification.completions.exception');
+			const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
+			return emptyList;
+		} finally {
+			this.inlineEditLogger.add(logContext);
+
+			telemetryBuilder.nesBuilder.markEndTime();
+		}
+	}
+
+	private async _provideInlineCompletionItems(
+		doc: TextDocument,
+		position: Position,
+		context: InlineCompletionContext,
+		telemetryBuilder: NextEditProviderTelemetryBuilder,
+		logContext: GhostTextLogContext,
+		parentLogger: ILogger,
+		token: CancellationToken,
+	): Promise<GhostTextCompletionList> {
+
 		const copilotConfig = workspace.getConfiguration(CopilotConfigPrefix);
 		// Constraining the generated inline completion to match selectedCompletionInfo sandbags Copilot pretty hard, as
 		// typically it's just the first entry in the list alphabetically.  But if we generate a result that doesn't
@@ -116,39 +153,46 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 			context = { ...context, selectedCompletionInfo: undefined };
 		}
 
-		try {
-			let items = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, token);
 
-			if (!items) {
+		const emptyList = { items: [], telemetryBuilder }; // we need to return an empty list, such that vscode invokes endOfLife on it and we send telemetry
+
+		try {
+			const list = await this.ghostTextProvider.provideInlineCompletionItems(doc, position, context, telemetryBuilder, logContext, parentLogger, token);
+
+			telemetryBuilder.nesBuilder.setHasNextEdit(list !== undefined && list.items.length > 0);
+
+			if (!list) {
 				if (token.isCancellationRequested) {
 					logContext.setIsSkipped();
+				} else {
+					logContext.markAsNoSuggestions();
 				}
-				return undefined;
+
+				return emptyList;
 			}
 
-			// If the language client provides a list of items, we want to add the send feedback command to it.
-			if (Array.isArray(items)) {
-				items = { items };
-			}
-
-			this.logSuggestion(logContext, doc, items);
+			this.logSuggestion(logContext, doc, list);
+			logContext.setResponseResults(list.items);
 
 			return {
-				...items,
+				...list,
 				commands: [sendCompletionFeedbackCommand],
 			};
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '._provideInlineCompletionItems', logger);
+			this.instantiationService.invokeFunction(exception, e, '._provideInlineCompletionItems', myLogger);
 			logContext.setError(e);
 		}
+
+		return emptyList;
 	}
 
 	handleDidShowCompletionItem(item: GhostTextCompletionItem) {
 		try {
+			item.telemetryBuilder.setAsShown();
 			this.copilotCompletionFeedbackTracker.trackItem(item);
 			return this.ghostTextProvider.handleDidShowCompletionItem(item);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleDidShowCompletionItem', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidShowCompletionItem', myLogger);
 		}
 	}
 
@@ -159,7 +203,7 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.ghostTextProvider.handleDidPartiallyAcceptCompletionItem(item, acceptedLengthOrInfo);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleDidPartiallyAcceptCompletionItem', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleDidPartiallyAcceptCompletionItem', myLogger);
 		}
 	}
 
@@ -167,12 +211,24 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		try {
 			return this.ghostTextProvider.handleEndOfLifetime(completionItem, reason);
 		} catch (e) {
-			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', logger);
+			this.instantiationService.invokeFunction(exception, e, '.handleEndOfLifetime', myLogger);
 		}
 	}
 
+	handleListEndOfLifetime(list: InlineCompletionList, reason: InlineCompletionsDisposeReason): void {
+		const ghostTextList = list as GhostTextCompletionList;
+		softAssert(ghostTextList.telemetryBuilder !== undefined, 'Expected GhostTextCompletionList to have telemetryBuilder');
+
+		const telemetryBuilder = ghostTextList.telemetryBuilder;
+
+		const disposeReasonStr = InlineCompletionsDisposeReasonKind[reason.kind];
+		telemetryBuilder.setDisposalReason(disposeReasonStr);
+
+		this.telemetrySender.sendTelemetryForBuilder(telemetryBuilder);
+	}
+
 	private logSuggestion(
-		logContext: GhostTextContext,
+		logContext: GhostTextLogContext,
 		doc: TextDocument,
 		items: InlineCompletionList
 	) {
@@ -206,5 +262,15 @@ export class CopilotInlineCompletionItemProvider extends Disposable implements I
 		const patch = lineEdit.humanReadablePatch(text.getLines());
 
 		logContext.setResult(patch);
+	}
+
+	private createTelemetryBuilder() {
+		return new NextEditProviderTelemetryBuilder(
+			undefined,
+			undefined,
+			undefined,
+			'ghostText',
+			undefined
+		);
 	}
 }

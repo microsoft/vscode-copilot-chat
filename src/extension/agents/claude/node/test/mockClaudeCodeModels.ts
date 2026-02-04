@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClaudeCodeModelInfo, IClaudeCodeModels } from '../claudeCodeModels';
+import { ClaudeCodeModelInfo, IClaudeCodeModels, NoClaudeModelsAvailableError } from '../claudeCodeModels';
 
 export class MockClaudeCodeModels implements IClaudeCodeModels {
 	declare _serviceBrand: undefined;
 
-	private _defaultModel: string | undefined = 'claude-sonnet-4-20250514';
+	private _defaultModel: string = 'claude-sonnet-4-20250514';
 
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -16,12 +16,15 @@ export class MockClaudeCodeModels implements IClaudeCodeModels {
 		return models.find(m => m.id.toLowerCase() === normalizedId || m.name.toLowerCase() === normalizedId)?.id;
 	}
 
-	async getDefaultModel(): Promise<string | undefined> {
+	async getDefaultModel(): Promise<string> {
+		if (!this._defaultModel) {
+			throw new NoClaudeModelsAvailableError();
+		}
 		return this._defaultModel;
 	}
 
 	async setDefaultModel(modelId: string | undefined): Promise<void> {
-		this._defaultModel = modelId;
+		this._defaultModel = modelId ?? 'claude-sonnet-4-20250514';
 	}
 
 	async getModels(): Promise<ClaudeCodeModelInfo[]> {

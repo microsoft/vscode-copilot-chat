@@ -15,7 +15,9 @@ import {
 	UserPromptSubmitHookInput
 } from '@anthropic-ai/claude-agent-sdk';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { registerClaudeHook } from './claudeHookRegistry';
+import { CapturingToken } from '../../../../../platform/requestLogger/common/capturingToken';
+import { IClaudeSessionStateService } from '../claudeSessionStateService';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for Notification events.
@@ -39,12 +41,14 @@ registerClaudeHook('Notification', NotificationLoggingHook);
 
 /**
  * Logging hook for UserPromptSubmit events.
+ * Also sets up the capturing token for request logging grouping.
  */
 export class UserPromptSubmitLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
@@ -52,6 +56,10 @@ export class UserPromptSubmitLoggingHook implements HookCallbackMatcher {
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as UserPromptSubmitHookInput;
 		this.logService.trace(`[ClaudeCodeSession] UserPromptSubmit Hook: prompt=${hookInput.prompt}`);
+
+		// Create a capturing token for this request to group tool calls under the request
+		const capturingToken = new CapturingToken(hookInput.prompt, 'sparkle', false);
+		this.sessionStateService.setCapturingTokenForSession(hookInput.session_id, capturingToken);
 		return { continue: true };
 	}
 }
@@ -59,12 +67,14 @@ registerClaudeHook('UserPromptSubmit', UserPromptSubmitLoggingHook);
 
 /**
  * Logging hook for Stop events.
+ * Also clears the capturing token to ensure each prompt gets its own isolated token.
  */
 export class StopLoggingHook implements HookCallbackMatcher {
 	public readonly hooks: HookCallback[];
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService
 	) {
 		this.hooks = [this._handle.bind(this)];
 	}
@@ -72,6 +82,10 @@ export class StopLoggingHook implements HookCallbackMatcher {
 	private async _handle(input: HookInput): Promise<HookJSONOutput> {
 		const hookInput = input as StopHookInput;
 		this.logService.trace(`[ClaudeCodeSession] Stop Hook: stopHookActive=${hookInput.stop_hook_active}`);
+
+		// Clear the capturing token so subsequent requests get their own isolated token
+		this.sessionStateService.setCapturingTokenForSession(hookInput.session_id, undefined);
+
 		return { continue: true };
 	}
 }

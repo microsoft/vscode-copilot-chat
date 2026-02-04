@@ -98,6 +98,11 @@ declare module 'vscode' {
 		 * The name of the subagent, used for logging and debugging purposes.
 		 */
 		readonly subAgentName?: string;
+
+		/**
+		 * The request ID of the parent request that invoked this subagent.
+		 */
+		readonly parentRequestId?: string;
 	}
 
 	export enum ChatRequestEditedFileEventKind {
@@ -115,10 +120,6 @@ declare module 'vscode' {
 	 * ChatRequestTurn + private additions. Note- at runtime this is the SAME as ChatRequestTurn and instanceof is safe.
 	 */
 	export class ChatRequestTurn2 {
-		/**
-		 * The id of the chat request. Used to identity an interaction with any of the chat surfaces.
-		 */
-		readonly id?: string;
 		/**
 		 * The prompt as entered by the user.
 		 *
@@ -157,10 +158,15 @@ declare module 'vscode' {
 		/**
 		 * @hidden
 		 */
-		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined);
+		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined);
 	}
 
 	export class ChatResponseTurn2 {
+		/**
+		 * The id of the chat response. Used to identity an interaction with any of the chat surfaces.
+		 */
+		readonly id?: string;
+
 		/**
 		 * The content that was received from the chat participant. Only the stream parts that represent actual content (not metadata) are represented.
 		 */

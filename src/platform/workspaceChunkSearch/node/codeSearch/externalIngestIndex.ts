@@ -3,15 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
+import * as ingestUtils from '@github/blackbird-external-ingest-utils';
+import * as l10n from '@vscode/l10n';
+import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import { isEqualOrParent, relativePath } from '../../../../util/vs/base/common/resources';
+import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkAndScore } from '../../../chunking/common/chunk';
@@ -22,9 +26,11 @@ import { RelativePattern } from '../../../filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../ignore/common/ignoreService';
 import { ILogService } from '../../../log/common/logService';
 import { ISearchService } from '../../../search/common/searchService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../workspace/common/workspaceService';
 import { StrategySearchSizing, WorkspaceChunkQueryWithEmbeddings } from '../../common/workspaceChunkSearch';
 import { shouldPotentiallyIndexFile } from '../workspaceFileIndex';
+import { CodeSearchRepoStatus, TriggerIndexingError, TriggerRemoteIndexingError } from './codeSearchRepo';
 import { ExternalIngestFile, IExternalIngestClient } from './externalIngestClient';
 
 const debug = false;
@@ -46,6 +52,11 @@ interface DbFileEntry {
 	shouldIngest: ShouldIngestState;
 }
 
+export interface ExternalIngestStatus {
+	readonly status: CodeSearchRepoStatus;
+	readonly progressMessage: string | undefined;
+}
+
 /**
  * Manages external ingest indexing for files that are NOT covered by GitHub/ADO code search.
  */
@@ -53,7 +64,7 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _db: sql.DatabaseSync;
 
-	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(5));
+	private readonly _readLimiter = this._register(new Limiter<Uint8Array>(20));
 	private readonly _watcher = this._register(new MutableDisposable<DisposableStore>());
 
 	private static readonly _checkpointStorageKey = 'externalIngest.checkpoint';
@@ -69,6 +80,48 @@ export class ExternalIngestIndex extends Disposable {
 
 	private readonly _client: IExternalIngestClient;
 
+	private readonly _onDidChangeState = this._register(new Emitter<void>());
+	public readonly onDidChangeState = this._onDidChangeState.event;
+
+	private _currentIngestOperation?: {
+		promise: Promise<Result<true, TriggerIndexingError>>;
+
+		progressMessage: string | undefined;
+
+		completed: boolean;
+	};
+
+	/**
+	 * Returns the current index state.
+	 */
+	public getState(): ExternalIngestStatus {
+		if (this._currentIngestOperation) {
+			if (this._currentIngestOperation.completed) {
+				return {
+					status: CodeSearchRepoStatus.Ready,
+					progressMessage: undefined,
+				};
+			} else {
+				return {
+					status: CodeSearchRepoStatus.BuildingIndex,
+					progressMessage: this._currentIngestOperation.progressMessage,
+				};
+			}
+		}
+
+		if (this.getCurrentIndexCheckpoint()) {
+			return {
+				status: CodeSearchRepoStatus.Ready,
+				progressMessage: undefined,
+			};
+		}
+
+		return {
+			status: CodeSearchRepoStatus.NotYetIndexed,
+			progressMessage: undefined,
+		};
+	}
+
 	constructor(
 		client: IExternalIngestClient,
 		@IEnvService private readonly _envService: IEnvService,
@@ -77,6 +130,7 @@ export class ExternalIngestIndex extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@ISearchService private readonly _searchService: ISearchService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IVSCodeExtensionContext private readonly _vsExtensionContext: IVSCodeExtensionContext,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
@@ -92,10 +146,10 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		try {
-			this._db = this.createDatabase(dbPath);
+			this._db = this.openOrCreateDatabase(dbPath);
 		} catch (error) {
 			this._logService.error('Failed to create database. Falling back to in-memory db', error);
-			this._db = this.createDatabase(':memory:');
+			this._db = this.createFreshDatabase(':memory:');
 		}
 	}
 
@@ -137,10 +191,31 @@ export class ExternalIngestIndex extends Disposable {
 		const filesetName = this.getFilesetName(primaryRoot);
 		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
 
-		await this._client.deleteFileset(filesetName, token);
-		this.clearCurrentIndexCheckpoint();
+		try {
+			await this._client.deleteFileset(filesetName, token);
+			this.clearCurrentIndexCheckpoint();
+			this._onDidChangeState.fire();
 
-		this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
+			this._logService.info(`ExternalIngestIndex: Deleted index for fileset ${filesetName}`);
+
+			/* __GDPR__
+				"externalIngestIndex.deleteIndex" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest index is deleted successfully"
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.deleteIndex');
+		} catch (e) {
+			/* __GDPR__
+				"externalIngestIndex.deleteIndex.error" : {
+					"owner": "mjbvz",
+					"comment": "Logged when deleting external ingest index fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.deleteIndex.error', { error: (e as Error).message });
+			throw e;
+		}
 	}
 
 	/**
@@ -176,13 +251,12 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<void> {
-
-		await this.initialize();
+	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+		await raceCancellationError(this.initialize(), token);
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
-			return;
+			return Result.error(TriggerRemoteIndexingError.noWorkspace);
 		}
 
 		// Use the first workspace folder as the "root" for the fileset
@@ -190,17 +264,90 @@ export class ExternalIngestIndex extends Disposable {
 
 		const currentCheckpoint = this.getCurrentIndexCheckpoint();
 
-		const result = await this._client.updateIndex(
-			this.getFilesetName(primaryRoot),
-			currentCheckpoint,
-			this.getFilesToIndexFromDb(),
-			token,
-			onProgress
-		);
+		// Track building state
+		const operation: typeof this._currentIngestOperation = {
+			promise: undefined!,
+			progressMessage: undefined,
+			completed: false,
+		};
 
-		if (result.isOk()) {
-			this.setCurrentIndexCheckpoint(result.val.checkpoint);
-		}
+		const wrappedOnProgress = (message: string) => {
+			if (this._currentIngestOperation === operation) {
+				operation.progressMessage = message;
+				this._onDidChangeState.fire();
+			}
+
+			onProgress(message);
+		};
+
+		const sw = new StopWatch();
+
+		const updatePromise = (async (): Promise<Result<true, TriggerIndexingError>> => {
+			try {
+				const result = await this._client.updateIndex(
+					this.getFilesetName(primaryRoot),
+					currentCheckpoint,
+					this.getFilesToIndexFromDb(token),
+					token,
+					wrappedOnProgress
+				);
+				if (result.isOk()) {
+					this.setCurrentIndexCheckpoint(result.val.checkpoint);
+
+					/* __GDPR__
+						"externalIngestIndex.updateIndex.success" : {
+							"owner": "mjbvz",
+							"comment": "Logged when external ingest index update completes successfully",
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the update in milliseconds" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.updateIndex.success', undefined, { durationMs: sw.elapsed() });
+
+					return Result.ok(true);
+				} else {
+					/* __GDPR__
+						"externalIngestIndex.updateIndex.error" : {
+							"owner": "mjbvz",
+							"comment": "Logged when external ingest index update fails",
+							"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" },
+							"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before failure in milliseconds" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.updateIndex.error', { error: result.err.message }, { durationMs: sw.elapsed() });
+
+					return Result.error({
+						id: 'external-ingest-error',
+						userMessage: l10n.t("Failed to update external ingest index: {0}", result.err.message)
+					});
+				}
+			} catch (e) {
+				/* __GDPR__
+					"externalIngestIndex.updateIndex.exception" : {
+						"owner": "mjbvz",
+						"comment": "Logged when external ingest index update throws an exception",
+						"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The exception message" },
+						"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before exception in milliseconds" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.updateIndex.exception', { error: (e as Error).message }, { durationMs: sw.elapsed() });
+
+				return Result.error({
+					id: 'external-ingest-error',
+					userMessage: l10n.t("Exception updating external ingest index: {0}", (e as Error).message)
+				});
+			} finally {
+				if (this._currentIngestOperation === operation) {
+					operation.completed = true;
+				}
+				this._onDidChangeState.fire();
+			}
+		})();
+
+		operation.promise = updatePromise;
+		this._currentIngestOperation = operation;
+		this._onDidChangeState.fire();
+
+		return updatePromise;
 	}
 
 	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
@@ -209,24 +356,104 @@ export class ExternalIngestIndex extends Disposable {
 			return [];
 		}
 
-		const resolvedQuery = await query.resolveQuery(token);
+		const sw = new StopWatch();
 
-		await raceCancellationError(this.doIngest(() => { }, token), token);
+		try {
+			const resolvedQuery = await query.resolveQuery(token);
 
-		// TODO: search changed files too
-		const primaryRoot = workspaceFolders[0];
-		const result = await raceCancellationError(this._client.searchFilesets(
-			this.getFilesetName(primaryRoot),
-			primaryRoot,
-			resolvedQuery,
-			sizing.maxResultCountHint,
-			token), token);
+			await raceCancellationError(this.doIngest(() => { }, token), token);
 
-		return result.chunks;
+			// TODO: search changed files too
+			const primaryRoot = workspaceFolders[0];
+			const result = await raceCancellationError(this._client.searchFilesets(
+				this.getFilesetName(primaryRoot),
+				primaryRoot,
+				resolvedQuery,
+				sizing.maxResultCountHint,
+				token), token);
+
+			/* __GDPR__
+				"externalIngestIndex.search.success" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest search completes successfully",
+					"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks returned from the search" },
+					"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken to complete the search in milliseconds" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('externalIngestIndex.search.success', undefined, {
+				resultCount: result.chunks.length,
+				durationMs: sw.elapsed()
+			});
+
+			return result.chunks;
+		} catch (e) {
+			/* __GDPR__
+				"externalIngestIndex.search.error" : {
+					"owner": "mjbvz",
+					"comment": "Logged when external ingest search fails",
+					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The error message" },
+					"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time taken before failure in milliseconds" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryErrorEvent('externalIngestIndex.search.error', { error: (e as Error).message }, { durationMs: sw.elapsed() });
+			throw e;
+		}
 	}
 
-	private createDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
-		this._logService.trace(`ExternalIngestIndex: Creating database at path: ${dbPath}`);
+	private openOrCreateDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
+		this._logService.trace(`ExternalIngestIndex: Opening database at path: ${dbPath}`);
+
+		// For in-memory databases, always create fresh
+		if (dbPath === ':memory:') {
+			return this.createFreshDatabase(dbPath);
+		}
+
+		// Try to open existing database and check cache version
+		if (fs.existsSync(dbPath)) {
+			try {
+				const db = new sql.DatabaseSync(dbPath, {
+					open: true,
+					enableForeignKeyConstraints: true,
+				});
+
+				const storedVersion = this.getStoredCacheVersion(db);
+				if (storedVersion === ingestUtils.cacheVersion()) {
+					this._logService.trace(`ExternalIngestIndex: Cache version matches (${ingestUtils.cacheVersion()})`);
+					return db;
+				}
+
+				// Version mismatch - close and delete
+				this._logService.info(`ExternalIngestIndex: Cache version mismatch (stored: ${storedVersion}, current: ${ingestUtils.cacheVersion()}). Recreating database.`);
+				db.close();
+			} catch (error) {
+				this._logService.warn(`ExternalIngestIndex: Failed to open existing database, will recreate: ${error}`);
+			}
+
+			// Delete the old database file
+			try {
+				fs.unlinkSync(dbPath);
+			} catch (error) {
+				this._logService.warn(`ExternalIngestIndex: Failed to delete old database file: ${error}`);
+			}
+		}
+
+		return this.createFreshDatabase(dbPath);
+	}
+
+	private getStoredCacheVersion(db: sql.DatabaseSync): number | undefined {
+		try {
+			const row = db.prepare('SELECT value FROM Metadata WHERE key = ?').get('cacheVersion');
+			if (row && typeof row.value === 'number') {
+				return row.value;
+			}
+		} catch {
+			// Table may not exist in older databases
+		}
+		return undefined;
+	}
+
+	private createFreshDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
+		this._logService.trace(`ExternalIngestIndex: Creating fresh database at path: ${dbPath}`);
 
 		const db = new sql.DatabaseSync(dbPath, {
 			open: true,
@@ -243,6 +470,13 @@ export class ExternalIngestIndex extends Disposable {
 		`);
 
 		db.exec(`
+			CREATE TABLE IF NOT EXISTS Metadata (
+				key TEXT PRIMARY KEY,
+				value INTEGER NOT NULL
+			);
+		`);
+
+		db.exec(`
 			CREATE TABLE IF NOT EXISTS Files (
 				path TEXT PRIMARY KEY,
 				size INTEGER NOT NULL,
@@ -251,6 +485,9 @@ export class ExternalIngestIndex extends Disposable {
 				shouldIngest INTEGER NOT NULL DEFAULT 0
 			);
 		`);
+
+		// Store the current cache version
+		db.prepare('INSERT OR REPLACE INTO Metadata (key, value) VALUES (?, ?)').run('cacheVersion', ingestUtils.cacheVersion());
 
 		return db;
 	}
@@ -303,8 +540,8 @@ export class ExternalIngestIndex extends Disposable {
 		return !await this._ignoreService.isCopilotIgnored(uri, token);
 	}
 
-	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
-		if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+	private async shouldIngestFile(uri: URI, stat: { readonly size: number; readonly mtime: number }, token: CancellationToken): Promise<Result<{ readonly docSha: Uint8Array }, false>> {
+		if (!await this.shouldTrackFile(uri, token)) {
 			return Result.error(false);
 		}
 
@@ -356,23 +593,34 @@ export class ExternalIngestIndex extends Disposable {
 		return uri.fsPath;
 	}
 
-	private async *getFilesToIndexFromDb(): AsyncIterable<ExternalIngestFile> {
-		// Get files that are either already marked Yes or need to be evaluated (Undetermined)
+	private createExternalIngestFile(uri: URI, docSha: Uint8Array): ExternalIngestFile {
+		return {
+			uri,
+			relativePath: this.computeRelativePath(uri),
+			docSha,
+			read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
+		};
+	}
+
+	private async *getFilesToIndexFromDb(token: CancellationToken): AsyncIterable<ExternalIngestFile> {
+		// Get files that are either already marked "Yes" or "need to be evaluated" (Undetermined)
 		const rows = this._db.prepare('SELECT path, size, mtime, docSha, shouldIngest FROM Files WHERE shouldIngest IN (?, ?)').all(ShouldIngestState.Yes, ShouldIngestState.Undetermined) as unknown as Array<DbFileEntry>;
 
-		for (const row of rows) {
+		const limiter = new Limiter<ExternalIngestFile | undefined>(20);
+
+		const processRow = async (row: DbFileEntry): Promise<ExternalIngestFile | undefined> => {
 			const uri = URI.parse(row.path);
 
 			// Skip files that are now under code search repos
-			if (!await this.shouldTrackFile(uri, CancellationToken.None)) {
+			if (!await this.shouldTrackFile(uri, token)) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
-			const stat = await this.safeStat(uri);
+			const stat = await raceCancellationError(this.safeStat(uri), token);
 			if (!stat) {
 				this.delete(uri);
-				continue;
+				return undefined;
 			}
 
 			const storedSize = row.size;
@@ -381,51 +629,60 @@ export class ExternalIngestIndex extends Disposable {
 
 			// If file state is undetermined, we need to evaluate it
 			if (row.shouldIngest === ShouldIngestState.Undetermined) {
-				const result = await this.shouldIngestFile(uri, stat);
+				const result = await this.shouldIngestFile(uri, stat, token);
 				if (result.isOk()) {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, docSha = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.Yes, result.val.docSha, stat.size, stat.mtime, uri.toString());
 
-					yield {
-						uri,
-						relativePath: this.computeRelativePath(uri),
-						docSha: result.val.docSha,
-						read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-					};
+					return this.createExternalIngestFile(uri, result.val.docSha);
 				} else {
 					this._db.prepare('UPDATE Files SET shouldIngest = ?, size = ?, mtime = ? WHERE path = ?')
 						.run(ShouldIngestState.No, stat.size, stat.mtime, uri.toString());
 				}
-				continue;
+				return undefined;
 			}
 
 			// File is already marked Yes - use cached docSha if file unchanged
 			let docSha: Uint8Array | undefined = fileUnchanged ? row.docSha ?? undefined : undefined;
 
 			if (!docSha) {
-				docSha = await this.computeIngestDocSha(uri);
+				docSha = await raceCancellationError(this.computeIngestDocSha(uri), token);
 				if (!docSha) {
-					continue;
+					return undefined;
 				}
 
 				// Store the computed docSha in the database
 				this._db.prepare('UPDATE Files SET docSha = ? WHERE path = ?').run(docSha, uri.toString());
 			}
 
-			yield {
-				uri,
-				relativePath: this.computeRelativePath(uri),
-				docSha,
-				read: () => this._readLimiter.queue(() => this._fileSystemService.readFile(uri)),
-			};
+			return this.createExternalIngestFile(uri, docSha);
+		};
+
+		// Queue all work upfront to run in parallel, then yield results in order as they complete
+		const pendingResults = rows.map(row => limiter.queue(() => processRow(row)));
+
+		for (const pending of pendingResults) {
+			const result = await raceCancellationError(pending, token);
+			if (result) {
+				yield result;
+			}
 		}
 	}
 
 	private async reconcileDbFiles(): Promise<void> {
+		await this._workspaceService.ensureWorkspaceIsFullyLoaded();
+		await this._ignoreService.init();
+
 		const initialDbFiles = new ResourceSet();
 		for (const uri of this.iterateDbFiles()) {
 			initialDbFiles.add(uri);
 		}
+
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${initialDbFiles.size} initial file entries in database.`);
+
+		let addedFileCount = 0;
+		let updatedFileCount = 0;
+		let removedFileCount = 0;
 
 		const seen = new ResourceSet();
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
@@ -436,6 +693,8 @@ export class ExternalIngestIndex extends Disposable {
 				Number.MAX_SAFE_INTEGER,
 				CancellationToken.None
 			);
+
+			this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Found ${paths.length} candidate files in workspace folder ${folder.toString()}.`);
 
 			for (const uri of paths) {
 				// Skip files under code search repos
@@ -451,8 +710,12 @@ export class ExternalIngestIndex extends Disposable {
 				seen.add(uri);
 
 				const existing = this.get(uri);
-				if (!existing || existing.size !== stat.size || existing.mtime !== stat.mtime) {
+				if (!existing) {
 					await this.tryAddOrUpdateFile(uri);
+					addedFileCount++;
+				} else if (existing.size !== stat.size || existing.mtime !== stat.mtime) {
+					await this.tryAddOrUpdateFile(uri);
+					updatedFileCount++;
 				}
 			}
 		}
@@ -461,8 +724,10 @@ export class ExternalIngestIndex extends Disposable {
 		for (const uri of initialDbFiles) {
 			if (!seen.has(uri)) {
 				this.delete(uri);
+				removedFileCount++;
 			}
 		}
+		this._logService.trace(`ExternalIngestIndex::reconcileDbFiles() Reconciled database. Added: ${addedFileCount}, updated: ${updatedFileCount}, removed: ${removedFileCount}`);
 	}
 
 	private registerWatcher(): void {
@@ -522,7 +787,7 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array {
-		return getDocSha(this.computeRelativePath(uri), new DocumentContents(data));
+		return ingestUtils.getDocSha(this.computeRelativePath(uri), new ingestUtils.DocumentContents(data));
 	}
 
 	private async computeIngestDocSha(uri: URI): Promise<Uint8Array | undefined> {

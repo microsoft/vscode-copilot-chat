@@ -2,7 +2,7 @@
 	"files.trimTrailingWhitespace": true,
 	"[typescript]": {
 		"editor.insertSpaces": false,
-		"editor.defaultFormatter": "TypeScriptTeam.native-preview",
+		"editor.defaultFormatter": "vscode.typescript-language-features",
 		"editor.formatOnSave": true,
 		"editor.codeActionsOnSave": {
 			"source.organizeImports": "always"
@@ -150,5 +150,6 @@
 	},
 	"githubPullRequests.codingAgent.enabled": true,
 	"githubPullRequests.codingAgent.uiIntegration": true,
-	"chat.inlineReferences.style": "link",
+	"python-envs.defaultEnvManager": "ms-python.python:system",
+	"python-envs.pythonProjects": [],
 }

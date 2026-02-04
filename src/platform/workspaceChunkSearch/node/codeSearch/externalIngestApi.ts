@@ -12,7 +12,7 @@ import { ILogService } from '../../../log/common/logService';
 // Sliding window that holds at least N entries and all entries in the time window.
 // This allows the sliding window to always hold some entries if inserts are infrequent,
 // but if inserts are frequent enough then time window behavior takes over.
-class SlidingTimeAndNWindow {
+class SlidingTimeAndNWindow implements IDisposable {
 	private values: number[] = [];
 	private times: number[] = [];
 	private sumValues = 0;
@@ -24,6 +24,12 @@ class SlidingTimeAndNWindow {
 		this.numEntries = numEntries;
 		this.windowDurationMs = windowDurationMs;
 		this.startPeriodicCleanup();
+	}
+
+	dispose(): void {
+		if (typeof this.cleanupInterval !== 'undefined') {
+			clearInterval(this.cleanupInterval);
+		}
 	}
 
 	increment(n: number): void {
@@ -88,12 +94,6 @@ class SlidingTimeAndNWindow {
 			}
 		}, 100);
 	}
-
-	destroy(): void {
-		if (this.cleanupInterval) {
-			clearInterval(this.cleanupInterval);
-		}
-	}
 }
 
 class Throttler {
@@ -113,8 +113,8 @@ class Throttler {
 	reset(): void {
 		if (this.numOutstandingRequests === 0) {
 			this.lastSendTime = Date.now();
-			this.totalQuotaUsedWindow.destroy();
-			this.sendPeriodWindow.destroy();
+			this.totalQuotaUsedWindow.dispose();
+			this.sendPeriodWindow.dispose();
 			this.totalQuotaUsedWindow = new SlidingTimeAndNWindow(5, 2000);
 			this.sendPeriodWindow = new SlidingTimeAndNWindow(5, 2000);
 		}
@@ -183,11 +183,12 @@ class Throttler {
 		return shouldSend;
 	}
 
-	destroy(): void {
-		this.totalQuotaUsedWindow.destroy();
-		this.sendPeriodWindow.destroy();
+	dispose(): void {
+		this.totalQuotaUsedWindow.dispose();
+		this.sendPeriodWindow.dispose();
 	}
 }
+
 export const githubHeaders = Object.freeze({
 	requestId: 'x-github-request-id',
 	totalQuotaUsed: 'x-github-total-quota-used',
@@ -248,13 +249,16 @@ export class ApiClient implements IDisposable {
 				this.throttler.recordQuotaUsed(quotaUsed);
 			}
 			return res;
+		} catch (e) {
+			this.logService.error(`${method} to ${url} request threw with error: ${e}`);
+			throw e;
 		} finally {
 			this.throttler?.requestFinished();
 		}
 	}
 
 	dispose(): void {
-		this.throttler?.destroy();
+		this.throttler?.dispose();
 	}
 }
 

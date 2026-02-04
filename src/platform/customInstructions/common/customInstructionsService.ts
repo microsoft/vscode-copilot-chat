@@ -24,6 +24,7 @@ import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { IPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
+import { COPILOT_INSTRUCTIONS_PATH, INSTRUCTION_FILE_EXTENSION, INSTRUCTIONS_LOCATION_KEY, PERSONAL_SKILL_FOLDERS, PromptsType, SKILLS_LOCATION_KEY, USE_AGENT_SKILLS_SETTING, WORKSPACE_SKILL_FOLDERS } from './promptTypes';
 
 declare const TextDecoder: {
 	decode(input: Uint8Array): string;
@@ -50,7 +51,7 @@ export const ICustomInstructionsService = createServiceIdentifier<ICustomInstruc
 
 export interface IExtensionPromptFile {
 	uri: URI;
-	type: 'instructions' | 'prompt' | 'agent' | 'skill';
+	type: PromptsType;
 }
 
 export interface ICustomInstructionsService {
@@ -59,6 +60,8 @@ export interface ICustomInstructionsService {
 	fetchInstructionsFromFile(fileUri: Uri): Promise<ICustomInstructions | undefined>;
 
 	getAgentInstructions(): Promise<URI[]>;
+
+	parseInstructionIndexFile(promptFileIndexText: string): IInstructionIndexFile;
 
 	isExternalInstructionsFile(uri: URI): Promise<boolean>;
 	isExternalInstructionsFolder(uri: URI): boolean;
@@ -77,6 +80,13 @@ export interface ICustomInstructionsService {
 	getExtensionSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined;
 }
 
+export interface IInstructionIndexFile {
+	readonly instructions: ResourceSet;
+	readonly skills: ResourceSet;
+	readonly skillFolders: ResourceSet;
+	readonly agents: Set<string>;
+}
+
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
 
 function isCodeGenerationImportInstruction(instruction: any): instruction is CodeGenerationImportInstruction {
@@ -92,17 +102,6 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 	}
 	return false;
 }
-
-const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
-const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
-
-const WORKSPACE_SKILL_FOLDERS = ['.github/skills', '.claude/skills'];
-const PERSONAL_SKILL_FOLDERS = ['.copilot/skills', '.claude/skills'];
-const USE_AGENT_SKILLS_SETTING = 'chat.useAgentSkills';
-const SKILLS_LOCATION_KEY = 'chat.agentSkillsLocations';
-
-const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
-
 
 export class CustomInstructionsService extends Disposable implements ICustomInstructionsService {
 
@@ -414,6 +413,10 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 		return undefined;
 	}
 
+	public parseInstructionIndexFile(content: string): InstructionIndexFile {
+		return new InstructionIndexFile(content, this.promptPathRepresentationService);
+	}
+
 	public async isExternalInstructionsFile(uri: URI): Promise<boolean> {
 		if (uri.scheme === Schemas.vscodeUserData && uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
 			return true;
@@ -464,4 +467,88 @@ export class CustomInstructionsService extends Disposable implements ICustomInst
 	public getSkillInfo(uri: URI): { skillName: string; skillFolderUri: URI } | undefined {
 		return this._matchInstructionLocationsFromSkills.get()(uri);
 	}
+}
+
+class InstructionIndexFile implements IInstructionIndexFile {
+
+	private instructionUris: ResourceSet | undefined;
+	private skillUris: ResourceSet | undefined;
+	private skillFolderUris: ResourceSet | undefined;
+	private agentNames: Set<string> | undefined;
+
+	constructor(
+		public readonly content: string,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService) {
+	}
+
+	/**
+	 * Finds file paths or names in the index file. The index file has XML format: <listElementName><elementName><propertyName>value</propertyName></elementName></listElementName>
+	 */
+	private getValuesInIndexFile(listElementName: string, elementName: string, propertyName: string): string[] {
+		const result: string[] = [];
+		const lists = xmlContents(this.content, listElementName);
+		for (const list of lists) {
+			const instructions = xmlContents(list, elementName);
+			for (const instruction of instructions) {
+				const filePath = xmlContents(instruction, propertyName);
+				if (filePath.length > 0) {
+					result.push(filePath[0]);
+				}
+			}
+		}
+		return result;
+	}
+
+	private getURIsFromFilePaths(filePaths: string[]): ResourceSet {
+		const result = new ResourceSet();
+		for (const filePath of filePaths) {
+			const uri = this.promptPathRepresentationService.resolveFilePath(filePath);
+			if (uri) {
+				result.add(uri);
+			}
+		}
+		return result;
+	}
+
+	get instructions(): ResourceSet {
+		if (this.instructionUris === undefined) {
+			this.instructionUris = this.getURIsFromFilePaths(this.getValuesInIndexFile('instructions', 'instruction', 'file'));
+		}
+		return this.instructionUris;
+	}
+
+	get skills(): ResourceSet {
+		if (this.skillUris === undefined) {
+			this.skillUris = this.getURIsFromFilePaths(this.getValuesInIndexFile('skills', 'skill', 'file'));
+		}
+		return this.skillUris;
+	}
+
+	get skillFolders(): ResourceSet {
+		if (this.skillFolderUris === undefined) {
+			this.skillFolderUris = new ResourceSet();
+			for (const skillUri of this.skills) {
+				const skillFolderUri = extUriBiasedIgnorePathCase.dirname(skillUri);
+				this.skillFolderUris.add(skillFolderUri);
+			}
+		}
+		return this.skillFolderUris;
+	}
+
+	get agents(): Set<string> {
+		if (this.agentNames === undefined) {
+			this.agentNames = new Set(this.getValuesInIndexFile('agents', 'agent', 'file'));
+		}
+		return this.agentNames;
+	}
+}
+
+function xmlContents(text: string, tag: string): string[] {
+	const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'g');
+	const matches = [];
+	let match;
+	while ((match = regex.exec(text)) !== null) {
+		matches.push(match[1].trim());
+	}
+	return matches;
 }

@@ -124,6 +124,7 @@ export interface ILoggedToolCall {
 	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
+	toolMetadata?: unknown;
 	toJSON(): Promise<object>;
 }
 
@@ -137,6 +138,8 @@ export interface ILoggedPendingRequest {
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
 	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -152,7 +155,7 @@ export interface IRequestLogger {
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
-	logServerToolCall(id: string, name: string, args: unknown): void;
+	logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
 	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 
@@ -184,6 +187,8 @@ export interface ILoggedChatMLRequest {
 	startTime: Date;
 	endTime: Date;
 	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export interface ILoggedChatMLSuccessRequest extends ILoggedChatMLRequest {
@@ -235,7 +240,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 
 	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
-	public abstract logServerToolCall(id: string, name: string, args: unknown): void;
+	public abstract logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
@@ -285,7 +290,8 @@ class AbstractPendingLoggedRequest {
 			chatParams: this._chatParams,
 			startTime: this._time,
 			endTime: new Date(),
-			isConversationRequest: this._chatParams.isConversationRequest
+			isConversationRequest: this._chatParams.isConversationRequest,
+			customMetadata: this._chatParams.customMetadata
 		});
 	}
 }
@@ -312,6 +318,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 				deltas
 			});
@@ -325,6 +332,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 			});
 		}

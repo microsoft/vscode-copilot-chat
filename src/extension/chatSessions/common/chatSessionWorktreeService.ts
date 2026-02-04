@@ -4,8 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { RepoContext } from '../../../platform/git/common/gitService';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { IObservable } from '../../../util/vs/base/common/observable';
+
+export interface ChatSessionWorktreeFile {
+	readonly filePath: string;
+	readonly originalFilePath: string | undefined;
+	readonly modifiedFilePath: string | undefined;
+	readonly statistics: {
+		readonly additions: number;
+		readonly deletions: number;
+	};
+}
 
 export interface ChatSessionWorktreeData {
 	readonly data: string;
@@ -18,6 +28,7 @@ interface ChatSessionWorktreePropertiesV1 {
 	readonly branchName: string;
 	readonly repositoryPath: string;
 	readonly worktreePath: string;
+	readonly changes?: readonly ChatSessionWorktreeFile[] | undefined;
 }
 
 export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
@@ -26,17 +37,17 @@ export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionW
 
 export interface IChatSessionWorktreeService {
 	readonly _serviceBrand: undefined;
-	readonly isWorktreeSupportedObs: IObservable<boolean>;
 
-	createWorktree(stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
+	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
 
+	getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined>;
 	getWorktreePath(sessionId: string): vscode.Uri | undefined;
 
 	applyWorktreeChanges(sessionId: string): Promise<void>;
-	getWorktreeChanges(sessionId: string): Promise<vscode.ChatSessionChangedFile[] | undefined>;
+	getWorktreeChanges(sessionId: string): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
 
 	handleRequestCompleted(sessionId: string): Promise<void>;
 }

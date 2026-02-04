@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
@@ -13,6 +14,9 @@ import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSes
 // Import the tool permission handlers
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
+
+// Import the hooks to trigger self-registration
+import '../../agents/claude/vscode-node/hooks/index';
 
 export class ClaudeChatSessionParticipant {
 	constructor(
@@ -34,36 +38,47 @@ export class ClaudeChatSessionParticipant {
 			return slashResult.result ?? {};
 		}
 
-		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
-			const { claudeSessionId } = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
-			if (!claudeSessionId) {
-				stream.warning(vscode.l10n.t("Failed to create a new Claude Code session."));
-				return undefined;
+		const create = async (modelId: string, permissionMode?: PermissionMode) => {
+			const result = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
+			if (!result.claudeSessionId) {
+				// Only show generic warning if we didn't already show a specific error
+				if (!result.errorDetails) {
+					stream.warning(vscode.l10n.t("Failed to create a new Claude Code session."));
+				}
+				return { claudeSessionId: undefined, errorDetails: result.errorDetails };
 			}
-			return claudeSessionId;
+			return { claudeSessionId: result.claudeSessionId, errorDetails: undefined };
 		};
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
-			const modelId = await this.contentProvider.getModelIdForSession(sessionId);
+			let modelId: string;
+			try {
+				modelId = await this.contentProvider.getModelIdForSession(sessionId);
+			} catch (e) {
+				if (e instanceof NoClaudeModelsAvailableError) {
+					return { errorDetails: { message: e.message } };
+				}
+				throw e;
+			}
 			const permissionMode = this.contentProvider.getPermissionModeForSession(sessionId);
 
 			if (chatSessionContext.isUntitled) {
 				/* New, empty session */
-				const claudeSessionId = await create(modelId, permissionMode);
-				if (claudeSessionId) {
+				const result = await create(modelId, permissionMode);
+				if (result.claudeSessionId) {
 					// Tell UI to replace with claude-backed session
 					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-						resource: ClaudeSessionUri.forSessionId(claudeSessionId),
+						resource: ClaudeSessionUri.forSessionId(result.claudeSessionId),
 						label: request.prompt ?? 'Claude Code'
 					});
 				}
-				return {};
+				return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 			}
 
 			/* Existing session */
-			await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId, permissionMode);
-			return {};
+			const result = await this.claudeAgentManager.handleRequest(sessionId, request, context, stream, token, modelId, permissionMode);
+			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		}
 		/* Via @claude */
 		// TODO: Think about how this should work

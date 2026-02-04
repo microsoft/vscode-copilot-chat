@@ -3,16 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type * as vscode from 'vscode';
+import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
 import { Emitter } from '../../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
+import { constObservable, IObservable } from '../../../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../../vscodeTypes';
+import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { ICopilotTool } from '../../../../tools/common/toolsRegistry';
 import { IOnWillInvokeToolEvent, IToolsService, IToolValidationResult } from '../../../../tools/common/toolsService';
-import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeToolPermissionContext, ClaudeToolPermissionResult, IClaudeToolConfirmationParams, IClaudeToolPermissionHandler } from '../../common/claudeToolPermission';
 import { registerToolPermissionHandler } from '../../common/claudeToolPermissionRegistry';
 import { ClaudeToolPermissionService } from '../../common/claudeToolPermissionService';
@@ -47,6 +49,12 @@ class MockToolsService implements IToolsService {
 	clearCalls(): void {
 		this._invokeToolCalls = [];
 	}
+
+	invokeToolWithEndpoint(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, endpoint: IChatEndpoint | undefined, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2> {
+		return this.invokeTool(name, options);
+	}
+
+	modelSpecificTools: IObservable<{ definition: vscode.LanguageModelToolDefinition; tool: ICopilotTool<unknown> }[]> = constObservable([]);
 
 	async invokeTool(
 		name: string,

@@ -7,6 +7,7 @@ import { PermissionMode, SDKAssistantMessage, SDKMessage } from '@anthropic-ai/c
 import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -20,6 +21,9 @@ import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 
+/** Sentinel value indicating no Claude models with Messages API are available */
+export const UNAVAILABLE_MODEL_ID = '__unavailable__';
+
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
 	pendingToolInvocations: Map<string, vscode.ChatToolInvocationPart>;
@@ -29,6 +33,9 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
 	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 
+	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
+	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
+
 	// Track the last known option values for each session to detect actual changes
 	private readonly _lastKnownOptions = new Map<string, { modelId?: string; permissionMode?: PermissionMode }>();
 
@@ -36,8 +43,16 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
+
+		// Listen for configuration changes to update available options
+		this._register(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions.fullyQualifiedId)) {
+				this._onDidChangeChatSessionProviderOptions.fire();
+			}
+		}));
 
 		// Listen for state changes and notify UI only if value actually changed
 		this._register(this.sessionStateService.onDidChangeSessionState(e => {
@@ -71,9 +86,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	/**
-	 * Gets the model ID for a session, delegating to state service
+	 * Gets the model ID for a session, delegating to state service.
+	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
 	 */
-	public async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+	public async getModelIdForSession(sessionId: string): Promise<string> {
 		return this.sessionStateService.getModelIdForSession(sessionId);
 	}
 
@@ -86,17 +102,33 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const models = await this.claudeCodeModels.getModels();
-		const modelItems: vscode.ChatSessionProviderOptionItem[] = models.map(model => ({
-			id: model.id,
-			name: model.name,
-			description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
-		}));
+		let modelItems: vscode.ChatSessionProviderOptionItem[];
+
+		if (models.length === 0) {
+			// No Claude models with Messages API available - show unavailable placeholder
+			modelItems = [{
+				id: UNAVAILABLE_MODEL_ID,
+				name: l10n.t('Unavailable'),
+				description: l10n.t('No Claude models with Messages API found'),
+			}];
+		} else {
+			modelItems = models.map(model => ({
+				id: model.id,
+				name: model.name,
+				description: model.multiplier !== undefined ? `${model.multiplier}x` : undefined,
+			}));
+		}
 
 		const permissionModeItems: vscode.ChatSessionProviderOptionItem[] = [
 			{ id: 'default', name: l10n.t('Ask before edits') },
 			{ id: 'acceptEdits', name: l10n.t('Edit automatically') },
 			{ id: 'plan', name: l10n.t('Plan mode') },
 		];
+
+		// Add bypass permissions option if enabled via setting
+		if (this.configurationService.getConfig(ConfigKey.ClaudeAgentAllowDangerouslySkipPermissions)) {
+			permissionModeItems.push({ id: 'bypassPermissions', name: l10n.t('Bypass all permissions') });
+		}
 
 		return {
 			optionGroups: [
@@ -120,6 +152,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		const sessionId = ClaudeSessionUri.getId(resource);
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
+				// Ignore the unavailable placeholder - it's not a real model
+				if (update.value === UNAVAILABLE_MODEL_ID) {
+					continue;
+				}
 				// Update last known first so the event listener won't fire back to UI
 				this._updateLastKnown(sessionId, { modelId: update.value });
 				void this.claudeCodeModels.setDefaultModel(update.value);
@@ -141,7 +177,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			[];
 
 		// Get model and permission mode from state service (queries session if active)
-		const model = await this.sessionStateService.getModelIdForSession(sessionId);
+		const availableModels = await this.claudeCodeModels.getModels();
+		const model = availableModels.length === 0
+			? UNAVAILABLE_MODEL_ID
+			: await this.sessionStateService.getModelIdForSession(sessionId);
 		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string> = {};
@@ -175,7 +214,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return;
 		}
 
-		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined, undefined);
+		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined);
 	}
 
 	private _assistantMessageToResponse(message: SDKAssistantMessage['message'], toolContext: ToolContext): vscode.ChatResponseTurn2 {

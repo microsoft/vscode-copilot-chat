@@ -88,6 +88,20 @@ export interface IOctoKitUser {
 	avatar_url: string;
 }
 
+/**
+ * Result of checking if Copilot cloud agent is enabled for a repository.
+ */
+export interface CCAEnabledResult {
+	/**
+	 * Whether the cloud agent is enabled. `undefined` if unable to determine.
+	 */
+	enabled: boolean | undefined;
+	/**
+	 * The HTTP status code when the cloud agent is disabled (401, 403, or 422).
+	 */
+	statusCode?: 401 | 403 | 422;
+}
+
 export interface IOctoKitSessionInfo {
 	name: string;
 	owner_id: number;
@@ -329,17 +343,35 @@ export interface IOctoKitService {
 	/**
 	 * Gets the list of organizations that the authenticated user belongs to.
 	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @param pageSize - Number of organizations to fetch per page (max and default: 100)
 	 * @returns An array of organization logins
 	 */
-	getUserOrganizations(authOptions: AuthOptions): Promise<string[]>;
+	getUserOrganizations(authOptions: AuthOptions, pageSize?: number): Promise<string[]>;
+
+	/**
+	 * Checks if the authenticated user is a member of a specific organization.
+	 * This makes a direct API call and avoids pagination issues with getUserOrganizations.
+	 * @param org The organization login to check membership for
+	 * @param authOptions - Authentication options. By default, uses silent auth.
+	 * @returns True if the user is a member, false otherwise
+	 */
+	isUserMemberOfOrg(org: string, authOptions: AuthOptions): Promise<boolean>;
 
 	/**
 	 * Gets the list of repositories for an organization.
 	 * @param org The organization name
 	 * @param authOptions - Authentication options. By default, uses silent auth and throws {@link PermissiveAuthRequiredError} if not authenticated.
+	 * @param pageSize - Number of repositories to fetch per page (max and default: 100)
 	 * @returns An array of repository names
 	 */
-	getOrganizationRepositories(org: string, authOptions: AuthOptions): Promise<string[]>;
+	getOrganizationRepositories(org: string, authOptions: AuthOptions, pageSize?: number): Promise<string[]>;
+
+	/**
+	 * Gets the custom instructions prompt for an organization.
+	 * @param orgLogin The organization login
+	 * @returns The prompt string or undefined if not available
+	 */
+	getOrgCustomInstructions(orgLogin: string, authOptions: AuthOptions): Promise<string | undefined>;
 
 	/**
 	 * Gets the list of repositories the authenticated user has access to.
@@ -376,6 +408,20 @@ export interface IOctoKitService {
 	 * @returns An array of assignable actors with their login names
 	 */
 	getAssignableActors(owner: string, repo: string, authOptions: AuthOptions): Promise<AssignableActor[]>;
+
+	/**
+	 * Checks if the Copilot cloud agent is enabled for a repository.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param authOptions - Authentication options. By default, uses silent auth.
+	 * @returns An object indicating enabled status and status code if disabled.
+	 *          - 200: enabled = true
+	 *          - 401: enabled = false, statusCode = 401
+	 *          - 403: enabled = false, statusCode = 403
+	 *          - 422: enabled = false, statusCode = 422
+	 *          - Other errors: enabled = undefined
+	 */
+	isCCAEnabled(owner: string, repo: string, authOptions: AuthOptions): Promise<CCAEnabledResult>;
 }
 
 /**
@@ -451,16 +497,28 @@ export class BaseOctoKitService {
 		return '';
 	}
 
-	protected async getUserOrganizationsWithToken(token: string): Promise<string[]> {
-		const result = await this._makeGHAPIRequest('user/orgs', 'GET', token);
+	protected async getUserOrganizationsWithToken(token: string, pageSize: number = 100): Promise<string[]> {
+		const result = await this._makeGHAPIRequest(`user/orgs?per_page=${pageSize}`, 'GET', token);
 		if (!result || !Array.isArray(result)) {
 			return [];
 		}
 		return result.map((org: { login: string }) => org.login);
 	}
 
-	protected async getOrganizationRepositoriesWithToken(org: string, token: string): Promise<string[]> {
-		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=5&sort=updated`, 'GET', token);
+	protected async isUserMemberOfOrgWithToken(org: string, token: string): Promise<boolean> {
+		try {
+			// GET /user/memberships/orgs/{org} returns 200 if the user is a member, 404 otherwise
+			const result = await this._makeGHAPIRequest(`user/memberships/orgs/${encodeURIComponent(org)}`, 'GET', token);
+			// If we get a result with state 'active' or 'pending', user is a member
+			return result && (result.state === 'active' || result.state === 'pending');
+		} catch {
+			// 404 or other error means user is not a member
+			return false;
+		}
+	}
+
+	protected async getOrganizationRepositoriesWithToken(org: string, token: string, pageSize: number = 100): Promise<string[]> {
+		const result = await this._makeGHAPIRequest(`orgs/${org}/repos?per_page=${pageSize}&sort=updated`, 'GET', token);
 		if (!result || !Array.isArray(result) || result.length === 0) {
 			return [];
 		}
