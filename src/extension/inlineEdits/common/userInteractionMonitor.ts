@@ -269,7 +269,7 @@ export class UserInteractionMonitor {
 			return parseUserHappinessScoreConfigurationString(configString);
 		}
 		catch (e) {
-			this._logService.error('Failed to parse user happiness score configuration, using default config', e);
+			this._logService.error(e, 'Failed to parse user happiness score configuration, using default config');
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
