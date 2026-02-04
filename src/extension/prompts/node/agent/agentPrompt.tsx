@@ -117,7 +117,6 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 		const maxToolResultLength = Math.floor(this.promptEndpoint.modelMaxPromptTokens * MAX_TOOL_RESPONSE_PCT);
 		const userQueryTagName = customizations.userQueryTagName;
-		const attachmentHint = customizations.attachmentHint;
 		const ReminderInstructionsClass = customizations.ReminderInstructionsClass;
 		const ToolReferencesHintClass = customizations.ToolReferencesHintClass;
 
@@ -135,7 +134,6 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
 					userQueryTagName={userQueryTagName}
-					attachmentHint={attachmentHint}
 					ReminderInstructionsClass={ReminderInstructionsClass}
 					ToolReferencesHintClass={ToolReferencesHintClass}
 				/>
@@ -144,7 +142,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <>
 				{baseInstructions}
 				<AgentConversationHistory flexGrow={1} priority={700} promptContext={this.props.promptContext} />
-				<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, { userQueryTagName, attachmentHint, ReminderInstructionsClass, ToolReferencesHintClass })} />
+				<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, { userQueryTagName, ReminderInstructionsClass, ToolReferencesHintClass })} />
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} truncateAt={maxToolResultLength} enableCacheBreakpoints={false} />
 			</>;
 		}
@@ -260,8 +258,6 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 export interface AgentUserMessageCustomizations {
 	/** Tag name used to wrap the user query (e.g., 'userRequest' or 'user_query') */
 	readonly userQueryTagName?: string;
-	/** Hint text appended to user query when there are attachments */
-	readonly attachmentHint?: string;
 	/** Custom reminder instructions component class */
 	readonly ReminderInstructionsClass?: ReminderInstructionsConstructor;
 	/** Custom tool references hint component class */
@@ -350,7 +346,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
 
 		const userQueryTagName = this.props.userQueryTagName ?? 'userRequest';
-		const attachmentHint = this.props.chatVariables.hasVariables() ? (this.props.attachmentHint ?? '') : '';
 		const ReminderInstructionsClass = this.props.ReminderInstructionsClass ?? DefaultReminderInstructions;
 		const reminderProps: ReminderInstructionsProps = {
 			endpoint: this.props.endpoint,
@@ -387,7 +382,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{this.configurationService.getNonExtensionConfig<boolean>(USE_SKILL_ADHERENCE_PROMPT_SETTING) && <SkillAdherenceReminder chatVariables={this.props.chatVariables} />}
 					</Tag>
 					{query && <Tag name={userQueryTagName} priority={900} flexGrow={7}>
-						<UserQuery chatVariables={this.props.chatVariables} query={query + attachmentHint} />
+						<UserQuery chatVariables={this.props.chatVariables} query={query} />
 					</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>

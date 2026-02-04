@@ -72,6 +72,10 @@ export class CopilotCLIPromptResolver {
 				return;
 			}
 			if (isLocation(variableRef.value)) {
+				if (await this.ignoreService.isCopilotIgnored(variableRef.value.uri)) {
+					return;
+				}
+				fileFolderReferences.push(variableRef);
 				validReferences.push(variableRef);
 				return;
 			}
@@ -137,7 +141,38 @@ export class CopilotCLIPromptResolver {
 				return;
 			}
 
+			if (isLocation(ref.value)) {
+				try {
+					// Open the document and get the text for the range.
+					const document = await raceCancellation(this.workspaceService.openTextDocument(ref.value.uri), token);
+					if (!document) {
+						return;
+					}
+					attachments.push({
+						type: 'selection',
+						displayName: ref.name,
+						filePath: ref.value.uri.fsPath,
+						selection: {
+							start: {
+								line: ref.value.range.start.line + 1,
+								character: ref.value.range.start.character + 1
+							},
+							end: {
+								line: ref.value.range.end.line + 1,
+								character: ref.value.range.end.character + 1
+							}
+						},
+						text: document.getText(ref.value.range)
+					});
+				}
+				catch (ex) {
+					this.logService.error(`[CopilotCLISession] Failed to attach location ${ref.value.uri.fsPath}: ${ex}`);
+				}
+				return;
+			}
+
 			const uri = ref.value;
+
 			if (!URI.isUri(uri)) {
 				return;
 			}
