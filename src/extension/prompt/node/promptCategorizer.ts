@@ -4,19 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICopilotToolCall } from '../../../platform/networking/common/fetch';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { CATEGORIZE_PROMPT_TOOL_NAME, CATEGORIZE_PROMPT_TOOL_SCHEMA, isValidDomain, isValidIntent, isValidScope, PromptClassification } from '../common/promptCategorizationTaxonomy';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { PromptCategorizationPrompt } from '../../prompts/node/panel/promptCategorization';
+import { CATEGORIZE_PROMPT_TOOL_NAME, CATEGORIZE_PROMPT_TOOL_SCHEMA, isValidDomain, isValidIntent, isValidScope, PromptClassification } from '../common/promptCategorizationTaxonomy';
 
 /** Experiment flag to enable prompt categorization */
 const EXP_FLAG_PROMPT_CATEGORIZATION = 'copilotchat.promptCategorization';
@@ -73,11 +74,13 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
+		@ICopilotTokenStore private readonly copilotTokenStore: ICopilotTokenStore,
 	) { }
 
 	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void {
-		// Only run when experiment flag is enabled
-		if (!this.experimentationService.getTreatmentVariable<boolean>(EXP_FLAG_PROMPT_CATEGORIZATION)) {
+		// Always enable for internal users; external users require experiment flag
+		const isInternal = this.copilotTokenStore.copilotToken?.isInternal === true;
+		if (!isInternal && !this.experimentationService.getTreatmentVariable<boolean>(EXP_FLAG_PROMPT_CATEGORIZATION)) {
 			return;
 		}
 
@@ -119,18 +122,12 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		try {
 			const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 
-			// Truncate prompt for classification - first 2000 chars is sufficient to determine intent
-			const MAX_PROMPT_FOR_CLASSIFICATION = 2000;
-			const promptForClassification = request.prompt.length > MAX_PROMPT_FOR_CLASSIFICATION
-				? request.prompt.slice(0, MAX_PROMPT_FOR_CLASSIFICATION)
-				: request.prompt;
-
 			const { messages } = await renderPromptElement(
 				this.instantiationService,
 				endpoint,
 				PromptCategorizationPrompt,
 				{
-					userRequest: promptForClassification,
+					userRequest: request.prompt,
 				}
 			);
 

@@ -19,8 +19,8 @@ export interface PromptCategorizationProps extends BasePromptElementProps {
 export class PromptCategorizationPrompt extends PromptElement<PromptCategorizationProps> {
 	override async render(_state: void, sizing: PromptSizing) {
 		const systemPrompt = [
-			'You are an expert intent classifier for AI coding assistants. Classify developer messages across four dimensions: intent, domain, time estimate, and scope.',
-			'Use the categorize_prompt tool to provide your classification.',
+			'You are an expert intent classifier for AI coding assistants. Classify developer requests in context of their workspace and active file across four dimensions: intent, domain, time estimate, and scope.',
+			'You MUST use the categorize_prompt tool to provide your classification.',
 			generateTaxonomyPrompt(),
 		].join('\n\n');
 
@@ -31,11 +31,11 @@ export class PromptCategorizationPrompt extends PromptElement<PromptCategorizati
 					<SafetyRules />
 				</SystemMessage>
 				<UserMessage priority={900}>
+					<WorkspaceStructure priority={600} flexGrow={0} maxSize={Math.min(300, Math.floor(sizing.tokenBudget * 0.1))} /><br />
+					<CurrentEditor priority={600} flexGrow={0} /><br />
 					User message:<br />
 					{this.props.userRequest}
 				</UserMessage>
-				<WorkspaceStructure priority={600} flexGrow={0} maxSize={Math.min(300, Math.floor(sizing.tokenBudget * 0.1))} />
-				<CurrentEditor priority={600} flexGrow={0} />
 			</>
 		);
 	}
