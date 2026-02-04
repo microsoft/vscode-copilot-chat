@@ -651,6 +651,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const id = SessionIdForCLI.parse(resource);
 			const isUntitled = chatSessionContext.isUntitled;
 			const uncommittedChangesAction = confirmationResults.length > 0 ? this.getConfirmationResult(request) : undefined;
+			const uncommittedChangesData = this.getUncommittedChangesConfirmationData(confirmationResults);
+			const additionalReferences = uncommittedChangesData?.metadata?.references;
 
 			// Handle untitled sessions with uncommitted changes
 			if (isUntitled && hasUncommittedChanges) {
@@ -719,7 +721,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const originalPrompt = this.getUncommittedChangesConfirmationData(confirmationResults)?.metadata?.prompt;
 
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, originalPrompt, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, originalPrompt, [...(additionalReferences ?? [])], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
