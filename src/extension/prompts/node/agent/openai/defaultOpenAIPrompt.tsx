@@ -130,13 +130,6 @@ class DefaultOpenAIPromptResolver implements IAgentPrompt {
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
 		return OpenAIReminderInstructions;
 	}
-
-	resolveAttachmentHint(endpoint: IChatEndpoint): string | undefined {
-		if (endpoint.family === 'gpt-4.1') {
-			return ' (See <attachments> above for file contents. You may not need to search or read the file again.)';
-		}
-		return undefined;
-	}
 }
 
 class OpenAIReminderInstructions extends PromptElement<ReminderInstructionsProps> {

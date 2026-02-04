@@ -501,7 +501,7 @@ Active pull request (may not be the same as open pull request): Skip failing tes
 
 </attachments>
 <userRequest>
-Explain this (See <attachments> above for file contents. You may not need to search or read the file again.)
+Explain this
 </userRequest>`;
 }
 
@@ -559,6 +559,6 @@ index f30ade6977b4..b564ebfafc09 100644
 
 </attachments>
 <userRequest>
-Explain this (See <attachments> above for file contents. You may not need to search or read the file again.)
+Explain this (See <attachments> above for file contents.)
 </userRequest>`;
 }
