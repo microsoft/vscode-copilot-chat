@@ -170,7 +170,7 @@ export class CopilotCLIMCPHandler implements ICopilotCLIMCPHandler {
 				isDefaultServer: true,
 				headers: resolvedDefinition.headers,
 				tools: ['*'],
-				displayName: 'Github',
+				displayName: 'GitHub',
 			};
 			this.logService.trace('[CopilotCLIMCPHandler] Added built-in GitHub MCP server via definition provider.');
 		} catch (error) {
