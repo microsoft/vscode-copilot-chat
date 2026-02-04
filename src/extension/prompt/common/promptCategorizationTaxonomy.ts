@@ -368,6 +368,10 @@ export const SCOPE_DEFINITIONS = {
 		description: 'One-off task, doesn\'t directly modify main codebase',
 		signals: ['"write a script to"', '"analyze this data"', 'temporary/throwaway work'],
 	},
+	unknown_scope: {
+		description: 'Scope cannot be determined from message',
+		signals: [],
+	},
 } as const satisfies Record<string, CategoryDefinition>;
 
 // ============================================================================
