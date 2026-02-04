@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -114,8 +114,9 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
+	// or if the model doesn't support interleaved thinking
 	let thinkingBudget: number | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking) {
+	if (isAllowedConversationAgent && !options.disableThinking && modelSupportsInterleavedThinking(endpoint.model)) {
 		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 		const maxTokens = options.postOptions.max_tokens ?? 1024;
 		const normalizedBudget = (configuredBudget && configuredBudget > 0)

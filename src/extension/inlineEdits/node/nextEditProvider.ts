@@ -92,7 +92,7 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	handleShown(suggestion: T): void;
 	handleAcceptance(docId: DocumentId, suggestion: T): void;
 	handleRejection(docId: DocumentId, suggestion: T): void;
-	handleIgnored(docId: DocumentId, suggestion: T, supersededByRequestUuid: INextEditResult | undefined): void;
+	handleIgnored(docId: DocumentId, suggestion: T, supersededBy: INextEditResult | undefined): void;
 	lastRejectionTime: number;
 	lastTriggerTime: number;
 }
@@ -123,6 +123,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	} | null = null;
 
 	private _lastShownTime = 0;
+	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
+	private _lastShownSuggestionId: number | undefined = undefined;
 
 	private _lastRejectionTime = 0;
 	public get lastRejectionTime() {
@@ -237,7 +239,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections, nesConfigs);
+		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections);
 		if (cachedEdit?.rejected) {
 			logger.trace('cached edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejectedCache');
@@ -342,7 +344,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
-		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit)) {
 			logger.trace('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
@@ -449,7 +451,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (requestToReuse) {
 			// Nice! No need to make another request, we can reuse the result from a pending request.
 			if (speculativeRequest) {
-				logger.trace('reusing speculative pending request');
+				logger.trace(`reusing speculative pending request (opportunityId=${speculativeRequest.opportunityId}, headerRequestId=${speculativeRequest.id})`);
 				// Clear the speculative request since we're using it
 				this._speculativePendingRequest = null;
 			}
@@ -467,7 +469,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				// Needs rebasing.
 				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime, nesConfigs);
+					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
 					if (rebasedCachedEdit) {
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 						return Result.ok(rebasedCachedEdit);
@@ -842,6 +844,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
+		this._lastShownSuggestionId = suggestion.requestId;
 
 		// Trigger speculative request for the post-edit document state
 		const speculativeRequestsEnabled = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
@@ -872,7 +875,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const rootedEdit = new RootedEdit(result.documentBeforeEdits, new StringEdit([result.edit]));
 
 		const postEditContentST = new StringText(postEditContent);
-		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections, { isAsyncCompletions: false });
+		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections);
 		if (cachedEdit) {
 			// first cachedEdit should be without edits because of noSuggestions caching
 			if (cachedEdit.edit) {
@@ -880,7 +883,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				return;
 			} else if (cachedEdit.editWindow) {
 				const shiftedSelection = new OffsetRange(cachedEdit.editWindow.endExclusive, cachedEdit.editWindow.endExclusive);
-				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection], { isAsyncCompletions: false });
+				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
 				if (cachedEdit?.edit) {
 					logger.trace('already have cached edit for post-edit state (after shifting selection)');
 					return;
@@ -912,8 +915,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 
-		logger.trace('triggering speculative request for post-edit state');
-
 		// Cancel any previous speculative request
 		this._speculativePendingRequest?.request.cancellationTokenSource.cancel();
 		this._speculativePendingRequest = null;
@@ -928,6 +929,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		// Use a dummy version since this is speculative and we don't have the actual post-edit version
 		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
 		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined);
+
+		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
 		try {
 			const speculativeRequest = await this._createSpeculativeRequest(
@@ -1194,7 +1197,15 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void {
+		// Check if this was the last shown suggestion
+		const wasShown = this._lastShownSuggestionId === suggestion.requestId;
+		const wasSuperseded = supersededBy !== undefined;
+		if (wasShown && !wasSuperseded) {
+			// Was shown to the user
+			this._statelessNextEditProvider.handleIgnored?.();
+		}
+	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined || suggestion.result.edit === undefined) {

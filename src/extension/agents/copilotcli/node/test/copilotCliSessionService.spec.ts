@@ -179,6 +179,15 @@ describe('CopilotCLISessionService', () => {
 			expect(existingSession?.object).not.toBe(session);
 			expect(existingSession?.object.sessionId).toBe(session.object.sessionId);
 		});
+
+		it('passes clientName: vscode to session manager', async () => {
+			const createSessionSpy = vi.spyOn(manager, 'createSession');
+			await service.createSession({ model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
+
+			expect(createSessionSpy).toHaveBeenCalledWith(expect.objectContaining({
+				clientName: 'vscode'
+			}));
+		});
 	});
 
 	describe('CopilotCLISessionService.getSession concurrency & locking', () => {

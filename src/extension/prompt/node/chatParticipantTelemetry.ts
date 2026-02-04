@@ -144,6 +144,7 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	codeBlocks: string;
 	isParticipantDetected: string;
 	mode: string;
+	parentRequestId: string | undefined;
 };
 
 type RequestTelemetryMeasurements = {
@@ -663,7 +664,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
-				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." }
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
+				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -681,6 +683,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
 			mode: this._getModeNameWithSubagent(),
+			parentRequestId: this._request.parentRequestId
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,

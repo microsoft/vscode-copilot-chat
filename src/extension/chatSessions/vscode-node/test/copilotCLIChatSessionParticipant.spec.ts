@@ -188,7 +188,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let mcpHandler: ICopilotCLIMCPHandler;
 	let folderRepositoryManager: FolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
-	let fileSystemService: MockFileSystemService;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -216,7 +215,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git = new FakeGitService();
 		models = new FakeModels();
 		cliSessionServiceForFolderManager = new FakeCopilotCLISessionService();
-		fileSystemService = new MockFileSystemService();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
@@ -267,7 +265,6 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,
 			git,
 			workspaceService,
-			fileSystemService,
 			logService
 		);
 		participant = new CopilotCLIChatSessionParticipant(
@@ -621,6 +618,59 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(itemProvider.swap).toHaveBeenCalled();
 		const swapCall = (itemProvider.swap as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(swapCall[1].label).toBe('Implement new feature');
+	});
+
+	it('passes additionalReferences from confirmation metadata to resolvePrompt', async () => {
+		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+
+		const testReferences: vscode.ChatPromptReference[] = [
+			{ id: 'vscode.file', name: 'test.ts', value: Uri.file('/workspace/test.ts') },
+			{ id: 'vscode.file', name: 'other.ts', value: Uri.file('/workspace/other.ts') }
+		];
+
+		const request = new TestChatRequest('Copy Changes');
+		const context = createChatContext('temp-new', true);
+		(request as any).acceptedConfirmationData = [{
+			step: 'uncommitted-changes',
+			metadata: {
+				prompt: 'Fix the bug',
+				references: testReferences,
+				chatContext: context
+			}
+		}];
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		// Should pass additionalReferences to resolvePrompt
+		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
+		const resolvePromptCall = (promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(resolvePromptCall[2]).toEqual(testReferences);
+	});
+
+	it('passes empty array when confirmation metadata has no references', async () => {
+		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+
+		const request = new TestChatRequest('Copy Changes');
+		const context = createChatContext('temp-new', true);
+		(request as any).acceptedConfirmationData = [{
+			step: 'uncommitted-changes',
+			metadata: {
+				prompt: 'Fix the bug',
+				// No references field
+				chatContext: context
+			}
+		}];
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		// Should pass empty array when no references in metadata
+		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
+		const resolvePromptCall = (promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+		expect(resolvePromptCall[2]).toEqual([]);
 	});
 
 	it('returns empty when user cancels untitled session confirmation', async () => {

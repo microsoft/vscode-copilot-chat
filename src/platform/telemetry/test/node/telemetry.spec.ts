@@ -189,6 +189,7 @@ suite('GitHub Telemetry Sender', function () {
 			_serviceBrand: undefined,
 			optedIn: true,
 			organizationsList: undefined,
+			enterpriseList: undefined,
 			trackingId: 'testId'
 		};
 		const mockLoggerFactory = (enhanced: boolean) => {

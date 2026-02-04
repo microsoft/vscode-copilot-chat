@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, ChatSessionProviderOptionItem, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
+import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
@@ -16,11 +17,12 @@ import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
-import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { DeferredPromise, disposableTimeout } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { basename, extUri } from '../../../util/vs/base/common/resources';
+import { relative } from '../../../util/vs/base/common/path';
+import { basename, dirname, extUri, isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
@@ -34,7 +36,7 @@ import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatV
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
-import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
+import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
@@ -44,6 +46,7 @@ const AGENTS_OPTION_ID = 'agent';
 const MODELS_OPTION_ID = 'model';
 const REPOSITORY_OPTION_ID = 'repository';
 const OPEN_REPOSITORY_COMMAND_ID = 'github.copilot.cli.sessions.openRepository';
+const MAX_MRU_ENTRIES = 10;
 
 const UncommittedChangesStep = 'uncommitted-changes';
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CLIConfirmationMetadata };
@@ -134,7 +137,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	private shouldShowSession(sessionId: string): boolean | undefined {
-		if (isUntitledSessionId(sessionId)) {
+		if (
+			isUntitledSessionId(sessionId) ||			// always show untitled sessions
+			vscode.workspace.isAgentSessionsWorkspace	// always all sessions in agent sessions workspace
+		) {
 			return true;
 		}
 		// If we have a workspace folder for this and the workspace folder belongs to one of the open workspace folders, show it.
@@ -278,8 +284,23 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	}
 
 	public notifyProviderOptionsChange(): void {
-		this._repositoryOptionItemsForUntitledWorkspace = undefined;
 		this._onDidChangeChatSessionProviderOptions.fire();
+	}
+
+	private async getDefaultUntitledSessionRepositoryOption(copilotcliSessionId: string, token: vscode.CancellationToken) {
+		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
+		// Use FolderRepositoryManager to get folder/repository info (no trust check needed for UI population)
+		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
+		const uri = folderInfo.repository ?? folderInfo.folder;
+		if (uri) {
+			return uri;
+		} else if (repositories.length) {
+			// No folder selected yet for this untitled session - use MRU or first available
+			const lastUsedFolderId = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
+			const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
+			return Uri.file(firstRepo);
+		}
+		return undefined;
 	}
 
 	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -288,13 +309,13 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const workingDirectory = workingDirectoryValue ? workingDirectoryValue : undefined;
 		const isolationEnabled = workingDirectoryValue ? true : false; // If theres' a worktree, that means isolation was enabled.
 
-		const [defaultModel, sessionAgent, defaultAgent, existingSession, repositories] = await Promise.all([
+		const [defaultModel, sessionAgent, defaultAgent, existingSession] = await Promise.all([
 			this.copilotCLIModels.getDefaultModel(),
 			this.copilotCLIAgents.getSessionAgent(copilotcliSessionId),
 			this.copilotCLIAgents.getDefaultAgent(),
 			isUntitledSessionId(copilotcliSessionId) ? Promise.resolve(undefined) : this.sessionService.getSession(copilotcliSessionId, { workingDirectory, isolationEnabled, readonly: true }, token),
-			this.isUntitledWorkspace() ? this.getRepositoryOptionItemsForUntitledWorkspace() : Promise.resolve(this.getRepositoryOptionItems())
 		]);
+		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
 		// If we have session in _sessionModel, use that (faster as its in memory), else get from existing session.
 		const model = (existingSession ? (_sessionModel.get(copilotcliSessionId) ?? await existingSession.object.getSelectedModelId()) : _sessionModel.get(copilotcliSessionId)) ?? await this.getCustomAgentModel(defaultAgent, token) ?? defaultModel;
@@ -309,20 +330,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		}
 
 		// Use FolderRepositoryManager to get folder/repository info (no trust check needed for UI population)
-		const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 		if (isUntitledSessionId(copilotcliSessionId)) {
-			const id = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
-			if (id) {
-				options[REPOSITORY_OPTION_ID] = id;
-			} else if (repositories.length) {
-				// No folder selected yet for this untitled session - use MRU or first available
-				const lastUsedFolderId = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
-				const firstRepo = (lastUsedFolderId && repositories.find(repo => repo.id === lastUsedFolderId)?.id) ?? repositories[0].id;
-				options[REPOSITORY_OPTION_ID] = firstRepo;
+			const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(copilotcliSessionId, token);
+			if (defaultRepo) {
+				options[REPOSITORY_OPTION_ID] = defaultRepo.fsPath;
 				// Use the manager to track the selection for untitled sessions
-				this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, vscode.Uri.file(firstRepo));
+				this.folderRepositoryManager.setUntitledSessionFolder(copilotcliSessionId, defaultRepo);
 			}
 		} else {
+			const folderInfo = await this.folderRepositoryManager.getFolderRepository(copilotcliSessionId, undefined, token);
 			const folderOrRepoId = folderInfo.repository?.fsPath ?? folderInfo.folder?.fsPath;
 			const existingItem = folderOrRepoId ? repositories.find(repo => repo.id === folderOrRepoId) : undefined;
 			if (existingItem) {
@@ -402,16 +418,21 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		// Handle repository options based on workspace type
 		if (this.isUntitledWorkspace()) {
 			// For untitled workspaces, show last used repositories and "Open Repository..." command
-			const repositories = await this.getRepositoryOptionItemsForUntitledWorkspace();
+			const repositories = this.folderRepositoryManager.getFolderMRU();
+			const items = folderMRUToChatProviderOptions(repositories);
+			items.splice(MAX_MRU_ENTRIES); // Limit to max entries
+			const commands: vscode.Command[] = [];
+			commands.push({
+				command: OPEN_REPOSITORY_COMMAND_ID,
+				title: l10n.t('Browse folders...')
+			});
+
 			optionGroups.push({
 				id: REPOSITORY_OPTION_ID,
 				name: l10n.t('Folder'),
 				description: l10n.t('Pick Folder'),
-				items: repositories,
-				commands: [{
-					command: OPEN_REPOSITORY_COMMAND_ID,
-					title: l10n.t('Open Folder...')
-				}]
+				items,
+				commands
 			});
 		} else {
 			const repositories = this.getRepositoryOptionItems();
@@ -469,30 +490,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		return repoItems.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	private _repositoryOptionItemsForUntitledWorkspace: Promise<ChatSessionProviderOptionItem[]> | undefined;
-
-	/**
-	 * Get repository option items for untitled workspaces using last used repositories.
-	 */
-	private async getRepositoryOptionItemsForUntitledWorkspace(): Promise<ChatSessionProviderOptionItem[]> {
-		const currentValue = this._repositoryOptionItemsForUntitledWorkspace;
-		// Re-query in case some folders changed or new items have been added.
-		this._repositoryOptionItemsForUntitledWorkspace = this.getRepositoryOptionItemsForUntitledWorkspaceImpl();
-		// Always return cached value for faster loading.
-		return currentValue ?? this._repositoryOptionItemsForUntitledWorkspace;
-	}
-
-	private async getRepositoryOptionItemsForUntitledWorkspaceImpl(): Promise<ChatSessionProviderOptionItem[]> {
-		const mruItems = await this.folderRepositoryManager.getFolderMRU();
-
-		return mruItems.map((item) => {
-			if (item.repository) {
-				return toRepositoryOptionItem(item.folder);
-			} else {
-				return toWorkspaceFolderOptionItem(item.folder, basename(item.folder));
-			}
-		});
-	}
 
 	// Handle option changes for a session (store current state in a map)
 	async provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): Promise<void> {
@@ -509,7 +506,22 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					await this.selectAgentModel(resource, agent, token);
 				}
 			} else if (update.optionId === REPOSITORY_OPTION_ID && typeof update.value === 'string' && isUntitledSessionId(sessionId)) {
-				this.folderRepositoryManager.setUntitledSessionFolder(sessionId, vscode.Uri.file(update.value));
+				const folder = vscode.Uri.file(update.value);
+				if ((await checkPathExists(folder, this.fileSystem))) {
+					this.folderRepositoryManager.setUntitledSessionFolder(sessionId, folder);
+				} else {
+					await this.folderRepositoryManager.deleteMRUEntry(folder);
+					const message = l10n.t('The path \'{0}\' does not exist on this computer.', folder.fsPath);
+					vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
+					const defaultRepo = await this.getDefaultUntitledSessionRepositoryOption(sessionId, token);
+					if (defaultRepo && !isEqual(folder, defaultRepo)) {
+						this.folderRepositoryManager.setUntitledSessionFolder(sessionId, defaultRepo);
+						const changes: { optionId: string; value: string }[] = [];
+						changes.push({ optionId: REPOSITORY_OPTION_ID, value: defaultRepo.fsPath });
+						this.notifySessionOptionsChange(resource, changes);
+					}
+					this.notifyProviderOptionsChange();
+				}
 			}
 		}
 	}
@@ -651,6 +663,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const id = SessionIdForCLI.parse(resource);
 			const isUntitled = chatSessionContext.isUntitled;
 			const uncommittedChangesAction = confirmationResults.length > 0 ? this.getConfirmationResult(request) : undefined;
+			const uncommittedChangesData = this.getUncommittedChangesConfirmationData(confirmationResults);
+			const additionalReferences = uncommittedChangesData?.metadata?.references;
 
 			// Handle untitled sessions with uncommitted changes
 			if (isUntitled && hasUncommittedChanges) {
@@ -719,7 +733,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const originalPrompt = this.getUncommittedChangesConfirmationData(confirmationResults)?.metadata?.prompt;
 
 				// Construct the full prompt with references to be sent to CLI.
-				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, originalPrompt, [], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
+				const { prompt, attachments } = await this.promptResolver.resolvePrompt(request, originalPrompt, [...(additionalReferences ?? [])], session.object.options.isolationEnabled, session.object.options.workingDirectory, token);
 				await session.object.handleRequest(request.id, prompt, attachments, modelId, token);
 				await this.commitWorktreeChangesIfNeeded(session.object, token);
 			}
@@ -860,9 +874,9 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			if (worktreeProperties) {
 				void this.copilotCLIWorktreeManagerService.setWorktreeProperties(session.object.sessionId, worktreeProperties);
 			}
-			if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
-				void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, session.object.options.workingDirectory.fsPath);
-			}
+		}
+		if (session.object.options.workingDirectory && !session.object.options.isolationEnabled) {
+			void this.workspaceFolderService.trackSessionWorkspaceFolder(session.object.sessionId, session.object.options.workingDirectory.fsPath);
 		}
 		disposables.add(session.object.attachStream(stream));
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
@@ -1207,7 +1221,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 }
 
-export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, copilotCLIWorktreeManagerService: IChatSessionWorktreeService, gitService: IGitService, copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService, contentProvider: CopilotCLIChatSessionContentProvider, folderRepositoryManager: IFolderRepositoryManager): IDisposable {
+export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, copilotCLIWorktreeManagerService: IChatSessionWorktreeService, gitService: IGitService, copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService, contentProvider: CopilotCLIChatSessionContentProvider, folderRepositoryManager: IFolderRepositoryManager, envService: INativeEnvService, fileSystemService: IFileSystemService): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
@@ -1273,11 +1287,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			vscode.window.createTerminal({ cwd: worktreePath }).show();
 		}
 	}));
-	// Command to open a folder picker and select a repository for untitled workspaces
-	disposableStore.add(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, async (sessionItemResource?: vscode.Uri) => {
-		if (!sessionItemResource) {
-			return;
-		}
+	async function selectFolder() {
 		// Open folder picker dialog
 		const folderUris = await vscode.window.showOpenDialog({
 			canSelectFiles: false,
@@ -1286,13 +1296,105 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 			openLabel: l10n.t('Open Folder...'),
 		});
 
-		if (!folderUris || folderUris.length === 0) {
+		return folderUris && folderUris.length > 0 ? folderUris[0] : undefined;
+	}
+	disposableStore.add(vscode.commands.registerCommand(OPEN_REPOSITORY_COMMAND_ID, async (sessionItemResource?: vscode.Uri) => {
+		if (!sessionItemResource) {
 			return;
 		}
 
-		const selectedFolderUri = folderUris[0];
-		const sessionId = SessionIdForCLI.parse(sessionItemResource);
+		let selectedFolderUri: Uri | undefined = undefined;
+		const mruItems = folderRepositoryManager.getFolderMRU();
 
+		if (mruItems.length === 0) {
+			selectedFolderUri = await selectFolder();
+		} else {
+			type RecentFolderQuickPickItem = vscode.QuickPickItem & ({ folderUri: vscode.Uri; openFolder: false } | { folderUri: undefined; openFolder: true });
+			const items: RecentFolderQuickPickItem[] = mruItems
+				.filter(item => !item.isUntitledSessionSelection)
+				.map(item => {
+					const optionItem = item.repository
+						? toRepositoryOptionItem(item.folder)
+						: toWorkspaceFolderOptionItem(item.folder, basename(item.folder));
+
+					return {
+						label: optionItem.name,
+						description: `~/${relative(envService.userHome.fsPath, item.folder.fsPath)}`,
+						iconPath: optionItem.icon,
+						folderUri: item.folder,
+						openFolder: false
+					};
+				});
+
+			items.unshift({
+				label: l10n.t('Open Folder...'),
+				iconPath: new vscode.ThemeIcon('folder-opened'),
+				folderUri: undefined,
+				openFolder: true
+			}, {
+				kind: vscode.QuickPickItemKind.Separator,
+				label: '',
+				folderUri: undefined,
+				openFolder: true
+			});
+
+			const selectedFolder = new DeferredPromise<Uri | undefined>();
+			const disposables = new DisposableStore();
+			const quickPick = disposables.add(vscode.window.createQuickPick<RecentFolderQuickPickItem>());
+			quickPick.items = items;
+			quickPick.placeholder = l10n.t('Select a recent folder');
+			quickPick.matchOnDescription = true;
+			quickPick.ignoreFocusOut = true;
+			quickPick.matchOnDetail = true;
+			quickPick.show();
+			disposables.add(quickPick.onDidHide(() => {
+				selectedFolder.complete(undefined);
+			}));
+			disposables.add(quickPick.onDidAccept(async () => {
+				if (quickPick.selectedItems.length === 0 && !quickPick.value) {
+					selectedFolder.complete(undefined);
+					quickPick.hide();
+				} else if (quickPick.selectedItems.length && quickPick.selectedItems[0].folderUri) {
+					selectedFolder.complete(quickPick.selectedItems[0].folderUri);
+					quickPick.hide();
+				} else if (quickPick.selectedItems.length && quickPick.selectedItems[0].openFolder) {
+					selectedFolder.complete(await selectFolder());
+					quickPick.hide();
+				} else if (quickPick.value) {
+					const fileOrFolder = vscode.Uri.file(quickPick.value);
+					try {
+						const stat = await vscode.workspace.fs.stat(fileOrFolder);
+						let directory: Uri | undefined = undefined;
+						if (stat.type & vscode.FileType.Directory) {
+							quickPick.hide();
+							directory = fileOrFolder;
+						} else if (stat.type & vscode.FileType.File) {
+							directory = dirname(fileOrFolder);
+						}
+						if (directory) {
+							// Possible user selected a folder thats inside an existing workspace folder.
+							selectedFolder.complete(vscode.workspace.getWorkspaceFolder(directory)?.uri || directory);
+							quickPick.hide();
+						}
+					} catch {
+						// ignore
+					}
+				}
+			}));
+			selectedFolderUri = await selectedFolder.p;
+			disposables.dispose();
+		}
+
+		if (!selectedFolderUri) {
+			return;
+		}
+		if (!(await checkPathExists(selectedFolderUri, fileSystemService))) {
+			const message = l10n.t('The path \'{0}\' does not exist on this computer.', selectedFolderUri.fsPath);
+			vscode.window.showErrorMessage(l10n.t('Path does not exist'), { modal: true, detail: message });
+			return;
+		}
+
+		const sessionId = SessionIdForCLI.parse(sessionItemResource);
 		folderRepositoryManager.setUntitledSessionFolder(sessionId, selectedFolderUri);
 
 		// Notify VS Code that the option changed
@@ -1303,6 +1405,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 		// Notify that provider options have changed so the dropdown updates
 		contentProvider.notifyProviderOptionsChange();
+
 	}));
 
 	const applyChanges = async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
@@ -1366,3 +1469,27 @@ async function getModelFromPromptFile(models: readonly string[], copilotCLIModel
 	return undefined;
 }
 
+
+function folderMRUToChatProviderOptions(mruItems: FolderRepositoryMRUEntry[]): ChatSessionProviderOptionItem[] {
+	return mruItems.map((item) => {
+		if (item.repository) {
+			return toRepositoryOptionItem(item.folder);
+		} else {
+			return toWorkspaceFolderOptionItem(item.folder, basename(item.folder));
+		}
+	});
+
+}
+
+
+/**
+ * Check if a path exists and is a directory.
+ */
+async function checkPathExists(filePath: vscode.Uri, fileSystemService: IFileSystemService): Promise<boolean> {
+	try {
+		const stat = await fileSystemService.stat(filePath);
+		return stat.type === vscode.FileType.Directory;
+	} catch {
+		return false;
+	}
+}
