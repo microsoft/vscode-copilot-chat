@@ -306,6 +306,175 @@ To add new functionality:
 The integration respects VS Code settings:
 - `github.copilot.advanced.claudeCodeDebugEnabled`: Enables debug logging from Claude Code SDK
 
+## Upgrading Anthropic SDK Packages
+
+This section documents the process for upgrading the Anthropic SDK packages used in the Claude integration.
+
+### Packages
+
+| Package | Description |
+|---------|-------------|
+| `@anthropic-ai/claude-agent-sdk` | Official Claude Agent SDK - provides the core agent runtime, tools, hooks, sessions, and message streaming |
+| `@anthropic-ai/sdk` | Anthropic API SDK - provides base types, API client, and message structures used by the agent SDK |
+
+### Upgrade Process
+
+#### 1. Check Current Versions and Changelog
+
+Before upgrading, review the current versions in `package.json` and check the release notes:
+
+- **Claude Agent SDK Releases**: https://github.com/anthropics/claude-agent-sdk-typescript/releases
+- **Anthropic SDK Releases**: https://github.com/anthropics/anthropic-sdk-typescript/releases
+
+#### 2. Summarize All Changes
+
+Create a consolidated summary of changes between your current version and the target version. Group changes by category, not by individual version:
+
+**Summary Format:**
+```markdown
+### `@anthropic-ai/package-name` (oldVersion → newVersion)
+
+#### Features
+- **Category:** Description of new feature or capability
+
+#### Bug Fixes
+- Description of what was fixed
+
+#### Breaking Changes
+- **Old API → New API**: Description of what changed and how to migrate
+```
+
+**How to Create the Summary:**
+1. **Read the GitHub Release Notes**: Go through each release between your versions
+2. **Consolidate by Category**: Group all features together, all bug fixes together, etc.
+3. **Identify Breaking Changes**: Look for:
+   - Removed or renamed exports
+   - Changed function signatures
+   - Modified type definitions
+   - Deprecated APIs that have been removed
+4. **Document Migration Steps**: For breaking changes, include the old and new patterns
+5. **Check Peer Dependencies**: Note if the new version requires different peer dependencies
+
+#### 3. List Important Changes
+
+Categorize changes by impact level:
+
+**Critical (Must Address Before Merge):**
+- Breaking API changes that will cause compilation errors
+- Removed types or functions currently in use
+- Changed behavior of core functionality (sessions, streaming, tools)
+
+**Important (Should Address):**
+- Deprecated APIs that should be migrated
+- New recommended patterns replacing old ones
+- Performance improvements that require code changes
+
+**Nice to Have (Can Address Later):**
+- New optional features
+- Additional type exports
+- Enhanced error messages
+
+#### 4. Update Package Versions
+
+```bash
+# Update to latest
+npm install @anthropic-ai/claude-agent-sdk @anthropic-ai/sdk
+```
+
+#### 5. Fix Compilation Errors
+
+After updating, check for compilation errors:
+
+1. Run the `start-watch-tasks` VS Code task to see real-time compilation errors
+2. Address any type errors in the following key files:
+   - `node/claudeCodeAgent.ts` - Session and message handling
+   - `node/claudeCodeSdkService.ts` - SDK wrapper
+   - `node/claudeCodeSessionService.ts` - Session persistence
+   - `common/claudeTools.ts` - Tool type definitions
+   - `node/hooks/*.ts` - Hook implementations
+   - `vscode-node/slashCommands/*.ts` - Slash command handlers
+   - `node/toolPermissionHandlers/*.ts` - Permission handlers
+
+#### 6. Things to Test
+
+After upgrading, verify the following functionality works correctly:
+
+**Core Functionality:**
+- [ ] Starting a new Claude chat session
+- [ ] Sending messages and receiving responses
+- [ ] Streaming responses render correctly in the chat UI
+- [ ] Session persistence and resumption works
+
+**Tool Operations:**
+- [ ] `Read` tool - Reading files displays content correctly
+- [ ] `Edit` tool - File edits apply correctly with proper diffs
+- [ ] `Write` tool - New files are created correctly
+- [ ] `Bash` tool - Shell commands execute and return output
+- [ ] `Glob` tool - File pattern matching works
+- [ ] `Grep` tool - Content search works
+- [ ] `WebFetch` tool - URL fetching works (if applicable)
+
+**Tool Confirmation:**
+- [ ] Auto-approval works for workspace files
+- [ ] Confirmation dialogs appear for dangerous operations
+- [ ] Denying a tool sends appropriate message to Claude
+- [ ] Tool invocation formatting displays correctly in chat
+
+**Hooks:**
+- [ ] `PreToolUse` hooks fire before tool execution
+- [ ] `PostToolUse` hooks fire after tool completion
+- [ ] `SessionStart`/`SessionEnd` hooks work correctly
+- [ ] Logging hooks capture expected data
+
+**Slash Commands:**
+- [ ] `/hooks` command works
+- [ ] `/memory` command works
+- [ ] `/agents` command works
+- [ ] (If enabled) `/terminal` command works
+
+**Edge Cases:**
+- [ ] Cancellation during streaming works correctly
+- [ ] Error handling for failed tool operations
+- [ ] Large file handling
+- [ ] Multi-turn conversations maintain context
+- [ ] Subagent execution (if used)
+
+**Regression Testing:**
+- [ ] Run unit tests: `npm run test:unit` (filter to claude-related tests)
+- [ ] Run integration tests for the Claude agent
+- [ ] Manual testing in VS Code with various prompts
+
+#### 7. Update Documentation
+
+After a successful upgrade:
+
+1. Update this `AGENTS.md` if any architectural changes occurred
+2. Update type definitions in `common/claudeTools.ts` if tools changed
+3. Document any new features or capabilities added
+4. Update the "Official Claude Agent SDK Documentation" links if URLs changed
+
+### Troubleshooting Common Issues
+
+**Type Errors After Upgrade:**
+- Check if types were renamed (common: `Message` → `ContentBlock`, etc.)
+- Look for removed type exports that need new imports
+- Verify generic type parameters haven't changed
+
+**Session Loading Failures:**
+- Session file format may have changed between major versions
+- Check `ClaudeCodeSessionService` for compatibility issues
+- May need to clear old session files during major upgrades
+
+**Hook Registration Failures:**
+- Hook event names may have changed
+- Check `HookEvent` type for valid event strings
+- Verify hook callback signatures match new SDK expectations
+
+**Tool Execution Errors:**
+- Tool input schemas may have changed
+- Check tool result handling for new error types
+- Verify tool confirmation flow hasn't changed
+
 ## Dependencies
 
 - `@anthropic-ai/claude-agent-sdk`: Official Claude Code SDK
