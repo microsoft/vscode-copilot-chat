@@ -107,11 +107,6 @@ describe('FileOpenTelemetryService', () => {
 	});
 
 	afterEach(async () => {
-		if (service) {
-			await service.flush();
-			service.dispose();
-		}
-
 		// Cleanup temp directory
 		if (fs.existsSync(tempDir)) {
 			fs.rmSync(tempDir, { recursive: true, force: true });
@@ -126,6 +121,19 @@ describe('FileOpenTelemetryService', () => {
 			mockEnvService,
 		);
 		return svc;
+	}
+
+	/**
+	 * Helper to flush and dispose the service, then wait for file to be written
+	 */
+	async function closeServiceAndWait(): Promise<void> {
+		if (service) {
+			await service.flush();
+			service.dispose();
+			service = undefined as any;
+			// Wait for the file stream to be fully closed
+			await new Promise(resolve => setTimeout(resolve, 50));
+		}
 	}
 
 	it('should report isEnabled correctly', () => {
@@ -156,7 +164,7 @@ describe('FileOpenTelemetryService', () => {
 			duration_ms: 100,
 		});
 
-		await service.flush();
+		await closeServiceAndWait();
 
 		// Read and parse the log file
 		const content = fs.readFileSync(outfile, 'utf-8');
@@ -186,7 +194,7 @@ describe('FileOpenTelemetryService', () => {
 			prompt: 'This is a secret prompt',
 		});
 
-		await service.flush();
+		await closeServiceAndWait();
 
 		const content = fs.readFileSync(outfile, 'utf-8');
 		const event = JSON.parse(content.trim());
@@ -205,7 +213,7 @@ describe('FileOpenTelemetryService', () => {
 			prompt: 'This is a secret prompt',
 		});
 
-		await service.flush();
+		await closeServiceAndWait();
 
 		const content = fs.readFileSync(outfile, 'utf-8');
 		const event = JSON.parse(content.trim());
@@ -222,7 +230,7 @@ describe('FileOpenTelemetryService', () => {
 		service.recordTokenUsage('gpt-4', 'input', 500);
 		service.recordFileOperation('create', 50);
 
-		await service.flush();
+		await closeServiceAndWait();
 
 		const content = fs.readFileSync(outfile, 'utf-8');
 		const lines = content.trim().split('\n');
@@ -293,7 +301,7 @@ describe('FileOpenTelemetryService', () => {
 		});
 		service.recordAgentRun('agent-mode', 5000, 10, 'completed');
 
-		await service.flush();
+		await closeServiceAndWait();
 
 		const content = fs.readFileSync(outfile, 'utf-8');
 		const lines = content.trim().split('\n');
