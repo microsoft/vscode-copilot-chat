@@ -91,6 +91,9 @@ export class TelemetryData {
 		if (telemetryConfig.organizationsList) {
 			configProperties['organizations_list'] = telemetryConfig.organizationsList;
 		}
+		if (telemetryConfig.enterpriseList) {
+			configProperties['enterprise_list'] = telemetryConfig.enterpriseList;
+		}
 
 		// By being the second argument, configProperties will always override
 		this.properties = { ...this.properties, ...configProperties };

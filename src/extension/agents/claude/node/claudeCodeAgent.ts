@@ -396,7 +396,8 @@ export class ClaudeCodeSession extends Disposable {
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
 					toolInvocationToken: this._currentRequest.toolInvocationToken,
-					permissionMode: this._currentPermissionMode
+					permissionMode: this._currentPermissionMode,
+					stream: this._currentRequest.stream
 				});
 			},
 			systemPrompt: {

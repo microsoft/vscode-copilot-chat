@@ -18,7 +18,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
@@ -184,8 +184,10 @@ export class ChatEndpoint implements IChatEndpoint {
 			const betaFeatures: string[] = [];
 
 			// Add thinking beta if enabled
-			if (this._getThinkingBudget()) {
+			if (modelSupportsInterleavedThinking(this.model)) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
+			} else {
+				headers['capi-beta-1'] = 'true';
 			}
 
 			// Add context management beta if enabled
