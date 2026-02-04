@@ -801,14 +801,14 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 			// Check for blocking responses
 			for (const result of results) {
-				if (result.kind === 1 /* ChatHookResultKind.Success */ && typeof result.result === 'object') {
-					const output = result.result as StopHookOutput;
+				if (result.success === true && typeof result.output === 'object') {
+					const output = result.output as StopHookOutput;
 					if (output.decision === 'block' && output.reason) {
 						this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${output.reason}`);
 						return { shouldContinue: true, reason: output.reason };
 					}
-				} else if (result.kind === 2 /* ChatHookResultKind.Error */) {
-					const errorMessage = typeof result.result === 'string' ? result.result : 'Unknown error';
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
 					this._logService.error(`[DefaultToolCallingLoop] Stop hook error: ${errorMessage}`);
 				}
 			}
