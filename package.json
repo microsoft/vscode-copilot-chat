@@ -2753,12 +2753,12 @@
 			},
 			{
 				"command": "github.copilot.growth.showNeedsInputMessage",
-				"title": "Show Copilot Growth: Needs Input Message",
+				"title": "Show Copilot Welcome Message",
 				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.growth.showFeatureTip",
-				"title": "Show Copilot Growth: Feature Tip",
+				"title": "Show Copilot Feature Tip",
 				"category": "GitHub Copilot"
 			}
 		],
