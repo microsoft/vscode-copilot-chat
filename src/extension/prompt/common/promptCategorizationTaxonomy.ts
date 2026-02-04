@@ -502,3 +502,59 @@ export function generateTaxonomyPrompt(): string {
 		generateScopePromptSection(),
 	].join('\n\n');
 }
+
+// ============================================================================
+// Tool calling schema for structured output
+// ============================================================================
+
+/** Tool name for prompt categorization */
+export const CATEGORIZE_PROMPT_TOOL_NAME = 'categorize_prompt';
+
+/** JSON Schema for the categorize_prompt tool parameters */
+export const CATEGORIZE_PROMPT_TOOL_SCHEMA = {
+	type: 'object',
+	additionalProperties: false,
+	properties: {
+		intent: {
+			type: 'string',
+			enum: Object.keys(INTENT_DEFINITIONS),
+			description: 'The primary action the user wants to perform'
+		},
+		domain: {
+			type: 'string',
+			enum: Object.keys(DOMAIN_DEFINITIONS),
+			description: 'The area of code or system the request relates to'
+		},
+		scope: {
+			type: 'string',
+			enum: Object.keys(SCOPE_DEFINITIONS),
+			description: 'The code context required to fulfill the request'
+		},
+		timeEstimate: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				bestCase: {
+					type: 'string',
+					description: 'ISO 8601 duration for best case scenario (e.g., "PT5M" for 5 minutes)'
+				},
+				realistic: {
+					type: 'string',
+					description: 'ISO 8601 duration for realistic scenario (e.g., "PT15M" for 15 minutes)'
+				}
+			},
+			required: ['bestCase', 'realistic']
+		},
+		confidence: {
+			type: 'number',
+			minimum: 0,
+			maximum: 1,
+			description: 'Confidence score between 0.0 and 1.0'
+		},
+		reasoning: {
+			type: 'string',
+			description: 'Brief 1-2 sentence explanation for the classification'
+		}
+	},
+	required: ['intent', 'domain', 'scope', 'timeEstimate', 'confidence', 'reasoning']
+} as const;

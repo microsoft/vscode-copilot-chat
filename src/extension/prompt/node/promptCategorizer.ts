@@ -7,12 +7,14 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ICopilotToolCall } from '../../../platform/networking/common/fetch';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { isValidDomain, isValidIntent, isValidScope, PromptClassification } from '../common/promptCategorizationTaxonomy';
+import { CATEGORIZE_PROMPT_TOOL_NAME, CATEGORIZE_PROMPT_TOOL_SCHEMA, isValidDomain, isValidIntent, isValidScope, PromptClassification } from '../common/promptCategorizationTaxonomy';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { PromptCategorizationPrompt } from '../../prompts/node/panel/promptCategorization';
 
@@ -97,7 +99,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 
 		// Fire and forget - don't await
 		this._categorizePromptAsync(request, context).catch(err => {
-			this.logService.error(err instanceof Error ? err : String(err), '[PromptCategorizer] Error categorizing prompt');
+			this.logService.error(`[PromptCategorizer] Error categorizing prompt: ${err instanceof Error ? err.message : String(err)}`);
 		});
 	}
 
@@ -109,53 +111,87 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		// Gather context signals (outside try block for telemetry access)
 		const currentLanguage = this.tabsAndEditorsService.activeTextEditor?.document.languageId;
 
+		// Use 10 second timeout - classification should be fast with copilot-fast model
+		const CATEGORIZATION_TIMEOUT_MS = 10_000;
+		const cts = new CancellationTokenSource();
+		const timeoutHandle = setTimeout(() => cts.cancel(), CATEGORIZATION_TIMEOUT_MS);
+
 		try {
 			const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+
+			// Truncate prompt for classification - first 2000 chars is sufficient to determine intent
+			const MAX_PROMPT_FOR_CLASSIFICATION = 2000;
+			const promptForClassification = request.prompt.length > MAX_PROMPT_FOR_CLASSIFICATION
+				? request.prompt.slice(0, MAX_PROMPT_FOR_CLASSIFICATION)
+				: request.prompt;
 
 			const { messages } = await renderPromptElement(
 				this.instantiationService,
 				endpoint,
 				PromptCategorizationPrompt,
 				{
-					userRequest: request.prompt,
+					userRequest: promptForClassification,
 				}
 			);
+
+			// Collect tool calls from the response stream
+			const toolCalls: ICopilotToolCall[] = [];
 
 			const response = await endpoint.makeChatRequest2({
 				debugName: 'promptCategorization',
 				messages,
-				finishedCb: undefined,
+				finishedCb: async (_text, _index, delta) => {
+					if (delta.copilotToolCalls) {
+						toolCalls.push(...delta.copilotToolCalls);
+					}
+					return undefined;
+				},
 				location: ChatLocation.Panel,
 				userInitiatedRequest: false,
 				isConversationRequest: false,
-			}, { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => { } }) } as vscode.CancellationToken);
-
-			if (response.type === ChatFetchResponseType.Success) {
-				const responseText = response.value.trim();
-
-				// Try to parse JSON from potential markdown code block or raw JSON
-				let jsonText = responseText;
-				const codeBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-				if (codeBlockMatch) {
-					jsonText = codeBlockMatch[1].trim();
+				requestOptions: {
+					tools: [{
+						type: 'function',
+						function: {
+							name: CATEGORIZE_PROMPT_TOOL_NAME,
+							description: 'Classify a user prompt across intent, domain, scope, and time estimate dimensions',
+							parameters: CATEGORIZE_PROMPT_TOOL_SCHEMA
+						}
+					}],
+					tool_choice: { type: 'function', function: { name: CATEGORIZE_PROMPT_TOOL_NAME } }
 				}
+			}, cts.token);
 
-				try {
-					const parsed = JSON.parse(jsonText);
-					if (isValidClassification(parsed)) {
-						classification = parsed;
-						success = true;
-					} else {
-						this.logService.warn(`[PromptCategorizer] Invalid classification structure: ${jsonText}`);
+			if (cts.token.isCancellationRequested) {
+				this.logService.debug('[PromptCategorizer] Request cancelled due to timeout');
+				// Don't return early - still send telemetry below to track timeouts
+			} else if (response.type === ChatFetchResponseType.Success) {
+				// Find the categorize_prompt tool call
+				const categorizationCall = toolCalls.find(tc => tc.name === CATEGORIZE_PROMPT_TOOL_NAME);
+
+				if (categorizationCall) {
+					try {
+						const parsed = JSON.parse(categorizationCall.arguments);
+						if (isValidClassification(parsed)) {
+							classification = parsed;
+							success = true;
+						} else {
+							this.logService.warn(`[PromptCategorizer] Invalid classification structure: ${categorizationCall.arguments.substring(0, 200)}`);
+						}
+					} catch (parseError) {
+						this.logService.warn(`[PromptCategorizer] Failed to parse tool arguments: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
 					}
-				} catch (parseError) {
-					this.logService.warn(`[PromptCategorizer] Failed to parse JSON response: ${jsonText}`);
+				} else {
+					this.logService.warn('[PromptCategorizer] No categorization tool call found in response');
 				}
 			} else {
 				this.logService.warn(`[PromptCategorizer] Request failed with type: ${response.type}`);
 			}
 		} catch (err) {
-			this.logService.error(err instanceof Error ? err : String(err), '[PromptCategorizer] Error during categorization');
+			this.logService.error(`[PromptCategorizer] Error during categorization: ${err instanceof Error ? err.message : String(err)}`);
+		} finally {
+			clearTimeout(timeoutHandle);
+			cts.dispose();
 		}
 
 		const latencyMs = Date.now() - startTime;
@@ -173,6 +209,38 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
 				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? '',
 				scope: classification?.scope ?? 'unknown',
+			},
+			{
+				promptLength: request.prompt.length,
+				numReferences: request.references?.length ?? 0,
+				numToolReferences: request.toolReferences?.length ?? 0,
+				confidence: classification?.confidence ?? 0,
+				latencyMs,
+				success: success ? 1 : 0,
+			}
+		);
+
+		// Send internal telemetry with full metrics including PAI data (reasoning + prompt)
+		// Truncate prompt to 8192 chars to avoid telemetry backend limits; promptLength measurement preserves original size
+		const MAX_TELEMETRY_PROMPT_LENGTH = 8192;
+		const truncatedPrompt = request.prompt.length > MAX_TELEMETRY_PROMPT_LENGTH
+			? request.prompt.slice(0, MAX_TELEMETRY_PROMPT_LENGTH)
+			: request.prompt;
+
+		this.telemetryService.sendInternalMSFTTelemetryEvent(
+			'promptCategorization',
+			{
+				sessionId: request.sessionId ?? '',
+				requestId: request.id ?? '',
+				modeName: request.modeInstructions2?.name,
+				currentLanguage: currentLanguage ?? '',
+				intent: classification?.intent ?? 'unknown',
+				domain: classification?.domain ?? 'unknown',
+				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
+				timeEstimateRealistic: classification?.timeEstimate?.realistic ?? '',
+				scope: classification?.scope ?? 'unknown',
+				reasoning: classification?.reasoning ?? '',
+				prompt: truncatedPrompt,
 			},
 			{
 				promptLength: request.prompt.length,
