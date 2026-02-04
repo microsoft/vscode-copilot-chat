@@ -72,6 +72,9 @@ export class CopilotCLIPromptResolver {
 				return;
 			}
 			if (isLocation(variableRef.value)) {
+				if (await this.ignoreService.isCopilotIgnored(variableRef.value.uri)) {
+					return;
+				}
 				fileFolderReferences.push(variableRef);
 				validReferences.push(variableRef);
 				return;
