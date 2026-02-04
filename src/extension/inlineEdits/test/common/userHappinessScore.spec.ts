@@ -11,7 +11,7 @@ import { ActionKind, getUserHappinessScore, getWindowWithIgnoredLimit, MAX_INTER
  * v1 algorithm from main branch (only accepted/rejected).
  * Used as reference to verify the new configurable algorithm can mimic the original behavior.
  */
-function v1GetUserHappinessScore(actions: { kind: 'accepted' | 'rejected' }[]): number {
+function v1GetUserHappinessScore(actions: { kind: ActionKind.Accepted | ActionKind.Rejected }[]): number {
 	if (actions.length === 0) {
 		return 0.5; // neutral score when no data
 	}
@@ -26,7 +26,7 @@ function v1GetUserHappinessScore(actions: { kind: 'accepted' | 'rejected' }[]): 
 		const weight = i + 1;
 
 		// Accepted = 1, Rejected = 0
-		const score = action.kind === 'accepted' ? 1 : 0;
+		const score = action.kind === ActionKind.Accepted ? 1 : 0;
 
 		weightedScore += score * weight;
 		totalWeight += weight;
@@ -56,30 +56,35 @@ const CONFIG_MIMICS_V1: UserHappinessScoreConfiguration = {
 };
 
 describe('UserHappinessScore', () => {
+
+	const accepted = ActionKind.Accepted;
+	const rejected = ActionKind.Rejected;
+	const ignored = ActionKind.Ignored;
+
 	describe('v2 algorithm mimics v1', () => {
 		const testCases: { name: string; actions: ActionKind[] }[] = [
 			{ name: 'empty actions', actions: [] },
-			{ name: 'single accept', actions: ['accepted'] },
-			{ name: 'single reject', actions: ['rejected'] },
-			{ name: 'all accepts', actions: ['accepted', 'accepted', 'accepted', 'accepted', 'accepted'] },
-			{ name: 'all rejects', actions: ['rejected', 'rejected', 'rejected', 'rejected', 'rejected'] },
-			{ name: 'mixed 50/50', actions: ['accepted', 'rejected', 'accepted', 'rejected', 'accepted', 'rejected'] },
-			{ name: 'accepts then rejects', actions: ['accepted', 'accepted', 'accepted', 'rejected', 'rejected', 'rejected'] },
-			{ name: 'rejects then accepts', actions: ['rejected', 'rejected', 'rejected', 'accepted', 'accepted', 'accepted'] },
-			{ name: 'full 10 mixed', actions: ['accepted', 'rejected', 'accepted', 'accepted', 'rejected', 'accepted', 'rejected', 'accepted', 'rejected', 'accepted'] },
+			{ name: 'single accept', actions: [accepted] },
+			{ name: 'single reject', actions: [rejected] },
+			{ name: 'all accepts', actions: [accepted, accepted, accepted, accepted, accepted] },
+			{ name: 'all rejects', actions: [rejected, rejected, rejected, rejected, rejected] },
+			{ name: 'mixed 50/50', actions: [accepted, rejected, accepted, rejected, accepted, rejected] },
+			{ name: 'accepts then rejects', actions: [accepted, accepted, accepted, rejected, rejected, rejected] },
+			{ name: 'rejects then accepts', actions: [rejected, rejected, rejected, accepted, accepted, accepted] },
+			{ name: 'full 10 mixed', actions: [accepted, rejected, accepted, accepted, rejected, accepted, rejected, accepted, rejected, accepted] },
 			// Cases with ignored (should be filtered out when mimicking v1)
-			{ name: 'accepts with ignored', actions: ['accepted', 'ignored', 'accepted', 'ignored', 'accepted'] },
-			{ name: 'rejects with ignored', actions: ['rejected', 'ignored', 'rejected', 'ignored', 'rejected'] },
-			{ name: 'mixed with many ignored', actions: ['accepted', 'ignored', 'ignored', 'ignored', 'rejected', 'ignored', 'accepted'] },
-			{ name: 'all ignored', actions: ['ignored', 'ignored', 'ignored', 'ignored', 'ignored'] },
-			{ name: 'accept surrounded by ignored', actions: ['ignored', 'ignored', 'accepted', 'ignored', 'ignored'] },
+			{ name: 'accepts with ignored', actions: [accepted, ignored, accepted, ignored, accepted] },
+			{ name: 'rejects with ignored', actions: [rejected, ignored, rejected, ignored, rejected] },
+			{ name: 'mixed with many ignored', actions: [accepted, ignored, ignored, ignored, rejected, ignored, accepted] },
+			{ name: 'all ignored', actions: [ignored, ignored, ignored, ignored, ignored] },
+			{ name: 'accept surrounded by ignored', actions: [ignored, ignored, accepted, ignored, ignored] },
 		];
 
 		for (const testCase of testCases) {
 			test(testCase.name, () => {
 				// For v1, filter out ignored actions
 				const v1Actions = testCase.actions
-					.filter((a): a is 'accepted' | 'rejected' => a !== 'ignored')
+					.filter((a): a is ActionKind.Accepted | ActionKind.Rejected => a !== ActionKind.Ignored)
 					.map(kind => ({ kind }));
 
 				const newActions = testCase.actions.map(kind => ({ kind }));
@@ -100,9 +105,9 @@ describe('UserHappinessScore', () => {
 			};
 
 			const actions = [
-				{ kind: 'accepted' as const },
-				{ kind: 'ignored' as const },
-				{ kind: 'rejected' as const },
+				{ kind: accepted },
+				{ kind: ignored },
+				{ kind: rejected },
 			];
 
 			const score = getUserHappinessScore(actions, config);
@@ -122,12 +127,12 @@ describe('UserHappinessScore', () => {
 
 			// Many consecutive ignored followed by accept
 			const actions: { kind: ActionKind }[] = [
-				{ kind: 'ignored' },
-				{ kind: 'ignored' },
-				{ kind: 'ignored' },
-				{ kind: 'ignored' },
-				{ kind: 'ignored' },
-				{ kind: 'accepted' },
+				{ kind: ignored },
+				{ kind: ignored },
+				{ kind: ignored },
+				{ kind: ignored },
+				{ kind: ignored },
+				{ kind: accepted },
 			];
 
 			const window = getWindowWithIgnoredLimit(actions, config);
@@ -146,26 +151,26 @@ describe('UserHappinessScore', () => {
 
 			// Scattered ignored actions
 			const actions: { kind: ActionKind }[] = [
-				{ kind: 'ignored' },
-				{ kind: 'accepted' },
-				{ kind: 'ignored' },
-				{ kind: 'rejected' },
-				{ kind: 'ignored' },
-				{ kind: 'accepted' },
+				{ kind: ignored },
+				{ kind: accepted },
+				{ kind: ignored },
+				{ kind: rejected },
+				{ kind: ignored },
+				{ kind: accepted },
 			];
 
 			const window = getWindowWithIgnoredLimit(actions, config);
 			// Should only include 2 total ignored
-			const ignoredCount = window.filter(a => a.kind === 'ignored').length;
+			const ignoredCount = window.filter(a => a.kind === ignored).length;
 			expect(ignoredCount).toBe(2);
 		});
 
 		test('different score weights affect result', () => {
 			// Test that including ignored with a specific score affects the result
 			const actions = [
-				{ kind: 'accepted' as const },
-				{ kind: 'ignored' as const },
-				{ kind: 'rejected' as const },
+				{ kind: accepted },
+				{ kind: ignored },
+				{ kind: rejected },
 			];
 
 			// Config where ignored is included but scores as neutral (0.5)
@@ -208,9 +213,9 @@ describe('UserHappinessScore', () => {
 			};
 
 			const actions = [
-				{ kind: 'ignored' as const },
-				{ kind: 'ignored' as const },
-				{ kind: 'ignored' as const },
+				{ kind: ignored },
+				{ kind: ignored },
+				{ kind: ignored },
 			];
 
 			const score = getUserHappinessScore(actions, config);
@@ -221,13 +226,13 @@ describe('UserHappinessScore', () => {
 			const config = DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 
 			// Single accept should give score above 0.5 but not too high
-			const singleAccept = getUserHappinessScore([{ kind: 'accepted' }], config);
+			const singleAccept = getUserHappinessScore([{ kind: accepted }], config);
 			expect(singleAccept).toBeGreaterThan(0.5);
 			expect(singleAccept).toBeLessThan(0.6); // Pulled towards neutral due to low confidence
 
 			// 10 accepts should give score closer to 1
 			const manyAccepts = getUserHappinessScore(
-				Array(10).fill(null).map(() => ({ kind: 'accepted' as const })),
+				Array(10).fill(null).map(() => ({ kind: accepted })),
 				config
 			);
 			expect(manyAccepts).toBeGreaterThan(0.9);
@@ -238,13 +243,13 @@ describe('UserHappinessScore', () => {
 
 			// Accepts followed by rejects (recent rejects should lower score)
 			const acceptsThenRejects = getUserHappinessScore(
-				[{ kind: 'accepted' }, { kind: 'accepted' }, { kind: 'rejected' }, { kind: 'rejected' }],
+				[{ kind: accepted }, { kind: accepted }, { kind: rejected }, { kind: rejected }],
 				config
 			);
 
 			// Rejects followed by accepts (recent accepts should raise score)
 			const rejectsThenAccepts = getUserHappinessScore(
-				[{ kind: 'rejected' }, { kind: 'rejected' }, { kind: 'accepted' }, { kind: 'accepted' }],
+				[{ kind: rejected }, { kind: rejected }, { kind: accepted }, { kind: accepted }],
 				config
 			);
 

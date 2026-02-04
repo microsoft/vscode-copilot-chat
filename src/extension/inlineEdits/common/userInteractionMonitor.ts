@@ -9,7 +9,11 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { DelaySession } from './delay';
 
-export type ActionKind = 'accepted' | 'rejected' | 'ignored';
+export enum ActionKind {
+	Accepted = 'accepted',
+	Rejected = 'rejected',
+	Ignored = 'ignored',
+}
 
 export const MAX_INTERACTIONS_CONSIDERED = 10;
 export const MAX_INTERACTIONS_STORED = 30;
@@ -39,7 +43,7 @@ export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
 	for (let i = actions.length - 1; i >= 0 && result.length < MAX_INTERACTIONS_CONSIDERED; i--) {
 		const action = actions[i];
 
-		if (action.kind === 'ignored') {
+		if (action.kind === ActionKind.Ignored) {
 			let skip = false;
 			if (limitConsecutiveIgnored && consecutiveIgnored >= ignoredLimit) {
 				skip = true;
@@ -100,7 +104,7 @@ export function getUserHappinessScore(
 		const action = window[i];
 
 		// Skip ignored actions if not included in score calculation
-		if (action.kind === 'ignored' && !config.includeIgnored) {
+		if (action.kind === ActionKind.Ignored && !config.includeIgnored) {
 			continue;
 		}
 
@@ -113,13 +117,13 @@ export function getUserHappinessScore(
 		// Get score based on action kind from configuration
 		let score: number;
 		switch (action.kind) {
-			case 'accepted':
+			case ActionKind.Accepted:
 				score = config.acceptedScore;
 				break;
-			case 'rejected':
+			case ActionKind.Rejected:
 				score = config.rejectedScore;
 				break;
-			case 'ignored':
+			case ActionKind.Ignored:
 				score = config.ignoredScore;
 				break;
 		}
@@ -145,13 +149,13 @@ export class UserInteractionMonitor {
 	 * Used for aggressiveness level calculation.
 	 * Includes all action types (accepted, rejected, ignored).
 	 */
-	private _recentUserActionsForAggressiveness: { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] = [];
+	private _recentUserActionsForAggressiveness: { time: number; kind: ActionKind }[] = [];
 
 	/**
 	 * Used for timing/debounce calculation.
 	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
 	 */
-	private _recentUserActionsForTiming: { time: number; kind: 'accepted' | 'rejected' }[] = [];
+	private _recentUserActionsForTiming: { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -162,18 +166,18 @@ export class UserInteractionMonitor {
 	// Capture user interactions
 
 	public handleAcceptance(): void {
-		this._recordUserAction('accepted');
+		this._recordUserAction(ActionKind.Accepted);
 	}
 
 	public handleRejection(): void {
-		this._recordUserAction('rejected');
+		this._recordUserAction(ActionKind.Rejected);
 	}
 
 	public handleIgnored(): void {
-		this._recordUserAction('ignored');
+		this._recordUserAction(ActionKind.Ignored);
 	}
 
-	private _recordUserAction(kind: 'accepted' | 'rejected' | 'ignored') {
+	private _recordUserAction(kind: ActionKind): void {
 		const now = Date.now();
 
 		// Always record for aggressiveness calculation
@@ -181,7 +185,7 @@ export class UserInteractionMonitor {
 		this._recentUserActionsForAggressiveness = this._recentUserActionsForAggressiveness.slice(-MAX_INTERACTIONS_STORED);
 
 		// Only record accepts/rejects for timing calculation
-		if (kind !== 'ignored') {
+		if (kind !== ActionKind.Ignored) {
 			this._recentUserActionsForTiming.push({ time: now, kind });
 			this._recentUserActionsForTiming = this._recentUserActionsForTiming.slice(-MAX_INTERACTIONS_CONSIDERED);
 		}
