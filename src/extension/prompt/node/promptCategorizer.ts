@@ -194,6 +194,27 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		const latencyMs = Date.now() - startTime;
 
 		// Send telemetry
+		/* __GDPR__
+			"promptCategorization" : {
+				"owner": "digitarald",
+				"comment": "Classifies agent requests for understanding user intent and response quality",
+				"sessionId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat session identifier" },
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique request identifier within the session" },
+				"modeName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode name being used" },
+				"currentLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language ID of the active editor" },
+				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The intent category (e.g., code_generation, code_fixing)" },
+				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The domain category (e.g., frontend, backend)" },
+				"timeEstimateBestCase": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for best case time estimate" },
+				"timeEstimateRealistic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for realistic time estimate" },
+				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The scope category (e.g., current_file, codebase)" },
+				"promptLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Length of the user prompt in characters" },
+				"numReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of context references attached to the request" },
+				"numToolReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool references in the request" },
+				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0)" },
+				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in milliseconds to complete the classification" },
+				"success": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether classification succeeded (1) or failed (0)" }
+			}
+		*/
 		this.telemetryService.sendMSFTTelemetryEvent(
 			'promptCategorization',
 			{
