@@ -25,6 +25,7 @@ import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
+import { UserInputRequest } from './userInputHelpers';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -47,6 +48,8 @@ export class CopilotCLISessionOptions {
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
+	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
+	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
 	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
@@ -61,6 +64,14 @@ export class CopilotCLISessionOptions {
 			};
 		};
 		this.requestPermissionHandler = this.requestPermissionRejected;
+		this.requestUserInputRejected = async (request: UserInputRequest): ReturnType<NonNullable<SessionOptions['requestUserInput']>> => {
+			logger.info(`[CopilotCLISession] User input would be invalid as no handler was set: ${request.question}`);
+			return {
+				answer: '',
+				wasFreeform: false
+			};
+		};
+		this.requestUserInputHandler = this.requestUserInputRejected;
 	}
 
 	public addPermissionHandler(handler: NonNullable<SessionOptions['requestPermission']>): IDisposable {
@@ -72,10 +83,22 @@ export class CopilotCLISessionOptions {
 		});
 	}
 
+	public addUserInputHandler(handler: NonNullable<SessionOptions['requestUserInput']>): IDisposable {
+		this.requestUserInputHandler = handler;
+		return toDisposable(() => {
+			if (this.requestUserInputHandler === handler) {
+				this.requestUserInputHandler = this.requestUserInputRejected;
+			}
+		});
+	}
+
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
+			},
+			requestUserInput: async (request: UserInputRequest) => {
+				return await this.requestUserInputHandler(request);
 			}
 		};
 

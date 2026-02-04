@@ -208,3 +208,8 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}
 }
+
+export enum SpeculativeRequestsEnablement {
+	On = 'on',
+	Off = 'off',
+}

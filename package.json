@@ -89,6 +89,7 @@
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
+		"chatHooks@1",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -3061,6 +3062,26 @@
 						"tags": [
 							"preview"
 						]
+					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
+						"type": "number",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
+						"minimum": 0,
+						"maximum": 32000,
+						"default": 16000,
+						"tags": [
+							"preview",
+							"onExp"
+						]
 					}
 				}
 			},
@@ -3545,15 +3566,6 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.anthropic.useMessagesApi": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useMessagesApi%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3598,17 +3610,6 @@
 						"enum": [
 							"off",
 							"detailed"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": "number",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 0,
-						"maximum": 32000,
-						"default": 4000,
-						"tags": [
-							"experimental",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
@@ -5533,7 +5534,7 @@
 		"prepare": "husky",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
-		"build": "node .esbuild.ts",
+		"build": "node .esbuild.ts --sourcemaps",
 		"compile": "node .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
 		"watch:esbuild": "node .esbuild.ts --watch --dev",
@@ -5669,7 +5670,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "0.2.5",
 		"@anthropic-ai/sdk": "^0.71.2",
-		"@github/blackbird-external-ingest-utils": "^0.1.0",
+		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.400",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",

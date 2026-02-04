@@ -20,7 +20,7 @@ import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } f
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { EditStreaming, EditStreamingWithTelemetry, IStatelessNextEditProvider, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditTelemetryBuilder, WithStatelessProviderTelemetry } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { editWouldDeleteWhatWasJustInserted, editWouldDeleteWhatWasJustInserted2, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService, ProviderTarget } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -73,8 +73,6 @@ interface ModelConfig extends xtabPromptOptions.PromptOptions {
 	modelName: string | undefined;
 }
 
-type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
-
 export class XtabProvider implements IStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
@@ -115,13 +113,14 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		this.userInteractionMonitor.handleRejection();
 	}
 
-	public async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	public async *provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
 		const telemetry = new StatelessNextEditTelemetryBuilder(request);
 
 		logContext.setProviderStartTime();
 		try {
 			if (request.xtabEditHistory.length === 0) {
-				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
+				const noSuggestionReason = new NoNextEditReason.ActiveDocumentHasNoEdits();
+				return new WithStatelessProviderTelemetry(noSuggestionReason, telemetry.build(Result.error(noSuggestionReason)));
 			}
 
 			const delaySession = this.userInteractionMonitor.createDelaySession(request.providerRequestStartDateTime);
@@ -130,39 +129,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			let res = await iterator.next(); // for-async-await loop doesn't work because we need to access the final return value
 
-			let nextEditResult: Result<void, NoNextEditReason>;
-
-			if (res.done) {
-				// stream already ended, so we can just return the final reason
-				nextEditResult = Result.error(res.value);
-				pushEdit(nextEditResult);
-			} else {
-				// stream is not done yet, so we push the first edit and then continue streaming in the background
-
-				nextEditResult = Result.ok(undefined);
-
-				(async () => {
-					let nEdits = 0;
-					while (!res.done) {
-						nEdits++;
-						pushEdit(Result.ok(res.value));
-						res = await iterator.next();
-					}
-					pushEdit(Result.error(res.value));
-				})().catch((err: unknown) => {
-					const error = errors.fromUnknown(err);
-					logContext.addLog(`Error while streaming further edits: ${errors.fromUnknown(err)}`);
-					pushEdit(Result.error(new NoNextEditReason.Unexpected(error)));
-				});
+			while (!res.done) {
+				yield new WithStatelessProviderTelemetry(res.value, telemetry.build(Result.ok(undefined)));
+				res = await iterator.next();
 			}
 
-			if (nextEditResult.isError() && nextEditResult.err instanceof NoNextEditReason.GotCancelled) {
+			const noNextEditReason = res.value;
+
+			if (noNextEditReason instanceof NoNextEditReason.GotCancelled) {
 				logContext.setIsSkipped();
 			}
 
-			return new StatelessNextEditResult(nextEditResult, telemetry.build(nextEditResult));
+			return new WithStatelessProviderTelemetry(noNextEditReason, telemetry.build(Result.error(noNextEditReason)));
 		} catch (err: unknown) {
-			return StatelessNextEditResult.noEdit(new NoNextEditReason.Unexpected(errors.fromUnknown(err)), telemetry);
+			const error = errors.fromUnknown(err);
+			const noSuggestionReason = new NoNextEditReason.Unexpected(error);
+			return new WithStatelessProviderTelemetry(noSuggestionReason, telemetry.build(Result.error(noSuggestionReason)));
 		} finally {
 			logContext.setProviderEndTime();
 		}
