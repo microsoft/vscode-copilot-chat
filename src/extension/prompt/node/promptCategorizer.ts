@@ -107,25 +107,12 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 		try {
 			const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 
-			// Gather context signals
-			// Note: For Panel location, location2 is undefined so these will be false/undefined
-			const hasSelection = false;
-			const currentFileName: string | undefined = undefined;
-			const currentLanguage: string | undefined = undefined;
-			const hasErrors = false; // TODO: Could check diagnostics if needed
-			const modeName = request.modeInstructions2?.name;
-
 			const { messages } = await renderPromptElement(
 				this.instantiationService,
 				endpoint,
 				PromptCategorizationPrompt,
 				{
 					userRequest: request.prompt,
-					modeName,
-					hasSelection,
-					currentFileName,
-					currentLanguage,
-					hasErrors,
 				}
 			);
 
