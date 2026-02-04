@@ -244,11 +244,11 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 		const start = Date.now();
 		let ttft: number | undefined;
 		let ttfte: number | undefined;
+		let usage: APIUsage | undefined;
 
 		try {
 			const stream = await client.models.generateContentStream(params);
 
-			let usage: APIUsage | undefined;
 			let pendingThinkingSignature: string | undefined;
 
 			for await (const chunk of stream) {
@@ -276,6 +276,9 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 							// Now handle the actual content parts
 							if ('thought' in part && part.thought === true && part.text) {
 								// Handle thinking/reasoning content from Gemini API
+								if (ttfte === undefined) {
+									ttfte = Date.now() - issuedTime;
+								}
 								progress.report(new LanguageModelThinkingPart(part.text));
 							} else if (part.text) {
 								if (ttfte === undefined) {
@@ -291,6 +294,9 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 									pendingThinkingSignature = undefined;
 								}
 
+								if (ttfte === undefined) {
+									ttfte = Date.now() - issuedTime;
+								}
 								progress.report(new LanguageModelToolCallPart(
 									generateUuid(),
 									part.functionCall.name,
@@ -302,20 +308,40 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 				}
 
 				// Extract usage information if available in the chunk
+				// Initialize on first chunk with usageMetadata, then update incrementally
+				// This ensures we capture prompt token info even if stream is cancelled mid-way
 				if (chunk.usageMetadata) {
-					const promptTokens = chunk.usageMetadata.promptTokenCount || -1;
-					const completionTokens = chunk.usageMetadata.candidatesTokenCount || -1;
+					const promptTokens = chunk.usageMetadata.promptTokenCount;
+					const completionTokens = chunk.usageMetadata.candidatesTokenCount;
+					const cachedTokens = chunk.usageMetadata.cachedContentTokenCount;
 
-					usage = {
-						// Use -1 as a sentinel value to indicate that the token count is unavailable
-						completion_tokens: completionTokens,
-						prompt_tokens: promptTokens,
-						total_tokens: chunk.usageMetadata.totalTokenCount ||
-							(promptTokens !== -1 && completionTokens !== -1 ? promptTokens + completionTokens : -1),
-						prompt_tokens_details: {
-							cached_tokens: chunk.usageMetadata.cachedContentTokenCount || 0,
+					if (!usage) {
+						// Initialize usage on first chunk - use -1 as sentinel for unavailable values
+						usage = {
+							completion_tokens: completionTokens ?? -1,
+							prompt_tokens: promptTokens ?? -1,
+							total_tokens: chunk.usageMetadata.totalTokenCount ?? -1,
+							prompt_tokens_details: {
+								cached_tokens: cachedTokens ?? 0,
+							}
+						};
+					} else {
+						// Update with latest values, preserving existing non-sentinel values
+						if (promptTokens !== undefined) {
+							usage.prompt_tokens = promptTokens;
 						}
-					};
+						if (completionTokens !== undefined) {
+							usage.completion_tokens = completionTokens;
+						}
+						if (chunk.usageMetadata.totalTokenCount !== undefined) {
+							usage.total_tokens = chunk.usageMetadata.totalTokenCount;
+						} else if (usage.prompt_tokens !== -1 && usage.completion_tokens !== -1) {
+							usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+						}
+						if (cachedTokens !== undefined) {
+							usage.prompt_tokens_details!.cached_tokens = cachedTokens;
+						}
+					}
 				}
 			}
 
@@ -323,7 +349,8 @@ export class GeminiNativeBYOKLMProvider extends AbstractLanguageModelChatProvide
 		} catch (error) {
 			if ((error as any)?.name === 'AbortError' || token.isCancellationRequested) {
 				this._logService.trace('Gemini streaming aborted');
-				return { ttft, ttfte, usage: undefined };
+				// Return partial usage data collected before cancellation
+				return { ttft, ttfte, usage };
 			}
 			this._logService.error(`Gemini streaming error: ${toErrorMessage(error, true)}`);
 			throw error;
