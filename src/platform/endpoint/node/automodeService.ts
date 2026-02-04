@@ -58,7 +58,9 @@ class AutoModeTokenBank extends Disposable {
 		if (!this._token) {
 			if (this._fetchTokenPromise) {
 				await this._fetchTokenPromise;
-			} else {
+			}
+			// If we still don't have a token (e.g., the awaited promise returned nothing), force a new fetch
+			if (!this._token) {
 				this._fetchTokenPromise = this._fetchToken(true);
 				await this._fetchTokenPromise;
 			}
@@ -74,7 +76,6 @@ class AutoModeTokenBank extends Disposable {
 		// If the window isn't active we will skip fetching to save network calls
 		// We will fetch again when the window becomes active
 		if (!this._envService.isActive && !force) {
-			this._fetchTokenPromise = undefined;
 			return;
 		}
 		const startTime = Date.now();
