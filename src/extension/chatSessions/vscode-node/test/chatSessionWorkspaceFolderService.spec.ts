@@ -265,9 +265,9 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			expect(result.length).toBe(3);
 			// Most recent first
-			expect(result[0].folder.fsPath).toBe('/path/3');
-			expect(result[1].folder.fsPath).toBe('/path/2');
-			expect(result[2].folder.fsPath).toBe('/path/1');
+			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/path/3').fsPath);
+			expect(result[1].folder.fsPath).toBe(vscode.Uri.file('/path/2').fsPath);
+			expect(result[2].folder.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
 		});
 
 		it('should include lastAccessTime for each folder', async () => {
@@ -292,7 +292,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 			// Should only include the valid entry
 			expect(result.length).toBe(1);
-			expect(result[0].folder.fsPath).toBe('/path/1');
+			expect(result[0].folder.fsPath).toBe(vscode.Uri.file('/path/1').fsPath);
 		});
 
 		it('should filter out untitled session IDs', async () => {
@@ -327,7 +327,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 	describe('deleteRecentFolder', () => {
 		it('should delete folder by matching fsPath', async () => {
 			const sessionId = 'session-1';
-			const folderPath = '/path/to/folder';
+			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
 
 			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
 			const deleteUri = vscode.Uri.file(folderPath);
@@ -339,7 +339,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 		it('should delete folder by URI equality', async () => {
 			const sessionId = 'session-1';
-			const folderPath = '/path/to/folder';
+			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
 
 			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
 			const deleteUri = URI.file(folderPath);
@@ -350,11 +350,11 @@ describe('ChatSessionWorkspaceFolderService', () => {
 		});
 
 		it('should delete all entries matching the folder', async () => {
-			const folderPath = '/path/to/folder';
+			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
 
 			await service.trackSessionWorkspaceFolder('session-1', folderPath);
 			await service.trackSessionWorkspaceFolder('session-2', folderPath);
-			await service.trackSessionWorkspaceFolder('session-3', '/different/path');
+			await service.trackSessionWorkspaceFolder('session-3', vscode.Uri.file('/different/path').fsPath);
 
 			await service.deleteRecentFolder(vscode.Uri.file(folderPath));
 
@@ -375,8 +375,8 @@ describe('ChatSessionWorkspaceFolderService', () => {
 		});
 
 		it('should not affect other folders when deleting one', async () => {
-			const folder1 = '/path/1';
-			const folder2 = '/path/2';
+			const folder1 = vscode.Uri.file('/path/1').fsPath;
+			const folder2 = vscode.Uri.file('/path/2').fsPath;
 
 			await service.trackSessionWorkspaceFolder('session-1', folder1);
 			await service.trackSessionWorkspaceFolder('session-2', folder2);
@@ -394,7 +394,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 		it('should update globalState after deletion', async () => {
 			const sessionId = 'session-1';
-			const folderPath = '/path/to/folder';
+			const folderPath = vscode.Uri.file('/path/to/folder').fsPath;
 
 			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
 			const beforeDelete = extensionContext.globalState.get<Record<string, unknown>>('github.copilot.cli.sessionWorkspaceFolders', {});
@@ -454,7 +454,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			await extensionContext.globalState.update('github.copilot.cli.sessionWorkspaceFolders', data);
 
 			// Trigger cleanup by adding another entry
-			await service.trackSessionWorkspaceFolder('session-trigger', '/trigger/path');
+			await service.trackSessionWorkspaceFolder('session-trigger', vscode.Uri.file('/trigger/path').fsPath);
 
 			const finalData = extensionContext.globalState.get<Record<string, unknown>>('github.copilot.cli.sessionWorkspaceFolders', {});
 
@@ -465,9 +465,9 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 	describe('integration scenarios', () => {
 		it('should maintain data across multiple operations', async () => {
-			await service.trackSessionWorkspaceFolder('session-1', '/path/1');
-			await service.trackSessionWorkspaceFolder('session-2', '/path/2');
-			await service.trackSessionWorkspaceFolder('session-3', '/path/3');
+			await service.trackSessionWorkspaceFolder('session-1', vscode.Uri.file('/path/1').fsPath);
+			await service.trackSessionWorkspaceFolder('session-2', vscode.Uri.file('/path/2').fsPath);
+			await service.trackSessionWorkspaceFolder('session-3', vscode.Uri.file('/path/3').fsPath);
 
 			let recent = service.getRecentFolders();
 			expect(recent.length).toBe(3);
@@ -487,7 +487,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 			const operations = [];
 			for (let i = 0; i < 50; i++) {
 				operations.push(
-					service.trackSessionWorkspaceFolder(`session-${i}`, `/path/${i}`)
+					service.trackSessionWorkspaceFolder(`session-${i}`, vscode.Uri.file(`/path/${i}`).fsPath)
 				);
 			}
 
@@ -499,7 +499,7 @@ describe('ChatSessionWorkspaceFolderService', () => {
 
 		it('should maintain consistency after delete and re-track', async () => {
 			const sessionId = 'session-1';
-			const folderPath = '/path/1';
+			const folderPath = vscode.Uri.file('/path/1').fsPath;
 
 			await service.trackSessionWorkspaceFolder(sessionId, folderPath);
 			await service.deleteTrackedWorkspaceFolder(sessionId);
