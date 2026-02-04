@@ -7,6 +7,8 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, parseUserHappinessScoreConfigurationString, UserHappinessScoreConfiguration } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import * as errors from '../../../util/common/errors';
 import { DelaySession } from './delay';
 
 export enum ActionKind {
@@ -169,6 +171,7 @@ export class UserInteractionMonitor {
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
 	// Capture user interactions
@@ -268,7 +271,8 @@ export class UserInteractionMonitor {
 	}
 
 	private _getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
-		const configString = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString, this._experimentationService);
+		const configKey = ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString;
+		const configString = this._configurationService.getExperimentBasedConfig(configKey, this._experimentationService);
 		if (configString === undefined) {
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
@@ -278,6 +282,17 @@ export class UserInteractionMonitor {
 		}
 		catch (e) {
 			this._logService.error(e, 'Failed to parse user happiness score configuration, using default config');
+			// Log to telemetry when we fail to parse an experimental config, but still offer the default config to avoid disruption.
+			/* __GDPR__
+				"incorrectNesAdaptiveAggressivenessConfig" : {
+					"owner": "bstee615",
+					"comment": "Capture if model configuration string is invalid JSON.",
+					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
+					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." },
+					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesAdaptiveAggressivenessConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
 			return DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION;
 		}
 	}
