@@ -423,7 +423,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
@@ -539,7 +538,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				this._blockedExtensionService.reportBlockedExtension(extensionId, result.retryAfter);
 				throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 			} else if (result.type === ChatFetchResponseType.QuotaExceeded) {
-				const details = getErrorDetailsFromChatFetchError(result, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;
