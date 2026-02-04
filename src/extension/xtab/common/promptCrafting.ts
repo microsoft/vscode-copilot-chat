@@ -163,8 +163,8 @@ function getRecentDiffsForSweep(
 	const result: { path: string; original: string; updated: string }[] = [];
 	let tokenBudget = opts.diffHistory.maxTokens;
 
-	// Traverse from most recent to least recent
-	for (let i = xtabHistory.length - 1; i >= 0 && result.length < opts.diffHistory.nEntries; --i) {
+	// Only get the most recent diff (last edit)
+	for (let i = xtabHistory.length - 1; i >= 0 && result.length < 1; --i) {
 		const entry = xtabHistory[i];
 
 		// Only process edit entries
@@ -193,7 +193,7 @@ function getRecentDiffsForSweep(
 		result.push({ path, original: originalContent, updated: updatedContent });
 	}
 
-	return result.reverse(); // Return from oldest to newest
+	return result; // Return only the most recent diff
 }
 
 export function getUserPrompt(promptPieces: PromptPieces): string {

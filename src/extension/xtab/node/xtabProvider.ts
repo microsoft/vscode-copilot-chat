@@ -58,7 +58,7 @@ import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
-import { charCount, constructMessages, linesWithBackticksRemoved, stripEmptyLinesFromStream, toLines } from './xtabUtils';
+import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -226,13 +226,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
-		// const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
-		let editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
-
-		// For nextEdit (Sweep), use the entire document as the edit window
-		if (promptOptions.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
-			editWindowLinesRange = new OffsetRange(0, currentDocument.lines.length);
-		}
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
 
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
@@ -697,9 +691,53 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			// For nextEdit (Sweep), strip leading/trailing empty lines from response
 			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
-				cleanedLinesStream = stripEmptyLinesFromStream(linesStream);
+				// Smart extraction for Sweep: diff full response against full document
+				// and yield only the actual changes
+				const responseLines: string[] = [];
+				for await (const line of linesStream) {
+					responseLines.push(line);
+				}
+
+				if (chatResponseFailure) {
+					return XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
+				}
+
+				// Strip leading/trailing empty lines
+				while (responseLines.length > 0 && responseLines[0].trim() === '') {
+					responseLines.shift();
+				}
+				while (responseLines.length > 0 && responseLines[responseLines.length - 1].trim() === '') {
+					responseLines.pop();
+				}
+
+				if (responseLines.length === 0) {
+					return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+				}
+
+				// Get full current document content
+				const currentLines = promptPieces.currentDocument.lines;
+
+				// Compute diff between current document and model response
+				const diffResult = await this.diffService.computeDiff(
+					currentLines.join('\n'),
+					responseLines.join('\n'),
+					{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }
+				);
+
+				tracer.trace(`Sweep smart extraction: found ${diffResult.changes.length} changes`);
+
+				// Yield only the actual changes
+				for (const change of diffResult.changes) {
+					const singleLineEdit = new LineReplacement(
+						new LineRange(change.original.startLineNumber, change.original.endLineNumberExclusive),
+						responseLines.slice(change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1)
+					);
+					tracer.trace(`Sweep edit: ${singleLineEdit.toString()}`);
+					yield { edit: singleLineEdit, isFromCursorJump, window: editWindow };
+				}
+
+				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 			} else {
 				cleanedLinesStream = linesStream;
 			}
