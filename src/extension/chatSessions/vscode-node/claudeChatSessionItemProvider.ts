@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 
 /**
  * Chat session item provider for Claude Code.

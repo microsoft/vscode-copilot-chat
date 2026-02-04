@@ -120,14 +120,16 @@ All interactions are displayed through VS Code's native chat UI, providing a sea
 - Provides dependency injection for testability
 - Enables mocking in unit tests
 
-### `node/claudeCodeSessionService.ts`
+### `node/sessionParser/claudeCodeSessionService.ts`
 
 **IClaudeCodeSessionService / ClaudeCodeSessionService**
 - Loads and manages persisted Claude Code sessions from disk
 - Reads `.jsonl` session files from `~/.claude/projects/<workspace-slug>/`
 - Builds message chains from leaf nodes to reconstruct full conversations
+- Discovers and parses subagent sessions from `{session-id}/subagents/agent-*.jsonl`
 - Provides session caching with mtime-based invalidation
 - Used to resume previous Claude Code conversations
+- See `node/sessionParser/README.md` for detailed documentation
 
 ### `common/claudeTools.ts`
 
