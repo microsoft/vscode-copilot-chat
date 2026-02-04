@@ -89,6 +89,7 @@
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
+		"agentSessionsWorkspace",
 		"chatHooks@1",
 		"extensionsAny",
 		"newSymbolNamesProvider",

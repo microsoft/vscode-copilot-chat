@@ -137,7 +137,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	private shouldShowSession(sessionId: string): boolean | undefined {
-		if (isUntitledSessionId(sessionId)) {
+		if (
+			isUntitledSessionId(sessionId) ||			// always show untitled sessions
+			vscode.workspace.isAgentSessionsWorkspace	// always all sessions in agent sessions workspace
+		) {
 			return true;
 		}
 		// If we have a workspace folder for this and the workspace folder belongs to one of the open workspace folders, show it.
