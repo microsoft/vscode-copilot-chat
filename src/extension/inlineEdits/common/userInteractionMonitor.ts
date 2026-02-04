@@ -15,6 +15,14 @@ export enum ActionKind {
 	Ignored = 'ignored',
 }
 
+/**
+ * Represents a user interaction wrt an inline edit suggestion.
+ */
+export interface NESUserAction {
+	time: number;
+	kind: ActionKind;
+}
+
 export const MAX_INTERACTIONS_CONSIDERED = 10;
 export const MAX_INTERACTIONS_STORED = 30;
 
@@ -24,10 +32,10 @@ export const MAX_INTERACTIONS_STORED = 30;
  * When ignored limit is reached, skip excess ignored actions but expand window
  * further back to still get MAX_INTERACTIONS_CONSIDERED items.
  */
-export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
-	actions: T[],
+export function getWindowWithIgnoredLimit(
+	actions: NESUserAction[],
 	config: UserHappinessScoreConfiguration
-): T[] {
+): NESUserAction[] {
 	const { limitConsecutiveIgnored, limitTotalIgnored, ignoredLimit } = config;
 
 	if (!limitConsecutiveIgnored && !limitTotalIgnored) {
@@ -35,7 +43,7 @@ export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
 		return actions.slice(-MAX_INTERACTIONS_CONSIDERED);
 	}
 
-	const result: T[] = [];
+	const result: NESUserAction[] = [];
 	let consecutiveIgnored = 0;
 	let totalIgnored = 0;
 
@@ -81,7 +89,7 @@ export function getWindowWithIgnoredLimit<T extends { kind: ActionKind }>(
  * - Score is adjusted towards neutral (0.5) based on data confidence
  */
 export function getUserHappinessScore(
-	actions: { kind: ActionKind }[],
+	actions: NESUserAction[],
 	config: UserHappinessScoreConfiguration
 ): number {
 	if (actions.length === 0) {
@@ -149,13 +157,13 @@ export class UserInteractionMonitor {
 	 * Used for aggressiveness level calculation.
 	 * Includes all action types (accepted, rejected, ignored).
 	 */
-	protected _recentUserActionsForAggressiveness: { time: number; kind: ActionKind }[] = [];
+	protected _recentUserActionsForAggressiveness: NESUserAction[] = [];
 
 	/**
 	 * Used for timing/debounce calculation.
 	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
 	 */
-	protected _recentUserActionsForTiming: { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] = [];
+	protected _recentUserActionsForTiming: (NESUserAction & { kind: ActionKind.Accepted | ActionKind.Rejected })[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
