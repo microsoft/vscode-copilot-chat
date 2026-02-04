@@ -284,15 +284,15 @@ declare module 'vscode' {
 	 * Generic tool result data that displays input and output in collapsible sections.
 	 * Use plain strings for unformatted text or MarkdownString for formatted markdown.
 	 */
-	export interface ChatGenericToolResultData {
+	export interface ChatSimpleToolResultData {
 		/**
-		 * The input to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 * The input to display.
 		 */
-		input: string | MarkdownString;
+		input: string;
 		/**
-		 * The output to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 * The output to display.
 		 */
-		output: string | MarkdownString;
+		output: string;
 	}
 
 	export interface ChatToolResourcesInvocationData {
@@ -311,7 +311,7 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatGenericToolResultData | ChatToolResourcesInvocationData;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatToolResourcesInvocationData | ChatSimpleToolResultData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 

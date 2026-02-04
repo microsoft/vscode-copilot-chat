@@ -995,10 +995,10 @@ function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: Unknown
 }
 
 function genericToolInvocationCompleted(_invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
-	if (result.success && result.result?.content && typeof result.result.content === 'string') {
+	if (result.success && result.result?.content) {
 		_invocation.toolSpecificData = {
-			output: new MarkdownString(result.result.content),
-			input: toolCall.arguments ? `\`\`\`json\n${JSON.stringify(toolCall.arguments, null, 2)}\n\`\`\`` : ''
+			output: typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content, null, 2),
+			input: toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : ''
 		};
 	}
 
