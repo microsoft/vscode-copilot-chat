@@ -38,16 +38,16 @@ class TestUserInteractionMonitor extends UserInteractionMonitor {
 	/**
 	 * Get a copy of the recent user actions for aggressiveness calculation.
 	 */
-	getActionsForAggressiveness(): { time: number; kind: 'accepted' | 'rejected' | 'ignored' }[] {
+	getActionsForAggressiveness(): { time: number; kind: ActionKind }[] {
 		// Access private field through type assertion
-		return [...(this as any)._recentUserActionsForAggressiveness];
+		return [...this._recentUserActionsForAggressiveness];
 	}
 
 	/**
 	 * Get a copy of the recent user actions for timing calculation.
 	 */
-	getActionsForTiming(): { time: number; kind: 'accepted' | 'rejected' }[] {
-		return [...(this as any)._recentUserActionsForTiming];
+	getActionsForTiming(): { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] {
+		return [...this._recentUserActionsForTiming];
 	}
 }
 

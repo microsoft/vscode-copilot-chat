@@ -149,13 +149,13 @@ export class UserInteractionMonitor {
 	 * Used for aggressiveness level calculation.
 	 * Includes all action types (accepted, rejected, ignored).
 	 */
-	private _recentUserActionsForAggressiveness: { time: number; kind: ActionKind }[] = [];
+	protected _recentUserActionsForAggressiveness: { time: number; kind: ActionKind }[] = [];
 
 	/**
 	 * Used for timing/debounce calculation.
 	 * Only includes accepted and rejected actions (ignored actions don't affect timing).
 	 */
-	private _recentUserActionsForTiming: { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] = [];
+	protected _recentUserActionsForTiming: { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] = [];
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
