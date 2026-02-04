@@ -884,9 +884,9 @@ function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: U
  * Extracts title from first non-empty line (strips leading #), parses checklist items,
  * and generates sequential numeric IDs.
  */
-function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: string; title: string; status: ChatTodoStatus }> } {
+function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> } {
 	const lines = markdown.split('\n');
-	const todoList: Array<{ id: string; title: string; status: ChatTodoStatus }> = [];
+	const todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> = [];
 	let title = 'Updated todo list';
 	let inCodeBlock = false;
 	let currentItem: { title: string; status: ChatTodoStatus } | null = null;
@@ -922,7 +922,7 @@ function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{
 			// Save previous item if exists
 			if (currentItem && currentItem.title.trim()) {
 				todoList.push({
-					id: String(todoList.length + 1),
+					id: todoList.length + 1,
 					title: currentItem.title.trim(),
 					status: currentItem.status
 				});
@@ -951,7 +951,7 @@ function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{
 	// Add the last item
 	if (currentItem && currentItem.title.trim()) {
 		todoList.push({
-			id: String(todoList.length + 1),
+			id: todoList.length + 1,
 			title: currentItem.title.trim(),
 			status: currentItem.status
 		});

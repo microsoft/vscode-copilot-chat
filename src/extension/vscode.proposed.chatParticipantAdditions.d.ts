@@ -274,7 +274,7 @@ declare module 'vscode' {
 
 	export interface ChatTodoToolInvocationData {
 		todoList: Array<{
-			id: string;
+			id: number;
 			title: string;
 			status: ChatTodoStatus;
 		}>;
