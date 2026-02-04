@@ -28,7 +28,7 @@ import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
+import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelTextPart, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -457,7 +457,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.serverToolCalls) {
 					for (const serverCall of delta.serverToolCalls) {
-						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.arguments);
+						const result: LanguageModelToolResult2 = {
+							content: [new LanguageModelTextPart(JSON.stringify(serverCall.result, undefined, 2))]
+						};
+						this._requestLogger.logServerToolCall(serverCall.id, serverCall.name, serverCall.args, result);
 					}
 				}
 				if (delta.statefulMarker) {
@@ -488,17 +491,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			tools: availableTools,
 		});
 		fetchStreamSource?.resolve();
-		let chatResult = await processResponsePromise ?? undefined;
+		const chatResult = await processResponsePromise ?? undefined;
 
-		// hydrate the token usage into the chat result as this renders the context window widget
-		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
-			chatResult = {
-				...chatResult, usage: {
-					completionTokens: fetchResult.usage.completion_tokens,
-					promptTokens: fetchResult.usage.prompt_tokens,
-					promptTokenDetails,
-				}
-			};
+		// Report token usage to the stream for rendering the context window widget
+		const stream = streamParticipants[streamParticipants.length - 1];
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage && stream) {
+			stream.usage({
+				completionTokens: fetchResult.usage.completion_tokens,
+				promptTokens: fetchResult.usage.prompt_tokens,
+				promptTokenDetails,
+			});
 		}
 
 		// Validate authentication session upgrade and handle accordingly

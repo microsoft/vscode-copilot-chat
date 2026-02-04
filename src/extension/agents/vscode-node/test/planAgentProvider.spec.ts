@@ -249,8 +249,8 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		// Should preserve body content
-		assert.ok(content.includes('You are a PLANNING AGENT, NOT an implementation agent.'));
-		assert.ok(content.includes('Your SOLE responsibility is planning, NEVER even consider to start implementation.'));
+		assert.ok(content.includes('You are a PLANNING AGENT, pairing with the user'));
+		assert.ok(content.includes('Your SOLE responsibility is planning. NEVER start implementation.'));
 	});
 
 	test('handles empty additionalTools array gracefully', async () => {
@@ -292,6 +292,47 @@ suite('PlanAgentProvider', () => {
 		assert.ok(content.includes('label: Open in Editor'));
 		assert.ok(content.includes('agent: agent'));
 		assert.ok(content.includes('send: true'));
+	});
+
+	test('applies ImplementAgentModel to Start Implementation handoff', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.ImplementAgentModel, 'Claude Haiku 4.5 (copilot)');
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		// Should contain Start Implementation handoff with model override
+		assert.ok(content.includes('label: Start Implementation'));
+		assert.ok(content.includes('model: Claude Haiku 4.5 (copilot)'));
+	});
+
+	test('does not include model in handoff when ImplementAgentModel is not set', async () => {
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		const content = await getAgentContent(agents[0]);
+
+		// Find the Start Implementation handoff section
+		const handoffsStart = content.indexOf('handoffs:');
+		const handoffsSection = content.slice(handoffsStart, content.indexOf('---', handoffsStart));
+
+		// Should not contain model field in handoffs when not configured
+		assert.ok(!handoffsSection.includes('model:'), 'Should not have model field in handoffs when ImplementAgentModel is not set');
+	});
+
+	test('fires onDidChangeCustomAgents when ImplementAgentModel setting changes', async () => {
+		const provider = createProvider();
+
+		let eventFired = false;
+		provider.onDidChangeCustomAgents(() => {
+			eventFired = true;
+		});
+
+		await mockConfigurationService.setConfig(ConfigKey.ImplementAgentModel, 'new-model');
+
+		assert.equal(eventFired, true);
 	});
 });
 

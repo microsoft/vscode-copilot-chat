@@ -59,6 +59,7 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 64_000;
 export class ClaudeLanguageModelServer extends Disposable {
 	private server: http.Server;
 	private config: IClaudeLanguageModelServerConfig;
+	private readonly _userInitiatedMessageCounts = new Map<string, number>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -120,11 +121,23 @@ export class ClaudeLanguageModelServer extends Disposable {
 	}
 
 	/**
-	 * Verify nonce
+	 * Verify nonce from x-api-key or Authorization header
 	 */
 	private async isAuthTokenValid(req: http.IncomingMessage): Promise<boolean> {
-		const authHeader = req.headers['x-api-key'];
-		return authHeader === this.config.nonce;
+		// Check x-api-key header (used by SDK)
+		const apiKeyHeader = req.headers['x-api-key'];
+		if (apiKeyHeader === this.config.nonce) {
+			return true;
+		}
+
+		// Check Authorization header with Bearer prefix (used by CLI with ANTHROPIC_AUTH_TOKEN)
+		const authHeader = req.headers['authorization'];
+		if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+			const token = authHeader.slice(7); // Remove "Bearer " prefix
+			return token === this.config.nonce;
+		}
+
+		return false;
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
@@ -147,14 +160,12 @@ export class ClaudeLanguageModelServer extends Disposable {
 		try {
 			const requestBody: AnthropicMessagesRequest = JSON.parse(bodyString);
 
-			// Determine if this is a user-initiated message
-			const lastMessage = requestBody.messages?.at(-1);
-			const isUserInitiatedMessage = lastMessage?.role === 'user';
-
-			const endpoints = await this.endpointProvider.getAllChatEndpoints();
+			const allEndpoints = await this.endpointProvider.getAllChatEndpoints();
+			// Filter to only endpoints that support the Messages API
+			const endpoints = allEndpoints.filter(e => e.apiType === 'messages');
 			if (endpoints.length === 0) {
-				this.error('No language models available');
-				this.sendErrorResponse(res, 404, 'not_found_error', 'No language models available');
+				this.error('No Claude models with Messages API available');
+				this.sendErrorResponse(res, 404, 'not_found_error', 'No Claude models with Messages API available');
 				return;
 			}
 
@@ -165,6 +176,12 @@ export class ClaudeLanguageModelServer extends Disposable {
 				return;
 			}
 			requestBody.model = selectedEndpoint.model;
+			// Determine if this is a user-initiated message using counter-based approach
+			const count = this._userInitiatedMessageCounts.get(selectedEndpoint.model) ?? 0;
+			const isUserInitiatedMessage = count > 0;
+			if (isUserInitiatedMessage) {
+				this._userInitiatedMessageCounts.set(selectedEndpoint.model, count - 1);
+			}
 
 			// Set up streaming response
 			res.writeHead(200, {
@@ -308,6 +325,15 @@ export class ClaudeLanguageModelServer extends Disposable {
 		return { ...this.config };
 	}
 
+	/**
+	 * Increments the user-initiated message count for a given model.
+	 * Called when a user sends a new message in a Claude session.
+	 */
+	public incrementUserInitiatedMessageCount(modelId: string): void {
+		const current = this._userInitiatedMessageCounts.get(modelId) ?? 0;
+		this._userInitiatedMessageCounts.set(modelId, current + 1);
+	}
+
 	private info(message: string): void {
 		const messageWithClassName = `[ClaudeLanguageModelServer] ${message}`;
 		this.logService.info(messageWithClassName);
@@ -396,7 +422,7 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 	}
 
 	public getExtraHeaders(): Record<string, string> {
-		const headers = this.base.getExtraHeaders?.() ?? {};
+		const headers = this.base.getExtraHeaders?.(ChatLocation.MessagesProxy) ?? {};
 		if (this.requestHeaders['user-agent']) {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
 		}
@@ -472,10 +498,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get restrictedToSkus(): string[] | undefined {
 		return this.base.restrictedToSkus;
-	}
-
-	public get isDefault(): boolean {
-		return this.base.isDefault;
 	}
 
 	public get isFallback(): boolean {

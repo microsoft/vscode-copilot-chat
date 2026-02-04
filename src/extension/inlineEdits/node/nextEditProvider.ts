@@ -3,18 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { basename } from 'path';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
-import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
+import { Edits, RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
-import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { IXtabHistoryEditEntry, NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogger, ILogService, LogTarget } from '../../../platform/log/common/logService';
+import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import * as errors from '../../../util/common/errors';
@@ -29,7 +32,7 @@ import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/com
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
+import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
@@ -41,6 +44,42 @@ import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
+
+/**
+ * Computes a reduced window range that encompasses both the original window (shrunk by one line
+ * on each end) and the full line where the cursor is located.
+ *
+ * This ensures the cache invalidation window always includes the cursor's line while trimming
+ * the edges of the original window.
+ */
+function computeReducedWindow(
+	window: OffsetRange,
+	activeDocSelection: OffsetRange | undefined,
+	documentBeforeEdits: StringText
+): OffsetRange {
+	if (!activeDocSelection) {
+		return window;
+	}
+	const cursorOffset = activeDocSelection.endExclusive;
+	const t = documentBeforeEdits.getTransformer();
+	const cursorPosition = t.getPosition(cursorOffset);
+	const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
+	const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
+	const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
+	const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
+	const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
+	return new OffsetRange(
+		Math.min(reducedOffset, lineOffset),
+		Math.max(reducedEndOffset, lineEndOffset)
+	);
+}
+
+function convertLineEditToEdit(nextLineEdit: LineEdit, projectedDocuments: readonly ProcessedDoc[], docId: DocumentId): StringEdit {
+	const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
+	const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
+	const suggestedEdit = rootedLineEdit.toEdit();
+	return suggestedEdit;
+}
 
 export interface NESInlineCompletionContext extends vscode.InlineCompletionContext {
 	enforceCacheDelay: boolean;
@@ -73,6 +112,16 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
+	/**
+	 * Tracks a speculative request for the post-edit document state.
+	 * When a suggestion is shown, we speculatively fetch the next edit as if the user had already accepted.
+	 * This allows reusing the in-flight request when the user actually accepts the suggestion.
+	 */
+	private _speculativePendingRequest: {
+		request: StatelessNextEditRequest<CachedOrRebasedEdit>;
+		postEditContent: string;
+	} | null = null;
+
 	private _lastShownTime = 0;
 	/** The requestId of the last shown suggestion. We store only the requestId (not the object) to avoid preventing garbage collection. */
 	private _lastShownSuggestionId: number | undefined = undefined;
@@ -102,6 +151,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		@ISnippyService private readonly _snippyService: ISnippyService,
 		@ILogService private readonly _logService: ILogService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
 
@@ -189,7 +239,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections, nesConfigs);
+		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, selections);
 		if (cachedEdit?.rejected) {
 			logger.trace('cached edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejectedCache');
@@ -294,7 +344,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
-		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit.actualEdit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit.actualEdit)) {
 			logger.trace('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
@@ -385,22 +435,41 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		logContext.setRecentEdit(historyContext);
 
+		// Check if we can reuse the regular pending request
 		const pendingRequestStillCurrent = documentAtInvocationTime.value === this._pendingStatelessNextEditRequest?.documentBeforeEdits.value;
 		const existingNextEditRequest = (pendingRequestStillCurrent || nesConfigs.isAsyncCompletions) && !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
 			&& this._pendingStatelessNextEditRequest || undefined;
-		if (existingNextEditRequest) {
+
+		// Check if we can reuse the speculative pending request (from when a suggestion was shown)
+		const speculativeRequestMatches = this._speculativePendingRequest?.postEditContent === documentAtInvocationTime.value
+			&& !this._speculativePendingRequest.request.cancellationTokenSource.token.isCancellationRequested;
+		const speculativeRequest = speculativeRequestMatches ? this._speculativePendingRequest?.request : undefined;
+
+		// Prefer speculative request if it matches (it was specifically created for this post-edit state)
+		const requestToReuse = speculativeRequest ?? existingNextEditRequest;
+
+		if (requestToReuse) {
 			// Nice! No need to make another request, we can reuse the result from a pending request.
+			if (speculativeRequest) {
+				logger.trace('reusing speculative pending request');
+				// Clear the speculative request since we're using it
+				this._speculativePendingRequest = null;
+			}
 
-			const nextEditResult = await this._joinNextEditRequest(existingNextEditRequest, telemetryBuilder, logContext, cancellationToken);
+			const nextEditResult = await this._joinNextEditRequest(requestToReuse, telemetryBuilder, logContext, cancellationToken);
 
-			if (pendingRequestStillCurrent) {
+			const requestStillCurrent = speculativeRequest
+				? speculativeRequestMatches // For speculative, we already checked it matches
+				: pendingRequestStillCurrent;
+
+			if (requestStillCurrent) {
 				telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-				return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : existingNextEditRequest.firstEdit.p;
+				return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : requestToReuse.firstEdit.p;
 			} else {
 				// Needs rebasing.
-				const cacheResult = await existingNextEditRequest.firstEdit.p;
+				const cacheResult = await requestToReuse.firstEdit.p;
 				if (cacheResult.isOk() && cacheResult.val.edit) {
-					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime, nesConfigs);
+					const rebasedCachedEdit = this._nextEditCache.tryRebaseCacheEntry(cacheResult.val, documentAtInvocationTime, selectionAtInvocationTime);
 					if (rebasedCachedEdit) {
 						telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
 						return Result.ok(rebasedCachedEdit);
@@ -414,14 +483,14 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				}
 
 				// Rebase failed (or result had error). Check if there is a new pending request. Otherwise continue with a new request below.
-				const pendingRequestStillCurrent = documentAtInvocationTime.value === this._pendingStatelessNextEditRequest?.documentBeforeEdits.value;
-				const existingNextEditRequest2 = pendingRequestStillCurrent && !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
+				const pendingRequestStillCurrent2 = documentAtInvocationTime.value === this._pendingStatelessNextEditRequest?.documentBeforeEdits.value;
+				const existingNextEditRequest2 = pendingRequestStillCurrent2 && !this._pendingStatelessNextEditRequest?.cancellationTokenSource.token.isCancellationRequested
 					&& this._pendingStatelessNextEditRequest || undefined;
 				if (existingNextEditRequest2) {
 					logger.trace('reusing 2nd existing next edit request after rebase failed');
-					const nextEditResult = await this._joinNextEditRequest(existingNextEditRequest2, telemetryBuilder, logContext, cancellationToken);
-					telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult.telemetry);
-					return nextEditResult.nextEdit.isError() ? nextEditResult.nextEdit : existingNextEditRequest2.firstEdit.p;
+					const nextEditResult2 = await this._joinNextEditRequest(existingNextEditRequest2, telemetryBuilder, logContext, cancellationToken);
+					telemetryBuilder.setStatelessNextEditTelemetry(nextEditResult2.telemetry);
+					return nextEditResult2.nextEdit.isError() ? nextEditResult2.nextEdit : existingNextEditRequest2.firstEdit.p;
 				}
 
 				logger.trace('creating new next edit request after rebase failed');
@@ -478,13 +547,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const projectedDocuments = historyContext.documents.map(doc => this._processDoc(doc));
 
 		const xtabEditHistory = this._xtabHistoryTracker.getHistory();
-
-		function convertLineEditToEdit(nextLineEdit: LineEdit, docId: DocumentId): StringEdit {
-			const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
-			const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
-			const suggestedEdit = rootedLineEdit.toEdit();
-			return suggestedEdit;
-		}
 
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
@@ -545,136 +607,163 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			});
 		}) : undefined);
 
-		const createPushEdit = (): PushEdit => {
-			let ithEdit = -1;
-			const statePerDoc = new CachedFunction((id: DocumentId) => {
-				const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
-				if (!doc) {
-					throw new BugIndicatingError();
-				}
-				return {
-					docContents: doc.documentAfterEdits,
-					editsSoFar: StringEdit.empty,
-					nextEdits: [] as StringReplacement[],
-					docId: id,
-				};
-			});
-			const pushEdit: PushEdit = (result) => {
-				const myLogger = logger.createSubLogger('pushEdit');
 
-				++ithEdit;
-				myLogger.trace(`processing edit #${ithEdit} (starts at 0)`);
-
-				if (result.isError()) { // either error or stream of edits ended
-					// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
-					if (ithEdit === 0 && result.err instanceof NoNextEditReason.NoSuggestions) {
-						myLogger.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
-						this._shouldExpandEditWindow = false;
-					}
-					if (statePerDoc.get(curDocId).nextEdits.length) {
-						myLogger.trace(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
-					} else {
-						myLogger.trace(`no edit, reason: ${result.err.kind}`);
-						if (result.err instanceof NoNextEditReason.NoSuggestions) {
-							const { documentBeforeEdits, window } = result.err;
-							let reducedWindow = window;
-							if (activeDocSelection && window) {
-								const cursorOffset = activeDocSelection.endExclusive;
-								const t = documentBeforeEdits.getTransformer();
-								const cursorPosition = t.getPosition(cursorOffset);
-								const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
-								const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
-								const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
-								const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
-								const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
-								reducedWindow = new OffsetRange(
-									Math.min(reducedOffset, lineOffset),
-									Math.max(reducedEndOffset, lineEndOffset)
-								);
-							}
-							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
-						}
-					}
-					{
-						disp.dispose();
-						removeFromPending();
-					}
-					if (!firstEdit.isSettled) {
-						firstEdit.complete(result);
-					}
-					return;
-				}
-
-				// reset shouldExpandEditWindow to false when we get any edit
-				myLogger.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
-				this._shouldExpandEditWindow = false;
-
-				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
-
-				const singleLineEdit = result.val.edit;
-				const lineEdit = new LineEdit([singleLineEdit]);
-				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
-				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
-
-				if (rebasedEdit === undefined) {
-					myLogger.trace(`edit ${ithEdit} is undefined after rebasing`);
-					if (!firstEdit.isSettled) {
-						firstEdit.complete(Result.error(new NoNextEditReason.Uncategorized(new Error('Rebased edit is undefined'))));
-					}
-					return;
-				}
-
-				targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
-
-				let cachedEdit: CachedOrRebasedEdit | undefined;
-				if (rebasedEdit.replacements.length === 0) {
-					myLogger.trace(`WARNING: ${ithEdit} has no edits`);
-				} else if (rebasedEdit.replacements.length > 1) {
-					myLogger.trace(`WARNING: ${ithEdit} has ${rebasedEdit.replacements.length} edits, but expected only 1`);
-				} else {
-					// populate the cache
-					const nextEdit = rebasedEdit.replacements[0];
-					targetDocState.nextEdits.push(nextEdit);
-					cachedEdit = this._nextEditCache.setKthNextEdit(
-						targetDocState.docId,
-						targetDocState.docContents,
-						ithEdit === 0 ? result.val.window : undefined,
-						nextEdit,
-						ithEdit,
-						ithEdit === 0 ? targetDocState.nextEdits : undefined,
-						ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
-						req,
-						{ isFromCursorJump: result.val.isFromCursorJump }
-					);
-					myLogger.trace(`populated cache for ${ithEdit}`);
-				}
-
-				if (!firstEdit.isSettled) {
-					myLogger.trace('resolving firstEdit promise');
-					logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
-					firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
-				}
-
-				targetDocState.docContents = rebasedEdit.applyOnText(targetDocState.docContents);
+		const statePerDoc = new CachedFunction((id: DocumentId) => {
+			const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
+			if (!doc) {
+				throw new BugIndicatingError();
+			}
+			return {
+				docContents: doc.documentAfterEdits,
+				editsSoFar: StringEdit.empty,
+				nextEdits: [] as StringReplacement[],
+				docId: id,
 			};
+		});
 
-			return pushEdit;
+		const editStream = this._statelessNextEditProvider.provideNextEdit(nextEditRequest, logger, logContext, nextEditRequest.cancellationTokenSource.token);
+
+		let ithEdit = -1;
+
+		const processEdit = (streamedEdit: { readonly edit: LineReplacement; readonly isFromCursorJump: boolean; readonly window?: OffsetRange; readonly targetDocument?: DocumentId }, telemetry: IStatelessNextEditTelemetry): CachedOrRebasedEdit | undefined => {
+			++ithEdit;
+			const myLogger = logger.createSubLogger('processEdit');
+			myLogger.trace(`processing edit #${ithEdit} (starts at 0)`);
+
+			// reset shouldExpandEditWindow to false when we get any edit
+			myLogger.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
+			this._shouldExpandEditWindow = false;
+
+			const targetDocState = statePerDoc.get(streamedEdit.targetDocument ?? curDocId);
+
+			const singleLineEdit = streamedEdit.edit;
+			const lineEdit = new LineEdit([singleLineEdit]);
+			const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
+			const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
+
+			if (rebasedEdit === undefined) {
+				myLogger.trace(`edit ${ithEdit} is undefined after rebasing`);
+				if (!firstEdit.isSettled) {
+					firstEdit.complete(Result.error(new NoNextEditReason.Uncategorized(new Error('Rebased edit is undefined'))));
+				}
+				return undefined;
+			}
+
+			targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
+
+			let cachedEdit: CachedOrRebasedEdit | undefined;
+			if (rebasedEdit.replacements.length === 0) {
+				myLogger.trace(`WARNING: ${ithEdit} has no edits`);
+			} else if (rebasedEdit.replacements.length > 1) {
+				myLogger.trace(`WARNING: ${ithEdit} has ${rebasedEdit.replacements.length} edits, but expected only 1`);
+			} else {
+				// populate the cache
+				const nextEditReplacement = rebasedEdit.replacements[0];
+				targetDocState.nextEdits.push(nextEditReplacement);
+				cachedEdit = this._nextEditCache.setKthNextEdit(
+					targetDocState.docId,
+					targetDocState.docContents,
+					ithEdit === 0 ? streamedEdit.window : undefined,
+					nextEditReplacement,
+					ithEdit,
+					ithEdit === 0 ? targetDocState.nextEdits : undefined,
+					ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
+					req,
+					{ isFromCursorJump: streamedEdit.isFromCursorJump }
+				);
+				myLogger.trace(`populated cache for ${ithEdit}`);
+			}
+
+			if (!firstEdit.isSettled) {
+				myLogger.trace('resolving firstEdit promise');
+				logContext.setResult(new RootedLineEdit(targetDocState.docContents, lineEdit)); // this's correct without rebasing because this's the first edit
+				firstEdit.complete(cachedEdit ? Result.ok(cachedEdit) : Result.error(new NoNextEditReason.Unexpected(new Error('No cached edit'))));
+			}
+
+			targetDocState.docContents = rebasedEdit.applyOnText(targetDocState.docContents);
+
+			return cachedEdit;
 		};
-		const pushEdit = createPushEdit();
+
+		const handleStreamEnd = (completionReason: NoNextEditReason, lastTelemetry: IStatelessNextEditTelemetry) => {
+			const myLogger = logger.createSubLogger('streamEnd');
+
+			// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
+			const hadNoEdits = ithEdit === -1;
+			if (hadNoEdits && completionReason instanceof NoNextEditReason.NoSuggestions) {
+				myLogger.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
+				this._shouldExpandEditWindow = false;
+			}
+
+			if (statePerDoc.get(curDocId).nextEdits.length) {
+				myLogger.trace(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
+			} else {
+				myLogger.trace(`no edit, reason: ${completionReason.kind}`);
+				if (completionReason instanceof NoNextEditReason.NoSuggestions) {
+					const { documentBeforeEdits, window } = completionReason;
+					const reducedWindow = window ? computeReducedWindow(window, activeDocSelection, documentBeforeEdits) : undefined;
+					this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
+				}
+			}
+
+			if (!firstEdit.isSettled) {
+				firstEdit.complete(Result.error(completionReason));
+			}
+
+			const resultForTelemetry: Result<void, NoNextEditReason> = statePerDoc.get(curDocId).nextEdits.length > 0
+				? Result.ok(undefined)
+				: Result.error(completionReason);
+			const result = new StatelessNextEditResult(resultForTelemetry, lastTelemetry);
+			nextEditRequest.setResult(result);
+
+			disp.dispose();
+			removeFromPending();
+
+			return result;
+		};
+
 		try {
-			nextEditResult = await this._statelessNextEditProvider.provideNextEdit(nextEditRequest, pushEdit, logger, logContext, nextEditRequest.cancellationTokenSource.token);
-			nextEditRequest.setResult(nextEditResult);
+			let res = await editStream.next();
+
+			if (res.done) {
+				// Stream ended immediately without any edits
+				const completionReason = res.value.v;
+				nextEditResult = handleStreamEnd(completionReason, res.value.telemetryBuilder);
+			} else {
+				// Process first edit synchronously
+				const firstStreamedEdit = res.value.v;
+				const firstTelemetry = res.value.telemetryBuilder;
+				processEdit(firstStreamedEdit, firstTelemetry);
+
+				// Continue streaming remaining edits in the background (unawaited)
+				(async () => {
+					try {
+						res = await editStream.next();
+						while (!res.done) {
+							const streamedEdit = res.value.v;
+							processEdit(streamedEdit, res.value.telemetryBuilder);
+							res = await editStream.next();
+						}
+
+						// Stream completed
+						const completionReason = res.value.v;
+						handleStreamEnd(completionReason, res.value.telemetryBuilder);
+					} catch (err) {
+						logger.trace(`Error while streaming further edits: ${errors.toString(err)}`);
+						const errorReason = new NoNextEditReason.Unexpected(errors.fromUnknown(err));
+						handleStreamEnd(errorReason, firstTelemetry);
+					}
+				})();
+
+				// Return early with streaming result
+				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest));
+			}
+
 		} catch (err) {
 			nextEditRequest.setResultError(err);
 			throw err;
-		} finally {
-			if (!nextEditResult || nextEditResult.nextEdit.isError()) {
-				// when streaming, we need to keep the response going unless UI cancels it
-				// if we remove it from pending here, when UI cancels, we cannot cancel it because we think that the request has finished
-				disp.dispose();
-				removeFromPending();
-			}
 		}
+
 		return { nextEditRequest, nextEditResult };
 	}
 
@@ -756,6 +845,327 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
 		this._lastShownSuggestionId = suggestion.requestId;
+
+		// Trigger speculative request for the post-edit document state
+		const speculativeRequestsEnabled = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsSpeculativeRequests, this._expService);
+		if (speculativeRequestsEnabled) {
+			void this._triggerSpeculativeRequest(suggestion);
+		}
+	}
+
+	private async _triggerSpeculativeRequest(suggestion: NextEditResult): Promise<void> {
+		const logger = this._logger.createSubLogger('_triggerSpeculativeRequest');
+
+		const result = suggestion.result;
+		if (!result?.edit) {
+			logger.trace('no edit in suggestion result');
+			return;
+		}
+
+		const docId = result.targetDocumentId;
+		if (!docId) {
+			logger.trace('no target document ID in suggestion result');
+			return;
+		}
+
+		// Compute the post-edit document content
+		const postEditContent = result.edit.replace(result.documentBeforeEdits.value);
+		const postEditCursorOffset = result.edit.replaceRange.endExclusive + result.edit.getLengthDelta();
+		const selections = [new OffsetRange(postEditCursorOffset, postEditCursorOffset)];
+		const rootedEdit = new RootedEdit(result.documentBeforeEdits, new StringEdit([result.edit]));
+
+		const postEditContentST = new StringText(postEditContent);
+		let cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, selections);
+		if (cachedEdit) {
+			// first cachedEdit should be without edits because of noSuggestions caching
+			if (cachedEdit.edit) {
+				logger.trace('already have cached edit for post-edit state');
+				return;
+			} else if (cachedEdit.editWindow) {
+				const shiftedSelection = new OffsetRange(cachedEdit.editWindow.endExclusive, cachedEdit.editWindow.endExclusive);
+				cachedEdit = this._nextEditCache.lookupNextEdit(docId, postEditContentST, [shiftedSelection]);
+				if (cachedEdit?.edit) {
+					logger.trace('already have cached edit for post-edit state (after shifting selection)');
+					return;
+				}
+			} else {
+				logger.trace('already have cached no-suggestions entry for post-edit state');
+				return;
+			}
+		}
+
+		// Check if we already have a pending request for the post-edit state
+		if (this._pendingStatelessNextEditRequest?.documentBeforeEdits.value === postEditContent) {
+			logger.trace('already have pending request for post-edit state');
+			return;
+		}
+
+		// Check if we already have a speculative request for this post-edit state
+		if (this._speculativePendingRequest?.postEditContent === postEditContent) {
+			logger.trace('already have speculative request for post-edit state');
+			return;
+		}
+
+		// Get the document to trigger speculative fetch
+		// Note: targetDocumentId is defined when the suggestion targets a different document
+		// Otherwise, use the file path from the log context
+		const doc = this._workspace.getDocument(docId);
+		if (!doc) {
+			logger.trace('document not found for speculative request');
+			return;
+		}
+
+		logger.trace('triggering speculative request for post-edit state');
+
+		// Cancel any previous speculative request
+		this._speculativePendingRequest?.request.cancellationTokenSource.cancel();
+		this._speculativePendingRequest = null;
+
+		const historyContext = this._historyContextProvider.getHistoryContext(docId);
+		if (!historyContext) {
+			logger.trace('no history context for speculative request');
+			return;
+		}
+
+		// Create a speculative request
+		// Use a dummy version since this is speculative and we don't have the actual post-edit version
+		const logContext = new InlineEditRequestLogContext(docId.uri, 0, undefined);
+		const req = new NextEditFetchRequest(`sp-${suggestion.source.opportunityId}`, logContext, undefined);
+
+		try {
+			const speculativeRequest = await this._createSpeculativeRequest(
+				req,
+				doc,
+				historyContext,
+				postEditContent,
+				rootedEdit,
+				result.edit,
+				logger
+			);
+
+			if (speculativeRequest) {
+				this._speculativePendingRequest = {
+					request: speculativeRequest,
+					postEditContent,
+				};
+			}
+		} catch (e) {
+			logger.trace(`speculative request failed: ${errors.toString(e)}`);
+		}
+	}
+
+	/**
+	 * Creates and starts a speculative request for the post-edit document state.
+	 * The request will populate the cache so that when the user accepts the suggestion,
+	 * the next NES request can reuse or find the result in cache.
+	 */
+	private async _createSpeculativeRequest(
+		req: NextEditFetchRequest,
+		doc: IObservableDocument,
+		historyContext: HistoryContext,
+		postEditContent: string,
+		rootedEdit: RootedEdit,
+		appliedEdit: StringReplacement,
+		parentLogger: ILogger
+	): Promise<StatelessNextEditRequest<CachedOrRebasedEdit> | undefined> {
+		const logger = parentLogger.createSubLogger('_createSpeculativeRequest');
+		const curDocId = doc.id;
+
+		const recording = this._debugRecorder?.getRecentLog();
+		const logContext = req.log;
+
+		const activeDocAndIdx = historyContext.getDocumentAndIdx(curDocId);
+		if (!activeDocAndIdx) {
+			logger.trace('active doc not found in history context');
+			return undefined;
+		}
+
+		// Create the post-edit document content
+		const postEditText = new StringText(postEditContent);
+
+		// Process documents, but for the active document, use the post-edit state
+		const projectedDocuments: ProcessedDoc[] = historyContext.documents.map(docHist => {
+			if (docHist.docId !== curDocId) {
+				return this._processDoc(docHist);
+			} else {
+				// For the active document, create a version representing post-edit state
+				// The "recent edit" from the model's perspective is the NES edit we just applied
+				const workspaceRoot = this._workspace.getWorkspaceRoot(curDocId);
+				const postEditEdit = new StringEdit([appliedEdit]);
+				const postEditLineEdit = RootedLineEdit.fromEdit(new RootedEdit(doc.value.get(), postEditEdit)).removeCommonSuffixPrefixLines().edit;
+
+				const nextEditDoc = new StatelessNextEditDocument(
+					curDocId,
+					workspaceRoot,
+					docHist.languageId,
+					doc.value.get().getLines(), // lines before the NES edit
+					postEditLineEdit, // the NES edit as LineEdit
+					doc.value.get(), // document before NES edit
+					Edits.single(postEditEdit), // the NES edit as Edits
+					undefined, // selection - not critical for speculative
+				);
+
+				return {
+					recentEdit: new RootedEdit(doc.value.get(), postEditEdit),
+					nextEditDoc,
+					documentAfterEdits: postEditText,
+				};
+			}
+		});
+
+		const xtabEditHistory = this._xtabHistoryTracker.getHistory();
+		const suggestedEdit: IXtabHistoryEditEntry = { kind: 'edit', docId: curDocId, edit: rootedEdit };
+		xtabEditHistory.push(suggestedEdit);
+
+		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
+
+		const nLinesEditWindow = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsAutoExpandEditWindowLines, this._expService);
+
+		const nextEditRequest = new StatelessNextEditRequest(
+			req.headerRequestId,
+			req.opportunityId,
+			postEditText, // documentBeforeEdits is the post-edit state
+			projectedDocuments.map(d => d.nextEditDoc),
+			activeDocAndIdx.idx,
+			xtabEditHistory,
+			firstEdit,
+			nLinesEditWindow,
+			logContext,
+			undefined, // recordingBookmark
+			recording,
+			undefined, // providerRequestStartDateTime
+		);
+
+		logger.trace('starting speculative provider call');
+
+		// Start the provider call - this runs in the background and populates the cache
+		const label = `NES | spec | ${basename(doc.id.toUri().fsPath)} (v${doc.version})`;
+
+		const capturingToken = new CapturingToken(label, undefined, true, true);
+
+		void this._requestLogger.captureInvocation(capturingToken, () => this._runSpeculativeProviderCall(nextEditRequest, projectedDocuments, curDocId, req, logger));
+
+		return nextEditRequest;
+	}
+
+	/**
+	 * Runs the provider call for a speculative request and caches results.
+	 */
+	private async _runSpeculativeProviderCall(
+		nextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit>,
+		projectedDocuments: readonly ProcessedDoc[],
+		curDocId: DocumentId,
+		req: NextEditFetchRequest,
+		parentLogger: ILogger
+	): Promise<void> {
+		const logger = parentLogger.createSubLogger('_runSpeculativeProviderCall');
+
+		const statePerDoc = new CachedFunction((id: DocumentId) => {
+			const doc = projectedDocuments.find(d => d.nextEditDoc.id === id);
+			if (!doc) {
+				throw new BugIndicatingError();
+			}
+			return {
+				docContents: doc.documentAfterEdits,
+				editsSoFar: StringEdit.empty,
+				nextEdits: [] as StringReplacement[],
+				docId: id,
+			};
+		});
+
+		const logContext = req.log;
+		const editStream = this._statelessNextEditProvider.provideNextEdit(
+			nextEditRequest,
+			logger,
+			logContext,
+			nextEditRequest.cancellationTokenSource.token
+		);
+
+		let ithEdit = -1;
+
+		try {
+			let res = await editStream.next();
+
+			if (res.done) {
+				nextEditRequest.firstEdit.complete(Result.error(res.value.v));
+				nextEditRequest.setResult(new StatelessNextEditResult(
+					Result.error(res.value.v),
+					res.value.telemetryBuilder
+				));
+				logger.trace('speculative request completed with no edits');
+			} else {
+
+				(async () => {
+					while (!res.done) {
+						++ithEdit;
+						const streamedEdit = res.value.v;
+
+						const targetDocState = statePerDoc.get(streamedEdit.targetDocument ?? curDocId);
+
+						const singleLineEdit = streamedEdit.edit;
+						const lineEdit = new LineEdit([singleLineEdit]);
+						const edit = convertLineEditToEdit(lineEdit, projectedDocuments, targetDocState.docId);
+						const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
+
+						if (rebasedEdit === undefined) {
+							logger.trace(`speculative edit ${ithEdit} rebasing failed`);
+							res = await editStream.next();
+							continue;
+						}
+
+						targetDocState.editsSoFar = targetDocState.editsSoFar.compose(rebasedEdit);
+
+						if (rebasedEdit.replacements.length === 1) {
+							const nextEditReplacement = rebasedEdit.replacements[0];
+							targetDocState.nextEdits.push(nextEditReplacement);
+
+							// Populate the cache with the speculative result
+							const cachedEdit = this._nextEditCache.setKthNextEdit(
+								targetDocState.docId,
+								targetDocState.docContents,
+								ithEdit === 0 ? streamedEdit.window : undefined,
+								nextEditReplacement,
+								ithEdit,
+								ithEdit === 0 ? targetDocState.nextEdits : undefined,
+								undefined, // no userEditSince for speculative
+								req,
+								{ isFromCursorJump: streamedEdit.isFromCursorJump }
+							);
+
+							if (!nextEditRequest.firstEdit.isSettled && cachedEdit) {
+								nextEditRequest.firstEdit.complete(Result.ok(cachedEdit));
+								nextEditRequest.setResult(
+									new StatelessNextEditResult(
+										Result.ok(undefined),
+										res.value.telemetryBuilder
+									)
+								);
+							}
+
+							logger.trace(`cached speculative edit ${ithEdit}`);
+						}
+
+						targetDocState.docContents = rebasedEdit.applyOnText(targetDocState.docContents);
+
+						res = await editStream.next();
+					}
+				})().finally(() => {
+					if (!nextEditRequest.firstEdit.isSettled) {
+						nextEditRequest.firstEdit.complete(Result.error(new NoNextEditReason.Uncategorized(new Error('Speculative request ended without edits'))));
+						nextEditRequest.setResult(
+							new StatelessNextEditResult(
+								Result.error(new NoNextEditReason.Uncategorized(new Error('Speculative request ended without edits'))),
+								res.value.telemetryBuilder
+							)
+						);
+					}
+				});
+			}
+
+			logger.trace(`speculative request completed with ${ithEdit + 1} edits`);
+		} catch (e) {
+			logger.trace(`speculative provider call error: ${errors.toString(e)}`);
+		}
 	}
 
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {

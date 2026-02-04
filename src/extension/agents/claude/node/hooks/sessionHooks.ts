@@ -12,7 +12,7 @@ import {
 	SessionStartHookInput
 } from '@anthropic-ai/claude-agent-sdk';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { registerClaudeHook } from './claudeHookRegistry';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for SessionStart events.

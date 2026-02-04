@@ -35,8 +35,9 @@ export interface IClaudeSessionStateService {
 
 	/**
 	 * Gets the model ID for a session. Falls back to default if not set.
+	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
 	 */
-	getModelIdForSession(sessionId: string): Promise<string | undefined>;
+	getModelIdForSession(sessionId: string): Promise<string>;
 
 	/**
 	 * Sets the model ID for a session.
@@ -82,7 +83,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		super();
 	}
 
-	async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+	async getModelIdForSession(sessionId: string): Promise<string> {
 		const state = this._sessionState.get(sessionId);
 		if (state?.modelId !== undefined) {
 			return state.modelId;

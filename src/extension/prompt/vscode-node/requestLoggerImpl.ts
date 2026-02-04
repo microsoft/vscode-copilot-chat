@@ -349,17 +349,17 @@ export class RequestLogger extends AbstractRequestLogger {
 		));
 	}
 
-	public override logServerToolCall(id: string, name: string, args: unknown): void {
-		const syntheticResponse: LanguageModelToolResult2 = {
-			content: [new LanguageModelTextPart('[Server tool - executed by model provider]')]
-		};
+	public override logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void {
 		this._addEntry(new LoggedToolCall(
 			id,
 			`${name} [server]`,
 			args,
-			syntheticResponse,
+			result,
 			this.currentRequest,
-			Date.now()
+			Date.now(),
+			undefined, // thinking
+			undefined, // edits
+			undefined  // toolMetadata
 		));
 	}
 

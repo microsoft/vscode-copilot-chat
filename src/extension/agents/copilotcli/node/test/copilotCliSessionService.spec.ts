@@ -23,6 +23,7 @@ import { IInstantiationService } from '../../../../../util/vs/platform/instantia
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { IChatDelegationSummaryService } from '../../common/delegationSummaryService';
 import { COPILOT_CLI_DEFAULT_AGENT_ID, ICopilotCLIAgents, ICopilotCLISDK } from '../copilotCli';
+import { ICopilotCLIImageSupport } from '../copilotCLIImageSupport';
 import { CopilotCLISession, ICopilotCLISession } from '../copilotcliSession';
 import { CopilotCLISessionService, CopilotCLISessionWorkspaceTracker } from '../copilotcliSessionService';
 import { CopilotCLIMCPHandler } from '../mcpHandler';
@@ -91,6 +92,16 @@ export class NullCopilotCLIAgents implements ICopilotCLIAgents {
 	}
 }
 
+export class NullICopilotCLIImageSupport implements ICopilotCLIImageSupport {
+	_serviceBrand: undefined;
+	storeImage(_imageData: Uint8Array, _mimeType: string): Promise<URI> {
+		return Promise.resolve(URI.file('/dev/null'));
+	}
+	isTrustedImage(_imageUri: URI): boolean {
+		return false;
+	}
+}
+
 describe('CopilotCLISessionService', () => {
 	const disposables = new DisposableStore();
 	let logService: ILogService;
@@ -132,7 +143,7 @@ describe('CopilotCLISessionService', () => {
 						}
 					}();
 				}
-				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger()));
+				return disposables.add(new CopilotCLISession(options, sdkSession, logService, workspaceService, sdk, instantiationService, delegationService, new NullRequestLogger(), new NullICopilotCLIImageSupport()));
 			}
 		} as unknown as IInstantiationService;
 		const configurationService = accessor.get(IConfigurationService);

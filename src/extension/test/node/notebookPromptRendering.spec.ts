@@ -135,6 +135,12 @@ describe('Notebook Prompt Rendering', function () {
 			override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 				throw new Error('Method not implemented.');
 			}
+			override requestResourceTrust(_options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
+			override requestWorkspaceTrust(_options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
@@ -287,7 +293,6 @@ describe('Notebook Prompt Rendering', function () {
 			version: 'Test',
 			policy: 'enabled',
 			showInModelPicker: false,
-			isDefault: false,
 			isFallback: false,
 			urlOrRequestMetadata: '',
 			model: CHAT_MODEL.GPT41,

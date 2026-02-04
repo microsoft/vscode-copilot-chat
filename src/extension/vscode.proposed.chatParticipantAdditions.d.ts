@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// version: 1
+
 declare module 'vscode' {
 
 	export interface ChatParticipant {
@@ -264,6 +266,42 @@ declare module 'vscode' {
 		output: McpToolInvocationContentData[];
 	}
 
+	export enum ChatTodoStatus {
+		NotStarted = 1,
+		InProgress = 2,
+		Completed = 3
+	}
+
+	export interface ChatTodoToolInvocationData {
+		todoList: Array<{
+			id: string;
+			title: string;
+			status: ChatTodoStatus;
+		}>;
+	}
+
+	/**
+	 * Generic tool result data that displays input and output in collapsible sections.
+	 * Use plain strings for unformatted text or MarkdownString for formatted markdown.
+	 */
+	export interface ChatGenericToolResultData {
+		/**
+		 * The input to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 */
+		input: string | MarkdownString;
+		/**
+		 * The output to display. Can be a plain string (renders as text) or MarkdownString (renders with markdown formatting).
+		 */
+		output: string | MarkdownString;
+	}
+
+	export interface ChatToolResourcesInvocationData {
+		/**
+		 * Array of file URIs or locations to display as a collapsible list
+		 */
+		values: Array<Uri | Location>;
+	}
+
 	export class ChatToolInvocationPart {
 		toolName: string;
 		toolCallId: string;
@@ -273,7 +311,7 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatGenericToolResultData | ChatToolResourcesInvocationData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 
@@ -553,6 +591,13 @@ declare module 'vscode' {
 		push(part: ExtendedChatResponsePart): void;
 
 		clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void;
+
+		/**
+		 * Report token usage information for this request.
+		 * This is typically called when the underlying language model provides usage statistics.
+		 * @param usage Token usage information including prompt and completion tokens
+		 */
+		usage(usage: ChatResultUsage): void;
 	}
 
 	export enum ChatResponseReferencePartStatusKind {
@@ -744,12 +789,6 @@ declare module 'vscode' {
 		 * An optional detail string that will be rendered at the end of the response in certain UI contexts.
 		 */
 		details?: string;
-
-		/**
-		 * Token usage information for this request, if available.
-		 * This is typically provided by the underlying language model.
-		 */
-		readonly usage?: ChatResultUsage;
 	}
 
 	export namespace chat {

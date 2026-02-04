@@ -31,6 +31,18 @@ export const enum ShowNextEditPreference {
 	AroundEdit = 'aroundEdit',
 }
 
+export type EditStreaming = AsyncGenerator<StreamedEdit, NoNextEditReason, void>
+
+export class WithStatelessProviderTelemetry<T> {
+	constructor(
+		public readonly v: T,
+		public readonly telemetryBuilder: IStatelessNextEditTelemetry,
+	) {
+	}
+}
+
+export type EditStreamingWithTelemetry = AsyncGenerator<WithStatelessProviderTelemetry<StreamedEdit>, WithStatelessProviderTelemetry<NoNextEditReason>, void>
+
 export type StreamedEdit = {
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
@@ -43,7 +55,7 @@ export type PushEdit = (edit: Result<StreamedEdit, NoNextEditReason>) => void;
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
 	readonly showNextEditPreference?: ShowNextEditPreference;
-	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
+	provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
 	handleIgnored?(): void;
@@ -312,6 +324,7 @@ export interface IStatelessNextEditTelemetry {
 	/* general info */
 	readonly statelessNextEditProviderDuration: number;
 	readonly isCursorAtEndOfLine: boolean | undefined;
+	readonly isInlineSuggestion: boolean | undefined;
 	readonly nLinesOfCurrentFileInPrompt: number | undefined;
 	readonly modelName: string | undefined;
 
@@ -361,6 +374,7 @@ export interface IStatelessNextEditTelemetry {
 	readonly xtabUserHappinessScore: number | undefined;
 
 	/* cursor jump info */
+	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
 }
@@ -424,6 +438,7 @@ export class StatelessNextEditTelemetryBuilder {
 			promptLineCount,
 			promptCharCount,
 			isCursorAtEndOfLine: this._isCursorAtLineEnd,
+			isInlineSuggestion: this._isInlineSuggestion,
 			debounceTime: this._debounceTime,
 			artificialDelay: this._artificialDelay,
 			fetchStartedAt: this._fetchStartedAt,
@@ -435,6 +450,7 @@ export class StatelessNextEditTelemetryBuilder {
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 			xtabAggressivenessLevel: this._xtabAggressivenessLevel,
 			xtabUserHappinessScore: this._xtabUserHappinessScore,
+			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
 		};
@@ -482,6 +498,12 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _isInlineSuggestion: boolean | undefined;
+	public setIsInlineSuggestion(isInlineSuggestion: boolean): this {
+		this._isInlineSuggestion = isInlineSuggestion;
+		return this;
+	}
+
 	private _debounceTime: number | undefined;
 	public setDebounceTime(debounceTime: number): this {
 		this._debounceTime = debounceTime;
@@ -522,6 +544,11 @@ export class StatelessNextEditTelemetryBuilder {
 		return this;
 	}
 
+	private _cursorJumpModelName: string | undefined;
+	public setCursorJumpModelName(modelName: string | undefined): this {
+		this._cursorJumpModelName = modelName;
+		return this;
+	}
 
 	private _cursorJumpPrompt: Raw.ChatMessage[] | undefined;
 	public setCursorJumpPrompt(prompt: Raw.ChatMessage[] | undefined): this {

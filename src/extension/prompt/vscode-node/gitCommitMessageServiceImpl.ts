@@ -127,7 +127,7 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 			return null;
 		}
 
-		if (this._gitExtensionApi.repositories.length === 1) {
+		if (uri === undefined && this._gitExtensionApi.repositories.length === 1) {
 			return this._gitExtensionApi.repositories[0];
 		}
 
@@ -136,7 +136,7 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 			return null;
 		}
 
-		const repository = this._gitExtensionApi.getRepository(uri);
+		const repository = await this._gitExtensionApi.openRepository(uri);
 		if (!repository) {
 			return null;
 		}

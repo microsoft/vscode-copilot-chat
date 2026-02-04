@@ -29,7 +29,7 @@ import * as path from '../../../util/vs/base/common/path';
  * NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
  */
 
-const REQUIRED_VERSION = '0.0.342';
+const REQUIRED_VERSION = '0.0.394';
 const PACKAGE_NAME = '@github/copilot';
 const env = { ...process.env, PATH: (process.env.PATH || '').replaceAll(`${__dirname}${path.delimiter}`, '').replaceAll(`${path.delimiter}${__dirname}`, '') };
 

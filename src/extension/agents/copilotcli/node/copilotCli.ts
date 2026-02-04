@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -23,6 +25,7 @@ import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
+import { UserInputRequest } from './userInputHelpers';
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
@@ -45,6 +48,8 @@ export class CopilotCLISessionOptions {
 	private readonly mcpServers?: SessionOptions['mcpServers'];
 	private readonly requestPermissionRejected: NonNullable<SessionOptions['requestPermission']>;
 	private requestPermissionHandler: NonNullable<SessionOptions['requestPermission']>;
+	private readonly requestUserInputRejected: NonNullable<SessionOptions['requestUserInput']>;
+	private requestUserInputHandler: NonNullable<SessionOptions['requestUserInput']>;
 	constructor(options: { model?: string; isolationEnabled?: boolean; workingDirectory?: Uri; mcpServers?: SessionOptions['mcpServers']; agent?: SweCustomAgent; customAgents?: SweCustomAgent[] }, logger: ILogService) {
 		this.isolationEnabled = !!options.isolationEnabled;
 		this.workingDirectory = options.workingDirectory;
@@ -59,6 +64,14 @@ export class CopilotCLISessionOptions {
 			};
 		};
 		this.requestPermissionHandler = this.requestPermissionRejected;
+		this.requestUserInputRejected = async (request: UserInputRequest): ReturnType<NonNullable<SessionOptions['requestUserInput']>> => {
+			logger.info(`[CopilotCLISession] User input would be invalid as no handler was set: ${request.question}`);
+			return {
+				answer: '',
+				wasFreeform: false
+			};
+		};
+		this.requestUserInputHandler = this.requestUserInputRejected;
 	}
 
 	public addPermissionHandler(handler: NonNullable<SessionOptions['requestPermission']>): IDisposable {
@@ -70,10 +83,22 @@ export class CopilotCLISessionOptions {
 		});
 	}
 
+	public addUserInputHandler(handler: NonNullable<SessionOptions['requestUserInput']>): IDisposable {
+		this.requestUserInputHandler = handler;
+		return toDisposable(() => {
+			if (this.requestUserInputHandler === handler) {
+				this.requestUserInputHandler = this.requestUserInputRejected;
+			}
+		});
+	}
+
 	public toSessionOptions(): Readonly<SessionOptions & { requestPermission: NonNullable<SessionOptions['requestPermission']> }> {
 		const allOptions: SessionOptions = {
 			requestPermission: async (request: PermissionRequest) => {
 				return await this.requestPermissionHandler(request);
+			},
+			requestUserInput: async (request: UserInputRequest) => {
+				return await this.requestUserInputHandler(request);
 			}
 		};
 
@@ -124,11 +149,15 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		@ILogService private readonly logService: ILogService,
 	) {
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
+		// Eagerly fetch available models so that they're ready when needed.
+		this._availableModels.value.catch((error) => {
+			this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
+		});
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
 		modelId = modelId.trim().toLowerCase();
-		return models.find(m => m.id.toLowerCase() === modelId)?.id;
+		return models.find(m => m.id.toLowerCase() === modelId || m.name.toLowerCase() === modelId)?.id;
 	}
 	public async getDefaultModel() {
 		// First item in the list is always the default model (SDK sends the list ordered based on default preference)
@@ -324,7 +353,7 @@ type RequestDetails = { details: { requestId: string; toolIdEditMap: Record<stri
 export class CopilotCLISDK implements ICopilotCLISDK {
 	declare _serviceBrand: undefined;
 	private requestMap: Record<string, RequestDetails> = {};
-
+	private _ensureShimsPromise?: Promise<void>;
 	constructor(
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IEnvService private readonly envService: IEnvService,
@@ -333,6 +362,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 		@IAuthenticationService private readonly authentService: IAuthenticationService,
 	) {
 		this.requestMap = this.extensionContext.workspaceState.get<Record<string, RequestDetails>>(COPILOT_CLI_REQUEST_MAP_KEY, {});
+		this._ensureShimsPromise = this.ensureShims();
 	}
 
 	getRequestId(sdkRequestId: string): RequestDetails['details'] | undefined {
@@ -354,7 +384,7 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	public async getPackage(): Promise<typeof import('@github/copilot/sdk')> {
 		try {
 			// Ensure the node-pty shim exists before importing the SDK (required for CLI sessions)
-			await this.ensureShims();
+			await this._ensureShimsPromise;
 			return await import('@github/copilot/sdk');
 		} catch (error) {
 			this.logService.error(`[CopilotCLISession] Failed to load @github/copilot/sdk: ${error}`);
@@ -363,10 +393,15 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 
 	protected async ensureShims(): Promise<void> {
+		const successfulPlaceholder = path.join(this.extensionContext.extensionPath, 'node_modules', '@github', 'copilot', 'shims.txt');
+		if (await checkFileExists(successfulPlaceholder)) {
+			return;
+		}
 		await Promise.all([
 			ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService),
 			ensureRipgrepShim(this.extensionContext.extensionPath, this.envService.appRoot, this.logService)
 		]);
+		await fs.writeFile(successfulPlaceholder, 'Shims created successfully');
 	}
 
 	public async getAuthInfo(): Promise<NonNullable<SessionOptions['authInfo']>> {
@@ -379,3 +414,16 @@ export class CopilotCLISDK implements ICopilotCLISDK {
 	}
 }
 
+
+export function isWelcomeView(workspaceService: IWorkspaceService) {
+	return workspaceService.getWorkspaceFolders().length === 0;
+}
+
+async function checkFileExists(filePath: string): Promise<boolean> {
+	try {
+		const stat = await fs.stat(filePath);
+		return stat.isFile();
+	} catch (error) {
+		return false;
+	}
+}

@@ -78,6 +78,26 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	) { }
 
 	/**
+	 * Read a directory, returning an empty array if the directory doesn't exist.
+	 */
+	private async _tryReadDirectory(dirUri: URI): Promise<[string, FileType][]> {
+		try {
+			return await this._fileSystem.readDirectory(dirUri);
+		} catch (e) {
+			switch (e.code) {
+				case 'FileNotFound':
+				case 'DirectoryNotFound':
+				case 'ENOENT':
+					break;
+				default:
+					this._logService.error(e, `[ClaudeCodeSessionService] Failed to read directory: ${dirUri}`);
+					break;
+			}
+			return [];
+		}
+	}
+
+	/**
 	 * Collect messages from all sessions in all workspace folders.
 	 * - Read all .jsonl files in the .claude/projects/<folder> dir
 	 * - Create a map of all messages by uuid
@@ -96,7 +116,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			slugs.push(this._computeFolderSlug(folders[0]));
 		} else {
 			// Multi-root or no folder - add the no-project slug
-			slugs.push('-');
+			slugs.push(this._computeFolderSlug(URI.file(process.cwd())));
 		}
 
 		for (const slug of slugs) {
@@ -136,67 +156,59 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return null; // No cache entry
 		}
 
-		try {
-			const entries = await this._fileSystem.readDirectory(projectDirUri);
-			if (token.isCancellationRequested) {
-				return null;
+		const entries = await this._tryReadDirectory(projectDirUri);
+		if (entries.length === 0) {
+			return null; // Directory empty or gone, invalidate cache
+		}
+		if (token.isCancellationRequested) {
+			return null;
+		}
+
+		const currentFiles = new ResourceSet();
+
+		// Check if any .jsonl files have changed since our last cache
+		for (const [name, type] of entries) {
+			if (type !== FileType.File || !name.endsWith('.jsonl')) {
+				continue;
 			}
 
-			const currentFiles = new ResourceSet();
+			const fileUri = URI.joinPath(projectDirUri, name);
+			currentFiles.add(fileUri);
 
-			// Check if any .jsonl files have changed since our last cache
-			for (const [name, type] of entries) {
-				if (type !== FileType.File || !name.endsWith('.jsonl')) {
-					continue;
+			try {
+				const stat = await this._fileSystem.stat(fileUri);
+				const cachedMtime = this._fileMtimes.get(fileUri);
+
+				if (!cachedMtime || stat.mtime > cachedMtime) {
+					// File has changed or is new
+					return null;
 				}
+			} catch (e) {
+				// File might have been deleted, invalidate cache
+				return null;
+			}
+		}
 
-				const fileUri = URI.joinPath(projectDirUri, name);
-				currentFiles.add(fileUri);
-
-				try {
-					const stat = await this._fileSystem.stat(fileUri);
-					const cachedMtime = this._fileMtimes.get(fileUri);
-
-					if (!cachedMtime || stat.mtime > cachedMtime) {
-						// File has changed or is new
-						return null;
-					}
-				} catch (e) {
-					// File might have been deleted, invalidate cache
+		// Check if any previously cached files have been deleted
+		for (const cachedFileUri of this._fileMtimes.keys()) {
+			if (isEqualOrParent(cachedFileUri, projectDirUri) && cachedFileUri.path.endsWith('.jsonl')) {
+				if (!currentFiles.has(cachedFileUri)) {
+					// A previously cached file has been deleted
 					return null;
 				}
 			}
-
-			// Check if any previously cached files have been deleted
-			for (const cachedFileUri of this._fileMtimes.keys()) {
-				if (isEqualOrParent(cachedFileUri, projectDirUri) && cachedFileUri.path.endsWith('.jsonl')) {
-					if (!currentFiles.has(cachedFileUri)) {
-						// A previously cached file has been deleted
-						return null;
-					}
-				}
-			}
-
-			// All files are unchanged, return cached sessions
-			return this._sessionCache.get(projectDirUri) || null;
-		} catch (e) {
-			// Directory read failed, invalidate cache
-			this._logService.error(e, `[ClaudeCodeSessionLoader] Failed to check cache validity for: ${projectDirUri}`);
-			return null;
 		}
+
+		// All files are unchanged, return cached sessions
+		return this._sessionCache.get(projectDirUri) || null;
 	}
 
 	/**
 	 * Load sessions from disk and update file modification time tracking
 	 */
 	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
-		let entries: [string, FileType][] = [];
-		try {
-			entries = await this._fileSystem.readDirectory(projectDirUri);
-		} catch (e) {
-			if (e.code !== 'FileNotFound') {
-				this._logService.error(e, `[ClaudeChatSessionItemProvider] ${e.code} Failed to read directory: ${projectDirUri}`);
-			}
+		const entries = await this._tryReadDirectory(projectDirUri);
+		if (entries.length === 0) {
 			return [];
 		}
 

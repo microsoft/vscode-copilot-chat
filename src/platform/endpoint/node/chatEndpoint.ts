@@ -18,7 +18,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
@@ -120,7 +120,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
 	public readonly showInModelPicker: boolean;
-	public readonly isDefault: boolean;
 	public readonly isFallback: boolean;
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
@@ -161,7 +160,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.isPremium = modelMetadata.billing?.is_premium;
 		this.multiplier = modelMetadata.billing?.multiplier;
 		this.restrictedToSkus = modelMetadata.billing?.restricted_to;
-		this.isDefault = modelMetadata.is_chat_default;
 		this.isFallback = modelMetadata.is_chat_fallback;
 		this.supportsToolCalls = !!modelMetadata.capabilities.supports.tool_calls;
 		this.supportsVision = !!modelMetadata.capabilities.supports.vision;
@@ -172,10 +170,11 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi) {
+		const isAllowedConversationAgentModel = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
+		if (isAllowedConversationAgentModel && this.useMessagesApi) {
 
 			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
 			if (modelProviderPreference) {
@@ -185,8 +184,10 @@ export class ChatEndpoint implements IChatEndpoint {
 			const betaFeatures: string[] = [];
 
 			// Add thinking beta if enabled
-			if (this._getThinkingBudget()) {
+			if (modelSupportsInterleavedThinking(this.model)) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
+			} else {
+				headers['capi-beta-1'] = 'true';
 			}
 
 			// Add context management beta if enabled
@@ -514,7 +515,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		expectedNumChoices: number,
 		finishCallback: FinishedCallback,
 		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken | undefined
+		cancellationToken?: CancellationToken | undefined,
+		_location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>> {
 		// We must override this to a num choices > 1 because remote agents can do internal function calls which emit multiple completions even when N > 1
 		// It's awful that they do this, but we have to support it

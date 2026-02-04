@@ -10,6 +10,7 @@ import { Scalar } from 'yaml';
 import { PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { CustomAgentDetails, CustomAgentListItem, CustomAgentListOptions } from '../../../../platform/github/common/githubService';
+import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
 import { MockWorkspaceService } from '../../../../platform/ignore/node/test/mockWorkspaceService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -28,6 +29,7 @@ suite('GitHubOrgCustomAgentProvider', () => {
 	let mockGitService: MockGitService;
 	let mockWorkspaceService: MockWorkspaceService;
 	let mockExtensionContext: Partial<ExtensionContext>;
+	let mockAuthService: MockAuthenticationService;
 	let accessor: any;
 	let provider: GitHubOrgCustomAgentProvider;
 	let resourcesService: GitHubOrgChatResourcesService;
@@ -47,6 +49,7 @@ suite('GitHubOrgCustomAgentProvider', () => {
 		mockExtensionContext = {
 			globalStorageUri: storageUri,
 		};
+		mockAuthService = new MockAuthenticationService();
 
 		// Default: user is in 'testorg' and workspace belongs to 'testorg'
 		mockOctoKitService.setUserOrganizations(['testorg']);
@@ -70,6 +73,7 @@ suite('GitHubOrgCustomAgentProvider', () => {
 	function createProvider() {
 		// Create the real GitHubOrgChatResourcesService with mocked dependencies
 		resourcesService = new GitHubOrgChatResourcesService(
+			mockAuthService as any,
 			mockExtensionContext as any,
 			mockFileSystem,
 			mockGitService,
@@ -882,6 +886,8 @@ Test prompt
 	test('deduplicates enterprise agents that appear in multiple organizations', async () => {
 		// Setup multiple organizations BEFORE creating provider
 		mockOctoKitService.setUserOrganizations(['orgA', 'orgB']);
+		// Clear default workspace so getPreferredOrganizationName falls back to user organizations
+		mockWorkspaceService.setWorkspaceFolders([]);
 
 		// Create an enterprise agent that will appear in both organizations
 		const enterpriseAgent: CustomAgentListItem = {

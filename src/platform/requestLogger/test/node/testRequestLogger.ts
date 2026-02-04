@@ -54,9 +54,8 @@ export class TestRequestLogger extends AbstractRequestLogger {
 		this._onDidChangeRequests.fire();
 	}
 
-	public override logServerToolCall(id: string, name: string, args: unknown): void {
-		// Server tool calls are logged but don't have responses yet
-		this._entries.push(new TestLoggedToolCall(id, name, args, { content: [] }, this.currentRequest, Date.now()));
+	public override logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void {
+		this._entries.push(new TestLoggedToolCall(id, name, args, result, this.currentRequest, Date.now()));
 		this._onDidChangeRequests.fire();
 	}
 
@@ -172,6 +171,7 @@ class TestLoggedRequestInfo implements ILoggedRequestInfo {
 
 class TestLoggedToolCall {
 	public readonly kind = LoggedInfoKind.ToolCall;
+	public readonly toolMetadata: unknown;
 
 	constructor(
 		public readonly id: string,
@@ -180,8 +180,11 @@ class TestLoggedToolCall {
 		public readonly response: LanguageModelToolResult2,
 		public readonly token: CapturingToken | undefined,
 		public readonly time: number,
-		public readonly thinking?: ThinkingData
-	) { }
+		public readonly thinking?: ThinkingData,
+	) {
+		// Extract toolMetadata from response if it exists
+		this.toolMetadata = 'toolMetadata' in response ? (response as { toolMetadata?: unknown }).toolMetadata : undefined;
+	}
 
 	async toJSON(): Promise<object> {
 		return {
@@ -189,7 +192,7 @@ class TestLoggedToolCall {
 			kind: 'toolCall',
 			tool: this.name,
 			args: this.args,
-			time: new Date(this.time).toISOString()
+			time: new Date(this.time).toISOString(),
 		};
 	}
 }
