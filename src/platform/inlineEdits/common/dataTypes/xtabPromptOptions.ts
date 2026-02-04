@@ -6,11 +6,17 @@
 import { assertNever } from '../../../../util/vs/base/common/assert';
 import { IValidator, vBoolean, vEnum, vNumber, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
 
+export enum IncludeLineNumbersOption {
+	WithSpaceAfter = 'withSpaceAfter',
+	WithoutSpace = 'withoutSpaceAfter',
+	None = 'none',
+}
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
 	readonly includeViewedFiles: boolean;
-	readonly includeLineNumbers: boolean;
+	readonly includeLineNumbers: IncludeLineNumbersOption;
 }
 
 export type LanguageContextLanguages = { [languageId: string]: boolean };
@@ -33,6 +39,8 @@ export type PagedClipping = { pageSize: number };
 export type CurrentFileOptions = {
 	readonly maxTokens: number;
 	readonly includeTags: boolean;
+	readonly includeLineNumbers: IncludeLineNumbersOption;
+	readonly includeCursorTag: boolean;
 	readonly prioritizeAboveCursor: boolean;
 }
 
@@ -168,6 +176,7 @@ export enum PromptingStrategy {
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
 	PatchBased = 'patchBased',
+	PatchBased01 = 'patchBased01',
 	/**
 	 * Xtab275-based strategy with edit intent tag parsing.
 	 * Response format: <|edit_intent|>low|medium|high|no_edit<|/edit_intent|>
@@ -207,6 +216,8 @@ export namespace ResponseFormat {
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
+			case PromptingStrategy.PatchBased01:
+				return ResponseFormat.CustomDiffPatch;
 			case PromptingStrategy.Xtab275EditIntent:
 				return ResponseFormat.EditWindowWithEditIntent;
 			case PromptingStrategy.Xtab275EditIntentShort:
@@ -226,6 +237,8 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 	currentFile: {
 		maxTokens: 2000,
 		includeTags: true,
+		includeLineNumbers: IncludeLineNumbersOption.None,
+		includeCursorTag: false,
 		prioritizeAboveCursor: false,
 	},
 	pagedClipping: {
@@ -235,7 +248,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		nDocuments: 5,
 		maxTokens: 2000,
 		includeViewedFiles: false,
-		includeLineNumbers: false,
+		includeLineNumbers: IncludeLineNumbersOption.None,
 	},
 	languageContext: {
 		enabled: false,
@@ -294,4 +307,132 @@ export function parseLintOptionString(optionString: string): LintOptions | undef
 	} catch (e) {
 		throw new Error(`Failed to parse lint options string: ${e}`);
 	}
+}
+
+export interface UserHappinessScoreConfiguration {
+	/** Score for accepted actions */
+	acceptedScore: number;
+	/** Score for rejected actions */
+	rejectedScore: number;
+	/** Score for ignored/notAccepted actions */
+	ignoredScore: number;
+	/** Threshold for high aggressiveness level */
+	highThreshold: number;
+	/** Threshold for medium aggressiveness level */
+	mediumThreshold: number;
+	/** Whether to include ignored/notAccepted actions in score calculation */
+	includeIgnored: boolean;
+	/** Maximum number of ignored/notAccepted actions to consider */
+	ignoredLimit: number;
+	/** Whether to limit consecutive ignored actions */
+	limitConsecutiveIgnored: boolean;
+	/** Whether to limit total ignored actions */
+	limitTotalIgnored: boolean;
+}
+
+/**
+ * Default configuration for user happiness score calculation. Mimics v1 behavior.
+ */
+export const DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION: UserHappinessScoreConfiguration = {
+	acceptedScore: 1,
+	rejectedScore: 0,
+	ignoredScore: 0.5,
+	highThreshold: 0.7,
+	mediumThreshold: 0.4,
+	includeIgnored: false,
+	ignoredLimit: 0,
+	limitConsecutiveIgnored: false,
+	limitTotalIgnored: true,
+};
+
+/**
+ * Basic type validation for happiness config.
+ */
+const USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = vObj({
+	'acceptedScore': vRequired(vNumber()),
+	'rejectedScore': vRequired(vNumber()),
+	'ignoredScore': vRequired(vNumber()),
+	'highThreshold': vRequired(vNumber()),
+	'mediumThreshold': vRequired(vNumber()),
+	'includeIgnored': vRequired(vBoolean()),
+	'ignoredLimit': vRequired(vNumber()),
+	'limitConsecutiveIgnored': vRequired(vBoolean()),
+	'limitTotalIgnored': vRequired(vBoolean()),
+});
+
+function isInRange(value: number, min: number, max: number): boolean {
+	return value >= min && value <= max;
+}
+
+/**
+ * Value checking for happiness config.
+ */
+export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappinessScoreConfiguration> = {
+	validate(content: unknown) {
+		const baseResult = USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR.validate(content);
+		if (baseResult.error) {
+			return baseResult;
+		}
+
+		const config = baseResult.content;
+
+		// Validate score ranges [0, 1]
+		if (!isInRange(config.acceptedScore, 0, 1)) {
+			return { content: undefined, error: { message: 'acceptedScore must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.rejectedScore, 0, 1)) {
+			return { content: undefined, error: { message: 'rejectedScore must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.ignoredScore, 0, 1)) {
+			return { content: undefined, error: { message: 'ignoredScore must be in range [0, 1]' } };
+		}
+
+		// Validate threshold ranges [0, 1]
+		if (!isInRange(config.highThreshold, 0, 1)) {
+			return { content: undefined, error: { message: 'highThreshold must be in range [0, 1]' } };
+		}
+		if (!isInRange(config.mediumThreshold, 0, 1)) {
+			return { content: undefined, error: { message: 'mediumThreshold must be in range [0, 1]' } };
+		}
+
+		// Validate acceptedScore > rejectedScore to prevent division by zero
+		if (config.acceptedScore <= config.rejectedScore) {
+			return { content: undefined, error: { message: 'acceptedScore must be greater than rejectedScore to prevent division by zero' } };
+		}
+
+		// Validate highThreshold > mediumThreshold for logical consistency
+		if (config.highThreshold <= config.mediumThreshold) {
+			return { content: undefined, error: { message: 'highThreshold must be greater than mediumThreshold' } };
+		}
+
+		// Validate ignoredLimit >= 0
+		if (config.ignoredLimit < 0) {
+			return { content: undefined, error: { message: 'ignoredLimit must be non-negative' } };
+		}
+
+		return { content: config, error: undefined };
+	},
+	toSchema() {
+		return USER_HAPPINESS_SCORE_CONFIGURATION_BASE_VALIDATOR.toSchema();
+	}
+};
+
+export function parseUserHappinessScoreConfigurationString(optionString: string): UserHappinessScoreConfiguration {
+	try {
+		const parsed = JSON.parse(optionString);
+
+		const validation = USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR.validate(parsed);
+		if (validation.error) {
+			throw new Error(`User happiness score configuration validation failed: ${validation.error.message}`);
+		}
+
+		return validation.content;
+	} catch (e) {
+		throw new Error(`Failed to parse user happiness score configuration string: ${e}`);
+	}
+}
+
+export enum SpeculativeRequestsEnablement {
+	On = 'on',
+	Off = 'off',
 }

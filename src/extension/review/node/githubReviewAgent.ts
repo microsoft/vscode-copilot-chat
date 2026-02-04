@@ -208,7 +208,7 @@ export async function githubReview(
 	return { type: 'success', comments, excludedComments, reason: unsupportedLanguages.length ? l10n.t('Some of the submitted languages are currently not supported: {0}', unsupportedLanguages.join(', ')) : undefined };
 }
 
-function createReviewComment(ghComment: ResponseComment | ExcludedComment, request: ReviewRequest, document: TextDocument, index: number) {
+export function createReviewComment(ghComment: ResponseComment | ExcludedComment, request: ReviewRequest, document: TextDocument, index: number) {
 	const fromLine = document.lineAt(ghComment.data.line - 1);
 	const lastNonWhitespaceCharacterIndex = fromLine.text.trimEnd().length;
 	const range = new Range(fromLine.lineNumber, fromLine.firstNonWhitespaceCharacterIndex, fromLine.lineNumber, lastNonWhitespaceCharacterIndex);
@@ -245,7 +245,7 @@ function createReviewComment(ghComment: ResponseComment | ExcludedComment, reque
 }
 
 const SUGGESTION_EXPRESSION = /```suggestion(\u0020*(\r\n|\n))((?<suggestion>[\s\S]*?)(\r\n|\n))?```/g;
-function removeSuggestion(body: string) {
+export function removeSuggestion(body: string) {
 	const suggestions: string[] = [];
 	const content = body.replaceAll(SUGGESTION_EXPRESSION, (_match, _ws, _nl, suggestion) => {
 		if (suggestion) {
@@ -291,9 +291,9 @@ interface FileState {
 //   }
 // }
 
-type ResponseReference = ResponseComment | ExcludedComment | ExcludedFile | { type: 'unknown' };
+export type ResponseReference = ResponseComment | ExcludedComment | ExcludedFile | { type: 'unknown' };
 
-interface ResponseComment {
+export interface ResponseComment {
 	type: 'github.generated-pull-request-comment';
 	data: {
 		// The path of the file
@@ -306,7 +306,7 @@ interface ResponseComment {
 	};
 }
 
-interface ExcludedComment {
+export interface ExcludedComment {
 	type: 'github.excluded-pull-request-comment';
 	data: {
 		path: string;
@@ -317,7 +317,7 @@ interface ExcludedComment {
 	};
 }
 
-interface ExcludedFile {
+export interface ExcludedFile {
 	type: 'github.excluded-file';
 	data: {
 		file_path: string;
@@ -326,7 +326,7 @@ interface ExcludedFile {
 	};
 }
 
-function parseLine(line: string): ResponseReference[] {
+export function parseLine(line: string): ResponseReference[] {
 
 	if (line === 'data: [DONE]') { return []; }
 	if (line === '') { return []; }
@@ -428,19 +428,19 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 	};
 }
 
-function reversePatch(after: string, diff: string) {
+export function reversePatch(after: string, diff: string) {
 	const patch = parsePatch(diff.split(/\r?\n/));
 	const patchedLines = reverseParsedPatch(after.split(/\r?\n/), patch);
 	return patchedLines.join('\n');
 }
 
-interface LineChange {
+export interface LineChange {
 	beforeLineNumber: number;
 	content: string;
 	type: 'add' | 'remove';
 }
 
-function parsePatch(patchLines: string[]): LineChange[] {
+export function parsePatch(patchLines: string[]): LineChange[] {
 	const changes: LineChange[] = [];
 	let beforeLineNumber = -1;
 
@@ -465,7 +465,7 @@ function parsePatch(patchLines: string[]): LineChange[] {
 	return changes;
 }
 
-function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] {
+export function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] {
 	for (const change of patch) {
 		if (change.type === 'add') {
 			fileLines.splice(change.beforeLineNumber - 1, 1);
@@ -477,7 +477,7 @@ function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] 
 	return fileLines;
 }
 
-interface CodingGuideline {
+export interface CodingGuideline {
 	type: string;
 	id: string;
 	data: {
@@ -489,7 +489,7 @@ interface CodingGuideline {
 	};
 }
 
-async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
+export async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
 	const customInstructionRefs = [];
 	let nextId = firstId;
 

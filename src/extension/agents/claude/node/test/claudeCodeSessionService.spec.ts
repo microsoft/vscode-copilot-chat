@@ -490,6 +490,8 @@ describe('ClaudeCodeSessionService', () => {
 		let noWorkspaceDirUri: URI;
 		let noWorkspaceService: ClaudeCodeSessionService;
 		let noWorkspaceMockFs: MockFileSystemService;
+		// No-workspace uses process.cwd() to compute the slug (matching SDK behavior)
+		const cwdSlug = computeFolderSlug(URI.file(process.cwd()));
 
 		beforeEach(() => {
 			noWorkspaceMockFs = new MockFileSystemService();
@@ -504,12 +506,12 @@ describe('ClaudeCodeSessionService', () => {
 			noWorkspaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
 			const nativeEnvService = accessor.get(INativeEnvService);
-			// When there's no workspace, sessions are stored in the '-' directory
-			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', '-');
+			// When there's no workspace, sessions are stored based on process.cwd()
+			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', cwdSlug);
 			noWorkspaceService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
-		it('loads sessions from no-project directory when there are no workspace folders', async () => {
+		it('loads sessions from process.cwd() directory when there are no workspace folders', async () => {
 			const fileName = 'no-workspace-session.jsonl';
 			const fileContents = JSON.stringify({
 				parentUuid: null,
@@ -530,7 +532,7 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions[0].label).toBe('session without workspace');
 		});
 
-		it('returns empty array when no-project directory does not exist', async () => {
+		it('returns empty array when process.cwd() directory does not exist', async () => {
 			// Don't mock any directory - simulate non-existent directory
 
 			const sessions = await noWorkspaceService.getAllSessions(CancellationToken.None);
@@ -543,6 +545,8 @@ describe('ClaudeCodeSessionService', () => {
 		let multiRootDirUri: URI;
 		let multiRootService: ClaudeCodeSessionService;
 		let multiRootMockFs: MockFileSystemService;
+		// Multi-root workspaces use process.cwd() to compute the slug (matching SDK behavior)
+		const cwdSlug = computeFolderSlug(URI.file(process.cwd()));
 
 		beforeEach(() => {
 			multiRootMockFs = new MockFileSystemService();
@@ -559,12 +563,12 @@ describe('ClaudeCodeSessionService', () => {
 			multiRootMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
 			const nativeEnvService = accessor.get(INativeEnvService);
-			// Multi-root workspaces use the '-' directory (same as no-workspace)
-			multiRootDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', '-');
+			// Multi-root workspaces use process.cwd() slug to match where SDK stores sessions
+			multiRootDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', cwdSlug);
 			multiRootService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
-		it('loads sessions from no-project directory for multi-root workspaces', async () => {
+		it('loads sessions from process.cwd() directory for multi-root workspaces', async () => {
 			const fileName = 'multi-root-session.jsonl';
 			const fileContents = JSON.stringify({
 				parentUuid: null,
@@ -585,7 +589,7 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions[0].label).toBe('session in multi-root workspace');
 		});
 
-		it('returns empty array when no-project directory does not exist for multi-root', async () => {
+		it('returns empty array when process.cwd() directory does not exist for multi-root', async () => {
 			// Don't mock any directory - simulate non-existent directory
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
@@ -593,8 +597,8 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('uses dash directory not individual folder slugs for multi-root', async () => {
-			// Mock the '-' directory with a session
+		it('uses process.cwd() directory not individual folder slugs for multi-root', async () => {
+			// Mock the process.cwd() directory with a session
 			const fileName = 'shared-session.jsonl';
 			const fileContents = JSON.stringify({
 				parentUuid: null,
@@ -608,7 +612,7 @@ describe('ClaudeCodeSessionService', () => {
 			multiRootMockFs.mockDirectory(multiRootDirUri, [[fileName, FileType.File]]);
 			multiRootMockFs.mockFile(URI.joinPath(multiRootDirUri, fileName), fileContents, 1000);
 
-			// The session should only come from the '-' directory, not individual folder slugs
+			// The session should only come from the process.cwd() directory, not individual folder slugs
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(1);
@@ -660,6 +664,46 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions[0].id).toBe('space-session');
 			// Verify the slug used for the directory has spaces converted to dashes
 			expect(spaceSlug).toBe('-Users-test-my-project');
+		});
+	});
+
+	describe('directory read error handling', () => {
+		function createErrorWithCode(code: string): Error {
+			const error = new Error(`Directory error: ${code}`);
+			(error as Error & { code: string }).code = code;
+			return error;
+		}
+
+		it('returns empty sessions when directory throws ENOENT error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('ENOENT'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions when directory throws FileNotFound error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('FileNotFound'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions when directory throws DirectoryNotFound error', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('DirectoryNotFound'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('returns empty sessions and logs error for unexpected directory errors', async () => {
+			mockFs.mockError(dirUri, createErrorWithCode('EACCES'));
+
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
 		});
 	});
 });

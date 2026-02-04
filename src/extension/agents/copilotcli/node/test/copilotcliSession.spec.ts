@@ -26,6 +26,7 @@ import { IChatDelegationSummaryService } from '../../common/delegationSummarySer
 import { CopilotCLISessionOptions, ICopilotCLISDK } from '../copilotCli';
 import { CopilotCLISession } from '../copilotcliSession';
 import { PermissionRequest } from '../permissionHelpers';
+import { NullICopilotCLIImageSupport } from './copilotCliSessionService.spec';
 
 // Minimal shapes for types coming from the Copilot SDK we interact with
 interface MockSdkEventHandler { (payload: unknown): void }
@@ -127,6 +128,7 @@ describe('CopilotCLISession', () => {
 			instaService,
 			delegationService,
 			requestLogger,
+			new NullICopilotCLIImageSupport(),
 		));
 	}
 

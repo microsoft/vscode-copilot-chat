@@ -15,7 +15,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../util/vs/base/common/path';
-import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -132,6 +132,12 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 			if (instructionIndexFile.instructions.has(normalizedUri) || instructionIndexFile.skills.has(normalizedUri)) {
 				return;
 			}
+			// Check if the URI is under any skill folder (e.g., nested files like primitives/agents.md)
+			for (const skillFolderUri of instructionIndexFile.skillFolders) {
+				if (extUriBiasedIgnorePathCase.isEqualOrParent(normalizedUri, skillFolderUri)) {
+					return;
+				}
+			}
 		}
 	} else {
 		if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {
@@ -184,7 +190,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	if (workspaceService.getWorkspaceFolder(normalizedUri)) {
 		return false;
 	}
-	if (uri.scheme === Schemas.untitled) {
+	if (uri.scheme === Schemas.untitled || uri.scheme === 'vscode-chat-response-resource') {
 		return false;
 	}
 	if (await customInstructionsService.isExternalInstructionsFile(normalizedUri)) {

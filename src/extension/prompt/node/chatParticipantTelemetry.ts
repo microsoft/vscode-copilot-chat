@@ -143,6 +143,8 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	responseId: string;
 	codeBlocks: string;
 	isParticipantDetected: string;
+	mode: string;
+	parentRequestId: string | undefined;
 };
 
 type RequestTelemetryMeasurements = {
@@ -433,6 +435,10 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 						'ask';
 	}
 
+	protected _getModeNameWithSubagent(): string {
+		return this._request.subAgentName ?? this._getModeName();
+	}
+
 	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
 		if (availableTools.length === 0) {
 			return;
@@ -657,7 +663,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
-				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
+				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -674,6 +682,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			apiType: this._endpoint.apiType,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
+			mode: this._getModeNameWithSubagent(),
+			parentRequestId: this._request.parentRequestId
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,

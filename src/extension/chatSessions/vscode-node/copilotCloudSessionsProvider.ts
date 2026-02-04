@@ -13,7 +13,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
-import { IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
+import { CCAEnabledResult, IGithubRepositoryService, IOctoKitService, JobInfo, RemoteAgentJobResponse } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -72,10 +72,10 @@ interface UserSelectedRepository {
 }
 
 // TODO: No API from GH yet.
-const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string }[] = [
-	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot', assignableActorLogin: 'copilot-swe-agent' },
-	{ id: '2246796', name: 'Claude', at: 'claude[agent]', assignableActorLogin: 'anthropic-code-agent' },
-	{ id: '2248422', name: 'Codex', at: 'codex[agent]', assignableActorLogin: 'openai-code-agent' }
+const HARDCODED_PARTNER_AGENTS: { id: string; name: string; at?: string; assignableActorLogin?: string; codiconId?: string }[] = [
+	{ id: DEFAULT_PARTNER_AGENT_ID, name: 'Copilot', assignableActorLogin: 'copilot-swe-agent', codiconId: 'copilot' },
+	{ id: '2246796', name: 'Claude', at: 'claude[agent]', assignableActorLogin: 'anthropic-code-agent', codiconId: 'claude' },
+	{ id: '2248422', name: 'Codex', at: 'codex[agent]', assignableActorLogin: 'openai-code-agent', codiconId: 'openai' }
 ];
 
 /**
@@ -176,6 +176,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly gitOperationsManager = new CopilotCloudGitOperationsManager(this.logService, this._gitService, this._gitExtensionService);
 
 	private _partnerAgentsAvailableCache: Map<string, { id: string; name: string; at?: string }[]> | undefined;
+
+	// Cache for CCA enabled status per repository (key: "owner/repo")
+	private _ccaEnabledCache: Map<string, CCAEnabledResult> | undefined;
 
 	// Title
 	private TITLE = vscode.l10n.t('Delegate to cloud agent');
@@ -393,7 +396,57 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.activeSessionIds.clear();
 		this.stopActiveSessionPolling();
 		this._partnerAgentsAvailableCache = undefined;
+		this._ccaEnabledCache = undefined;
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	/**
+	 * Checks if the Copilot cloud agent is enabled for a repository.
+	 * Results are cached per repository until refresh() is called.
+	 * @param owner Repository owner
+	 * @param repo Repository name
+	 * @returns CCAEnabledResult with enabled status and optional status code
+	 */
+	private async checkCCAEnabled(owner: string, repo: string): Promise<CCAEnabledResult> {
+		const cacheKey = `${owner}/${repo}`;
+
+		if (!this._ccaEnabledCache) {
+			this._ccaEnabledCache = new Map();
+		}
+
+		const cached = this._ccaEnabledCache.get(cacheKey);
+		if (cached !== undefined) {
+			this.logService.trace(`copilotCloudSessionsProvider#checkCCAEnabled: using cached CCA enabled status for ${owner}/${repo}: ${cached.enabled}`);
+			return cached;
+		}
+
+		const result = await this._octoKitService.isCCAEnabled(owner, repo, { createIfNone: false });
+		this._ccaEnabledCache.set(cacheKey, result);
+
+		this.telemetry.sendTelemetryEvent('copilot.codingAgent.CCAIsEnabledCheck', { microsoft: true, github: false }, {
+			enabled: String(result.enabled),
+			statusCode: String(result.statusCode ?? 'none'),
+			cacheHit: 'false',
+		});
+
+		this.logService.trace(`copilotCloudSessionsProvider#checkCCAEnabled: fetched CCA enabled status for ${owner}/${repo}: ${result.enabled}`);
+		return result;
+	}
+
+	/**
+	 * Gets user-friendly error message for disabled CCA status.
+	 * @param result The CCAEnabledResult to get message for
+	 * @returns User-friendly error message
+	 */
+	private getCCADisabledMessage(result: CCAEnabledResult): string {
+		if (result.statusCode === 422) {
+			return vscode.l10n.t('Cloud agent is unable to create pull requests in this repository. Please verify repository rules allow this operation.');
+		}
+		if (result.statusCode === 401) {
+			return vscode.l10n.t('Cloud agent is not authorized to run on this repository. This may be because the Copilot coding agent is disabled for your organization, or your active GitHub account does not have push access to the target repository.');
+		}
+		// Default to 403 'disabled' message
+		return vscode.l10n.t('Cloud agent is not enabled for this repository. You may need to enable it in [GitHub settings]({0}) or contact your organization administrator.', 'https://github.com/settings/copilot/coding_agent');
 	}
 
 	private stopActiveSessionPolling(): void {
@@ -476,7 +529,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	 * Queries for available partner agents by checking if known CCA logins are assignable in the repository.
 	 * TODO: Remove once given a proper API
 	 */
-	private async getAvailablePartnerAgents(owner: string, repo: string): Promise<{ id: string; name: string; at?: string }[]> {
+	private async getAvailablePartnerAgents(owner: string, repo: string): Promise<{ id: string; name: string; at?: string; codiconId?: string }[]> {
 		const cacheKey = `${owner}/${repo}`;
 
 		// Return cached result if available
@@ -489,7 +542,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			const assignableActors = await this._octoKitService.getAssignableActors(owner, repo, { createIfNone: false });
 
 			// Check which agents from HARDCODED_PARTNER_AGENTS are assignable
-			const availableAgents: { id: string; name: string; at?: string }[] = [];
+			const availableAgents: { id: string; name: string; at?: string; codiconId?: string }[] = [];
 
 			for (const agent of HARDCODED_PARTNER_AGENTS) {
 				const { assignableActorLogin } = agent;
@@ -515,6 +568,60 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
+	/**
+	 * Scans local .github/agents/ directory and categorizes agent files.
+	 * Returns two groups:
+	 * - matches: local files that correlate with remote agents (name exists in both)
+	 * - localOnly: local files that don't have a corresponding remote agent
+	 */
+	private async getLocalCustomAgentFiles(remoteAgents: { name: string }[]): Promise<{
+		matches: Set<string>;
+		localOnly: { name: string; path: string }[];
+	}> {
+		const matches = new Set<string>();
+		const localOnly: { name: string; path: string }[] = [];
+		const remoteAgentNames = new Set(remoteAgents.map(a => a.name.toLowerCase()));
+
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			return { matches, localOnly };
+		}
+
+		// Only check the first workspace folder (consistent with how we query GitHub for custom agents)
+		// TODO: Expand to multi-root workspaces, etc...
+		const folder = workspaceFolders[0];
+		try {
+			// Find all .md files in .github/agents/
+			const pattern = new vscode.RelativePattern(folder, '.github/agents/*.md');
+			const files = await vscode.workspace.findFiles(pattern);
+
+			for (const file of files) {
+				// Extract agent name from filename (e.g., "my-agent.md" -> "my-agent" or "myagent.agent.md" -> "myagent")
+				const fileName = pathLib.basename(file.fsPath);
+				const agentName = fileName.replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
+
+				if (!agentName) {
+					continue;
+				}
+
+				if (remoteAgentNames.has(agentName.toLowerCase())) {
+					// This local file matches a remote agent
+					matches.add(agentName.toLowerCase());
+				} else {
+					// This local file has no corresponding remote agent
+					localOnly.push({
+						name: agentName,
+						path: vscode.workspace.asRelativePath(file)
+					});
+				}
+			}
+		} catch (error) {
+			this.logService.warn(`Error scanning for local agents in ${folder.uri.fsPath}: ${error}`);
+		}
+
+		return { matches, localOnly };
+	}
+
 	async provideChatSessionProviderOptions(token: vscode.CancellationToken): Promise<vscode.ChatSessionProviderOptions> {
 		this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions Start');
 
@@ -522,14 +629,45 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		const repoIds = await getRepoId(this._gitService);
 		const repoId = repoIds?.[0];
 
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		const isSingleRepoWorkspace = workspaceFolders?.length === 1 && repoIds?.length === 1;
+		let ccaEnabledResult: { enabled?: boolean; statusCode?: number } | undefined;
+		let isCcaEnabled = true;
+		if (isSingleRepoWorkspace && repoId) {
+			ccaEnabledResult = await this.checkCCAEnabled(repoId.org, repoId.repo);
+			isCcaEnabled = ccaEnabledResult.enabled !== false;
+		}
+		if (!isCcaEnabled && repoId) {
+			this.logService.trace(`copilotCloudSessionsProvider#provideChatSessionProviderOptions: CCA disabled for ${repoId.org}/${repoId.repo}, statusCode: ${ccaEnabledResult?.statusCode}`);
+			// Return empty options to disable the feature in the UI
+			return { optionGroups: [] };
+		}
+
 		try {
 			// Fetch agents (requires repo), models (global), and partner agents in parallel
 			const [customAgents, models, partnerAgents] = await Promise.allSettled([
-				repoId ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
+				repoId && repoIds?.length === 1 ? this._octoKitService.getCustomAgents(repoId.org, repoId.repo, { excludeInvalidConfig: true }, { createIfNone: false }) : Promise.resolve([]),
 				this._octoKitService.getCopilotAgentModels({ createIfNone: false }),
 				repoId ? this.getAvailablePartnerAgents(repoId.org, repoId.repo) : Promise.resolve([])
 			]);
 
+			try {
+				const items = await this.getRepositoriesOptionItems(repoIds);
+				optionGroups.push({
+					id: REPOSITORIES_OPTION_GROUP_ID,
+					name: vscode.l10n.t('Repository'),
+					description: vscode.l10n.t('Select repository'),
+					icon: new vscode.ThemeIcon('repo'),
+					items,
+					commands: [{
+						command: OPEN_REPOSITORY_COMMAND_ID,
+						title: vscode.l10n.t('Browse repositories...'),
+					}]
+				});
+
+			} catch (error) {
+				this.logService.error(`Error fetching repositories: ${error}`);
+			}
 
 			// Partner agents
 			// Only show if repo provides a choice of agent (>1)
@@ -538,7 +676,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					id: agent.id,
 					name: agent.name,
 					...(agent.id === DEFAULT_PARTNER_AGENT_ID && { default: true }),
-					icon: new vscode.ThemeIcon('agent')
+					icon: agent.codiconId ? new vscode.ThemeIcon(agent.codiconId) : undefined
 				}));
 				optionGroups.push({
 					id: PARTNER_AGENTS_OPTION_GROUP_ID,
@@ -548,13 +686,32 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				});
 			}
 
-			if (customAgents.status === 'fulfilled' && customAgents.value.length > 0) {
+			// Find local agent files and categorize them
+			const { matches, localOnly } = await this.getLocalCustomAgentFiles(
+				customAgents.status === 'fulfilled' ? customAgents.value : []
+			);
+
+			if ((customAgents.status === 'fulfilled' && customAgents.value.length > 0) || (repoIds?.length === 1 && localOnly.length > 0)) {
 				const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-					{ id: DEFAULT_CUSTOM_AGENT_ID, default: true, name: vscode.l10n.t('Default'), icon: new vscode.ThemeIcon('file-text') },
-					...customAgents.value.map(agent => ({
+					{
+						id: DEFAULT_CUSTOM_AGENT_ID,
+						default: true,
+						name: vscode.l10n.t('Agent'),
+						icon: new vscode.ThemeIcon('agent')
+					},
+					...(customAgents.status === 'fulfilled' ? customAgents.value.map(agent => ({
 						id: agent.name,
-						name: agent.display_name || agent.name
-					}))
+						name: agent.display_name || agent.name,
+						...(matches.has(agent.name.toLowerCase()) && { description: `${agent.name}.md` })
+					})) : []),
+					// Add local-only agents as disabled items with "push to remote" hint
+					...localOnly.map(localAgent => ({
+						id: localAgent.name,
+						name: localAgent.name,
+						description: vscode.l10n.t('Missing from {0}', repoId ? `${repoId.org}/${repoId.repo}` : 'remote repository'),
+						locked: true,
+						icon: new vscode.ThemeIcon('warning')
+					}) satisfies vscode.ChatSessionProviderOptionItem)
 				];
 				optionGroups.push({
 					id: CUSTOM_AGENTS_OPTION_GROUP_ID,
@@ -569,6 +726,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				const modelItems: vscode.ChatSessionProviderOptionItem[] = models.value.map(model => ({
 					id: model.id,
 					name: model.name,
+					description: `${model.billing.multiplier}x`,
 				}));
 				if (!models.value.find(m => m.id === DEFAULT_MODEL_ID)) {
 					modelItems.unshift({ id: DEFAULT_MODEL_ID, name: vscode.l10n.t('Auto'), description: vscode.l10n.t('Automatically select the best model') });
@@ -580,26 +738,6 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					items: modelItems,
 					when: `!chatSessionOption.partnerAgents || chatSessionOption.partnerAgents == ${DEFAULT_PARTNER_AGENT_ID}`
 				});
-			}
-
-			try {
-				const items = await this.getRepositoriesOptionItems(repoIds);
-				if (items.length > 0) {
-					optionGroups.push({
-						id: REPOSITORIES_OPTION_GROUP_ID,
-						name: vscode.l10n.t('Repository'),
-						description: vscode.l10n.t('Select repository'),
-						icon: new vscode.ThemeIcon('repo'),
-						items,
-						commands: [{
-							command: OPEN_REPOSITORY_COMMAND_ID,
-							title: vscode.l10n.t('Browse repositories...'),
-						}]
-					});
-				}
-
-			} catch (error) {
-				this.logService.error(`Error fetching repositories: ${error}`);
 			}
 
 			this.logService.trace(`copilotCloudSessionsProvider#provideChatSessionProviderOptions: Returning options: ${JSON.stringify(optionGroups, undefined, 2)}`);
@@ -728,14 +866,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!this.isGitHubRepoOrEmpty(repoIds)) {
+			// (unless we're in an agent sessions workspace)
+			if (!vscode.workspace.isAgentSessionsWorkspace && !this.isGitHubRepoOrEmpty(repoIds)) {
 				return [];
 			}
 			let sessions = [];
-			if (repoIds && repoIds.length > 0) {
-				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
-			} else {
+			if (vscode.workspace.isAgentSessionsWorkspace || !repoIds || repoIds.length === 0) {
 				sessions = await this._octoKitService.getAllSessions(undefined, true, { createIfNone: false });
+			} else {
+				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
 			}
 			this.cachedSessionsSize = sessions.length;
 
@@ -802,11 +941,16 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 					change.added ?? 0,
 					change.removed ?? 0));
 
+				const metadata = {
+					name: pr.repository?.name,
+					owner: pr.repository?.owner?.login
+				} satisfies { readonly [key: string]: unknown };
+
 				const session = {
 					resource: vscode.Uri.from({ scheme: CopilotCloudSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status: this.getSessionStatusFromSession(sessionItem),
-					badge: this.getPullRequestBadge(pr),
+					badge: this.getPullRequestBadge(repoIds, pr),
 					tooltip: this.createPullRequestTooltip(pr),
 					...(createdAt ? {
 						timing: {
@@ -816,12 +960,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 						}
 					} : {}),
 					changes,
+					metadata,
 					fullDatabaseId: pr.fullDatabaseId.toString(),
-					pullRequestDetails: pr,
-					repository: {
-						owner: pr.repository?.owner?.login ?? '',
-						name: pr.repository?.name ?? ''
-					}
+					pullRequestDetails: pr
 				} satisfies vscode.ChatSessionItem & {
 					fullDatabaseId: string;
 					pullRequestDetails: PullRequestSearchItem;
@@ -922,14 +1063,17 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		const resolvePartnerAgent = (sessions: SessionInfo[]): { id: string; name: string; at?: string | undefined } | undefined => {
+			const getDefault = () => {
+				return HARDCODED_PARTNER_AGENTS.find(agent => agent.id === DEFAULT_PARTNER_AGENT_ID) ?? undefined;
+			};
 			const agentId = sessions.find(s => s.agent_id)?.agent_id;
 			if (!agentId) {
-				return;
+				return getDefault();
 			}
 			// See if this matches any of the known partner agents
 			// TODO: Currently hardcoded, no API from GitHub.
 			const match = HARDCODED_PARTNER_AGENTS.find(agent => Number(agent.id) === agentId);
-			return match;
+			return match ?? getDefault();
 		};
 
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString(), { createIfNone: true });
@@ -1097,26 +1241,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 	}
 
-	private getPullRequestBadge(pr: PullRequestSearchItem): vscode.MarkdownString {
-		let badgeText: string;
-		switch (pr.state) {
-			case 'failed':
-				badgeText = vscode.l10n.t('$(git-pull-request) Failed in {0}', `#${pr.number}`);
-				break;
-			case 'in_progress':
-				badgeText = vscode.l10n.t('$(git-pull-request) Running in {0}', `#${pr.number}`);
-				break;
-			case 'queued':
-				badgeText = vscode.l10n.t('$(git-pull-request) Queued in {0}', `#${pr.number}`);
-				break;
-			default:
-				badgeText = vscode.l10n.t('$(git-pull-request) {0}', `#${pr.number}`);
-				break;
+	private getPullRequestBadge(repoIds: GithubRepoId[] | undefined, pr: PullRequestSearchItem): vscode.MarkdownString | undefined {
+		if (vscode.workspace.workspaceFolders === undefined || (repoIds && repoIds.length > 1)) {
+			const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
+			const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
+			badge.supportThemeIcons = true;
+			return badge;
 		}
 
-		const badge = new vscode.MarkdownString(badgeText);
-		badge.supportThemeIcons = true;
-		return badge;
+		return undefined;
 	}
 
 	private createPullRequestTooltip(pr: PullRequestSearchItem): vscode.MarkdownString {
@@ -2077,6 +2210,12 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 			repoOwner = repoId.org;
 			repoName = repoId.repo;
+		}
+
+		// Check if CCA is enabled before posting job
+		const ccaEnabled = await this.checkCCAEnabled(repoOwner, repoName);
+		if (ccaEnabled.enabled === false) {
+			throw new Error(this.getCCADisabledMessage(ccaEnabled));
 		}
 
 		if (isTruncated) {

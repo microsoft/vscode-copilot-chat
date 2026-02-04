@@ -32,7 +32,9 @@ export class UserInfoStore extends Disposable {
 
 		if (copilotTokenStore) {
 			const getInternalOrg = (): string | undefined => {
-				if (copilotTokenStore.copilotToken?.isGitHubInternal) {
+				if (copilotTokenStore.copilotToken?.isVscodeTeamMember) {
+					return 'vscode';
+				} else if (copilotTokenStore.copilotToken?.isGitHubInternal) {
 					return 'github';
 				} else if (copilotTokenStore.copilotToken?.isMicrosoftInternal) {
 					return 'microsoft';

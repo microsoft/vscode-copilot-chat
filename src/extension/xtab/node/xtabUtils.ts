@@ -4,25 +4,25 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 
 
-export function toLines(stream: AsyncIterableObject<IResponsePart>) {
+export function toLines(stream: AsyncIterableObject<{ delta: { text: string } }>) {
 	return new AsyncIterableObject<string>(async (emitter) => {
-		let buffer = '';
+		let buffer: string | null = null;
 
 		for await (const chunk of stream) {
+			buffer ??= '';
 			buffer += chunk.delta.text;
 
-			const parts = buffer.split(/\r?\n/);
+			const parts: string[] = buffer.split(/\r?\n/);
 			buffer = parts.pop() ?? '';
 
 			emitter.emitMany(parts);
 		}
 
-		if (buffer) {
+		if (buffer !== null) {
 			emitter.emitOne(buffer);
 		}
 	});

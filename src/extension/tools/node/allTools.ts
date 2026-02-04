@@ -37,6 +37,5 @@ import './simpleBrowserTool';
 import './testFailureTool';
 import './toolReplayTool';
 import './usagesTool';
-import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';

@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, INativeEnvService } from '../../../platform/env/common/envService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
@@ -22,7 +23,7 @@ import { ClaudeSessionStateService, IClaudeSessionStateService } from '../../age
 import { ClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { ChatDelegationSummaryService, IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
 import { CopilotCLIAgents, CopilotCLIModels, CopilotCLISDK, ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
-import { CopilotCLIImageSupport } from '../../agents/copilotcli/node/copilotCLIImageSupport';
+import { CopilotCLIImageSupport, ICopilotCLIImageSupport } from '../../agents/copilotcli/node/copilotCLIImageSupport';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
@@ -32,15 +33,17 @@ import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/co
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
 import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
-import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, CopilotCLISessionIsolationManager, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
+import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
+import { FolderRepositoryManager } from './folderRepositoryManagerImpl';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -94,6 +97,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const slashCommandService = this._register(claudeAgentInstaService.createInstance(ClaudeSlashCommandService));
 		const claudeChatSessionParticipant = new ClaudeChatSessionParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeAgentManager, sessionItemProvider, chatSessionContentProvider, slashCommandService);
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, claudeChatSessionParticipant.createHandler());
+		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider, chatParticipant));
 
 		// #endregion
@@ -112,6 +116,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const cloudSessionProvider = this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
+				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
 				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
 				[IChatDelegationSummaryService, delegationSummary],
 				[ICopilotCLIModels, new SyncDescriptor(CopilotCLIModels)],
@@ -122,14 +127,13 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorktreeService, new SyncDescriptor(ChatSessionWorktreeService)],
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[ICopilotCLIMCPHandler, new SyncDescriptor(CopilotCLIMCPHandler)],
+				[IFolderRepositoryManager, new SyncDescriptor(FolderRepositoryManager)],
 			));
 
-		const copilotcliSessionIsolationManager = copilotcliAgentInstaService.createInstance(CopilotCLISessionIsolationManager);
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-		const imageSupport = copilotcliAgentInstaService.createInstance(CopilotCLIImageSupport);
-		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver, imageSupport);
-		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotcliSessionIsolationManager);
+		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
+		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
 
 		const copilotcliChatSessionParticipant = this._register(copilotcliAgentInstaService.createInstance(
@@ -142,9 +146,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotCLISessionService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionService));
 		const copilotCLIWorktreeManagerService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorktreeService));
 		const copilotCLIWorkspaceFolderSessions = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IChatSessionWorkspaceFolderService));
+		const folderRepositoryManager = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFolderRepositoryManager));
+		const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
+		const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService));
 	}
 
 	private registerCopilotCloudAgent() {

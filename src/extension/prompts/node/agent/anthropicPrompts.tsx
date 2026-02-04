@@ -10,7 +10,6 @@ import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDefe
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ToolName } from '../../../tools/common/toolNames';
-import { RepoMemoryContextPrompt } from '../../../tools/node/repoMemoryContextPrompt';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
@@ -74,12 +73,12 @@ class ToolSearchToolPrompt extends PromptElement<ToolSearchToolPromptProps> {
 			<br />
 			<Tag name='regexPatternSyntax'>
 				Construct regex patterns using Python's re.search() syntax. Common patterns:<br />
-				- `^mcp__github__` - matches tools starting with "mcp__github__"<br />
+				- `^mcp_github_` - matches tools starting with "mcp_github_"<br />
 				- `issue|pull_request` - matches tools containing "issue" OR "pull_request"<br />
 				- `create.*branch` - matches tools with "create" followed by "branch"<br />
-				- `mcp__.*__list` - matches MCP tools ending with "list"<br />
+				- `mcp_.*list` - matches MCP tools with "list" in it.<br />
 				<br />
-				The pattern is matched case-insensitively against tool names.<br />
+				The pattern is matched case-insensitively against tool names, descriptions, argument names and argument descriptions.<br />
 			</Tag>
 			<br />
 			<Tag name='incorrectUsagePatterns'>
@@ -128,7 +127,6 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				{tools[ToolName.FindTextInFiles] && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
@@ -256,43 +254,13 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.Codebase] && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
 				{tools[ToolName.CoreRunInTerminal] && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
 				{tools[ToolName.CreateFile] && <>When creating files, be intentional and avoid calling the {ToolName.CreateFile} tool unnecessarily. Only create files that are essential to completing the user's request. <br /></>}
-				{tools[ToolName.UpdateUserPreferences] && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{tools[ToolName.CoreRunInTerminal] && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
+				<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			</Tag>
-			{tools[ToolName.Memory] && <Tag name='repoMemory'>
-				If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the memory tool to store it at /memories/repo/. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
-				- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
-				- Important information about the structure or logic of the codebase<br />
-				- Commands for linting, building, or running tests that have been verified through a successful run<br />
-				<br />
-				<Tag name='examples'>
-					- "Use ErrKind wrapper for every public API error"<br />
-					- "Prefer ExpectNoLog helper over silent nil checks in tests"<br />
-					- "Always use Python typing"<br />
-					- "Follow the Google JavaScript Style Guide"<br />
-					- "Use html_escape as a sanitizer to avoid cross site scripting vulnerabilities"<br />
-					- "The code can be built with `npm run build` and tested with `npm run test`"<br />
-				</Tag>
-				<br />
-				Only store facts that meet the following criteria:<br />
-				<Tag name='factsCriteria'>
-					- Are likely to have actionable implications for a future task<br />
-					- Are independent of changes you are making as part of your current task, and will remain relevant if your current code isn't merged<br />
-					- Are unlikely to change over time<br />
-					- Cannot always be inferred from a limited code sample<br />
-					- Contain no secrets or sensitive data<br />
-				</Tag>
-				<br />
-				Store one fact per file at /memories/repo/&lt;descriptive-name&gt;.jsonl using JSONL format with these fields: subject (1-2 words), fact (less than 200 chars), citations (file:line or "User input: ..."), reason (2-3 sentences), category (bootstrap_and_build, user_preferences, general, or file_specific).<br />
-				Use the memory tool's create command if the file doesn't exist, or insert command to append a new line. Always include the reason and citations fields.<br />
-				Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
-			</Tag>}
-			{tools[ToolName.Memory] && this.props.isNewChat && <RepoMemoryContextPrompt />}
-			<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			<Tag name='communicationStyle'>
 				Maintain clarity and directness in all responses, delivering complete information while matching response depth to the task's complexity.<br />
 				For straightforward queries, keep answers brief - typically a few lines excluding code or tool invocations. Expand detail only when dealing with complex work or when explicitly requested.<br />
@@ -334,17 +302,27 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 class AnthropicPromptResolver implements IAgentPrompt {
 	static readonly familyPrefixes = ['claude', 'Anthropic'];
 
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) { }
+
+	private isSonnet4(endpoint: IChatEndpoint): boolean {
+		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
+	}
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		const normalizedModel = endpoint.model?.replace(/\./g, '-');
-		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
-			normalizedModel?.startsWith('claude-haiku-4-5') ||
-			normalizedModel?.startsWith('claude-opus-4-5')) {
-			return Claude45DefaultPrompt;
+		// Claude Sonnet 4 (not 4.5) uses the default Anthropic prompt
+		if (this.isSonnet4(endpoint)) {
+			return DefaultAnthropicAgentPrompt;
 		}
-		return DefaultAnthropicAgentPrompt;
+		return Claude45DefaultPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {
+		if (isAnthropicToolSearchEnabled(endpoint, this.configurationService, this.experimentationService)) {
+			return Claude45ToolSearchToolUseReminder;
+		}
 		return AnthropicReminderInstructions;
 	}
 }
@@ -354,6 +332,16 @@ class AnthropicReminderInstructions extends PromptElement<ReminderInstructionsPr
 		return <>
 			{getEditingReminder(this.props.hasEditFileTool, this.props.hasReplaceStringTool, false /* useStrongReplaceStringHint */, this.props.hasMultiReplaceStringTool)}
 			Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br />
+		</>;
+	}
+}
+
+class Claude45ToolSearchToolUseReminder extends PromptElement<ReminderInstructionsProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>
+			<AnthropicReminderInstructions {...this.props} />
+			<br />
+			IMPORTANT: Before calling any deferred tool that was not previously returned by {TOOL_SEARCH_TOOL_NAME}, you MUST first use {TOOL_SEARCH_TOOL_NAME} to load it. Calling a deferred tool without first loading it will fail. Tools returned by {TOOL_SEARCH_TOOL_NAME} are automatically expanded and immediately available - do not search for them again.<br />
 		</>;
 	}
 }
