@@ -44,6 +44,9 @@ import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { FolderRepositoryManager } from './folderRepositoryManagerImpl';
+import { GrowthChatSessionContentProvider } from './growthChatSessionContentProvider';
+import { GrowthChatSessionItemProvider } from './growthChatSessionItemProvider';
+import { GrowthChatSessionParticipant } from './growthChatSessionParticipant';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -152,6 +155,34 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService));
+
+		// #region Growth Chat Sessions
+		// Register growth chat sessions provider for product growth and user education
+		const growthSessionItemProvider = this._register(instantiationService.createInstance(GrowthChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionItemProvider.sessionType, growthSessionItemProvider));
+
+		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider));
+		const growthChatSessionParticipant = instantiationService.createInstance(GrowthChatSessionParticipant);
+		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
+		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
+		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
+
+		// Register temporary commands for testing
+		this._register(vscode.commands.registerCommand('github.copilot.growth.showNeedsInputMessage', async () => {
+			await this.showGrowthMessage(growthChatSessionParticipant, vscode.l10n.t('👋 Welcome to Copilot! To get started, try asking a question about your code or selecting some code and using inline chat (Ctrl+I).'));
+		}));
+
+		this._register(vscode.commands.registerCommand('github.copilot.growth.showFeatureTip', async () => {
+			await this.showGrowthMessage(growthChatSessionParticipant, vscode.l10n.t('💡 **Tip**: You can use @workspace to ask questions about your entire codebase, or @terminal to get help with terminal commands.'));
+		}));
+		// #endregion
+	}
+
+	private async showGrowthMessage(participant: GrowthChatSessionParticipant, message: string): Promise<void> {
+		// This will be called by the temporary commands to show educational messages
+		// For now, we'll just show an info message. In the future, this could
+		// create a chat session and send the message through the participant.
+		await vscode.window.showInformationMessage(message);
 	}
 
 	private registerCopilotCloudAgent() {
