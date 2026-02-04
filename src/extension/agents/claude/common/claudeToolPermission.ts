@@ -20,6 +20,7 @@ export type ClaudeToolPermissionResult =
 export interface ClaudeToolPermissionContext {
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly permissionMode?: PermissionMode;
+	readonly stream?: vscode.ChatResponseStream;
 }
 
 /**
