@@ -791,6 +791,24 @@ export function text_to_patch(
 	return [parser.patch, parser.fuzz];
 }
 
+export function identify_files_affected(text: string): Array<string> {
+	const lines = text.trim().split('\n');
+	const result = new Set<string>();
+	for (const line of lines) {
+		if (line.startsWith(UPDATE_FILE_PREFIX)) {
+			result.add(line.slice(UPDATE_FILE_PREFIX.length));
+		} else if (line.startsWith(DELETE_FILE_PREFIX)) {
+			result.add(line.slice(DELETE_FILE_PREFIX.length));
+		} else if (line.startsWith(MOVE_FILE_TO_PREFIX)) {
+			result.add(line.slice(MOVE_FILE_TO_PREFIX.length));
+		} else if (line.startsWith(DELETE_FILE_PREFIX)) {
+			result.add(line.slice(DELETE_FILE_PREFIX.length));
+		}
+	}
+
+	return [...result];
+}
+
 export function identify_files_needed(text: string): Array<string> {
 	const lines = text.trim().split('\n');
 	const result = new Set<string>();
