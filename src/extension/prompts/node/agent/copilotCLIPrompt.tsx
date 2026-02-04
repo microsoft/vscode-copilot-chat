@@ -66,9 +66,6 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		]);
 
 		const hasVariables = resourceVariables.hasVariables() || nonResourceVariables.hasVariables();
-		const attachmentHint = hasVariables ?
-			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
-			: '';
 		const hasEditedFileEvents = (this.props.editedFileEvents?.length ?? 0) > 0;
 		const hasCustomContext = hasVariables || hasEditedFileEvents;
 		const promptVariable = resourceVariables.find(v => isPromptFile(v));
@@ -112,7 +109,7 @@ class CopilotCLIAgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 					</Tag>
 				}
-				{hasCustomContext && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+				{hasCustomContext && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query}</Tag>}
 			</UserMessage>
 		);
 	}
