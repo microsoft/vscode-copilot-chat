@@ -95,9 +95,10 @@ interface StopHookResult {
 	 */
 	readonly shouldContinue: boolean;
 	/**
-	 * The reason the agent should continue, if shouldContinue is true.
+	 * The reasons the agent should continue, if shouldContinue is true.
+	 * Multiple hooks may block with different reasons.
 	 */
-	readonly reason?: string;
+	readonly reasons?: readonly string[];
 }
 
 interface SubagentStartHookResult {
@@ -113,9 +114,23 @@ interface SubagentStopHookResult {
 	 */
 	readonly shouldContinue: boolean;
 	/**
-	 * The reason the subagent should continue, if shouldContinue is true.
+	 * The reasons the subagent should continue, if shouldContinue is true.
+	 * Multiple hooks may block with different reasons.
 	 */
-	readonly reason?: string;
+	readonly reasons?: readonly string[];
+}
+
+/**
+ * Formats a hook context message from blocking reasons.
+ * @param reasons The reasons hooks blocked the agent from stopping
+ * @returns A formatted message for the model to address the requirements
+ */
+function formatHookContext(reasons: readonly string[]): string {
+	if (reasons.length === 1) {
+		return `You were about to complete but a hook blocked you with the following message: "${reasons[0]}". Please address this requirement before completing.`;
+	}
+	const formattedReasons = reasons.map((reason, i) => `${i + 1}. ${reason}`).join('\n');
+	return `You were about to complete but multiple hooks blocked you with the following messages:\n${formattedReasons}\n\nPlease address all of these requirements before completing.`;
 }
 
 /**
@@ -174,7 +189,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (this.stopHookReason) {
 			// Include the stop hook reason as a user message so the model knows what to do.
 			// Wrap with context so the model understands it needs to take action.
-			query = `You were about to complete but a hook blocked you with the following message: "${this.stopHookReason}". Please address this requirement before completing.`;
+			query = formatHookContext([this.stopHookReason]);
 			this._logService.info(`[ToolCallingLoop] Using stop hook reason as query: ${query}`);
 			this.stopHookReason = undefined; // Clear after use
 			hasStopHookQuery = true;
@@ -219,7 +234,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param input The stop hook input containing stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
-	 * @returns Result indicating whether to continue and the reason
+	 * @returns Result indicating whether to continue and the reasons
 	 */
 	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
 		try {
@@ -229,7 +244,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				input: input
 			}, token);
 
-			// Check for blocking responses
+			// Collect all blocking reasons (deduplicated)
+			const blockingReasons = new Set<string>();
 			for (const result of results) {
 				if (result.success === true) {
 					// Output may be a parsed object or a JSON string
@@ -239,7 +255,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
 						if (hookOutput.decision === 'block' && hookOutput.reason) {
 							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
-							return { shouldContinue: true, reason: hookOutput.reason };
+							blockingReasons.add(hookOutput.reason);
 						}
 					}
 				} else if (result.success === false) {
@@ -248,6 +264,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 			}
 
+			if (blockingReasons.size > 0) {
+				return { shouldContinue: true, reasons: [...blockingReasons] };
+			}
 			return { shouldContinue: false };
 		} catch (error) {
 			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
@@ -259,13 +278,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * Shows a message when the stop hook blocks the agent from stopping.
 	 * Override in subclasses to customize the display.
 	 * @param outputStream The output stream for displaying messages
-	 * @param reason The reason the stop hook blocked stopping
+	 * @param reasons The reasons the stop hook blocked stopping
 	 */
-	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
+	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
-			outputStream.warning(l10n.t('Stop hook: {0}', reason));
+			if (reasons.length === 1) {
+				outputStream.warning(l10n.t('Stop hook: {0}', reasons[0]));
+			} else {
+				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
+				outputStream.warning(l10n.t('Stop hooks:\n{0}', formattedReasons));
+			}
 		}
-		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
+		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
 	}
 
 	/**
@@ -313,7 +337,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param input The subagent stop hook input containing agent_id, agent_type, and stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
-	 * @returns Result indicating whether to continue and the reason
+	 * @returns Result indicating whether to continue and the reasons
 	 */
 	protected async executeSubagentStopHook(input: SubagentStopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<SubagentStopHookResult> {
 		try {
@@ -322,7 +346,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				input: input
 			}, token);
 
-			// Check for blocking responses
+			// Collect all blocking reasons (deduplicated)
+			const blockingReasons = new Set<string>();
 			for (const result of results) {
 				if (result.success === true) {
 					const output = result.output;
@@ -331,7 +356,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
 						if (hookOutput.decision === 'block' && hookOutput.reason) {
 							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
-							return { shouldContinue: true, reason: hookOutput.reason };
+							blockingReasons.add(hookOutput.reason);
 						}
 					}
 				} else if (result.success === false) {
@@ -340,6 +365,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 			}
 
+			if (blockingReasons.size > 0) {
+				return { shouldContinue: true, reasons: [...blockingReasons] };
+			}
 			return { shouldContinue: false };
 		} catch (error) {
 			this._logService.error('[ToolCallingLoop] Error executing SubagentStop hook', error);
@@ -351,13 +379,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * Shows a message when the subagent stop hook blocks the subagent from stopping.
 	 * Override in subclasses to customize the display.
 	 * @param outputStream The output stream for displaying messages
-	 * @param reason The reason the subagent stop hook blocked stopping
+	 * @param reasons The reasons the subagent stop hook blocked stopping
 	 */
-	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
+	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
-			outputStream.markdown('\n\n' + l10n.t('**Subagent stop hook:** {0}', reason) + '\n\n');
+			if (reasons.length === 1) {
+				outputStream.markdown('\n\n' + l10n.t('**Subagent stop hook:** {0}', reasons[0]) + '\n\n');
+			} else {
+				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
+				outputStream.markdown('\n\n' + l10n.t('**Subagent stop hooks:**\n{0}', formattedReasons) + '\n\n');
+			}
 		}
-		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reason}`);
+		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reasons.join('; ')}`);
 	}
 
 	private async throwIfCancelled(token: CancellationToken | PauseController) {
@@ -409,25 +442,31 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							agent_type: this.options.request.subAgentName ?? 'default',
 							stop_hook_active: stopHookActive
 						}, outputStream, token);
-						this._logService.info(`[ToolCallingLoop] Subagent stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
-						if (stopHookResult.shouldContinue && stopHookResult.reason) {
-							// The stop hook blocked stopping - show reason and continue
-							this.showSubagentStopHookBlockedMessage(outputStream, stopHookResult.reason);
-							// Store the reason so it can be passed to the model in the next prompt
-							this.stopHookReason = stopHookResult.reason;
-							this._logService.info(`[ToolCallingLoop] Subagent stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+						const joinedReasons = stopHookResult.reasons?.join('; ');
+						this._logService.info(`[ToolCallingLoop] Subagent stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
+							// The stop hook blocked stopping - show reasons and continue
+							this.showSubagentStopHookBlockedMessage(outputStream, stopHookResult.reasons);
+							// Store the joined reasons so it can be passed to the model in the next prompt
+							this.stopHookReason = joinedReasons;
+							// Also persist on the round so it survives across turns
+							result.round.hookContext = formatHookContext(stopHookResult.reasons);
+							this._logService.info(`[ToolCallingLoop] Subagent stop hook blocked, continuing with reasons: ${joinedReasons}`);
 							stopHookActive = true;
 							continue;
 						}
 					} else {
 						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
-						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
-						if (stopHookResult.shouldContinue && stopHookResult.reason) {
-							// The stop hook blocked stopping - show reason and continue
-							this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
-							// Store the reason so it can be passed to the model in the next prompt
-							this.stopHookReason = stopHookResult.reason;
-							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+						const joinedReasons = stopHookResult.reasons?.join('; ');
+						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
+							// The stop hook blocked stopping - show reasons and continue
+							this.showStopHookBlockedMessage(outputStream, stopHookResult.reasons);
+							// Store the joined reasons so it can be passed to the model in the next prompt
+							this.stopHookReason = joinedReasons;
+							// Also persist on the round so it survives across turns
+							result.round.hookContext = formatHookContext(stopHookResult.reasons);
+							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reasons: ${joinedReasons}`);
 							stopHookActive = true;
 							continue;
 						}
