@@ -62,6 +62,27 @@ export interface StopHookOutput {
 }
 
 /**
+ * Input passed to the SessionStart hook.
+ */
+export interface SessionStartHookInput {
+	/**
+	 * The source of the session start. Always "new".
+	 */
+	readonly source: 'new';
+}
+
+/**
+ * Output from the SessionStart hook.
+ */
+export interface SessionStartHookOutput {
+	/**
+	 * Additional context to add to the agent's context.
+	 * Multiple hooks' values are concatenated.
+	 */
+	readonly additionalContext?: string;
+}
+
+/**
  * Input passed to the SubagentStart hook.
  */
 export interface SubagentStartHookInput {
