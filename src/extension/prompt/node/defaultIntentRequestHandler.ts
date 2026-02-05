@@ -346,7 +346,7 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
+				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } });
 			} catch (error) {
 				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
@@ -801,11 +801,25 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 			// Check for blocking responses
 			for (const result of results) {
-				if (result.success === true && typeof result.output === 'object') {
-					const output = result.output as StopHookOutput;
-					if (output.decision === 'block' && output.reason) {
-						this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${output.reason}`);
-						return { shouldContinue: true, reason: output.reason };
+				if (result.success === true) {
+					// Output may be a parsed object or a JSON string
+					let output = result.output;
+					if (typeof output === 'string') {
+						try {
+							output = JSON.parse(output);
+						} catch {
+							// Not valid JSON, skip
+							this._logService.error(`[DefaultToolCallingLoop] Failed to parse output as JSON, skipping`);
+							continue;
+						}
+					}
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as StopHookOutput;
+						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
+							return { shouldContinue: true, reason: hookOutput.reason };
+						}
 					}
 				} else if (result.success === false) {
 					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
@@ -822,7 +836,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
 		if (outputStream) {
-			outputStream.markdown(l10n.t('Stop hook: {0}', reason));
+			outputStream.warning(l10n.t('Stop Hook: {0}', reason));
 		}
 		this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked stopping: ${reason}`);
 	}

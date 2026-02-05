@@ -144,6 +144,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
+	private stopHookReason: string | undefined;
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -180,10 +181,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
-		const isContinuation = this.turn.isContinuation;
-		const query = isContinuation ?
-			'Please continue' :
-			this.turn.request.message;
+		const isContinuation = this.turn.isContinuation || !!this.stopHookReason;
+		let query: string;
+		let hasStopHookQuery = false;
+		if (this.stopHookReason) {
+			// Include the stop hook reason as a user message so the model knows what to do.
+			// Wrap with context so the model understands it needs to take action.
+			query = `You were about to complete but a hook blocked you with the following message: "${this.stopHookReason}". Please address this requirement before completing.`;
+			this._logService.info(`[ToolCallingLoop] Using stop hook reason as query: ${query}`);
+			this.stopHookReason = undefined; // Clear after use
+			hasStopHookQuery = true;
+		} else if (isContinuation) {
+			query = 'Please continue';
+		} else {
+			query = this.turn.request.message;
+		}
 		// exclude turns from the history that errored due to prompt filtration
 		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.PromptFiltered);
 
@@ -204,6 +216,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				availableTools
 			},
 			isContinuation,
+			hasStopHookQuery,
 			modeInstructions: this.options.request.modeInstructions2,
 		};
 	}
@@ -271,9 +284,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 					// Before stopping, execute the stop hook
 					const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
+					this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
 					if (stopHookResult.shouldContinue && stopHookResult.reason) {
 						// The stop hook blocked stopping - show reason and continue
 						this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
+						// Store the reason so it can be passed to the model in the next prompt
+						this.stopHookReason = stopHookResult.reason;
+						this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
 						stopHookActive = true;
 						continue;
 					}
@@ -512,6 +529,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			throw new EmptyPromptError();
 		}
 
+		this._logService.info(`[ToolCallingLoop] Sending ${buildPromptResult.messages.length} messages to model, isContinuation=${isContinuation}`);
+
 		const promptContextTools = availableTools.length ? availableTools.map(toolInfo => {
 			return {
 				name: toolInfo.name,
@@ -599,6 +618,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
+			this._logService.info(`[ToolCallingLoop] Fetch success: response length=${fetchResult.value.length}, toolCalls=${toolCalls.length}`);
 			// Store token usage metadata for Anthropic models using Messages API
 			if (fetchResult.usage && isAnthropicFamily(endpoint)) {
 				this.turn.setMetadata(new AnthropicTokenUsageMetadata(

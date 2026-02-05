@@ -276,6 +276,8 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
 	readonly sessionResource?: string;
+	/** When true, skip frozen content and render using props.request (the stop hook query). */
+	readonly hasStopHookQuery?: boolean;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -303,6 +305,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		chatVariables: agentProps.promptContext.chatVariables,
 		enableCacheBreakpoints: agentProps.enableCacheBreakpoints,
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
+		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -325,7 +328,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const frozenContent = this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
+		// Skip frozen content if we have a stop hook query - we need to render the new query, not the cached message
+		const frozenContent = !this.props.hasStopHookQuery ? this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage : undefined;
 		if (frozenContent) {
 			return <FrozenContentUserMessage frozenContent={frozenContent} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 		}
