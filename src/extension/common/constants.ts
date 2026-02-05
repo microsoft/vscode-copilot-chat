@@ -31,12 +31,19 @@ export const enum Intent {
 	SearchPanel = 'searchPanel',
 	SearchKeywords = 'searchKeywords',
 	AskAgent = 'askAgent',
+	Compact = 'compact',
 }
 
 export const GITHUB_PLATFORM_AGENT = 'github.copilot-dynamic.platform';
 
 // TODO@jrieken THIS IS WEIRD. We should read this from package.json
 export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> = {
+	[Intent.Unknown]: {
+		'compact': Intent.Compact,
+	},
+	[Intent.AskAgent]: {
+		'compact': Intent.Compact,
+	},
 	[Intent.Workspace]: {
 		'explain': Intent.Explain,
 		'edit': Intent.Edit,

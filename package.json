@@ -1359,6 +1359,13 @@
 				"modes": [
 					"ask"
 				],
+				"commands": [
+					{
+						"name": "compact",
+						"description": "%copilot.compact.description%",
+						"sampleRequest": "%copilot.compact.sampleRequest%"
+					}
+				],
 				"disambiguation": [
 					{
 						"category": "generate_code_sample",

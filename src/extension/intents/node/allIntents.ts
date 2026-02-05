@@ -9,6 +9,7 @@ import { InlineChatIntent } from '../../inlineChat/node/inlineChatIntent';
 import { IntentRegistry } from '../../prompt/node/intentRegistry';
 import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
+import { CompactIntent } from './compactIntent';
 import { InlineDocIntent } from './docIntent';
 import { EditCodeIntent } from './editCodeIntent';
 import { EditCode2Intent } from './editCodeIntent2';
@@ -53,5 +54,6 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(SearchKeywordsIntent),
 	new SyncDescriptor(AskAgentIntent),
 	new SyncDescriptor(NotebookEditorIntent),
-	new SyncDescriptor(InlineChatIntent)
+	new SyncDescriptor(InlineChatIntent),
+	new SyncDescriptor(CompactIntent),
 ]);
