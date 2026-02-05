@@ -26,6 +26,27 @@ export interface IChatHookService {
 //#region Hook Input/Output Types
 
 /**
+ * Input passed to the SessionStart hook.
+ */
+export interface SessionStartHookInput {
+	/**
+	 * The source of the session. Always "new" for a new session.
+	 */
+	readonly source: 'new';
+}
+
+/**
+ * Output from the SessionStart hook.
+ */
+export interface SessionStartHookOutput {
+	/**
+	 * Additional context to add to the agent's context.
+	 * Multiple hooks' values are concatenated.
+	 */
+	readonly additionalContext?: string;
+}
+
+/**
  * Input passed to the UserPromptSubmit hook.
  */
 export interface UserPromptSubmitHookInput {

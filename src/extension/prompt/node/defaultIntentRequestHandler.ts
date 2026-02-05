@@ -8,7 +8,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, SessionStartHookInput, SessionStartHookOutput, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -300,6 +300,27 @@ export class DefaultIntentRequestHandler {
 
 	private async runWithToolCalling(intentInvocation: IIntentInvocation): Promise<IInternalRequestResult> {
 		const store = new DisposableStore();
+
+		// Execute SessionStart hook only on first turn of a new session
+		let hookContext: string | undefined;
+		if (this.conversation.turns.length === 1) {
+			try {
+				const hookResults = await this._chatHookService.executeHook('SessionStart', {
+					toolInvocationToken: this.request.toolInvocationToken,
+					input: { source: 'new' } satisfies SessionStartHookInput
+				});
+				// Concatenate additionalContext from all successful hook results
+				const contexts = hookResults
+					.filter(r => r.success && (r.output as SessionStartHookOutput)?.additionalContext)
+					.map(r => (r.output as SessionStartHookOutput).additionalContext!);
+				if (contexts.length > 0) {
+					hookContext = contexts.join('\n');
+				}
+			} catch (error) {
+				this._logService.error('[DefaultIntentRequestHandler] Error executing SessionStart hook', error);
+			}
+		}
+
 		const loop = this._loop = store.add(this._instantiationService.createInstance(
 			DefaultToolCallingLoop,
 			{
@@ -318,6 +339,7 @@ export class DefaultIntentRequestHandler {
 				interactionContext: this.documentContext?.document.uri,
 				responseProcessor: typeof intentInvocation.processResponse === 'function' ? intentInvocation as IResponseProcessor : undefined,
 				yieldRequested: this.yieldRequested,
+				hookContext,
 			},
 			this.chatTelemetryBuilder,
 		));
@@ -525,6 +547,10 @@ interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
 	location: ChatLocation;
 	temperature: number;
 	overrideRequestLocation?: ChatLocation;
+	/**
+	 * Additional context from hooks (e.g., SessionStart).
+	 */
+	hookContext?: string;
 }
 
 class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
@@ -574,6 +600,11 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
 		const context = super.createPromptContext(availableTools, outputStream);
 		this._handleVirtualCalls(context);
+
+		// Add hookContext if available
+		if (this.options.hookContext) {
+			context.hookContext = this.options.hookContext;
+		}
 
 		const extraVars = this.options.invocation.getAdditionalVariables?.(context);
 		if (extraVars?.hasVariables()) {

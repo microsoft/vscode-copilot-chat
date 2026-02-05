@@ -962,14 +962,16 @@ namespace TextDocuments {
 
 class NeighborFileModel implements vscode.Disposable {
 
+	private static readonly MAX_ITEMS = 12;
+
 	private readonly disposables;
 	private readonly visible: LRUCache<string, string>;
 	private readonly notVisible: LRUCache<string, string>;
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.visible = new LRUCache<string, string>({ max: 12 });
-		this.notVisible = new LRUCache<string, string>({ max: 12 });
+		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
+		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
@@ -983,10 +985,14 @@ class NeighborFileModel implements vscode.Disposable {
 		}));
 		this.disposables.add(vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
 			const uri = document.uri.toString();
-			this.visible.delete(uri);
-			this.notVisible.delete(uri);
+			if (TextDocuments.consider(document)) {
+				this.visible.delete(uri);
+				this.notVisible.delete(uri);
+			}
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
+			// We don't track open tabs here to ensure we only track documents that are
+			// actually focused. Otherwise opening multiple tabs at once would cause too much churn.
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
 					const uri = tab.input.uri.toString();
@@ -1035,13 +1041,13 @@ class NeighborFileModel implements vscode.Disposable {
 			}
 			result.push(value);
 		}
-		if (result.length < 12) {
+		if (result.length < NeighborFileModel.MAX_ITEMS) {
 			for (const [key, value] of this.notVisible.entries()) {
 				if (key === currentUri) {
 					continue;
 				}
 				result.push(value);
-				if (result.length >= 12) {
+				if (result.length >= NeighborFileModel.MAX_ITEMS) {
 					break;
 				}
 			}
