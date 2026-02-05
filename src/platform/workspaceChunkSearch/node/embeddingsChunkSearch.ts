@@ -117,7 +117,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			const fileCap = await this.getManualIndexFileCap();
 			return Result.error({
 				id: 'too-many-files',
-				userMessage: t('@workspace\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
+				userMessage: t('#codebase\'s indexing currently is limited to {0} files. Found {1} potential files to index in the workspace.\n\nA sparse local index will be used to answer question instead.', fileCap, this._embeddingsIndex.fileCount)
 			});
 		}
 

@@ -144,7 +144,7 @@ export class SetupTestsDetector implements ISetupTestsDetector {
 					{
 						$isSetupSuggestion: true,
 						command: CommandIds.OpenChat,
-						arguments: [{ query: `@workspace /setupTests` }],
+						arguments: [{ query: `/setupTests` }],
 					}
 				));
 				break;
