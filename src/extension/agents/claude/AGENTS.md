@@ -120,14 +120,16 @@ All interactions are displayed through VS Code's native chat UI, providing a sea
 - Provides dependency injection for testability
 - Enables mocking in unit tests
 
-### `node/claudeCodeSessionService.ts`
+### `node/sessionParser/claudeCodeSessionService.ts`
 
 **IClaudeCodeSessionService / ClaudeCodeSessionService**
 - Loads and manages persisted Claude Code sessions from disk
 - Reads `.jsonl` session files from `~/.claude/projects/<workspace-slug>/`
 - Builds message chains from leaf nodes to reconstruct full conversations
+- Discovers and parses subagent sessions from `{session-id}/subagents/agent-*.jsonl`
 - Provides session caching with mtime-based invalidation
 - Used to resume previous Claude Code conversations
+- See `node/sessionParser/README.md` for detailed documentation
 
 ### `common/claudeTools.ts`
 
@@ -305,6 +307,18 @@ To add new functionality:
 
 The integration respects VS Code settings:
 - `github.copilot.advanced.claudeCodeDebugEnabled`: Enables debug logging from Claude Code SDK
+
+## Upgrading Anthropic SDK Packages
+
+For the complete upgrade process, use the **anthropic-sdk-upgrader** Claude Code agent. The agent provides step-by-step guidance for upgrading `@anthropic-ai/claude-agent-sdk` and `@anthropic-ai/sdk` packages, including:
+
+- Checking changelogs and summarizing changes
+- Categorizing changes by impact level
+- Fixing compilation errors in key files
+- Complete testing checklist
+- Troubleshooting common issues
+
+See `.claude/agents/anthropic-sdk-upgrader.md` for the full process.
 
 ## Dependencies
 

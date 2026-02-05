@@ -35,11 +35,16 @@ parameters:
     displayName: 🚀 Publish Pre-Release
     type: boolean
     default: false
+  - name: processLocalization
+    displayName: 🌐 Process Localization
+    type: boolean
+    default: true
 
 extends:
   template: azure-pipelines/extension/pre-release.yml@templates
   parameters:
     l10nSourcePaths: ./src
+    l10nShouldProcess: ${{ parameters.processLocalization }}
     nodeVersion: 22.21.x
     standardizedVersioning: true
 
@@ -125,6 +130,9 @@ extends:
 
       - script: npm run build -- --prerelease
         displayName: npm run build
+
+    uploadSourceMaps:
+      enabled: true
 
     # testPlatforms:
     #     - name: Linux

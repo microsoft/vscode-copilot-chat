@@ -94,6 +94,13 @@ export interface IBuildPromptContext {
 	readonly request?: ChatRequest;
 	readonly stream?: vscode.ChatResponseStream;
 	readonly isContinuation?: boolean;
+	/**
+	 * True when the query contains a stop hook message that should be rendered
+	 * as a user message, even during a continuation. This is used to distinguish
+	 * between a normal continuation ("Please continue") and a stop hook
+	 * continuation that requires a specific user message.
+	 */
+	readonly hasStopHookQuery?: boolean;
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');

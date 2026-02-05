@@ -3,8 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DocumentContents, getDocSha } from '@github/blackbird-external-ingest-utils';
+import * as ingestUtils from '@github/blackbird-external-ingest-utils';
 import * as l10n from '@vscode/l10n';
+import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
@@ -145,10 +146,10 @@ export class ExternalIngestIndex extends Disposable {
 		}
 
 		try {
-			this._db = this.createDatabase(dbPath);
+			this._db = this.openOrCreateDatabase(dbPath);
 		} catch (error) {
 			this._logService.error('Failed to create database. Falling back to in-memory db', error);
-			this._db = this.createDatabase(':memory:');
+			this._db = this.createFreshDatabase(':memory:');
 		}
 	}
 
@@ -399,8 +400,60 @@ export class ExternalIngestIndex extends Disposable {
 		}
 	}
 
-	private createDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
-		this._logService.trace(`ExternalIngestIndex: Creating database at path: ${dbPath}`);
+	private openOrCreateDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
+		this._logService.trace(`ExternalIngestIndex: Opening database at path: ${dbPath}`);
+
+		// For in-memory databases, always create fresh
+		if (dbPath === ':memory:') {
+			return this.createFreshDatabase(dbPath);
+		}
+
+		// Try to open existing database and check cache version
+		if (fs.existsSync(dbPath)) {
+			try {
+				const db = new sql.DatabaseSync(dbPath, {
+					open: true,
+					enableForeignKeyConstraints: true,
+				});
+
+				const storedVersion = this.getStoredCacheVersion(db);
+				if (storedVersion === ingestUtils.cacheVersion()) {
+					this._logService.trace(`ExternalIngestIndex: Cache version matches (${ingestUtils.cacheVersion()})`);
+					return db;
+				}
+
+				// Version mismatch - close and delete
+				this._logService.info(`ExternalIngestIndex: Cache version mismatch (stored: ${storedVersion}, current: ${ingestUtils.cacheVersion()}). Recreating database.`);
+				db.close();
+			} catch (error) {
+				this._logService.warn(`ExternalIngestIndex: Failed to open existing database, will recreate: ${error}`);
+			}
+
+			// Delete the old database file
+			try {
+				fs.unlinkSync(dbPath);
+			} catch (error) {
+				this._logService.warn(`ExternalIngestIndex: Failed to delete old database file: ${error}`);
+			}
+		}
+
+		return this.createFreshDatabase(dbPath);
+	}
+
+	private getStoredCacheVersion(db: sql.DatabaseSync): number | undefined {
+		try {
+			const row = db.prepare('SELECT value FROM Metadata WHERE key = ?').get('cacheVersion');
+			if (row && typeof row.value === 'number') {
+				return row.value;
+			}
+		} catch {
+			// Table may not exist in older databases
+		}
+		return undefined;
+	}
+
+	private createFreshDatabase(dbPath: string | ':memory:'): sql.DatabaseSync {
+		this._logService.trace(`ExternalIngestIndex: Creating fresh database at path: ${dbPath}`);
 
 		const db = new sql.DatabaseSync(dbPath, {
 			open: true,
@@ -417,6 +470,13 @@ export class ExternalIngestIndex extends Disposable {
 		`);
 
 		db.exec(`
+			CREATE TABLE IF NOT EXISTS Metadata (
+				key TEXT PRIMARY KEY,
+				value INTEGER NOT NULL
+			);
+		`);
+
+		db.exec(`
 			CREATE TABLE IF NOT EXISTS Files (
 				path TEXT PRIMARY KEY,
 				size INTEGER NOT NULL,
@@ -425,6 +485,9 @@ export class ExternalIngestIndex extends Disposable {
 				shouldIngest INTEGER NOT NULL DEFAULT 0
 			);
 		`);
+
+		// Store the current cache version
+		db.prepare('INSERT OR REPLACE INTO Metadata (key, value) VALUES (?, ?)').run('cacheVersion', ingestUtils.cacheVersion());
 
 		return db;
 	}
@@ -724,7 +787,7 @@ export class ExternalIngestIndex extends Disposable {
 	}
 
 	private computeIngestDocShaFromContents(uri: URI, data: Uint8Array): Uint8Array {
-		return getDocSha(this.computeRelativePath(uri), new DocumentContents(data));
+		return ingestUtils.getDocSha(this.computeRelativePath(uri), new ingestUtils.DocumentContents(data));
 	}
 
 	private async computeIngestDocSha(uri: URI): Promise<Uint8Array | undefined> {

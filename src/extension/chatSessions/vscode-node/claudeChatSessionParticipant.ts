@@ -15,6 +15,9 @@ import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSes
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
 
+// Import the hooks to trigger self-registration
+import '../../agents/claude/vscode-node/hooks/index';
+
 export class ClaudeChatSessionParticipant {
 	constructor(
 		private readonly sessionType: string,
@@ -35,7 +38,7 @@ export class ClaudeChatSessionParticipant {
 			return slashResult.result ?? {};
 		}
 
-		const create = async (modelId?: string, permissionMode?: PermissionMode) => {
+		const create = async (modelId: string, permissionMode?: PermissionMode) => {
 			const result = await this.claudeAgentManager.handleRequest(undefined, request, context, stream, token, modelId, permissionMode);
 			if (!result.claudeSessionId) {
 				// Only show generic warning if we didn't already show a specific error

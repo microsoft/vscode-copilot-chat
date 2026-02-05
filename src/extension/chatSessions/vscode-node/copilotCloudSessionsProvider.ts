@@ -653,7 +653,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			try {
 				const items = await this.getRepositoriesOptionItems(repoIds);
-				if (items.length > 0) {
+				if (items.length !== 1) {
 					optionGroups.push({
 						id: REPOSITORIES_OPTION_GROUP_ID,
 						name: vscode.l10n.t('Repository'),
@@ -752,51 +752,48 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async getRepositoriesOptionItems(repoIds?: GithubRepoId[], fetchAll: boolean = false): Promise<vscode.ChatSessionProviderOptionItem[]> {
 		const items: vscode.ChatSessionProviderOptionItem[] = [];
-		// Only get options for empty workspace or multi-root workspaces
-		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0 || vscode.workspace.workspaceFolders.length > 1) {
-			if (!fetchAll) {
-				if (repoIds && repoIds.length > 0) {
-					repoIds.forEach((repoId, index) => {
+		if (!fetchAll) {
+			if (repoIds && repoIds.length > 0) {
+				repoIds.forEach((repoId, index) => {
+					items.push({
+						id: `${repoId.org}/${repoId.repo}`,
+						name: `${repoId.org}/${repoId.repo}`,
+						default: index === 0,
+						icon: new vscode.ThemeIcon('repo'),
+					});
+				});
+			} else {
+				// Fetch repos from recent push events (repos user has recently committed to)
+				try {
+					const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
+					for (const repo of recentlyCommittedRepos) {
+						const nwo = `${repo.owner}/${repo.name}`;
 						items.push({
-							id: `${repoId.org}/${repoId.repo}`,
-							name: `${repoId.org}/${repoId.repo}`,
-							default: index === 0,
+							id: nwo,
+							name: nwo,
 							icon: new vscode.ThemeIcon('repo'),
 						});
-					});
-				} else {
-					// Fetch repos from recent push events (repos user has recently committed to)
-					try {
-						const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
-						for (const repo of recentlyCommittedRepos) {
-							const nwo = `${repo.owner}/${repo.name}`;
-							items.push({
-								id: nwo,
-								name: nwo,
-								icon: new vscode.ThemeIcon('repo'),
-							});
-						}
-					} catch (error) {
-						this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
 					}
+				} catch (error) {
+					this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
+				}
 
-					// Add user-selected repos that aren't already in the list
-					const userSelectedRepos = this.getUserSelectedRepositories();
-					const existingIds = new Set(items.map(item => item.id));
-					for (const repo of userSelectedRepos) {
-						if (!existingIds.has(repo.name)) {
-							items.push({
-								id: repo.name,
-								name: repo.name,
-								icon: new vscode.ThemeIcon('repo'),
-							});
-						}
+				// Add user-selected repos that aren't already in the list
+				const userSelectedRepos = this.getUserSelectedRepositories();
+				const existingIds = new Set(items.map(item => item.id));
+				for (const repo of userSelectedRepos) {
+					if (!existingIds.has(repo.name)) {
+						items.push({
+							id: repo.name,
+							name: repo.name,
+							icon: new vscode.ThemeIcon('repo'),
+						});
 					}
 				}
-			} else {
-				const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
-				items.push(...fetchedItems);
 			}
+		} else {
+			const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
+			items.push(...fetchedItems);
 		}
 		return items;
 	}
@@ -868,14 +865,15 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		this.chatSessionItemsPromise = (async () => {
 			const repoIds = await getRepoId(this._gitService);
 			// Make sure if it's not a github repo we don't show any sessions
-			if (!this.isGitHubRepoOrEmpty(repoIds)) {
+			// (unless we're in an agent sessions workspace)
+			if (!vscode.workspace.isAgentSessionsWorkspace && !this.isGitHubRepoOrEmpty(repoIds)) {
 				return [];
 			}
 			let sessions = [];
-			if (repoIds && repoIds.length > 0) {
-				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
-			} else {
+			if (vscode.workspace.isAgentSessionsWorkspace || !repoIds || repoIds.length === 0) {
 				sessions = await this._octoKitService.getAllSessions(undefined, true, { createIfNone: false });
+			} else {
+				sessions = (await Promise.all(repoIds.map(repo => this._octoKitService.getAllSessions(`${repo.org}/${repo.repo}`, true, { createIfNone: false })))).flat();
 			}
 			this.cachedSessionsSize = sessions.length;
 
@@ -1692,17 +1690,27 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return {};
 		}
 
+		// Look up the partner agent and model for telemetry
+		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
+		const partnerAgentId = chatResource ? this.sessionPartnerAgentMap.get(chatResource) : undefined;
+		const partnerAgent = HARDCODED_PARTNER_AGENTS.find(agent => agent.id === partnerAgentId);
+		const modelId = chatResource ? this.sessionModelMap.get(chatResource) : undefined;
+
 		/* __GDPR__
 			"copilotcloud.chat.invoke" : {
 				"owner": "joshspicer",
 				"comment": "Event sent when a Copilot Cloud chat request is made.",
 				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
-				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." }
+				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
+				"partnerAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The partner agent name (e.g., Copilot, Claude, Codex)." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The selected model ID." }
 			}
 		*/
 		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
 			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
-			isUntitled: String(context.chatSessionContext?.isUntitled)
+			isUntitled: String(context.chatSessionContext?.isUntitled),
+			partnerAgent: partnerAgent?.name ?? 'unknown',
+			model: modelId ?? 'unknown'
 		});
 
 		// Follow up

@@ -41,6 +41,7 @@ import { escapeRegExpCharacters } from '../../../util/vs/base/common/strings';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { isBYOKModel } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
+import { IPowerService } from '../../power/common/powerService';
 import { ChatMLFetcherTelemetrySender as Telemetry } from './chatMLFetcherTelemetry';
 
 export interface IMadeChatRequestEvent {
@@ -108,6 +109,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IConversationOptions options: IConversationOptions,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IPowerService private readonly _powerService: IPowerService,
 	) {
 		super(options);
 	}
@@ -158,7 +160,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			location: opts.location,
 			body: requestBody,
 			ignoreStatefulMarker: opts.ignoreStatefulMarker,
-			isConversationRequest: opts.isConversationRequest
+			isConversationRequest: opts.isConversationRequest,
+			customMetadata: opts.customMetadata
 		});
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
@@ -561,6 +564,46 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		useFetcher?: FetcherId,
 		canRetryOnce?: boolean,
 	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
+		const isPowerSaveBlockerEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.ChatRequestPowerSaveBlocker, this._experimentationService);
+		const blockerHandle = isPowerSaveBlockerEnabled && location !== ChatLocation.Other ? this._powerService.acquirePowerSaveBlocker() : undefined;
+		try {
+			return await this._doFetchAndStreamChat(
+				chatEndpointInfo,
+				request,
+				baseTelemetryData,
+				finishedCb,
+				secretKey,
+				copilotToken,
+				location,
+				ourRequestId,
+				nChoices,
+				cancellationToken,
+				userInitiatedRequest,
+				telemetryProperties,
+				useFetcher,
+				canRetryOnce,
+			);
+		} finally {
+			blockerHandle?.dispose();
+		}
+	}
+
+	private async _doFetchAndStreamChat(
+		chatEndpointInfo: IChatEndpoint,
+		request: IEndpointBody,
+		baseTelemetryData: TelemetryData,
+		finishedCb: FinishedCallback,
+		secretKey: string | undefined,
+		copilotToken: CopilotToken,
+		location: ChatLocation,
+		ourRequestId: string,
+		nChoices: number | undefined,
+		cancellationToken: CancellationToken,
+		userInitiatedRequest?: boolean,
+		telemetryProperties?: TelemetryProperties | undefined,
+		useFetcher?: FetcherId,
+		canRetryOnce?: boolean,
+	): Promise<{ result: ChatResults | ChatRequestFailed | ChatRequestCanceled; fetcher?: FetcherId; bytesReceived?: number; statusCode?: number }> {
 
 		if (cancellationToken.isCancellationRequested) {
 			return { result: { type: FetchResponseKind.Canceled, reason: 'before fetch request' } };
@@ -646,7 +689,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				nChoices ?? /* OpenAI's default */ 1,
 				finishedCb,
 				extendedBaseTelemetryData,
-				cancellationToken
+				cancellationToken,
+				location,
 			);
 			chatCompletions = new AsyncIterableObject<ChatCompletion>(async emitter => {
 				try {
@@ -747,6 +791,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			cancellationToken,
 			useFetcher,
 			canRetryOnce,
+			location,
 		).then(response => {
 			const apim = response.headers.get('apim-request-id');
 			if (apim) {

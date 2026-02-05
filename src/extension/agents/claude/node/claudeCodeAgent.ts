@@ -22,13 +22,13 @@ import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { buildHooksFromRegistry } from './hooks/index';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -51,10 +51,11 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
-			const serverConfig = (await this.getLangModelServer()).getConfig();
+			const langModelServer = await this.getLangModelServer();
+			const serverConfig = langModelServer.getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
 			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
@@ -64,7 +65,7 @@ export class ClaudeAgentManager extends Disposable {
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -112,11 +113,12 @@ export class ClaudeAgentManager extends Disposable {
 		}
 	}
 
-	private resolvePrompt(request: vscode.ChatRequest): string {
+	private resolvePrompt(request: vscode.ChatRequest): Anthropic.TextBlockParam[] {
 		if (request.prompt.startsWith('/')) {
-			return request.prompt; // likely a slash command, don't modify
+			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
 		}
 
+		const contentBlocks: Anthropic.TextBlockParam[] = [];
 		const extraRefsTexts: string[] = [];
 		let prompt = request.prompt;
 		request.references.forEach(ref => {
@@ -134,11 +136,18 @@ export class ClaudeAgentManager extends Disposable {
 			}
 		});
 
+		// Add system-reminder as a separate content block so it's not rendered in chat history
 		if (extraRefsTexts.length > 0) {
-			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
+			contentBlocks.push({
+				type: 'text',
+				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
+			});
 		}
 
-		return prompt;
+		// Add the actual user prompt as a separate content block
+		contentBlocks.push({ type: 'text', text: prompt });
+
+		return contentBlocks;
 	}
 }
 
@@ -148,7 +157,7 @@ class KnownClaudeError extends Error { }
  * Represents a queued chat request waiting to be processed by the Claude session
  */
 interface QueuedRequest {
-	readonly prompt: string;
+	readonly prompt: Anthropic.TextBlockParam[];
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
@@ -171,9 +180,9 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _editTracker = new ExternalEditTracker();
+	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
-	private _currentModelId: string | undefined;
+	private _currentModelId: string;
 	private _currentPermissionMode: PermissionMode;
 
 	/**
@@ -202,8 +211,9 @@ export class ClaudeCodeSession extends Disposable {
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
+		private readonly langModelServer: ClaudeLanguageModelServer,
 		public sessionId: string | undefined,
-		initialModelId: string | undefined,
+		initialModelId: string,
 		initialPermissionMode: PermissionMode | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -216,6 +226,9 @@ export class ClaudeCodeSession extends Disposable {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		// Initialize edit tracker with plan directory as ignored
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		this._editTracker = new ExternalEditTracker([planDirUri]);
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
@@ -280,18 +293,18 @@ export class ClaudeCodeSession extends Disposable {
 
 	/**
 	 * Invokes the Claude Code session with a user prompt
-	 * @param prompt The user's prompt text
+	 * @param prompt The user's prompt as an array of content blocks
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
-	 * @param modelId Optional model ID to use for this request
+	 * @param modelId Model ID to use for this request
 	 */
 	public async invoke(
-		prompt: string,
+		prompt: Anthropic.TextBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string,
+		modelId: string,
 		permissionMode?: PermissionMode
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -309,9 +322,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		// Update model and permission mode on active session if they changed
-		if (modelId !== undefined) {
-			await this._setModel(modelId);
-		}
+		await this._setModel(modelId);
+
 		if (permissionMode !== undefined) {
 			await this._setPermissionMode(permissionMode);
 		}
@@ -381,7 +393,7 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
-			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			model: this._currentModelId,
 			// Pass the permission mode to the SDK
 			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
 			hooks: this._buildHooks(token),
@@ -392,7 +404,8 @@ export class ClaudeCodeSession extends Disposable {
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
 					toolInvocationToken: this._currentRequest.toolInvocationToken,
-					permissionMode: this._currentPermissionMode
+					permissionMode: this._currentPermissionMode,
+					stream: this._currentRequest.stream
 				});
 			},
 			systemPrompt: {
@@ -477,6 +490,10 @@ export class ClaudeCodeSession extends Disposable {
 				toolInvocationToken: request.toolInvocationToken,
 				token: request.token
 			};
+
+			// Increment user-initiated message count for this model
+			// This is used by the language model server to track which requests are user-initiated
+			this.langModelServer.incrementUserInitiatedMessageCount(this._currentModelId);
 
 			yield {
 				type: 'user',
