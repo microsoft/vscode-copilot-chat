@@ -548,8 +548,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
+		@IChatHookService chatHookService: IChatHookService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
