@@ -329,8 +329,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		// Skip frozen content if we have a stop hook query - we need to render the new query, not the cached message
-		const frozenContent = !this.props.hasStopHookQuery ? this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage : undefined;
+		const frozenContent = this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
 		if (frozenContent) {
 			return <FrozenContentUserMessage frozenContent={frozenContent} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 		}
