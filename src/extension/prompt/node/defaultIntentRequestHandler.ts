@@ -9,7 +9,7 @@ import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatRe
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
-import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -345,7 +345,7 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } });
+				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
 			} catch (error) {
 				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
