@@ -102,10 +102,9 @@ export interface IBuildPromptContext {
 	 */
 	readonly hasStopHookQuery?: boolean;
 	/**
-	 * Additional context provided by SubagentStart hooks. This is used to inject
-	 * hook-provided context into the subagent's prompt.
+	 * Additional context provided by a hook.
 	 */
-	readonly subagentHookContext?: string;
+	readonly additionalHookContext?: string;
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');

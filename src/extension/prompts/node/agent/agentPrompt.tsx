@@ -280,7 +280,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
 	readonly hasStopHookQuery?: boolean;
 	/** Additional context provided by SubagentStart hooks. */
-	readonly subagentHookContext?: string;
+	readonly additionalHookContext?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -309,7 +309,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		enableCacheBreakpoints: agentProps.enableCacheBreakpoints,
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
-		subagentHookContext: agentProps.promptContext.subagentHookContext,
+		additionalHookContext: agentProps.promptContext.additionalHookContext,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -379,7 +379,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
-						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}					{this.props.subagentHookContext && <SubagentHookContextPrompt context={this.props.subagentHookContext} />}					</Tag>
+						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
+						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
@@ -459,14 +460,14 @@ class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 	}
 }
 
-interface SubagentHookContextPromptProps extends BasePromptElementProps {
+interface AdditionalHookContextPromptProps extends BasePromptElementProps {
 	readonly context: string;
 }
 
 /**
- * Renders additional context provided by SubagentStart hooks.
+ * Renders additional context provided by hooks.
  */
-class SubagentHookContextPrompt extends PromptElement<SubagentHookContextPromptProps> {
+class AdditionalHookContextPrompt extends PromptElement<AdditionalHookContextPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <>Additional instructions from hooks: {this.props.context}</>;
 	}

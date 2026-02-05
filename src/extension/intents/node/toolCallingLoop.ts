@@ -130,7 +130,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
 	private stopHookReason: string | undefined;
-	private subagentHookContext: string | undefined;
+	private additionalHookContext: string | undefined;
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -205,7 +205,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			isContinuation,
 			hasStopHookQuery,
 			modeInstructions: this.options.request.modeInstructions2,
-			subagentHookContext: this.subagentHookContext,
+			additionalHookContext: this.additionalHookContext,
 		};
 	}
 
@@ -379,7 +379,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				agent_type: this.options.request.subAgentName ?? 'default'
 			}, token);
 			if (startHookResult.additionalContext) {
-				this.subagentHookContext = startHookResult.additionalContext;
+				this.additionalHookContext = startHookResult.additionalContext;
 				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
 			}
 		}
