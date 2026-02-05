@@ -9,7 +9,7 @@ import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatRe
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
-import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, SubagentStartHookInput, SubagentStartHookOutput, SubagentStopHookInput, SubagentStopHookOutput, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -141,7 +141,86 @@ export class DefaultIntentRequestHandler {
 				this.request.subAgentName,
 				this.request.sessionId,
 			);
-			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
+
+			// Execute SubagentStart hook for subagent requests (runSubagent tool invocations)
+			if (this.request.subAgentInvocationId) {
+				const agentId = this.request.subAgentInvocationId;
+				const agentType = this.request.subAgentName ?? 'runSubagent';
+				this._logService.trace(`[DefaultIntentRequestHandler] Executing SubagentStart hook: agentId=${agentId}, agentType=${agentType}`);
+				try {
+					const startHookResults = await this._chatHookService.executeHook('SubagentStart', {
+						toolInvocationToken: this.request.toolInvocationToken,
+						input: { agent_id: agentId, agent_type: agentType } satisfies SubagentStartHookInput
+					}, this.token);
+					for (const result of startHookResults) {
+						if (result.success === true) {
+							const output = result.output;
+							if (typeof output === 'object' && output !== null) {
+								const hookOutput = output as SubagentStartHookOutput;
+								if (hookOutput.additionalContext) {
+									this._logService.trace(`[DefaultIntentRequestHandler] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+								}
+							}
+						} else if (result.success === false) {
+							const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+							this._logService.error(`[DefaultIntentRequestHandler] SubagentStart hook error: ${errorMessage}`);
+						}
+					}
+				} catch (error) {
+					this._logService.error('[DefaultIntentRequestHandler] Error executing SubagentStart hook', error);
+				}
+			}
+
+			// Track SubagentStop hook state for subagent requests
+			let subagentStopHookActive = false;
+			let resultDetails: IInternalRequestResult;
+
+			// Run the tool calling loop with SubagentStop hook integration for subagent requests
+			while (true) {
+				resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
+
+				// Execute SubagentStop hook for subagent requests before returning
+				if (this.request.subAgentInvocationId) {
+					const agentId = this.request.subAgentInvocationId;
+					const agentType = this.request.subAgentName ?? 'runSubagent';
+					this._logService.trace(`[DefaultIntentRequestHandler] Executing SubagentStop hook: agentId=${agentId}, agentType=${agentType}, stop_hook_active=${subagentStopHookActive}`);
+					try {
+						const stopHookResults = await this._chatHookService.executeHook('SubagentStop', {
+							toolInvocationToken: this.request.toolInvocationToken,
+							input: { agent_id: agentId, agent_type: agentType, stop_hook_active: subagentStopHookActive } satisfies SubagentStopHookInput
+						}, this.token);
+						let shouldContinue = false;
+						let blockReason: string | undefined;
+						for (const result of stopHookResults) {
+							if (result.success === true) {
+								const output = result.output;
+								if (typeof output === 'object' && output !== null) {
+									const hookOutput = output as SubagentStopHookOutput;
+									this._logService.trace(`[DefaultIntentRequestHandler] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+									if (hookOutput.decision === 'block' && hookOutput.reason) {
+										this._logService.trace(`[DefaultIntentRequestHandler] SubagentStop hook blocked: ${hookOutput.reason}`);
+										shouldContinue = true;
+										blockReason = hookOutput.reason;
+										break;
+									}
+								}
+							} else if (result.success === false) {
+								const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+								this._logService.error(`[DefaultIntentRequestHandler] SubagentStop hook error: ${errorMessage}`);
+							}
+						}
+						if (shouldContinue && blockReason) {
+							this.stream.warning(l10n.t('Subagent stop hook: {0}', blockReason));
+							this._logService.info(`[DefaultIntentRequestHandler] SubagentStop hook blocked, continuing with reason: ${blockReason}`);
+							subagentStopHookActive = true;
+							continue;
+						}
+					} catch (error) {
+						this._logService.error('[DefaultIntentRequestHandler] Error executing SubagentStop hook', error);
+					}
+				}
+				break;
+			}
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);
