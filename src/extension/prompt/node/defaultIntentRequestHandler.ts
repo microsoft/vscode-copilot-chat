@@ -9,7 +9,7 @@ import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatRe
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
-import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -89,6 +89,7 @@ export class DefaultIntentRequestHandler {
 		private readonly chatTelemetryBuilder: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions = { maxToolCallIterations: 15 },
 		private readonly onPaused: Event<boolean>, // todo: use a PauseController instead
+		private readonly yieldRequested: (() => boolean) | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions private readonly options: IConversationOptions,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -320,6 +321,7 @@ export class DefaultIntentRequestHandler {
 				overrideRequestLocation: this.handlerOptions.overrideRequestLocation,
 				interactionContext: this.documentContext?.document.uri,
 				responseProcessor: typeof intentInvocation.processResponse === 'function' ? intentInvocation as IResponseProcessor : undefined,
+				yieldRequested: this.yieldRequested,
 			},
 			this.chatTelemetryBuilder,
 		));
@@ -345,7 +347,7 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: {} });
+				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
 			} catch (error) {
 				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
@@ -548,8 +550,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
+		@IChatHookService chatHookService: IChatHookService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
