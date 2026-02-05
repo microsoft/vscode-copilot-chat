@@ -631,8 +631,7 @@ export function createCopilotCLIToolInvocation(data: {
 	mcpToolName?: string | undefined;
 }, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
-		const mcpServer = l10n.t('MCP Server');
-		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
+		const toolName = getCLIToolFriendlyName(data);
 		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
@@ -700,6 +699,22 @@ const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string
 	'update_todo': [l10n.t('Update Todo'), formatUpdateTodoInvocation, formatUpdateTodoInvocationCompleted],
 };
 
+/**
+ * Get the user-friendly display name for a Copilot CLI tool.
+ * Falls back to the raw tool name if not found in the registry.
+ */
+export function getCLIToolFriendlyName(data: {
+	toolName: string;
+	mcpServerName?: string | undefined;
+	mcpToolName?: string | undefined;
+}): string {
+	if (Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
+		return ToolFriendlyNameAndHandlers[data.toolName as ToolCall['toolName']][0];
+	}
+	const mcpServer = l10n.t('MCP Server');
+	const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
+	return toolName;
+}
 
 function formatProgressToolInvocation(invocation: ChatToolInvocationPart, toolCall: ReportProgressTool): void {
 	const args = toolCall.arguments;

@@ -18,9 +18,9 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, ChatToolInvocationResult, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
+import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, getCLIToolFriendlyName, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
@@ -301,6 +301,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					} else if (responsePart instanceof ChatToolInvocationPart) {
+						// Stream the tool invocation immediately so the UI shows a spinner
+						this._stream?.beginToolInvocation(event.data.toolCallId, getCLIToolFriendlyName(event.data));
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -321,7 +324,18 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
 				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
-					this._stream?.push(responsePart);
+					if (responsePart instanceof ChatToolInvocationPart) {
+						// Complete the streaming tool invocation with result data
+						const result = new ChatToolInvocationResult();
+						result.invocationMessage = responsePart.invocationMessage;
+						result.pastTenseMessage = responsePart.pastTenseMessage;
+						result.toolSpecificData = responsePart.toolSpecificData;
+						result.isError = responsePart.isError;
+						result.isConfirmed = responsePart.isConfirmed;
+						this._stream?.completeToolInvocation(event.data.toolCallId, result);
+					} else {
+						this._stream?.push(responsePart);
+					}
 				}
 
 				const success = `success: ${event.data.success}`;

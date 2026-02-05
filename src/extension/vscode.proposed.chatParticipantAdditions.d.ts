@@ -282,7 +282,6 @@ declare module 'vscode' {
 
 	/**
 	 * Generic tool result data that displays input and output in collapsible sections.
-	 * Use plain strings for unformatted text or MarkdownString for formatted markdown.
 	 */
 	export interface ChatSimpleToolResultData {
 		/**
@@ -295,11 +294,26 @@ declare module 'vscode' {
 		output: string;
 	}
 
+
 	export interface ChatToolResourcesInvocationData {
 		/**
 		 * Array of file URIs or locations to display as a collapsible list
 		 */
 		values: Array<Uri | Location>;
+	}
+
+	/**
+	 * Result data for completing an externally-managed tool invocation.
+	 */
+	export class ChatToolInvocationResult {
+		invocationMessage?: string | MarkdownString;
+		pastTenseMessage?: string | MarkdownString;
+		isError?: boolean;
+		isConfirmed?: boolean;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatSimpleToolResultData | ChatToolResourcesInvocationData;
+		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
+
+		constructor();
 	}
 
 	export class ChatToolInvocationPart {
@@ -311,7 +325,7 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatToolResourcesInvocationData | ChatSimpleToolResultData;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatSimpleToolResultData | ChatToolResourcesInvocationData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 
@@ -587,6 +601,15 @@ declare module 'vscode' {
 		 * @param streamData New streaming data with updated partial arguments.
 		 */
 		updateToolInvocation(toolCallId: string, streamData: ChatToolInvocationStreamData): void;
+
+		/**
+		 * Complete a tool invocation that was started with {@link beginToolInvocation}.
+		 * This transitions the tool from its streaming/executing state to completed,
+		 * updating the UI with the final result data.
+		 * @param toolCallId The tool call ID that was passed to {@link beginToolInvocation}.
+		 * @param result The result data for the completed tool invocation.
+		 */
+		completeToolInvocation(toolCallId: string, result: ChatToolInvocationResult): void;
 
 		push(part: ExtendedChatResponsePart): void;
 

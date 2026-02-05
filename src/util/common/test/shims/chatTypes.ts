@@ -531,6 +531,17 @@ export interface ChatMcpToolInvocationData extends vscode.ChatMcpToolInvocationD
 	output: McpToolInvocationContentData[];
 }
 
+export class ChatToolInvocationResult {
+	invocationMessage?: string | vscode.MarkdownString;
+	pastTenseMessage?: string | vscode.MarkdownString;
+	isError?: boolean;
+	isConfirmed?: boolean;
+	toolSpecificData?: any;
+	presentation?: 'hidden' | 'hiddenAfterComplete';
+
+	constructor() { }
+}
+
 export class ChatToolInvocationPart {
 	toolName: string;
 	toolCallId: string;
