@@ -963,47 +963,65 @@ namespace TextDocuments {
 class NeighborFileModel implements vscode.Disposable {
 
 	private readonly disposables;
-	private readonly order: LRUCache<string, string>;
+	private readonly visible: LRUCache<string, string>;
+	private readonly notVisible: LRUCache<string, string>;
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.order = new LRUCache<string, string>({ max: 32 });
+		this.visible = new LRUCache<string, string>({ max: 12 });
+		this.notVisible = new LRUCache<string, string>({ max: 12 });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
 			}
 			const document = editor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}));
 		this.disposables.add(vscode.workspace.onDidCloseTextDocument((document: vscode.TextDocument) => {
-			this.order.delete(document.uri.toString());
+			const uri = document.uri.toString();
+			this.visible.delete(uri);
+			this.notVisible.delete(uri);
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
-					this.order.delete(tab.input.uri.toString());
+					const uri = tab.input.uri.toString();
+					const isVisible = this.visible.has(uri);
+					if (isVisible) {
+						this.visible.delete(uri);
+						this.notVisible.set(uri, tab.input.uri.fsPath);
+					}
 				}
 			}
 		}));
-		const openTextDocuments: Set<string> = new Set();
+		const textDocumentsToConsider: Map<string, vscode.Uri> = new Map();
 		for (const document of vscode.workspace.textDocuments) {
 			if (TextDocuments.consider(document)) {
-				openTextDocuments.add(document.uri.toString());
+				textDocumentsToConsider.set(document.uri.toString(), document.uri);
 			}
 		}
 		for (const group of vscode.window.tabGroups.all) {
 			for (const tab of group.tabs) {
-				if (tab.input instanceof vscode.TabInputText && openTextDocuments.has(tab.input.uri.toString())) {
-					this.order.set(tab.input.uri.toString(), tab.input.uri.fsPath);
+				const uri = tab.input instanceof vscode.TabInputText ? tab.input.uri : undefined;
+				if (uri !== undefined && textDocumentsToConsider.has(uri.toString())) {
+					this.visible.set(uri.toString(), uri.fsPath);
+					textDocumentsToConsider.delete(uri.toString());
 				}
 			}
+		}
+		for (const [key, uri] of textDocumentsToConsider.entries()) {
+			this.notVisible.set(key, uri.fsPath);
 		}
 		if (vscode.window.activeTextEditor !== undefined) {
 			const document = vscode.window.activeTextEditor.document;
 			if (TextDocuments.consider(document)) {
-				this.order.set(document.uri.toString(), document.uri.fsPath);
+				const uri = document.uri.toString();
+				this.visible.set(uri, document.uri.fsPath);
+				this.notVisible.delete(uri);
 			}
 		}
 	}
@@ -1011,13 +1029,21 @@ class NeighborFileModel implements vscode.Disposable {
 	public getNeighborFiles(currentDocument: vscode.TextDocument): string[] {
 		const result: string[] = [];
 		const currentUri = currentDocument.uri.toString();
-		for (const [key, value] of this.order.entries()) {
+		for (const [key, value] of this.visible.entries()) {
 			if (key === currentUri) {
 				continue;
 			}
 			result.push(value);
-			if (result.length >= 10) {
-				break;
+		}
+		if (result.length < 12) {
+			for (const [key, value] of this.notVisible.entries()) {
+				if (key === currentUri) {
+					continue;
+				}
+				result.push(value);
+				if (result.length >= 12) {
+					break;
+				}
 			}
 		}
 		return result;
