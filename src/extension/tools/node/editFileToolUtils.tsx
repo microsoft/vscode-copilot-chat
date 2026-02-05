@@ -800,6 +800,18 @@ export const enum ConfirmationCheckResult {
  */
 export function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
+	const hookFilesLocations = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.hookFilesLocations');
+
+	// Convert hook files locations to require confirmation (isApproved: false)
+	const hookFilesPatterns: Record<string, boolean> = {};
+	if (hookFilesLocations) {
+		for (const pattern of Object.keys(hookFilesLocations)) {
+			// Skip home directory patterns as they are handled separately
+			if (!pattern.startsWith('~/')) {
+				hookFilesPatterns[pattern] = false;
+			}
+		}
+	}
 
 	const checks = new ResourceMap<{ patterns: { pattern: glob.ParsedPattern; isApproved: boolean }[]; ignoreCasing: boolean }>();
 	const getPatterns = (wf: URI) => {
@@ -810,7 +822,7 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 
 		const ignoreCasing = extUriBiasedIgnorePathCase.ignorePathCasing(wf);
 		arr = { patterns: [], ignoreCasing };
-		for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
+		for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS, hookFilesPatterns]) {
 			if (obj) {
 				for (const [pattern, isApproved] of Object.entries(obj)) {
 					arr.patterns.push({ pattern: glob.parse({ base: wf.fsPath, pattern: ignoreCasing ? pattern.toLowerCase() : pattern }), isApproved });
