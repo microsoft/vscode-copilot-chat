@@ -888,7 +888,21 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 	};
 }
 
-export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], allowedUris: ResourceSet | undefined, detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>): Promise<PreparedToolInvocation> {
+export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], allowedUris: ResourceSet | undefined, detailMessage?: (urisNeedingConfirmation: readonly URI[]) => Promise<string>, forceConfirmationReason?: string): Promise<PreparedToolInvocation> {
+	// If forceConfirmationReason is provided, require confirmation for all URIs
+	if (forceConfirmationReason) {
+		const fileParts = uris.map(uri => formatUriForFileWidget(uri)).join(', ');
+		const details = detailMessage ? await detailMessage(uris) : undefined;
+
+		return {
+			confirmationMessages: {
+				title: t('Allow edits?'),
+				message: t`The model wants to edit files (${fileParts}). ${forceConfirmationReason}` + ' ' + t`Do you want to allow this?` + (details ? '\n\n' + details : ''),
+			},
+			presentation: 'hiddenAfterComplete'
+		};
+	}
+
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
 	const needsConfirmation = (await Promise.all(uris
 		.map(async uri => ({ uri, reason: await checker(uri) }))

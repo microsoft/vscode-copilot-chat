@@ -54,6 +54,7 @@ export class CreateDirectoryTool implements ICopilotTool<ICreateDirectoryParams>
 			async () => {
 				return 'Creating the directory:\n\n' + createFencedCodeBlock('plaintext', uri.fsPath);
 			},
+			options.forceConfirmationReason
 		);
 
 		return {
