@@ -405,10 +405,14 @@ suite('doReview', () => {
 			_serviceBrand: undefined;
 			selectionToReturn: Selection | undefined = undefined;
 			shouldThrowCancellation = false;
+			errorToThrow: Error | undefined = undefined;
 
 			async selectEnclosingScope(_editor: TextEditor, _options?: { reason?: string; includeBlocks?: boolean }): Promise<Selection | undefined> {
 				if (this.shouldThrowCancellation) {
 					throw new CancellationError();
+				}
+				if (this.errorToThrow) {
+					throw this.errorToThrow;
 				}
 				return this.selectionToReturn;
 			}
@@ -534,6 +538,45 @@ suite('doReview', () => {
 			const result = await session.review('selection', ProgressLocation.Notification);
 
 			assert.strictEqual(result, undefined);
+		});
+
+		test('proceeds with empty selection when scopeSelector throws non-cancellation error (fall-through behavior)', async () => {
+			// This test documents the preserved original behavior where non-cancellation errors
+			// are silently ignored and the review proceeds with whatever selection exists.
+			// See: https://github.com/microsoft/vscode/issues/276240
+			const mockAuth = new MockAuthService();
+			mockAuth.copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'test', code_review_enabled: true }));
+			mockAuth.tokenToReturn = mockAuth.copilotToken;
+
+			const emptySelection = { isEmpty: true, start: { line: 0 }, end: { line: 0 } };
+			const mockEditor = {
+				document: { uri: URI.file('/test/file.ts'), getText: () => 'code' },
+				selection: emptySelection
+			} as unknown as TextEditor;
+
+			const mockTabs = new MockTabsAndEditorsService();
+			mockTabs.activeTextEditor = mockEditor;
+
+			const mockScope = new MockScopeSelector();
+			// Throw a non-cancellation error (e.g., a symbol provider error)
+			mockScope.errorToThrow = new Error('Symbol provider failed');
+
+			serviceCollection.define(IAuthenticationService, mockAuth as unknown as IAuthenticationService);
+			serviceCollection.define(ITabsAndEditorsService, mockTabs as unknown as ITabsAndEditorsService);
+			serviceCollection.define(IScopeSelector, mockScope as unknown as IScopeSelector);
+
+			const accessor = serviceCollection.createTestingAccessor();
+			instantiationService = accessor.get(IInstantiationService);
+
+			const session = instantiationService.createInstance(ReviewSession);
+
+			// The review should proceed despite the error, using the empty selection
+			// This is the fall-through behavior from the original code
+			const result = await session.review('selection', ProgressLocation.Notification);
+
+			// Result should NOT be undefined - the error is silently ignored and review proceeds
+			assert.ok(result !== undefined, 'Review should proceed when scopeSelector throws non-cancellation error');
+			// The result type depends on what happens with the empty selection in the review
 		});
 
 		test('uses existing selection when not empty for selection group', async () => {
