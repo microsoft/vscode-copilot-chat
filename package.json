@@ -556,6 +556,51 @@
 				}
 			},
 			{
+				"name": "copilot_vscodeCommitMemory",
+				"toolReferenceName": "vscode_commit_memory",
+				"displayName": "Commit Memory to Workspace",
+				"userDescription": "Commit discovered memory to local workspace for integration into instruction files",
+				"modelDescription": "Commit a discovered memory or fact to the .github/pending-memories/ directory as a JSON file. This memory will be stored locally where it can be reviewed and integrated into instruction files, hooks, skills, or other configuration with LLM assistance. Use this tool when you discover important facts about the codebase that should be documented for future reference. The memory will be written to .github/pending-memories/memory-[timestamp]-[id].json.",
+				"canBeReferencedInPrompt": true,
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"subject": {
+							"type": "string",
+							"description": "The topic to which this memory relates. 1-2 words. Examples: naming conventions, testing practices, documentation, logging, authentication, sanitization, error handling."
+						},
+						"fact": {
+							"type": "string",
+							"description": "A clear and short description of a fact about the codebase or a convention used in the codebase. Must be less than 200 characters. Examples: Use JWT for authentication. Follow PEP 257 docstring conventions. Use single quotes for strings in Python. Use Winston for logging."
+						},
+						"citations": {
+							"type": "string",
+							"description": "The source of this fact, such as a file and line number in the codebase (e.g., path/file.go:123). If the convention is not explicitly stated in the codebase, you can point at several examples that illustrate it, selecting the most diverse set of examples you can find (e.g. from multiple files or contexts). If the fact is based on user input, the citations should be User input: followed by the contents of the input."
+						},
+						"reason": {
+							"type": "string",
+							"description": "A clear and detailed explanation of the reason behind storing this fact. Must be at least 2-3 sentences long, and include which future tasks this fact will be useful for and why it is important to remember this fact."
+						},
+						"category": {
+							"type": "string",
+							"description": "The type of memory being stored. This can be bootstrap_and_build (info about how to bootstrap and build the project), user_preferences (preferences of the user, such as coding style, tabs vs. spaces, favorite libraries, etc.), general (file independent facts), or file_specific (information about a specific file in the codebase)."
+						},
+						"suggestedContext": {
+							"type": "string",
+							"description": "Optional. Suggested file, hook, skill, or instruction file where this memory should be integrated. Examples: .github/instructions/typescript.instructions.md, .github/skills/testing/SKILL.md, .claude/hooks/pre-tool-use.yaml"
+						}
+					},
+					"required": [
+						"subject",
+						"fact",
+						"citations",
+						"reason",
+						"category"
+					]
+				}
+			},
+			{
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
