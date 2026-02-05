@@ -351,3 +351,31 @@ This extension is a complex, multi-layered system that provides comprehensive AI
   - Look for existing `I*Service` interfaces before reaching for raw APIs
   - **Why**: Enables unit testing without VS Code host, supports simulation tests, provides cross-platform abstractions (Node vs web), and adds features like caching and size limits
 - Always use the URI type instead of using string file paths. There are many helpers available for working with URIs.
+
+## Memory and Documentation
+
+### vscode_commit_memory Tool
+When you discover important facts, patterns, or conventions about this codebase that should be documented for future reference, use the `vscode_commit_memory` tool to commit them to `.github/pending-memories/` as JSON files. These memories can then be reviewed and integrated into:
+- Instruction files (`.github/instructions/*.instructions.md`)
+- Agent configurations (`.github/agents/*.agent.md`)
+- Skills (`.github/skills/*/SKILL.md`)
+- Hooks (`.claude/hooks/*.yaml`)
+
+**When to use vscode_commit_memory:**
+- Discovered important build, test, or bootstrap commands
+- Found coding style conventions or preferences (tabs vs spaces, naming patterns, etc.)
+- Identified architecture patterns or best practices
+- Learned about file-specific or component-specific conventions
+- User provides valuable context that should be remembered
+
+**Memory categories:**
+- `bootstrap_and_build`: Build commands, test commands, project setup
+- `user_preferences`: Coding style, library choices, conventions
+- `general`: File-independent facts about the codebase
+- `file_specific`: Information about specific files or components
+
+Example usage:
+```
+Use vscode_commit_memory when you learn that "npm run watch" starts the watch tasks,
+or that the codebase uses tabs for indentation, or any other important fact worth documenting.
+```
