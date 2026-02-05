@@ -162,7 +162,7 @@ export class EditCodeIntent implements IIntent {
 		}));
 	}
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>, yieldRequested: () => void): Promise<vscode.ChatResult> {
 		const applyEdits = request.acceptedConfirmationData?.filter(isEditsOkayConfirmation);
 		if (applyEdits?.length) {
 			await this._handleApplyConfirmedEdits(applyEdits.flatMap(e => ({ ...e.edits, chatRequestId: e.chatRequestId, chatRequestModel: request.model.id })), stream, token);
@@ -170,7 +170,7 @@ export class EditCodeIntent implements IIntent {
 		}
 
 		({ conversation, request } = await this._handleCodesearch(conversation, request, location, stream, token, documentContext, chatTelemetry));
-		return this.instantiationService.createInstance(EditIntentRequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry, this.getIntentHandlerOptions(request), onPaused).getResult();
+		return this.instantiationService.createInstance(EditIntentRequestHandler, this, conversation, request, stream, token, documentContext, location, chatTelemetry, this.getIntentHandlerOptions(request), onPaused, yieldRequested).getResult();
 	}
 
 	protected getIntentHandlerOptions(_request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
@@ -205,6 +205,7 @@ class EditIntentRequestHandler {
 		private readonly chatTelemetry: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions | undefined,
 		private readonly onPaused: Event<boolean>,
+		private readonly yieldRequested: () => boolean,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEditLogService private readonly editLogService: IEditLogService,
@@ -223,6 +224,7 @@ class EditIntentRequestHandler {
 			this.chatTelemetry,
 			this.handlerOptions,
 			this.onPaused,
+			this.yieldRequested,
 		);
 		const result = await actual.getResult();
 
