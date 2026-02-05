@@ -20,7 +20,6 @@ import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
 import { isLocation, isSymbolInformation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -73,7 +72,6 @@ export class ChatParticipantRequestHandler {
 		stream: ChatResponseStream,
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
-		private readonly onPaused: Event<boolean>,
 		private readonly yieldRequested: () => boolean,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -236,9 +234,9 @@ export class ChatParticipantRequestHandler {
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {
-					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.onPaused, this.yieldRequested);
+					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.yieldRequested);
 				} else {
-					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.onPaused, this.yieldRequested);
+					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.yieldRequested);
 					chatResult = intentHandler.getResult();
 				}
 

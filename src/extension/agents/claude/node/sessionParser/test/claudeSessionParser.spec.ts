@@ -557,16 +557,6 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Hello'); // Falls back to user message content
 		});
 
-		it('should use file mtime as fallback timestamp', () => {
-			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
-			const fileMtime = new Date('2026-02-01T12:00:00.000Z');
-
-			const metadata = extractSessionMetadata(content, 'session-1', fileMtime);
-
-			expect(metadata).not.toBeNull();
-			expect(metadata!.timestamp).toEqual(fileMtime);
-		});
-
 		it('should return null for empty content', () => {
 			const metadata = extractSessionMetadata('', 'session-1', new Date());
 
@@ -589,6 +579,39 @@ describe('claudeSessionParser', () => {
 
 			expect(metadata).not.toBeNull();
 			expect(metadata!.label).toBe('Actual message');
+		});
+
+		it('should extract firstMessageTimestamp and lastMessageTimestamp from single message', () => {
+			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+		});
+
+		it('should extract different firstMessageTimestamp and lastMessageTimestamp from multiple messages', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":"Follow up"}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:37:30.000Z'));
+		});
+
+		it('should return null when only summary exists (no messages)', () => {
+			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).toBeNull();
 		});
 	});
 
@@ -672,17 +695,6 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Hello');
 		});
 
-		it('should use file mtime as fallback timestamp', async () => {
-			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
-			const filePath = createTempFile(content);
-			const fileMtime = new Date('2026-02-01T12:00:00.000Z');
-
-			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', fileMtime);
-
-			expect(metadata).not.toBeNull();
-			expect(metadata!.timestamp).toEqual(fileMtime);
-		});
-
 		it('should return null for empty content', async () => {
 			const filePath = createTempFile('');
 
@@ -711,23 +723,52 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Actual message');
 		});
 
-		it('should stop reading early when metadata is found', async () => {
-			// Create a file where metadata is at the beginning, followed by lots of extra data
+		it('should extract firstMessageTimestamp and lastMessageTimestamp from single message', async () => {
+			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+		});
+
+		it('should extract different firstMessageTimestamp and lastMessageTimestamp from multiple messages', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":"Follow up"}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:37:30.000Z'));
+		});
+
+		it('should read all messages to get lastMessageTimestamp', async () => {
+			// Create a file where summary is early but last message timestamp is at the end
 			const lines = [
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
 				'{"type":"summary","summary":"Test summary","leafUuid":"uuid-1"}',
 			];
-			// Add many more lines that shouldn't need to be read
-			for (let i = 0; i < 1000; i++) {
-				lines.push(`{"type":"assistant","uuid":"uuid-${i + 2}","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":"Response ${i}"}}`);
+			// Add more messages - the last one should be captured
+			for (let i = 0; i < 10; i++) {
+				lines.push(`{"type":"assistant","uuid":"uuid-${i + 2}","sessionId":"session-1","timestamp":"2026-01-31T01:0${i}:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}`);
 			}
 			const filePath = createTempFile(lines.join('\n'));
 
 			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
-			// Should still get correct metadata
 			expect(metadata).not.toBeNull();
 			expect(metadata!.label).toBe('Test summary');
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			// Last message is at index 9, so timestamp is 01:09:00
+			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T01:09:00.000Z'));
 		});
 
 		it('should handle cancellation via AbortSignal', async () => {

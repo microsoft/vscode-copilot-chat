@@ -25,7 +25,6 @@ import { toErrorMessage } from '../../../util/common/errorMessage';
 import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Event } from '../../../util/vs/base/common/event';
 import { ResourceSet } from '../../../util/vs/base/common/map';
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { isFalsyOrWhitespace } from '../../../util/vs/base/common/strings';
@@ -103,7 +102,7 @@ export class InlineChatIntent implements IIntent {
 		this._progressMessages = this._instantiationService.createInstance(InlineChatProgressMessages);
 	}
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, _agentName: string, _location: ChatLocation, chatTelemetry: ChatTelemetryBuilder): Promise<vscode.ChatResult> {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
 		assertType(documentContext);
@@ -130,7 +129,7 @@ export class InlineChatIntent implements IIntent {
 
 		if (!enableV2) {
 			// OLD world
-			return this._handleRequestWithOldWorld(conversation, request, stream, token, documentContext, chatTelemetry, onPaused);
+			return this._handleRequestWithOldWorld(conversation, request, stream, token, documentContext, chatTelemetry);
 		}
 
 		return this._handleRequestWithNewWorld(endpoint, conversation, request, stream, token, documentContext, chatTelemetry);
@@ -138,7 +137,7 @@ export class InlineChatIntent implements IIntent {
 
 	// --- OLD world
 
-	private async _handleRequestWithOldWorld(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+	private async _handleRequestWithOldWorld(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext, chatTelemetry: ChatTelemetryBuilder): Promise<vscode.ChatResult> {
 		// OLD world
 		let didEmitEdits = false;
 		stream = ChatResponseStreamImpl.spy(stream, part => {
@@ -153,7 +152,7 @@ export class InlineChatIntent implements IIntent {
 			request = { ...request, prompt: intent.description };
 		}
 
-		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, onPaused, undefined);
+		const handler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, conversation, request, stream, token, documentContext, ChatLocation.Editor, chatTelemetry, undefined, undefined);
 		const result = await handler.getResult();
 
 		if (!didEmitEdits && !result.errorDetails) {
