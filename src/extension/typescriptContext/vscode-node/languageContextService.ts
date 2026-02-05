@@ -962,7 +962,7 @@ namespace TextDocuments {
 
 class NeighborFileModel implements vscode.Disposable {
 
-	private static readonly MAX_CACHE_SIZE = 12;
+	private static readonly MAX_ITEMS = 12;
 
 	private readonly disposables;
 	private readonly visible: LRUCache<string, string>;
@@ -970,8 +970,8 @@ class NeighborFileModel implements vscode.Disposable {
 
 	constructor() {
 		this.disposables = new DisposableStore();
-		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_CACHE_SIZE });
-		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_CACHE_SIZE });
+		this.visible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
+		this.notVisible = new LRUCache<string, string>({ max: NeighborFileModel.MAX_ITEMS });
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor: vscode.TextEditor | undefined) => {
 			if (editor === undefined) {
 				return;
@@ -1041,13 +1041,13 @@ class NeighborFileModel implements vscode.Disposable {
 			}
 			result.push(value);
 		}
-		if (result.length < 12) {
+		if (result.length < NeighborFileModel.MAX_ITEMS) {
 			for (const [key, value] of this.notVisible.entries()) {
 				if (key === currentUri) {
 					continue;
 				}
 				result.push(value);
-				if (result.length >= 12) {
+				if (result.length >= NeighborFileModel.MAX_ITEMS) {
 					break;
 				}
 			}
