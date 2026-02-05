@@ -107,7 +107,7 @@ export class OllamaLMProvider extends AbstractOpenAICompatibleLMProvider<OllamaC
 				};
 			}
 
-			return byokKnownModelsToAPIInfo(this._name, models).map(model => ({
+			return byokKnownModelsToAPIInfo(this._name, knownModels).map(model => ({
 				...model,
 				url: ollamaBaseUrl
 			}));
