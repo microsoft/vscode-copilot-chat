@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260124",
+		"vscode": "^1.110.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -90,7 +90,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatHooks@1",
+		"chatHooks@2",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -4290,6 +4290,14 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.searchSubagent.useAgenticProxy": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.searchSubagent.useAgenticProxy%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.searchSubagent.model": {
 						"type": "string",
 						"default": "",
@@ -5669,8 +5677,8 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.2.5",
-		"@anthropic-ai/sdk": "^0.71.2",
+		"@anthropic-ai/claude-agent-sdk": "0.2.31",
+		"@anthropic-ai/sdk": "^0.72.1",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.400",
 		"@google/genai": "^1.22.0",

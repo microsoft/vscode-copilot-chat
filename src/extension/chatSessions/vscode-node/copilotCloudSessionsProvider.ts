@@ -653,17 +653,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 			try {
 				const items = await this.getRepositoriesOptionItems(repoIds);
-				optionGroups.push({
-					id: REPOSITORIES_OPTION_GROUP_ID,
-					name: vscode.l10n.t('Repository'),
-					description: vscode.l10n.t('Select repository'),
-					icon: new vscode.ThemeIcon('repo'),
-					items,
-					commands: [{
-						command: OPEN_REPOSITORY_COMMAND_ID,
-						title: vscode.l10n.t('Browse repositories...'),
-					}]
-				});
+				if (items.length !== 1) {
+					optionGroups.push({
+						id: REPOSITORIES_OPTION_GROUP_ID,
+						name: vscode.l10n.t('Repository'),
+						description: vscode.l10n.t('Select repository'),
+						icon: new vscode.ThemeIcon('repo'),
+						items,
+						commands: [{
+							command: OPEN_REPOSITORY_COMMAND_ID,
+							title: vscode.l10n.t('Browse repositories...'),
+						}]
+					});
+				}
 
 			} catch (error) {
 				this.logService.error(`Error fetching repositories: ${error}`);
@@ -750,51 +752,48 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 	private async getRepositoriesOptionItems(repoIds?: GithubRepoId[], fetchAll: boolean = false): Promise<vscode.ChatSessionProviderOptionItem[]> {
 		const items: vscode.ChatSessionProviderOptionItem[] = [];
-		// Only get options for empty workspace or multi-root workspaces
-		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0 || vscode.workspace.workspaceFolders.length > 1) {
-			if (!fetchAll) {
-				if (repoIds && repoIds.length > 0) {
-					repoIds.forEach((repoId, index) => {
+		if (!fetchAll) {
+			if (repoIds && repoIds.length > 0) {
+				repoIds.forEach((repoId, index) => {
+					items.push({
+						id: `${repoId.org}/${repoId.repo}`,
+						name: `${repoId.org}/${repoId.repo}`,
+						default: index === 0,
+						icon: new vscode.ThemeIcon('repo'),
+					});
+				});
+			} else {
+				// Fetch repos from recent push events (repos user has recently committed to)
+				try {
+					const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
+					for (const repo of recentlyCommittedRepos) {
+						const nwo = `${repo.owner}/${repo.name}`;
 						items.push({
-							id: `${repoId.org}/${repoId.repo}`,
-							name: `${repoId.org}/${repoId.repo}`,
-							default: index === 0,
+							id: nwo,
+							name: nwo,
 							icon: new vscode.ThemeIcon('repo'),
 						});
-					});
-				} else {
-					// Fetch repos from recent push events (repos user has recently committed to)
-					try {
-						const recentlyCommittedRepos = await this._octoKitService.getRecentlyCommittedRepositories({ createIfNone: false });
-						for (const repo of recentlyCommittedRepos) {
-							const nwo = `${repo.owner}/${repo.name}`;
-							items.push({
-								id: nwo,
-								name: nwo,
-								icon: new vscode.ThemeIcon('repo'),
-							});
-						}
-					} catch (error) {
-						this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
 					}
+				} catch (error) {
+					this.logService.trace(`Failed to fetch recently committed repos: ${error}`);
+				}
 
-					// Add user-selected repos that aren't already in the list
-					const userSelectedRepos = this.getUserSelectedRepositories();
-					const existingIds = new Set(items.map(item => item.id));
-					for (const repo of userSelectedRepos) {
-						if (!existingIds.has(repo.name)) {
-							items.push({
-								id: repo.name,
-								name: repo.name,
-								icon: new vscode.ThemeIcon('repo'),
-							});
-						}
+				// Add user-selected repos that aren't already in the list
+				const userSelectedRepos = this.getUserSelectedRepositories();
+				const existingIds = new Set(items.map(item => item.id));
+				for (const repo of userSelectedRepos) {
+					if (!existingIds.has(repo.name)) {
+						items.push({
+							id: repo.name,
+							name: repo.name,
+							icon: new vscode.ThemeIcon('repo'),
+						});
 					}
 				}
-			} else {
-				const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
-				items.push(...fetchedItems);
 			}
+		} else {
+			const fetchedItems = await this.fetchAllRepositoriesFromGitHub();
+			items.push(...fetchedItems);
 		}
 		return items;
 	}

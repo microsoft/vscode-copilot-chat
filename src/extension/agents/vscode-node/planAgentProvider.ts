@@ -33,7 +33,7 @@ interface PlanAgentConfig {
 	tools: string[];
 	model?: string;
 	target?: string;
-	infer?: string;
+	disableModelInvocation?: boolean;
 	agents?: string[];
 	handoffs: PlanAgentHandoff[];
 	body: string;
@@ -48,7 +48,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
-	infer: 'user',
+	disableModelInvocation: true,
 	agents: [],
 	tools: [
 		'agent',
@@ -84,8 +84,8 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	if (config.target) {
 		lines.push(`target: ${config.target}`);
 	}
-	if (config.infer) {
-		lines.push(`infer: ${config.infer}`);
+	if (config.disableModelInvocation) {
+		lines.push(`disable-model-invocation: true`);
 	}
 
 	// Tools array - flow style for readability

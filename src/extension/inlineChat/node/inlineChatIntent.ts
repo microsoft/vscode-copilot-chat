@@ -262,7 +262,7 @@ export class InlineChatIntent implements IIntent {
 		));
 
 		if (result.lastResponse.type !== ChatFetchResponseType.Success) {
-			const details = getErrorDetailsFromChatFetchError(result.lastResponse, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
+			const details = getErrorDetailsFromChatFetchError(result.lastResponse, (await this._authenticationService.getCopilotToken()).copilotPlan);
 			return {
 				errorDetails: {
 					message: details.message,

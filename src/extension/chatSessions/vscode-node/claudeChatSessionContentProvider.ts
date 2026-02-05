@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PermissionMode, SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import Anthropic from '@anthropic-ai/sdk';
+import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -14,7 +13,8 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
-import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
+import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, StoredMessage, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
@@ -25,9 +25,27 @@ const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 export const UNAVAILABLE_MODEL_ID = '__unavailable__';
 
 interface ToolContext {
-	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
+	unprocessedToolCalls: Map<string, ContentBlock>;
 	pendingToolInvocations: Map<string, vscode.ChatToolInvocationPart>;
 }
+
+// #region Type Guards
+function isTextBlock(block: ContentBlock): block is TextBlock {
+	return block.type === 'text';
+}
+
+function isThinkingBlock(block: ContentBlock): block is ThinkingBlock {
+	return block.type === 'thinking';
+}
+
+function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
+	return block.type === 'tool_use';
+}
+
+function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
+	return block.type === 'tool_result';
+}
+// #endregion
 
 export class ClaudeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
@@ -197,9 +215,9 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		};
 	}
 
-	private _userMessageToRequest(message: Anthropic.MessageParam, toolContext: ToolContext): vscode.ChatRequestTurn2 | undefined {
-		const textContent = this._extractTextContent(message.content);
-		this._processToolResults(message.content, toolContext);
+	private _userMessageToRequest(content: string | ContentBlock[], toolContext: ToolContext): vscode.ChatRequestTurn2 | undefined {
+		const textContent = this._extractTextContent(content);
+		this._processToolResults(content, toolContext);
 
 		// If the user message only contains tool results and no visible text, don't create a request turn
 		if (!textContent.trim()) {
@@ -217,13 +235,13 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		return new ChatRequestTurn2(textContent, undefined, [], '', [], undefined);
 	}
 
-	private _assistantMessageToResponse(message: SDKAssistantMessage['message'], toolContext: ToolContext): vscode.ChatResponseTurn2 {
+	private _assistantMessageToResponse(message: AssistantMessageContent, toolContext: ToolContext): vscode.ChatResponseTurn2 {
 		const responseParts = coalesce(message.content.map(block => {
-			if (block.type === 'text') {
+			if (isTextBlock(block)) {
 				return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(block.text));
-			} else if (block.type === 'thinking') {
+			} else if (isThinkingBlock(block)) {
 				return new vscode.ChatResponseThinkingProgressPart(block.thinking);
-			} else if (block.type === 'tool_use') {
+			} else if (isToolUseBlock(block)) {
 				toolContext.unprocessedToolCalls.set(block.id, block);
 				const toolInvocation = createFormattedToolInvocation(block);
 				if (toolInvocation) {
@@ -248,42 +266,41 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return [];
 		}
 
-		return coalesce(existingSession.messages.map((m: SDKMessage) => {
-			if (m.type === 'user') {
-				return this._userMessageToRequest(m.message, toolContext);
-			} else if (m.type === 'assistant') {
+		return coalesce(existingSession.messages.map((m: StoredMessage) => {
+			if (m.type === 'user' && m.message.role === 'user') {
+				return this._userMessageToRequest(m.message.content, toolContext);
+			} else if (m.type === 'assistant' && m.message.role === 'assistant') {
 				return this._assistantMessageToResponse(m.message, toolContext);
 			}
 		}));
 	}
 
-	private _extractTextContent(content: string | Anthropic.ContentBlockParam[]): string {
+	private _extractTextContent(content: string | ContentBlock[]): string {
 		if (typeof content === 'string') {
 			return content;
 		}
 
 		return content
-			.filter((block): block is Anthropic.TextBlockParam => block.type === 'text')
+			.filter(isTextBlock)
 			.map(block => block.text)
 			.join('');
 	}
 
-	private _processToolResults(content: string | Anthropic.ContentBlockParam[], toolContext: ToolContext): void {
+	private _processToolResults(content: string | ContentBlock[], toolContext: ToolContext): void {
 		if (typeof content === 'string') {
 			return;
 		}
 
 		for (const block of content) {
-			if (block.type === 'tool_result') {
-				const toolResultBlock = block as Anthropic.ToolResultBlockParam;
-				const toolUse = toolContext.unprocessedToolCalls.get(toolResultBlock.tool_use_id);
+			if (isToolResultBlock(block)) {
+				const toolUse = toolContext.unprocessedToolCalls.get(block.tool_use_id);
 				if (toolUse) {
-					toolContext.unprocessedToolCalls.delete(toolResultBlock.tool_use_id);
-					const pendingInvocation = toolContext.pendingToolInvocations.get(toolResultBlock.tool_use_id);
+					toolContext.unprocessedToolCalls.delete(block.tool_use_id);
+					const pendingInvocation = toolContext.pendingToolInvocations.get(block.tool_use_id);
 					if (pendingInvocation) {
 						pendingInvocation.isConfirmed = true;
-						pendingInvocation.isError = toolResultBlock.is_error;
-						toolContext.pendingToolInvocations.delete(toolResultBlock.tool_use_id);
+						pendingInvocation.isError = block.is_error;
+						toolContext.pendingToolInvocations.delete(block.tool_use_id);
 					}
 				}
 			}

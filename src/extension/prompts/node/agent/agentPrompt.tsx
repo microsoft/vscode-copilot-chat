@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, Chunk, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -35,6 +35,7 @@ import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables, UserQuery } from '../panel/chatVariables';
 import { CustomInstructions } from '../panel/customInstructions';
+import { HistoricalImage } from '../panel/image';
 import { NotebookFormat, NotebookReminderInstructions } from '../panel/notebookEditCodePrompt';
 import { NotebookSummaryChange } from '../panel/notebookSummaryChangePrompt';
 import { UserPreferences } from '../panel/preferences';
@@ -276,6 +277,8 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
 	readonly sessionResource?: string;
+	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
+	readonly hasStopHookQuery?: boolean;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -303,6 +306,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		chatVariables: agentProps.promptContext.chatVariables,
 		enableCacheBreakpoints: agentProps.enableCacheBreakpoints,
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
+		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -417,7 +421,7 @@ export function renderedMessageToTsxChildren(message: string | readonly Raw.Chat
 		if (part.type === Raw.ChatCompletionContentPartKind.Text) {
 			return part.text;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.Image) {
-			return <Image src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
+			return <HistoricalImage src={part.imageUrl.url} detail={part.imageUrl.detail} mimeType={part.imageUrl.mediaType} />;
 		} else if (part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 			return enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />;
 		}
