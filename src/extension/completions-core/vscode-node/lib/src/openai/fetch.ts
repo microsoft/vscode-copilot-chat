@@ -843,7 +843,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			meanAlternativeLogProb: undefined,
 		});
 
-		const completions: { accumulator: CompletionAccumulator; isFinished: boolean }[] = [];
+		const completions: { accumulator: CompletionAccumulator; isFinished: boolean; yielded: boolean }[] = [];
 
 		try {
 			for await (const chunk of resp.stream) {
@@ -855,7 +855,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					const chunkIdx = chunk.choices[i].index;
 					let completion = completions[chunkIdx];
 					if (completion === undefined) {
-						completion = { accumulator: new CompletionAccumulator(), isFinished: false };
+						completion = { accumulator: new CompletionAccumulator(), isFinished: false, yielded: false };
 						completions[chunkIdx] = completion;
 					} else if (completion.isFinished) {
 						// already finished, skip
@@ -895,10 +895,19 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 						}
 					}
 
-					// handle all fields of finishedCb
-					if (hasFinishReason ||
-						(solutionDecision !== undefined &&
-							(typeof solutionDecision === 'number' || solutionDecision.yieldSolution))
+					// Determine whether to yield based on finish_reason or callback decision.
+					// When finish_reason is present, force yield & stop streaming (matching SSEProcessor).
+					if (hasFinishReason) {
+						if (solutionDecision === undefined || typeof solutionDecision !== 'object') {
+							solutionDecision = { yieldSolution: true, continueStreaming: false };
+						} else {
+							solutionDecision.yieldSolution = true;
+							solutionDecision.continueStreaming = false;
+						}
+					}
+
+					if (solutionDecision !== undefined &&
+						(typeof solutionDecision === 'number' || solutionDecision.yieldSolution)
 					) {
 						// mark as finished
 						const isFinished = hasFinishReason || typeof solutionDecision === 'number' || (solutionDecision !== undefined && !solutionDecision.continueStreaming);
@@ -918,14 +927,23 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 							? completion.accumulator.responseSoFar
 							: completion.accumulator.responseSoFar.slice(0, finishOffset);
 
-						const apiChoice = createAPIChoice(
-							chunkIdx,
-							completionText,
-							completion.accumulator.finishReason ?? 'stop',
-							completion.accumulator,
-							finishOffset !== undefined,
-						);
-						yield apiChoice;
+						// Guard against double-yielding the same choice, matching
+						// SSEProcessor's `solution.yielded` flag. Without this,
+						// StreamedCompletionSplitter can yield the first segment
+						// (via yieldSolution+continueStreaming), and then
+						// finish_reason forces a second yield of the full text,
+						// which ends up cached as a spurious ghost text suggestion.
+						if (!completion.yielded) {
+							completion.yielded = true;
+							const apiChoice = createAPIChoice(
+								chunkIdx,
+								completionText,
+								completion.accumulator.finishReason ?? 'stop',
+								completion.accumulator,
+								finishOffset !== undefined,
+							);
+							yield apiChoice;
+						}
 
 						if (cancel?.isCancellationRequested) {
 							return;
@@ -958,6 +976,12 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					if (cancel?.isCancellationRequested) {
 						return;
 					}
+
+					// Skip if already yielded (matches SSEProcessor.finishSolutions)
+					if (completion.yielded) {
+						continue;
+					}
+					completion.yielded = true;
 
 					const apiChoice = createAPIChoice(
 						chunkIdx,
