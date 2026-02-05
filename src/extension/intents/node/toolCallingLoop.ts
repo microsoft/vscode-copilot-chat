@@ -24,7 +24,7 @@ import { computePromptTokenDetails } from '../../../platform/tokenizer/node/prom
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -44,7 +44,6 @@ import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/p
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
-import { PauseController } from './pauseController';
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -207,9 +206,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param token Cancellation token
 	 * @returns Result indicating whether to continue and the reason
 	 */
-	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
+	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StopHookResult> {
 		try {
-			// PauseController implements CancellationToken, so we can use it directly
 			const results = await this._chatHookService.executeHook('Stop', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
 				input: input
@@ -254,13 +252,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
 	}
 
-	private async throwIfCancelled(token: CancellationToken | PauseController) {
-		if (await this.checkAsync(token)) {
+	private throwIfCancelled(token: CancellationToken) {
+		if (token.isCancellationRequested) {
+			this.turn.setResponse(TurnStatus.Cancelled, undefined, undefined, CanceledResult);
 			throw new CancellationError();
 		}
 	}
 
-	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
+	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
@@ -449,12 +448,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/** Runs a single iteration of the tool calling loop. */
-	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
+	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		await this.throwIfCancelled(token);
+		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
 		availableTools = await this.getAvailableTools(outputStream, token);
@@ -468,7 +467,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
 		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
-		await this.throwIfCancelled(token);
+		this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
 
@@ -512,24 +511,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			fetchStreamSource = new FetchStreamSource();
 			processResponsePromise = responseProcessor.processResponse(undefined, fetchStreamSource.stream, stream, token);
 
-			const disposables = new DisposableStore();
-			if (token instanceof PauseController) {
-				disposables.add(token.onDidChangePause(isPaused => {
-					if (isPaused) {
-						fetchStreamSource?.pause();
-					} else {
-						fetchStreamSource?.unpause();
-					}
-				}));
-			}
-
 			// Allows the response processor to do an early stop of the LLM request.
 			processResponsePromise.finally(() => {
 				// The response processor indicates that it has finished processing the response,
 				// so let's stop the request if it's still in flight.
 				stopEarly = true;
-
-				disposables.dispose();
 			});
 		}
 
@@ -774,23 +760,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		return filtered;
-	}
-
-	/**
-	 * Should be called between async operations. It cancels the operations and
-	 * returns true if the operation should be aborted, and waits for pausing otherwise.
-	 */
-	private async checkAsync(token: CancellationToken | PauseController): Promise<boolean> {
-		if (token instanceof PauseController && token.isPaused) {
-			await token.waitForUnpause();
-		}
-
-		if (token.isCancellationRequested) {
-			this.turn.setResponse(TurnStatus.Cancelled, undefined, undefined, CanceledResult);
-			return true;
-		}
-
-		return false;
 	}
 
 	private async buildPrompt2(buildPromptContext: IBuildPromptContext, stream: ChatResponseStream | undefined, token: CancellationToken): Promise<IBuildPromptResult> {

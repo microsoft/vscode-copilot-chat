@@ -69,7 +69,7 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				let stream = new SpyChatResponseStream();
-				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Write me a for loop in javascript'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, Event.None, () => false);
+				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Write me a for loop in javascript'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, () => false);
 
 				await interactiveSession.getResult();
 
@@ -77,7 +77,7 @@ suite('Copilot Chat Sanity Test', function () {
 				const oldText = stream.currentProgress;
 
 				stream = new SpyChatResponseStream();
-				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Can you make it in typescript instead'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, Event.None, () => false);
+				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Can you make it in typescript instead'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, () => false);
 				const result2 = await interactiveSession.getResult();
 
 				assert.ok(stream.currentProgress, 'Expected progress after second request');
@@ -105,7 +105,7 @@ suite('Copilot Chat Sanity Test', function () {
 				let stream = new SpyChatResponseStream();
 				const testRequest = new TestChatRequest(`You must use the search tool to search for "foo". It may fail, that's ok, just testing`);
 				testRequest.tools.set(ContributedToolName.FindTextInFiles, true);
-				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, Event.None, () => false);
+				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 
 				const onWillInvokeTool = Event.toPromise(toolsService.onWillInvokeTool);
 				const getResultPromise = interactiveSession.getResult();
@@ -116,7 +116,7 @@ suite('Copilot Chat Sanity Test', function () {
 				const oldText = stream.currentProgress;
 
 				stream = new SpyChatResponseStream();
-				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('And what is 1+1'), stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, Event.None, () => false);
+				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('And what is 1+1'), stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 				const result2 = await interactiveSession.getResult();
 
 				assert.ok(stream.currentProgress, 'Expected progress after second request');
@@ -140,7 +140,7 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				const progressReport = new SpyChatResponseStream();
-				const interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('What is a fibonacci sequence?'), progressReport, fakeToken, { agentName: '', agentId: '', intentId: 'explain' }, Event.None, () => false);
+				const interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('What is a fibonacci sequence?'), progressReport, fakeToken, { agentName: '', agentId: '', intentId: 'explain' }, () => false);
 
 				// Ask a `/explain` question
 				await interactiveSession.getResult();

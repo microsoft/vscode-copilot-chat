@@ -38,7 +38,6 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
-import { PauseController } from '../../intents/node/pauseController';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -88,7 +87,6 @@ export class DefaultIntentRequestHandler {
 		private readonly location: ChatLocation,
 		private readonly chatTelemetryBuilder: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions = { maxToolCallIterations: 15 },
-		private readonly onPaused: Event<boolean>, // todo: use a PauseController instead
 		private readonly yieldRequested: (() => boolean) | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions private readonly options: IConversationOptions,
@@ -343,15 +341,13 @@ export class DefaultIntentRequestHandler {
 			return promise;
 		}, this));
 
-		const pauseCtrl = store.add(new PauseController(this.onPaused, this.token));
-
 		try {
 			try {
 				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
 			} catch (error) {
 				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
-			const result = await loop.run(this.stream, pauseCtrl);
+			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
