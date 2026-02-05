@@ -22,7 +22,6 @@ import { isNotebook, SimulationWorkspace } from '../../src/platform/test/node/si
 import { SpyChatResponseStream } from '../../src/util/common/test/mockChatResponseStream';
 import { ChatRequestTurn, ChatResponseTurn } from '../../src/util/common/test/shims/chatTypes';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { Event } from '../../src/util/vs/base/common/event';
 import { DisposableStore } from '../../src/util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation, ChatRequest, ChatResponseAnchorPart, ChatResponseMarkdownPart } from '../../src/vscodeTypes';
@@ -93,7 +92,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 							parsedQuery.command ? agentsToCommands[parsedQuery.participantName as Intent]![parsedQuery.command] :
 								parsedQuery.participantName,
 					},
-					Event.None,
+					() => false,
 				);
 				const result = await interactiveSession.getResult();
 				assert.ok(!result.errorDetails, result.errorDetails?.message);

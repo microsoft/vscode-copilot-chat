@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Event, WindowState } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { env } from '../../../util/vs/base/common/process';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -51,6 +52,10 @@ export interface IEnvService {
 	readonly extensionId: string;
 	readonly appRoot: string;
 	readonly shell: string;
+	/**
+	 * @see vscode.window.onDidChangeWindowState
+	 */
+	readonly onDidChangeWindowState: Event<WindowState>;
 	isProduction(): boolean;
 	isPreRelease(): boolean;
 	isSimulation(): boolean;
@@ -85,6 +90,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get appRoot(): string;
 	abstract get shell(): string;
 	abstract get isActive(): boolean;
+	abstract get onDidChangeWindowState(): Event<WindowState>;
 
 	/**
 	 * @returns true if this is a build for end users.

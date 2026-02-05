@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatHookService, StopHookInput, StopHookOutput } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -23,7 +24,7 @@ import { computePromptTokenDetails } from '../../../platform/tokenizer/node/prom
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -43,8 +44,6 @@ import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/p
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
-import { PauseController } from './pauseController';
-
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -74,6 +73,12 @@ export interface IToolCallingLoopOptions {
 	 * The current chat request
 	 */
 	request: ChatRequest;
+	/**
+	 * A getter that returns true if VS Code has requested the extension to
+	 * gracefully yield. When set, it's likely that the editor will immediately
+	 * follow up with a new request in the same conversation.
+	 */
+	yieldRequested?: () => boolean;
 }
 
 export interface IToolCallingResponseEvent {
@@ -89,6 +94,17 @@ export interface IToolCallingBuiltPromptEvent {
 
 export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
 
+interface StopHookResult {
+	/**
+	 * Whether the agent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reason the agent should continue, if shouldContinue is true.
+	 */
+	readonly reason?: string;
+}
+
 /**
  * This is a base class that can be used to implement a tool calling loop
  * against a model. It requires only that you build a prompt and is decoupled
@@ -100,6 +116,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
+	private stopHookReason: string | undefined;
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -121,6 +138,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
+		@IChatHookService private readonly _chatHookService: IChatHookService,
 	) {
 		super();
 	}
@@ -136,10 +154,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
-		const isContinuation = this.turn.isContinuation;
-		const query = isContinuation ?
-			'Please continue' :
-			this.turn.request.message;
+		const isContinuation = this.turn.isContinuation || !!this.stopHookReason;
+		let query: string;
+		let hasStopHookQuery = false;
+		if (this.stopHookReason) {
+			// Include the stop hook reason as a user message so the model knows what to do.
+			// Wrap with context so the model understands it needs to take action.
+			query = `You were about to complete but a hook blocked you with the following message: "${this.stopHookReason}". Please address this requirement before completing.`;
+			this._logService.info(`[ToolCallingLoop] Using stop hook reason as query: ${query}`);
+			this.stopHookReason = undefined; // Clear after use
+			hasStopHookQuery = true;
+		} else if (isContinuation) {
+			query = 'Please continue';
+		} else {
+			query = this.turn.request.message;
+		}
 		// exclude turns from the history that errored due to prompt filtration
 		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.PromptFiltered);
 
@@ -160,6 +189,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				availableTools
 			},
 			isContinuation,
+			hasStopHookQuery,
 			modeInstructions: this.options.request.modeInstructions2,
 		};
 	}
@@ -169,20 +199,80 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
-	private async throwIfCancelled(token: CancellationToken | PauseController) {
-		if (await this.checkAsync(token)) {
+	/**
+	 * Called before the loop stops to give hooks a chance to block the stop.
+	 * @param input The stop hook input containing stop_hook_active flag
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result indicating whether to continue and the reason
+	 */
+	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StopHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('Stop', {
+				toolInvocationToken: this.options.request.toolInvocationToken,
+				input: input
+			}, token);
+
+			// Check for blocking responses
+			for (const result of results) {
+				if (result.success === true) {
+					// Output may be a parsed object or a JSON string
+					const output = result.output;
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as StopHookOutput;
+						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
+							return { shouldContinue: true, reason: hookOutput.reason };
+						}
+					}
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[DefaultToolCallingLoop] Stop hook error: ${errorMessage}`);
+				}
+			}
+
+			return { shouldContinue: false };
+		} catch (error) {
+			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
+			return { shouldContinue: false };
+		}
+	}
+
+	/**
+	 * Shows a message when the stop hook blocks the agent from stopping.
+	 * Override in subclasses to customize the display.
+	 * @param outputStream The output stream for displaying messages
+	 * @param reason The reason the stop hook blocked stopping
+	 */
+	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
+		if (outputStream) {
+			outputStream.warning(l10n.t('Stop hook: {0}', reason));
+		}
+		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
+	}
+
+	private throwIfCancelled(token: CancellationToken) {
+		if (token.isCancellationRequested) {
+			this.turn.setResponse(TurnStatus.Cancelled, undefined, undefined, CanceledResult);
 			throw new CancellationError();
 		}
 	}
 
-	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
+	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		let stopHookActive = false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
 				lastResult = this.hitToolCallLimit(outputStream, lastResult);
+				break;
+			}
+
+			// Check if VS Code has requested we gracefully yield before starting the next iteration
+			if (lastResult && this.options.yieldRequested?.()) {
 				break;
 			}
 
@@ -198,6 +288,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+					// Before stopping, execute the stop hook
+					const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
+					this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
+					if (stopHookResult.shouldContinue && stopHookResult.reason) {
+						// The stop hook blocked stopping - show reason and continue
+						this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
+						// Store the reason so it can be passed to the model in the next prompt
+						this.stopHookReason = stopHookResult.reason;
+						this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+						stopHookActive = true;
+						continue;
+					}
 					lastResult = lastResult;
 					break;
 				}
@@ -346,12 +448,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/** Runs a single iteration of the tool calling loop. */
-	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
+	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		await this.throwIfCancelled(token);
+		this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
 		availableTools = await this.getAvailableTools(outputStream, token);
@@ -365,9 +467,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
 		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
-		await this.throwIfCancelled(token);
+		this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
+
+		// Tool calls happen during prompt building. Check yield again here to see if we should abort prior to sending off the next request.
+		if (iterationNumber > 0 && this.options.yieldRequested?.()) {
+			throw new CancellationError();
+		}
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.options.interactionContext);
@@ -404,24 +511,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			fetchStreamSource = new FetchStreamSource();
 			processResponsePromise = responseProcessor.processResponse(undefined, fetchStreamSource.stream, stream, token);
 
-			const disposables = new DisposableStore();
-			if (token instanceof PauseController) {
-				disposables.add(token.onDidChangePause(isPaused => {
-					if (isPaused) {
-						fetchStreamSource?.pause();
-					} else {
-						fetchStreamSource?.unpause();
-					}
-				}));
-			}
-
 			// Allows the response processor to do an early stop of the LLM request.
 			processResponsePromise.finally(() => {
 				// The response processor indicates that it has finished processing the response,
 				// so let's stop the request if it's still in flight.
 				stopEarly = true;
-
-				disposables.dispose();
 			});
 		}
 
@@ -666,23 +760,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		return filtered;
-	}
-
-	/**
-	 * Should be called between async operations. It cancels the operations and
-	 * returns true if the operation should be aborted, and waits for pausing otherwise.
-	 */
-	private async checkAsync(token: CancellationToken | PauseController): Promise<boolean> {
-		if (token instanceof PauseController && token.isPaused) {
-			await token.waitForUnpause();
-		}
-
-		if (token.isCancellationRequested) {
-			this.turn.setResponse(TurnStatus.Cancelled, undefined, undefined, CanceledResult);
-			return true;
-		}
-
-		return false;
 	}
 
 	private async buildPrompt2(buildPromptContext: IBuildPromptContext, stream: ChatResponseStream | undefined, token: CancellationToken): Promise<IBuildPromptResult> {

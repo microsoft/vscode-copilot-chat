@@ -22,7 +22,6 @@ import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError, onBugIndicatingError } from '../../../util/vs/base/common/errors';
-import { Event } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -379,7 +378,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			agentId: getChatParticipantIdFromName(editorAgentName),
 			agentName: editorAgentName,
 			intentId: request.command,
-		}, Event.None);
+		}, () => false);
 		const result = await requestHandler.getResult();
 		if (result.errorDetails) {
 			throw new Error(result.errorDetails.message);
