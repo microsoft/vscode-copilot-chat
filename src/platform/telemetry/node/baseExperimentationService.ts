@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import type { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
+import { equals } from '../../../util/vs/base/common/arrays';
 import { IntervalTimer } from '../../../util/vs/base/common/async';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -85,21 +86,8 @@ export class UserInfoStore extends Disposable {
 		return this._organizationList;
 	}
 
-	private arraysEqual(a: string[] | undefined, b: string[] | undefined): boolean {
-		if (a === b) {
-			return true;
-		}
-		if (a === undefined || b === undefined) {
-			return false;
-		}
-		if (a.length !== b.length) {
-			return false;
-		}
-		return a.every((val, index) => val === b[index]);
-	}
-
 	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isVscodeTeamMember?: boolean, organizationList?: string[]): void {
-		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember && this.arraysEqual(this._organizationList, organizationList)) {
+		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember && equals(this._organizationList, organizationList)) {
 			// no change
 			return;
 		}
