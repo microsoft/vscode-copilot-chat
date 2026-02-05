@@ -302,7 +302,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param token Cancellation token
 	 * @returns Result containing additional context from hooks
 	 */
-	protected async executeSubagentStartHook(input: SubagentStartHookInput, token: CancellationToken | PauseController): Promise<SubagentStartHookResult> {
+	protected async executeSubagentStartHook(input: SubagentStartHookInput, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('SubagentStart', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
@@ -343,7 +343,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param token Cancellation token
 	 * @returns Result indicating whether to continue and the reasons
 	 */
-	protected async executeSubagentStopHook(input: SubagentStopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<SubagentStopHookResult> {
+	protected async executeSubagentStopHook(input: SubagentStopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStopHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('SubagentStop', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
