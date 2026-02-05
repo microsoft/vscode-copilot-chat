@@ -947,7 +947,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 			expect(lockCalls.length).toBeGreaterThan(0);
 
-			// After cancel, there should be unlock calls
+			// After cancel, there should be no unlock calls (repository option remains locked)
 			const unlockCalls = allCalls.filter(
 				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
 			);
