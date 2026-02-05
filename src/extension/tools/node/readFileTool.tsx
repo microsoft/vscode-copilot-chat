@@ -132,12 +132,13 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			ranges = getParamRanges(options.input, documentSnapshot);
 
 			void this.sendReadFileTelemetry('success', options, ranges, uri);
+			const useCodeFences = this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TeamInternal.ReadFileCodeFences, this.experimentationService);
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
 						this.instantiationService,
 						ReadFileResult,
-						{ uri, startLine: ranges.start, endLine: ranges.end, truncated: ranges.truncated, snapshot: documentSnapshot, languageModel: this._promptContext?.request?.model },
+						{ uri, startLine: ranges.start, endLine: ranges.end, truncated: ranges.truncated, snapshot: documentSnapshot, languageModel: this._promptContext?.request?.model, useCodeFences },
 						// If we are not called with tokenization options, have _some_ fake tokenizer
 						// otherwise we end up returning the entire document on every readFile.
 						options.tokenizationOptions ?? {
@@ -318,6 +319,7 @@ interface ReadFileResultProps extends BasePromptElementProps {
 	truncated: boolean;
 	snapshot: TextDocumentSnapshot | NotebookDocumentSnapshot;
 	languageModel: vscode.LanguageModelChat | undefined;
+	useCodeFences: boolean;
 }
 
 class ReadFileResult extends PromptElement<ReadFileResultProps> {
@@ -353,7 +355,7 @@ class ReadFileResult extends PromptElement<ReadFileResultProps> {
 		}
 
 		return <>
-			{range.end.line + 1 === documentSnapshot.lineCount && !this.props.truncated ? undefined : <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></ >}
+			{this.props.useCodeFences && range.end.line + 1 !== documentSnapshot.lineCount || this.props.truncated ? <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></ > : undefined}
 			<CodeBlock
 				uri={this.props.uri}
 				code={contents}
@@ -362,6 +364,7 @@ class ReadFileResult extends PromptElement<ReadFileResultProps> {
 				includeFilepath={false}
 				references={[new PromptReference(this.props.uri, undefined, { isFromTool: true })]}
 				lineBasedPriority
+				fence={this.props.useCodeFences ? undefined : ''}
 			/>
 		</>;
 	}
