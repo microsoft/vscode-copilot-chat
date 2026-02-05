@@ -148,6 +148,12 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 				</KeepWith>,
 			);
 		}
+
+		// If a hook added context after this round, render it as a user message
+		if (round.hookContext) {
+			children.push(<UserMessage>{round.hookContext}</UserMessage>);
+		}
+
 		return children;
 	}
 }

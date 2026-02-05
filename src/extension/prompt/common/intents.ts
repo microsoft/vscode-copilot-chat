@@ -113,6 +113,10 @@ export interface IBuildPromptContext {
 	 * continuation that requires a specific user message.
 	 */
 	readonly hasStopHookQuery?: boolean;
+	/**
+	 * Additional context provided by a hook.
+	 */
+	readonly additionalHookContext?: string;
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');
