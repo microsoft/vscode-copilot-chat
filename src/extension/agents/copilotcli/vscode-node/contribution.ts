@@ -11,7 +11,7 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 	readonly id = 'copilotCLI';
 
 	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
+		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
 		super();
 	}
