@@ -444,3 +444,7 @@ export enum SpeculativeRequestsEnablement {
 	On = 'on',
 	Off = 'off',
 }
+
+export namespace SpeculativeRequestsEnablement {
+	export const VALIDATOR = vEnum(SpeculativeRequestsEnablement.On, SpeculativeRequestsEnablement.Off);
+}

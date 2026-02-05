@@ -8,7 +8,6 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
@@ -19,7 +18,6 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
-import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -38,7 +36,6 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
-import { PauseController } from '../../intents/node/pauseController';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -88,7 +85,7 @@ export class DefaultIntentRequestHandler {
 		private readonly location: ChatLocation,
 		private readonly chatTelemetryBuilder: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions = { maxToolCallIterations: 15 },
-		private readonly onPaused: Event<boolean>, // todo: use a PauseController instead
+		private readonly yieldRequested: (() => boolean) | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions private readonly options: IConversationOptions,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -320,6 +317,7 @@ export class DefaultIntentRequestHandler {
 				overrideRequestLocation: this.handlerOptions.overrideRequestLocation,
 				interactionContext: this.documentContext?.document.uri,
 				responseProcessor: typeof intentInvocation.processResponse === 'function' ? intentInvocation as IResponseProcessor : undefined,
+				yieldRequested: this.yieldRequested,
 			},
 			this.chatTelemetryBuilder,
 		));
@@ -341,15 +339,13 @@ export class DefaultIntentRequestHandler {
 			return promise;
 		}, this));
 
-		const pauseCtrl = store.add(new PauseController(this.onPaused, this.token));
-
 		try {
 			try {
 				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
 			} catch (error) {
 				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
 			}
-			const result = await loop.run(this.stream, pauseCtrl);
+			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
@@ -547,7 +543,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
-		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@IChatHookService chatHookService: IChatHookService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
@@ -591,94 +586,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return context;
 	}
 
-	/**
-	 * Temporary logic to evaluate the efficacy of virtual tool grouping. Enabled
-	 * only for internal users so as to not cost premium requests for real users.
-	 *
-	 * 1. Wait until we get the first MCP (external) tool call for a conversation.
-	 * 2. Trigger virtual tool grouping
-	 * 3. Replay that same request with virtual tool grouping enabled
-	 * 4. Ensure the group containing the tool call is expanded
-	 */
-	private _didParallelToolCallLoop?: boolean;
-	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
-		const shouldDo = !this._didParallelToolCallLoop
-			&& this._copilotTokenStore.copilotToken?.isInternal;
-		if (!shouldDo) {
-			return;
-		}
-
-		const candidateCall = delta.copilotToolCalls?.find(tc => tc.name.startsWith('mcp_'));
-		if (!candidateCall) {
-			return;
-		}
-
-		this._didParallelToolCallLoop = true;
-		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.noParallelToolLoop')) {
-			return;
-		}
-
-		const token = CancellationToken.None;
-		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
-		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
-		const computed = await grouping.compute(this.options.request.prompt, token);
-
-		const container = grouping.getContainerFor(candidateCall.name);
-
-		let state = container ? (container.isExpanded ? 'defaultExpanded' : 'collapsed') : 'topLevel';
-		if (state === 'collapsed') {
-			await this.options.invocation.endpoint.makeChatRequest(
-				`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}/virtualParallelEval`,
-				messages,
-				(_text, _index, delta) => {
-					if (delta.copilotToolCalls?.some(tc => tc.name === container!.name)) {
-						state = 'expanded';
-						return Promise.resolve(1);
-					}
-					return Promise.resolve(undefined);
-				},
-				token,
-				this.options.overrideRequestLocation ?? this.options.location,
-				undefined,
-				{
-					...requestOptions,
-					tools: normalizeToolSchema(
-						this.options.invocation.endpoint.family,
-						computed.map(tool => ({
-							type: 'function',
-							function: {
-								name: tool.name,
-								description: tool.description,
-								parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
-							},
-						})),
-						(tool, rule) => {
-							this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
-						},
-					),
-					temperature: this.calculateTemperature(),
-				},
-				false, // The first tool call is user initiated and then the rest are just considered part of the loop
-			);
-		}
-
-
-		/* __GDPR__
-			"virtualTools.parallelCall" : {
-				"owner": "connor4312",
-				"comment": "Reports information about the generation of virtual tools.",
-				"toolCallName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the original tool call" },
-				"toolGroupName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the containing tool group" },
-				"toolGroupState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If/how the tool call was expanded" }
-			}
-		*/
-		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.parallelCall', {
-			toolCallName: candidateCall.name,
-			toolGroupName: container?.name,
-			toolGroupState: state,
-		});
-	}
-
 	private _handleVirtualCalls(context: Mutable<IBuildPromptContext>) {
 		if (!this.toolGrouping) {
 			return;
@@ -712,7 +619,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			debugName,
 			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
-				this._doMirroredCallWithVirtualTools(delta, opts.messages, opts.requestOptions!);
 				return opts.finishedCb!(text, index, delta);
 			},
 			location: this.options.overrideRequestLocation ?? this.options.location,
