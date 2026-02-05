@@ -5,216 +5,213 @@
 
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { IGitService } from '../../../../platform/git/common/gitService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ContributedToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
 import { toolResultToString } from './toolTestUtils';
 
 interface IVSCodeCommitMemoryParams {
-	subject: string;
-	fact: string;
-	citations: string;
-	reason: string;
-	category: string;
-	suggestedContext?: string;
+subject: string;
+fact: string;
+citations: string;
+reason: string;
+category: string;
+suggestedContext?: string;
 }
 
 suite('VSCodeCommitMemoryTool', () => {
-	let accessor: ITestingServicesAccessor;
-	let workspaceFolder: URI;
+let accessor: ITestingServicesAccessor;
+let workspaceFolder: URI;
 
-	beforeAll(async () => {
-		const services = createExtensionUnitTestingServices();
-		accessor = services.createTestingAccessor();
+beforeAll(async () => {
+const services = createExtensionUnitTestingServices();
 
-		// Set up a test workspace folder
-		const workspaceService = accessor.get(IWorkspaceService);
-		const folders = workspaceService.getWorkspaceFolders();
-		if (folders.length > 0) {
-			workspaceFolder = folders[0];
-		} else {
-			throw new Error('No workspace folder available for testing');
-		}
-	});
+// Set up a test workspace folder
+workspaceFolder = URI.file('/tmp/test-workspace');
+services.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder]]));
 
-	afterAll(() => {
-		accessor.dispose();
-	});
+accessor = services.createTestingAccessor();
+});
 
-	test('commit memory successfully', async () => {
-		const toolsService = accessor.get(IToolsService);
+afterAll(() => {
+accessor.dispose();
+});
 
-		const input: IVSCodeCommitMemoryParams = {
-			subject: 'build-command',
-			fact: 'npm run build',
-			citations: 'package.json:10',
-			reason: 'Build command for the project. This is important for CI/CD and development workflows.',
-			category: 'bootstrap_and_build'
-		};
+test('commit memory successfully', async () => {
+const toolsService = accessor.get(IToolsService);
 
-		const result = await toolsService.invokeTool(
-			ContributedToolName.VSCodeCommitMemory,
-			{ input, toolInvocationToken: null as never },
-			CancellationToken.None
-		);
-		const resultStr = await toolResultToString(accessor, result);
+const input: IVSCodeCommitMemoryParams = {
+subject: 'build-command',
+fact: 'npm run build',
+citations: 'package.json:10',
+reason: 'Build command for the project. This is important for CI/CD and development workflows.',
+category: 'bootstrap_and_build'
+};
 
-		expect(resultStr).toContain('Successfully committed memory');
-		expect(resultStr).toContain('build-command');
-		expect(resultStr).toMatch(/memory-\d+-[a-f0-9]{8}\.json/);
-	});
+const result = await toolsService.invokeTool(
+ContributedToolName.VSCodeCommitMemory,
+{ input, toolInvocationToken: null as never },
+CancellationToken.None
+);
+const resultStr = await toolResultToString(accessor, result);
 
-	test('commit memory with suggested context', async () => {
-		const toolsService = accessor.get(IToolsService);
+expect(resultStr).toContain('Successfully committed memory');
+expect(resultStr).toContain('build-command');
+expect(resultStr).toMatch(/memory-\d+-[a-f0-9]{8}\.json/);
+});
 
-		const input: IVSCodeCommitMemoryParams = {
-			subject: 'test-pattern',
-			fact: 'Jest is used for testing',
-			citations: 'package.json:15',
-			reason: 'Testing framework preference. This should be documented for new contributors.',
-			category: 'testing',
-			suggestedContext: '.github/instructions/testing.instructions.md'
-		};
+test('commit memory with suggested context', async () => {
+const toolsService = accessor.get(IToolsService);
 
-		const result = await toolsService.invokeTool(
-			ContributedToolName.VSCodeCommitMemory,
-			{ input, toolInvocationToken: null as never },
-			CancellationToken.None
-		);
-		const resultStr = await toolResultToString(accessor, result);
+const input: IVSCodeCommitMemoryParams = {
+subject: 'test-pattern',
+fact: 'Jest is used for testing',
+citations: 'package.json:15',
+reason: 'Testing framework preference. This should be documented for new contributors.',
+category: 'testing',
+suggestedContext: '.github/instructions/testing.instructions.md'
+};
 
-		expect(resultStr).toContain('Successfully committed memory');
-		expect(resultStr).toContain('test-pattern');
-	});
+const result = await toolsService.invokeTool(
+ContributedToolName.VSCodeCommitMemory,
+{ input, toolInvocationToken: null as never },
+CancellationToken.None
+);
+const resultStr = await toolResultToString(accessor, result);
 
-	test('verify memory file structure', async () => {
-		const toolsService = accessor.get(IToolsService);
-		const fileSystemService = accessor.get(IFileSystemService);
+expect(resultStr).toContain('Successfully committed memory');
+expect(resultStr).toContain('test-pattern');
+});
 
-		const input: IVSCodeCommitMemoryParams = {
-			subject: 'indentation',
-			fact: 'Uses tabs for indentation',
-			citations: '.editorconfig:3',
-			reason: 'Coding style preference that must be followed consistently.',
-			category: 'user_preferences'
-		};
+test('verify memory file structure', async () => {
+const toolsService = accessor.get(IToolsService);
+const fileSystemService = accessor.get(IFileSystemService);
 
-		const result = await toolsService.invokeTool(
-			ContributedToolName.VSCodeCommitMemory,
-			{ input, toolInvocationToken: null as never },
-			CancellationToken.None
-		);
-		const resultStr = await toolResultToString(accessor, result);
+const input: IVSCodeCommitMemoryParams = {
+subject: 'indentation',
+fact: 'Uses tabs for indentation',
+citations: '.editorconfig:3',
+reason: 'Coding style preference that must be followed consistently.',
+category: 'user_preferences'
+};
 
-		expect(resultStr).toContain('Successfully committed memory');
+const result = await toolsService.invokeTool(
+ContributedToolName.VSCodeCommitMemory,
+{ input, toolInvocationToken: null as never },
+CancellationToken.None
+);
+const resultStr = await toolResultToString(accessor, result);
 
-		// Extract filename from result
-		const filenameMatch = resultStr.match(/memory-\d+-[a-f0-9]{8}\.json/);
-		expect(filenameMatch).toBeTruthy();
+expect(resultStr).toContain('Successfully committed memory');
 
-		if (filenameMatch) {
-			const filename = filenameMatch[0];
-			const memoriesDir = URI.joinPath(workspaceFolder, '.github', 'pending-memories');
-			const filePath = URI.joinPath(memoriesDir, filename);
+// Extract filename from result
+const filenameMatch = resultStr.match(/memory-\d+-[a-f0-9]{8}\.json/);
+expect(filenameMatch).toBeTruthy();
 
-			// Verify file exists
-			const stat = await fileSystemService.stat(filePath);
-			expect(stat).toBeDefined();
+if (filenameMatch) {
+const filename = filenameMatch[0];
+const memoriesDir = URI.joinPath(workspaceFolder, '.github', 'pending-memories');
+const filePath = URI.joinPath(memoriesDir, filename);
 
-			// Read and verify file content
-			const content = await fileSystemService.readFile(filePath);
-			const contentStr = new TextDecoder().decode(content);
-			const memory = JSON.parse(contentStr);
+// Verify file exists
+const stat = await fileSystemService.stat(filePath);
+expect(stat).toBeDefined();
 
-			expect(memory.subject).toBe('indentation');
-			expect(memory.fact).toBe('Uses tabs for indentation');
-			expect(memory.citations).toBe('.editorconfig:3');
-			expect(memory.reason).toBe('Coding style preference that must be followed consistently.');
-			expect(memory.category).toBe('user_preferences');
-			expect(memory.timestamp).toBeDefined();
-			expect(memory.id).toBeDefined();
-		}
-	});
+// Read and verify file content
+const content = await fileSystemService.readFile(filePath);
+const contentStr = new TextDecoder().decode(content);
+const memory = JSON.parse(contentStr);
 
-	test('commit multiple memories', async () => {
-		const toolsService = accessor.get(IToolsService);
+expect(memory.subject).toBe('indentation');
+expect(memory.fact).toBe('Uses tabs for indentation');
+expect(memory.citations).toBe('.editorconfig:3');
+expect(memory.reason).toBe('Coding style preference that must be followed consistently.');
+expect(memory.category).toBe('user_preferences');
+expect(memory.timestamp).toBeDefined();
+expect(memory.id).toBeDefined();
+}
+});
 
-		const inputs: IVSCodeCommitMemoryParams[] = [
-			{
-				subject: 'logging',
-				fact: 'Use Winston for logging',
-				citations: 'src/logger.ts:5',
-				reason: 'Consistent logging framework for the entire project.',
-				category: 'general'
-			},
-			{
-				subject: 'authentication',
-				fact: 'Use JWT for authentication',
-				citations: 'src/auth.ts:10',
-				reason: 'Authentication mechanism used across all services.',
-				category: 'general'
-			}
-		];
+test('commit multiple memories', async () => {
+const toolsService = accessor.get(IToolsService);
 
-		for (const input of inputs) {
-			const result = await toolsService.invokeTool(
-				ContributedToolName.VSCodeCommitMemory,
-				{ input, toolInvocationToken: null as never },
-				CancellationToken.None
-			);
-			const resultStr = await toolResultToString(accessor, result);
+const inputs: IVSCodeCommitMemoryParams[] = [
+{
+subject: 'logging',
+fact: 'Use Winston for logging',
+citations: 'src/logger.ts:5',
+reason: 'Consistent logging framework for the entire project.',
+category: 'general'
+},
+{
+subject: 'authentication',
+fact: 'Use JWT for authentication',
+citations: 'src/auth.ts:10',
+reason: 'Authentication mechanism used across all services.',
+category: 'general'
+}
+];
 
-			expect(resultStr).toContain('Successfully committed memory');
-			expect(resultStr).toContain(input.subject);
-		}
-	});
+for (const input of inputs) {
+const result = await toolsService.invokeTool(
+ContributedToolName.VSCodeCommitMemory,
+{ input, toolInvocationToken: null as never },
+CancellationToken.None
+);
+const resultStr = await toolResultToString(accessor, result);
+
+expect(resultStr).toContain('Successfully committed memory');
+expect(resultStr).toContain(input.subject);
+}
+});
 });
 
 suite('VSCodeCommitMemoryTool without workspace', () => {
-	let accessor: ITestingServicesAccessor;
+let accessor: ITestingServicesAccessor;
 
-	beforeAll(() => {
-		const services = createExtensionUnitTestingServices();
-		// Mock workspace service to return no folders
-		const mockWorkspaceService: IWorkspaceService = {
-			_serviceBrand: undefined,
-			getWorkspaceFolders: () => [],
-			getWorkspaceFolderName: () => '',
-			onDidChangeWorkspaceFolders: () => ({ dispose: () => { } })
-		} as IWorkspaceService;
-		services.define(IWorkspaceService, mockWorkspaceService);
+beforeAll(() => {
+const services = createExtensionUnitTestingServices();
+// Mock workspace service to return no folders
+const mockWorkspaceService: IWorkspaceService = {
+_serviceBrand: undefined,
+getWorkspaceFolders: () => [],
+getWorkspaceFolderName: () => '',
+onDidChangeWorkspaceFolders: () => ({ dispose: () => { } })
+} as IWorkspaceService;
+services.define(IWorkspaceService, mockWorkspaceService);
 
-		accessor = services.createTestingAccessor();
-	});
+accessor = services.createTestingAccessor();
+});
 
-	afterAll(() => {
-		accessor.dispose();
-	});
+afterAll(() => {
+accessor.dispose();
+});
 
-	test('returns error when no workspace folder', async () => {
-		const toolsService = accessor.get(IToolsService);
+test('returns error when no workspace folder', async () => {
+const toolsService = accessor.get(IToolsService);
 
-		const input: IVSCodeCommitMemoryParams = {
-			subject: 'test',
-			fact: 'test fact',
-			citations: 'file.ts:1',
-			reason: 'test reason for storing this fact.',
-			category: 'general'
-		};
+const input: IVSCodeCommitMemoryParams = {
+subject: 'test',
+fact: 'test fact',
+citations: 'file.ts:1',
+reason: 'test reason for storing this fact.',
+category: 'general'
+};
 
-		const result = await toolsService.invokeTool(
-			ContributedToolName.VSCodeCommitMemory,
-			{ input, toolInvocationToken: null as never },
-			CancellationToken.None
-		);
-		const resultStr = await toolResultToString(accessor, result);
+const result = await toolsService.invokeTool(
+ContributedToolName.VSCodeCommitMemory,
+{ input, toolInvocationToken: null as never },
+CancellationToken.None
+);
+const resultStr = await toolResultToString(accessor, result);
 
-		expect(resultStr).toContain('Error');
-		expect(resultStr).toContain('No workspace folder found');
-	});
+expect(resultStr).toContain('Error');
+expect(resultStr).toContain('No workspace folder found');
+});
 });
