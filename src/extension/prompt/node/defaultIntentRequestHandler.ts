@@ -39,7 +39,7 @@ import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEdi
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
-import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, StopHookInput, StopHookOutput, StopHookResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
@@ -548,7 +548,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
-		@IChatHookService private readonly _chatHookService: IChatHookService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
 
@@ -787,49 +786,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			);
 		} else {
 			return this.options.temperature;
-		}
-	}
-
-	protected override async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
-		try {
-			// PauseController implements CancellationToken, so we can use it directly
-			const results = await this._chatHookService.executeHook('Stop', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, token);
-
-			// Check for blocking responses
-			for (const result of results) {
-				if (result.success === true) {
-					// Output may be a parsed object or a JSON string
-					let output = result.output;
-					if (typeof output === 'string') {
-						try {
-							output = JSON.parse(output);
-						} catch {
-							// Not valid JSON, skip
-							this._logService.error(`[DefaultToolCallingLoop] Failed to parse output as JSON, skipping`);
-							continue;
-						}
-					}
-					if (typeof output === 'object' && output !== null) {
-						const hookOutput = output as StopHookOutput;
-						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
-						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
-							return { shouldContinue: true, reason: hookOutput.reason };
-						}
-					}
-				} else if (result.success === false) {
-					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
-					this._logService.error(`[DefaultToolCallingLoop] Stop hook error: ${errorMessage}`);
-				}
-			}
-
-			return { shouldContinue: false };
-		} catch (error) {
-			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
-			return { shouldContinue: false };
 		}
 	}
 }

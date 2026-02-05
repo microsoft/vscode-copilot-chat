@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -166,6 +167,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
+		@IChatHookService private readonly _chatHookService: IChatHookService,
 	) {
 		super();
 	}
@@ -228,15 +230,52 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/**
 	 * Called before the loop stops to give hooks a chance to block the stop.
-	 * Override in subclasses to implement hook execution.
 	 * @param input The stop hook input containing stop_hook_active flag
 	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
 	 * @returns Result indicating whether to continue and the reason
 	 */
-	protected async executeStopHook(_input: StopHookInput, _outputStream: ChatResponseStream | undefined, _token: CancellationToken | PauseController): Promise<StopHookResult> {
-		// Default implementation: allow stopping
-		return { shouldContinue: false };
+	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
+		try {
+			// PauseController implements CancellationToken, so we can use it directly
+			const results = await this._chatHookService.executeHook('Stop', {
+				toolInvocationToken: this.options.request.toolInvocationToken,
+				input: input
+			}, token);
+
+			// Check for blocking responses
+			for (const result of results) {
+				if (result.success === true) {
+					// Output may be a parsed object or a JSON string
+					let output = result.output;
+					if (typeof output === 'string') {
+						try {
+							output = JSON.parse(output);
+						} catch {
+							// Not valid JSON, skip
+							this._logService.error(`[DefaultToolCallingLoop] Failed to parse output as JSON, skipping`);
+							continue;
+						}
+					}
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as StopHookOutput;
+						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
+							return { shouldContinue: true, reason: hookOutput.reason };
+						}
+					}
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[DefaultToolCallingLoop] Stop hook error: ${errorMessage}`);
+				}
+			}
+
+			return { shouldContinue: false };
+		} catch (error) {
+			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
+			return { shouldContinue: false };
+		}
 	}
 
 	/**
@@ -529,8 +568,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			throw new EmptyPromptError();
 		}
 
-		this._logService.info(`[ToolCallingLoop] Sending ${buildPromptResult.messages.length} messages to model, isContinuation=${isContinuation}`);
-
 		const promptContextTools = availableTools.length ? availableTools.map(toolInfo => {
 			return {
 				name: toolInfo.name,
@@ -618,7 +655,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
-			this._logService.info(`[ToolCallingLoop] Fetch success: response length=${fetchResult.value.length}, toolCalls=${toolCalls.length}`);
 			// Store token usage metadata for Anthropic models using Messages API
 			if (fetchResult.usage && isAnthropicFamily(endpoint)) {
 				this.turn.setMetadata(new AnthropicTokenUsageMetadata(
