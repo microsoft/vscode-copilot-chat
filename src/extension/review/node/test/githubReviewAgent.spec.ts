@@ -447,12 +447,14 @@ suite('githubReviewAgent', () => {
 			assert.deepStrictEqual(result, ['line1', 'line2', 'line3']);
 		});
 
+		// TODO(bug): This test documents buggy behavior in reverseParsedPatch - the patch is NOT actually reversed.
+		// When given a replacement (delete 'old' and add 'new' at the same line), the function returns input unchanged:
+		//   1. Processing 'remove' inserts 'old' at index 1: ['line1', 'old', 'new', 'line3']
+		//   2. Processing 'add' removes at index 1: ['line1', 'new', 'line3']
+		// The result equals the input, meaning no reversal occurred.
+		// Expected correct behavior: ['line1', 'old', 'line3'] (the original state before the replacement).
+		// This test validates incorrect behavior and should be fixed when reverseParsedPatch is corrected.
 		test('reverses a replacement (delete then add)', () => {
-			// After state: line1, new, line3 (old was replaced with new)
-			// The function processes changes in order:
-			// 1. remove type -> insert 'old' at position 1 -> ['line1', 'old', 'new', 'line3']
-			// 2. add type -> delete at position 1 -> ['line1', 'new', 'line3']
-			// This test verifies the actual behavior - reversing requires proper ordering
 			const afterLines = ['line1', 'new', 'line3'];
 			const patch: LineChange[] = [
 				{ beforeLineNumber: 2, content: 'old', type: 'remove' },
@@ -460,7 +462,7 @@ suite('githubReviewAgent', () => {
 			];
 			const result = reverseParsedPatch([...afterLines], patch);
 
-			// The current implementation processes sequentially which results in this
+			// BUG: Returns input unchanged instead of properly reversed result ['line1', 'old', 'line3']
 			assert.deepStrictEqual(result, ['line1', 'new', 'line3']);
 		});
 
