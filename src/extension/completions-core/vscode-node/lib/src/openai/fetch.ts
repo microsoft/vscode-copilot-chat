@@ -934,9 +934,31 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				}
 			}
 
-			// in case stream ends but some completions are not finished yet
+			// When the stream ends, call finishedCb with finished=true for any
+			// completions that weren't individually finished. This matches
+			// SSEProcessor.finishSolutions which gives the callback a final
+			// chance to process / trim the complete text (e.g. StreamedCompletionSplitter.trimAll).
 			for (const [chunkIdx, completion] of completions.entries()) {
 				if (!completion.isFinished) {
+					await finishedCb(completion.accumulator.responseSoFar, {
+						index: chunkIdx,
+						text: completion.accumulator.responseSoFar,
+						finished: true,
+						requestId: resp.requestId,
+						telemetryData: baseTelemetryData,
+						annotations: completion.accumulator.annotations,
+						getAPIJsonData: () => ({
+							text: completion.accumulator.responseSoFar,
+							tokens: completion.accumulator.chunks,
+							finish_reason: completion.accumulator.finishReason ?? 'stop',
+							copilot_annotations: completion.accumulator.annotations.current,
+						} satisfies APIJsonData),
+					} satisfies RequestDelta);
+
+					if (cancel?.isCancellationRequested) {
+						return;
+					}
+
 					const apiChoice = createAPIChoice(
 						chunkIdx,
 						completion.accumulator.responseSoFar,
