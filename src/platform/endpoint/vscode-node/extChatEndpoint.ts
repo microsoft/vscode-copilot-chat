@@ -19,7 +19,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
-import { storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
+import { retrieveCapturingTokenByCorrelation, storeCapturingTokenForCorrelation } from '../../requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { EndpointEditToolName, isEndpointEditToolName } from '../common/endpointProvider';
@@ -263,6 +263,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				serverRequestId: undefined
 			};
 			return result;
+		} finally {
+			// Clean up correlation map entry to prevent memory leak.
+			// If the request reached a BYOK provider, they already retrieved and removed this.
+			// If not (e.g., request failed early or model isn't BYOK), we need to clean it up here.
+			retrieveCapturingTokenByCorrelation(ourRequestId);
 		}
 	}
 
