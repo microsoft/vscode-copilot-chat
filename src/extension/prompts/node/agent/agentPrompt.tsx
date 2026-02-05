@@ -279,6 +279,8 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly sessionResource?: string;
 	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
 	readonly hasStopHookQuery?: boolean;
+	/** Additional context provided by SubagentStart hooks. */
+	readonly subagentHookContext?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -307,6 +309,7 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		enableCacheBreakpoints: agentProps.enableCacheBreakpoints,
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
 		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
+		subagentHookContext: agentProps.promptContext.subagentHookContext,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -376,8 +379,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
-						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
-					</Tag>
+						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}					{this.props.subagentHookContext && <SubagentHookContextPrompt context={this.props.subagentHookContext} />}					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
@@ -454,6 +456,19 @@ class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 		return (
 			!this.envService.isSimulation() && <>The current date is {dateStr}.</>
 		);
+	}
+}
+
+interface SubagentHookContextPromptProps extends BasePromptElementProps {
+	readonly context: string;
+}
+
+/**
+ * Renders additional context provided by SubagentStart hooks.
+ */
+class SubagentHookContextPrompt extends PromptElement<SubagentHookContextPromptProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>Additional instructions from hooks: {this.props.context}</>;
 	}
 }
 

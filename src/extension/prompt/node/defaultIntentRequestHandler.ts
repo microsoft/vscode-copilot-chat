@@ -9,7 +9,7 @@ import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatRe
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
-import { IChatHookService, SubagentStartHookInput, SubagentStartHookOutput, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -141,35 +141,6 @@ export class DefaultIntentRequestHandler {
 				this.request.subAgentName,
 				this.request.sessionId,
 			);
-
-			// Execute SubagentStart hook for subagent requests (runSubagent tool invocations)
-			if (this.request.subAgentInvocationId) {
-				const agentId = this.request.subAgentInvocationId;
-				const agentType = this.request.subAgentName ?? 'runSubagent';
-				this._logService.trace(`[DefaultIntentRequestHandler] Executing SubagentStart hook: agentId=${agentId}, agentType=${agentType}`);
-				try {
-					const startHookResults = await this._chatHookService.executeHook('SubagentStart', {
-						toolInvocationToken: this.request.toolInvocationToken,
-						input: { agent_id: agentId, agent_type: agentType } satisfies SubagentStartHookInput
-					}, this.token);
-					for (const result of startHookResults) {
-						if (result.success === true) {
-							const output = result.output;
-							if (typeof output === 'object' && output !== null) {
-								const hookOutput = output as SubagentStartHookOutput;
-								if (hookOutput.additionalContext) {
-									this._logService.trace(`[DefaultIntentRequestHandler] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
-								}
-							}
-						} else if (result.success === false) {
-							const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
-							this._logService.error(`[DefaultIntentRequestHandler] SubagentStart hook error: ${errorMessage}`);
-						}
-					}
-				} catch (error) {
-					this._logService.error('[DefaultIntentRequestHandler] Error executing SubagentStart hook', error);
-				}
-			}
 
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
