@@ -239,6 +239,9 @@ Test prompt content`;
 		// Check cached file content using the real service
 		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'full_agent.agent.md');
 
+		// infer: true means the agent CAN be invoked by the model
+		// This maps to disable-model-invocation: false, which is the default
+		// So we don't output disable-model-invocation at all
 		const expectedContent = `---
 name: Full Agent
 description: A fully configured agent
@@ -248,9 +251,51 @@ tools:
 argument-hint: Provide context
 target: vscode
 model: gpt-4
-infer: true
 ---
 Detailed prompt content
+`;
+
+		assert.equal(content, expectedContent);
+	});
+
+	test('maps infer: false to disable-model-invocation: true', async () => {
+		const provider = createProvider();
+
+		const mockAgent: CustomAgentListItem = {
+			name: 'non_inferable_agent',
+			repo_owner_id: 1,
+			repo_owner: 'testorg',
+			repo_id: 1,
+			repo_name: 'testrepo',
+			display_name: 'Non-Inferable Agent',
+			description: 'An agent that cannot be invoked by the model',
+			tools: ['tool1'],
+			version: 'v1',
+		};
+		mockOctoKitService.setCustomAgents([mockAgent]);
+
+		const mockDetails: CustomAgentDetails = {
+			...mockAgent,
+			prompt: 'This agent cannot be invoked as a subagent',
+			infer: false,
+		};
+		mockOctoKitService.setAgentDetails('non_inferable_agent', mockDetails);
+
+		await provider.provideCustomAgents({}, {} as any);
+		await waitForPolling();
+
+		const content = await resourcesService.readCacheFile(PromptsType.agent, 'testorg', 'non_inferable_agent.agent.md');
+
+		// infer: false means the agent CANNOT be invoked by the model
+		// This maps to disable-model-invocation: true
+		const expectedContent = `---
+name: Non-Inferable Agent
+description: An agent that cannot be invoked by the model
+tools:
+  - tool1
+disable-model-invocation: true
+---
+This agent cannot be invoked as a subagent
 `;
 
 		assert.equal(content, expectedContent);
@@ -641,6 +686,7 @@ Agent 1 prompt`;
 		assert.ok(!content.includes('target:'));
 		assert.ok(!content.includes('model:'));
 		assert.ok(!content.includes('infer:'));
+		assert.ok(!content.includes('disable-model-invocation:'));
 	});
 
 	test('excludes tools field when array contains only wildcard', async () => {
