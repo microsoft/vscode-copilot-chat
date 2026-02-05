@@ -992,7 +992,7 @@ class NeighborFileModel implements vscode.Disposable {
 		}));
 		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((e: vscode.TabChangeEvent) => {
 			// We don't track open tabs here to ensure we only track documents that are
-			// actually focused. Other opening multiple tabs at once would cause too much churn.
+			// actually focused. Otherwise opening multiple tabs at once would cause too much churn.
 			for (const tab of e.closed) {
 				if (tab.input instanceof vscode.TabInputText) {
 					const uri = tab.input.uri.toString();
