@@ -388,8 +388,24 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-					// Before stopping, execute the stop hook (but NOT for subagent requests - those use SubagentStop instead)
-					if (!this.options.request.subAgentInvocationId) {
+					// Before stopping, execute the stop hook
+					if (this.options.request.subAgentInvocationId) {
+						const stopHookResult = await this.executeSubagentStopHook({
+							agent_id: this.options.request.subAgentInvocationId,
+							agent_type: this.options.request.subAgentName ?? 'default',
+							stop_hook_active: stopHookActive
+						}, outputStream, token);
+						this._logService.info(`[ToolCallingLoop] Subagent stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reason) {
+							// The stop hook blocked stopping - show reason and continue
+							this.showSubagentStopHookBlockedMessage(outputStream, stopHookResult.reason);
+							// Store the reason so it can be passed to the model in the next prompt
+							this.stopHookReason = stopHookResult.reason;
+							this._logService.info(`[ToolCallingLoop] Subagent stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+							stopHookActive = true;
+							continue;
+						}
+					} else {
 						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
 						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
 						if (stopHookResult.shouldContinue && stopHookResult.reason) {
