@@ -61,4 +61,62 @@ export interface StopHookOutput {
 	readonly reason?: string;
 }
 
+/**
+ * Input passed to the SubagentStart hook.
+ */
+export interface SubagentStartHookInput {
+	/**
+	 * The unique identifier for the subagent.
+	 */
+	readonly agent_id: string;
+	/**
+	 * The agent name (built-in agents like "Plan" or custom agent names).
+	 */
+	readonly agent_type: string;
+}
+
+/**
+ * Output from the SubagentStart hook.
+ */
+export interface SubagentStartHookOutput {
+	/**
+	 * Additional context to add to the subagent's context.
+	 */
+	readonly additionalContext?: string;
+}
+
+/**
+ * Input passed to the SubagentStop hook.
+ */
+export interface SubagentStopHookInput {
+	/**
+	 * The unique identifier for the subagent.
+	 */
+	readonly agent_id: string;
+	/**
+	 * The agent name (built-in agents like "Plan" or custom agent names).
+	 */
+	readonly agent_type: string;
+	/**
+	 * True when the agent is already continuing as a result of a stop hook.
+	 * Check this value or process the transcript to prevent the agent from running indefinitely.
+	 */
+	readonly stop_hook_active: boolean;
+}
+
+/**
+ * Output from the SubagentStop hook.
+ */
+export interface SubagentStopHookOutput {
+	/**
+	 * Set to "block" to prevent the agent from stopping.
+	 * Omit or set to undefined to allow the agent to stop.
+	 */
+	readonly decision?: 'block';
+	/**
+	 * Required when decision is "block". Tells the agent why it should continue.
+	 */
+	readonly reason?: string;
+}
+
 //#endregion
