@@ -162,7 +162,7 @@ export class EditCodeIntent implements IIntent {
 		}));
 	}
 
-	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>, yieldRequested: () => void): Promise<vscode.ChatResult> {
+	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>, yieldRequested: () => boolean): Promise<vscode.ChatResult> {
 		const applyEdits = request.acceptedConfirmationData?.filter(isEditsOkayConfirmation);
 		if (applyEdits?.length) {
 			await this._handleApplyConfirmedEdits(applyEdits.flatMap(e => ({ ...e.edits, chatRequestId: e.chatRequestId, chatRequestModel: request.model.id })), stream, token);

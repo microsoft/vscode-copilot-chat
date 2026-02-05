@@ -388,7 +388,7 @@ export async function simulateEditingScenario(
 			if (!request.command) {
 				const intentDetector = instaService.createInstance(IntentDetector);
 				const participants = readBuiltinIntents(location);
-				const detectedParticipant = await intentDetector.provideParticipantDetection(request, { history }, { participants, location: ChatLocation.Editor }, CancellationToken.None);
+				const detectedParticipant = await intentDetector.provideParticipantDetection(request, { history, yieldRequested: false }, { participants, location: ChatLocation.Editor }, CancellationToken.None);
 				if (detectedParticipant?.command) {
 					request = { ...request, command: detectedParticipant.command };
 				}
