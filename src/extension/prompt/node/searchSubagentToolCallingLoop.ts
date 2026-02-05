@@ -32,6 +32,8 @@ export interface ISearchSubagentToolCallingLoopOptions extends IToolCallingLoopO
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
 	subAgentInvocationId?: string;
+	/** Optional subagent name/type. If not provided, defaults to the loop ID. */
+	subAgentName?: string;
 }
 
 export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubagentToolCallingLoopOptions> {
@@ -61,7 +63,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 				...context.tools,
 				toolReferences: [],
 				subAgentInvocationId: this.options.subAgentInvocationId ?? randomUUID(),
-				subAgentName: 'search'
+				subAgentName: this.options.subAgentName ?? SearchSubagentToolCallingLoop.ID
 			};
 		}
 		context.query = this.options.promptText;
@@ -157,7 +159,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	 * Gets the subagent type/name for this loop.
 	 */
 	private getSubagentType(): string {
-		return 'search';
+		return this.options.subAgentName ?? SearchSubagentToolCallingLoop.ID;
 	}
 
 	public override async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {

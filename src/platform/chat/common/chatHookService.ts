@@ -70,7 +70,7 @@ export interface SubagentStartHookInput {
 	 */
 	readonly agent_id: string;
 	/**
-	 * The agent name (built-in agents like "Bash", "Explore", "Plan", or custom agent names).
+	 * The agent name (built-in agents like "Plan" or custom agent names).
 	 */
 	readonly agent_type: string;
 }
@@ -94,7 +94,7 @@ export interface SubagentStopHookInput {
 	 */
 	readonly agent_id: string;
 	/**
-	 * The agent name (built-in agents like "Bash", "Explore", "Plan", or custom agent names).
+	 * The agent name (built-in agents like "Plan" or custom agent names).
 	 */
 	readonly agent_type: string;
 	/**

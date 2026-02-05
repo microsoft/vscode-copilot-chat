@@ -70,6 +70,7 @@ class SearchSubagentTool implements ICopilotTool<ISearchSubagentParams> {
 			location: request.location,
 			promptText: options.input.query,
 			subAgentInvocationId: subAgentInvocationId,
+			subAgentName: 'search',
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
