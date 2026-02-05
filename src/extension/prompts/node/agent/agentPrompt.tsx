@@ -277,7 +277,7 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
 	readonly sessionResource?: string;
-	/** When true, skip frozen content and render using props.request (the stop hook query). */
+	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
 	readonly hasStopHookQuery?: boolean;
 }
 

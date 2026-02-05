@@ -74,11 +74,6 @@ export interface IToolCallingLoopOptions {
 	 * The current chat request
 	 */
 	request: ChatRequest;
-	/**
-	 * Whether this run was triggered by a stop hook blocking the previous stop.
-	 * Used to set stop_hook_active in the Stop hook input.
-	 */
-	stopHookActive?: boolean;
 }
 
 export interface IToolCallingResponseEvent {
@@ -263,7 +258,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
-		let stopHookActive = this.options.stopHookActive ?? false;
+		let stopHookActive = false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
