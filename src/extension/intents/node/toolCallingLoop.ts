@@ -218,16 +218,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			for (const result of results) {
 				if (result.success === true) {
 					// Output may be a parsed object or a JSON string
-					let output = result.output;
-					if (typeof output === 'string') {
-						try {
-							output = JSON.parse(output);
-						} catch {
-							// Not valid JSON, skip
-							this._logService.error(`[DefaultToolCallingLoop] Failed to parse output as JSON, skipping`);
-							continue;
-						}
-					}
+					const output = result.output;
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as StopHookOutput;
 						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
