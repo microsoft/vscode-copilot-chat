@@ -7,7 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, StopHookInput, StopHookOutput } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -47,33 +47,8 @@ import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
 
 /**
- * Input passed to the Stop hook.
- */
-export interface StopHookInput {
-	/**
-	 * True when the agent is already continuing as a result of a stop hook.
-	 * Check this value or process the transcript to prevent the agent from running indefinitely.
-	 */
-	readonly stop_hook_active: boolean;
-}
-
-/**
- * Output from the Stop hook.
- */
-export interface StopHookOutput {
-	/**
-	 * Set to "block" to prevent the agent from stopping.
-	 * Omit or set to undefined to allow the agent to stop.
-	 */
-	readonly decision?: 'block';
-	/**
-	 * Required when decision is "block". Tells the agent why it should continue.
-	 */
-	readonly reason?: string;
-}
-
-/**
  * Result of calling the stop hook.
+ * This is an internal type used by the tool calling loop to process hook outputs.
  */
 export interface StopHookResult {
 	/**
