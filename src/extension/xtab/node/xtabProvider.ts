@@ -184,6 +184,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cancellationToken: CancellationToken,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState.t,
+		/**
+		 * For cursor jump scenarios, this is the edit window around the original cursor position
+		 * (before the jump). When provided, yielded edits will include this as `originalWindow`
+		 * so the cache can serve the edit when the cursor is in either location.
+		 */
+		originalEditWindow?: OffsetRange,
 	): EditStreaming {
 
 		const tracer = parentTracer.createSubLogger(['XtabProvider', 'doGetNextEditWithSelection']);
@@ -361,7 +367,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			tracer,
 			telemetryBuilder,
 			logContext,
-			cancellationToken
+			cancellationToken,
+			originalEditWindow,
 		);
 	}
 
@@ -502,6 +509,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
+		originalEditWindow: OffsetRange | undefined,
 	): EditStreaming {
 		const tracer = parentTracer.createSubLogger('streamEditsWithFiltering');
 
@@ -522,6 +530,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			telemetryBuilder,
 			logContext,
 			cancellationToken,
+			originalEditWindow,
 		);
 
 		let nEdits = 0;
@@ -574,6 +583,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
+		originalEditWindow: OffsetRange | undefined,
 	): EditStreaming {
 		const tracer = parentTracer.createSubLogger('streamEdits');
 
@@ -722,6 +732,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				linesStream,
 				request.documentBeforeEdits,
 				editWindow,
+				originalEditWindow,
 			);
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
@@ -750,7 +761,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					new LineRange(editWindowLineRange.start + cursorOriginalLinesOffset + 1 /* 0-based to 1-based */, editWindowLineRange.start + cursorOriginalLinesOffset + 2),
 					[editWindowLines[cursorOriginalLinesOffset].slice(0, cursorLineOffset - 1) + lineWithCursorContinued.value + editWindowLines[cursorOriginalLinesOffset].slice(cursorLineOffset - 1)]
 				);
-				yield { edit, isFromCursorJump, window: editWindow };
+				yield { edit, isFromCursorJump, window: editWindow, originalWindow: originalEditWindow };
 
 				const lines: string[] = [];
 				let v = await linesIter.next();
@@ -770,7 +781,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 						lines
 					),
 					isFromCursorJump,
-					window: editWindow
+					window: editWindow,
+					originalWindow: originalEditWindow
 				};
 
 				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
@@ -862,7 +874,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 						}
 					}
 
-					yield { edit: singleLineEdit, isFromCursorJump, window: editWindow };
+					yield { edit: singleLineEdit, isFromCursorJump, window: editWindow, originalWindow: originalEditWindow };
 					i++;
 				}
 			}
@@ -950,6 +962,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					cancellationToken,
 					telemetryBuilder,
 					new RetryState.Retrying('cursorJump'),
+					editWindow, // Pass the original edit window (before cursor jump) so the cache can serve the edit from both locations
 				);
 				return yield* v;
 			}

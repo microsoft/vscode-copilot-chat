@@ -47,6 +47,12 @@ export type StreamedEdit = {
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
+	/**
+	 * For cursor jump edits, this is the edit window around the original cursor position
+	 * (before the jump). This allows the cached edit to be served when the cursor is
+	 * in either the original location or the jump target location.
+	 */
+	readonly originalWindow?: OffsetRange;
 	readonly targetDocument?: DocumentId;
 }
 

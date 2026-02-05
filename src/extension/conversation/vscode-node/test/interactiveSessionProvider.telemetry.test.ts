@@ -36,7 +36,8 @@ suite('Conversation telemetry tests - Integration tests', function () {
 				stream,
 				token,
 				{ agentName: '', agentId: '' },
-				Event.None);
+				Event.None,
+				() => false);
 			await session.getResult(); // and throw away the result
 		});
 		assert.ok(allEvents(messages));

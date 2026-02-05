@@ -242,7 +242,7 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@IChatHookService chatHookService: IChatHookService,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, onPaused, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService);
 	}
 
 	/**

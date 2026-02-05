@@ -74,6 +74,12 @@ export interface IToolCallingLoopOptions {
 	 * The current chat request
 	 */
 	request: ChatRequest;
+	/**
+	 * A getter that returns true if VS Code has requested the extension to
+	 * gracefully yield. When set, it's likely that the editor will immediately
+	 * follow up with a new request in the same conversation.
+	 */
+	yieldRequested?: () => boolean;
 }
 
 export interface IToolCallingResponseEvent {
@@ -263,6 +269,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
 				lastResult = this.hitToolCallLimit(outputStream, lastResult);
+				break;
+			}
+
+			// Check if VS Code has requested we gracefully yield before starting the next iteration
+			if (lastResult && this.options.yieldRequested?.()) {
 				break;
 			}
 
@@ -460,6 +471,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength, toolTokenCount });
 		this._logService.trace('Built prompt');
+
+		// Tool calls happen during prompt building. Check yield again here to see if we should abort prior to sending off the next request.
+		if (iterationNumber > 0 && this.options.yieldRequested?.()) {
+			throw new CancellationError();
+		}
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.options.interactionContext);
