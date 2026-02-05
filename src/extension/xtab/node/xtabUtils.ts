@@ -80,30 +80,3 @@ export function charCount(messages: Raw.ChatMessage[]): number {
 	const promptCharCount = messages.reduce((total, msg) => total + msg.content.reduce((subtotal, part) => subtotal + (part.type === Raw.ChatCompletionContentPartKind.Text ? part.text.length : 0), 0), 0);
 	return promptCharCount;
 }
-
-/**
- * Strip leading and trailing empty lines from a stream.
- * Used for nextEdit (Sweep) strategy to remove empty lines from model response.
- */
-export function stripEmptyLinesFromStream(linesStream: AsyncIterableObject<string>): AsyncIterableObject<string> {
-	return new AsyncIterableObject<string>(async (emitter) => {
-		const lines: string[] = [];
-		for await (const line of linesStream) {
-			lines.push(line);
-		}
-
-		// Strip leading empty lines
-		while (lines.length > 0 && lines[0].trim() === '') {
-			lines.shift();
-		}
-
-		// Strip trailing empty lines
-		while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
-			lines.pop();
-		}
-
-		for (const line of lines) {
-			emitter.emitOne(line);
-		}
-	});
-}

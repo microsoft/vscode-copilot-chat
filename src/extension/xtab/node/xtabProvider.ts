@@ -51,7 +51,7 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, NextEditConstructPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nextEditConstructPrompt, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
@@ -310,7 +310,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? NextEditConstructPrompt(promptPieces) : getUserPrompt(promptPieces);
+		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? nextEditConstructPrompt(promptPieces) : getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 

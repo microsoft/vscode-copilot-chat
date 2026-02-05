@@ -58,7 +58,7 @@ export class PromptPieces {
  *   {current_state_of_contents}
  *   <|file_sep|>updated/{file_path}
  */
-export function NextEditConstructPrompt(promptPieces: PromptPieces): string {
+export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 	const FILE_SEP = '<|file_sep|>';
 	const parts: string[] = [];
 
