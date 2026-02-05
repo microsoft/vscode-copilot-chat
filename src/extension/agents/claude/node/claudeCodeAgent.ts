@@ -113,11 +113,12 @@ export class ClaudeAgentManager extends Disposable {
 		}
 	}
 
-	private resolvePrompt(request: vscode.ChatRequest): string {
+	private resolvePrompt(request: vscode.ChatRequest): Anthropic.TextBlockParam[] {
 		if (request.prompt.startsWith('/')) {
-			return request.prompt; // likely a slash command, don't modify
+			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
 		}
 
+		const contentBlocks: Anthropic.TextBlockParam[] = [];
 		const extraRefsTexts: string[] = [];
 		let prompt = request.prompt;
 		request.references.forEach(ref => {
@@ -135,11 +136,18 @@ export class ClaudeAgentManager extends Disposable {
 			}
 		});
 
+		// Add system-reminder as a separate content block so it's not rendered in chat history
 		if (extraRefsTexts.length > 0) {
-			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
+			contentBlocks.push({
+				type: 'text',
+				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
+			});
 		}
 
-		return prompt;
+		// Add the actual user prompt as a separate content block
+		contentBlocks.push({ type: 'text', text: prompt });
+
+		return contentBlocks;
 	}
 }
 
@@ -149,7 +157,7 @@ class KnownClaudeError extends Error { }
  * Represents a queued chat request waiting to be processed by the Claude session
  */
 interface QueuedRequest {
-	readonly prompt: string;
+	readonly prompt: Anthropic.TextBlockParam[];
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
@@ -285,14 +293,14 @@ export class ClaudeCodeSession extends Disposable {
 
 	/**
 	 * Invokes the Claude Code session with a user prompt
-	 * @param prompt The user's prompt text
+	 * @param prompt The user's prompt as an array of content blocks
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
 	 * @param modelId Model ID to use for this request
 	 */
 	public async invoke(
-		prompt: string,
+		prompt: Anthropic.TextBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
