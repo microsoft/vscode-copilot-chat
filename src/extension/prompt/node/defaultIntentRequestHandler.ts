@@ -832,13 +832,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			return { shouldContinue: false };
 		}
 	}
-
-	protected override showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
-		if (outputStream) {
-			outputStream.warning(l10n.t('Stop Hook: {0}', reason));
-		}
-		this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked stopping: ${reason}`);
-	}
 }
 
 interface IInternalRequestResult extends IToolCallLoopResult {

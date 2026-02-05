@@ -247,7 +247,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
 		if (outputStream) {
-			outputStream.progress(l10n.t('Stop hook blocked: {0}', reason));
+			outputStream.warning(l10n.t('Stop hook: {0}', reason));
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
 	}
