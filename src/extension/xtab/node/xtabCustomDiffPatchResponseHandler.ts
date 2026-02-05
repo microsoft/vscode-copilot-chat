@@ -60,12 +60,14 @@ export class XtabCustomDiffPatchResponseHandler {
 		linesStream: AsyncIterableObject<string>,
 		documentBeforeEdits: StringText,
 		window: OffsetRange | undefined,
+		originalWindow?: OffsetRange,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
 					window,
+					originalWindow,
 					isFromCursorJump: true,
 					// targetDocument, // TODO@ulugbekna: implement target document resolution
 				} satisfies StreamedEdit;

@@ -447,6 +447,10 @@ export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
 	readonly timestamp: Date;
+	/** Timestamp of the first message in the session (for timing.created) */
+	readonly firstMessageTimestamp: Date;
+	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
+	readonly lastMessageTimestamp: Date;
 }
 
 // #endregion

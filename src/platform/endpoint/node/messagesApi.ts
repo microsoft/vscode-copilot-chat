@@ -455,8 +455,8 @@ export class AnthropicMessagesProcessor {
 				if (chunk.message) {
 					this.messageId = chunk.message.id;
 					this.model = chunk.message.model;
-					this.inputTokens = chunk.message.usage.input_tokens;
-					this.outputTokens = chunk.message.usage.output_tokens;
+					this.inputTokens = chunk.message.usage.input_tokens ?? 0;
+					this.outputTokens = chunk.message.usage.output_tokens ?? 0;
 					this.cacheCreationTokens = chunk.message.usage.cache_creation_input_tokens ?? 0;
 					this.cacheReadTokens = chunk.message.usage.cache_read_input_tokens ?? 0;
 					if (chunk.message.usage.server_tool_use?.tool_search_requests) {
@@ -772,7 +772,6 @@ export class AnthropicMessagesProcessor {
 						toolSearchRequests: this.toolSearchRequests.toString(),
 					});
 				}
-
 				let finishReason: FinishedCompletionReason;
 				switch (this.stopReason) {
 					case 'refusal':
@@ -785,6 +784,11 @@ export class AnthropicMessagesProcessor {
 					default:
 						finishReason = FinishedCompletionReason.Stop;
 						break;
+				}
+
+				const computedPromptTokens = this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens;
+				if (computedPromptTokens < this.cacheReadTokens) {
+					this.logService.warn(`[messagesAPI] Token count inconsistency: computed prompt_tokens (${computedPromptTokens}) < cached_tokens (${this.cacheReadTokens}). Raw values: inputTokens=${this.inputTokens}, cacheCreationTokens=${this.cacheCreationTokens}, cacheReadTokens=${this.cacheReadTokens}`);
 				}
 
 				return {
@@ -802,9 +806,9 @@ export class AnthropicMessagesProcessor {
 						serverExperiments: ''
 					},
 					usage: {
-						prompt_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens,
+						prompt_tokens: computedPromptTokens,
 						completion_tokens: this.outputTokens,
-						total_tokens: this.inputTokens + this.cacheCreationTokens + this.cacheReadTokens + this.outputTokens,
+						total_tokens: computedPromptTokens + this.outputTokens,
 						prompt_tokens_details: {
 							cached_tokens: this.cacheReadTokens,
 						},

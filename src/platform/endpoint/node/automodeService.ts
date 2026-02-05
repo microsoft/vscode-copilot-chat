@@ -12,6 +12,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -39,10 +40,17 @@ class AutoModeTokenBank extends Disposable {
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _authService: IAuthenticationService,
 		private readonly _logService: ILogService,
-		private readonly _expService: IExperimentationService
+		private readonly _expService: IExperimentationService,
+		private readonly _envService: IEnvService
 	) {
 		super();
 		this._refreshTimer = this._register(new TimeoutTimer());
+		this._register(this._envService.onDidChangeWindowState((state) => {
+			if (state.active && (!this._token || this._token.expires_at * 1000 - Date.now() < 5 * 60 * 1000)) {
+				// Window is active again, fetch a new token if it's expiring soon or we don't have one
+				this._fetchTokenPromise = this._fetchToken();
+			}
+		}));
 		this._fetchTokenPromise = this._fetchToken();
 	}
 
@@ -50,8 +58,10 @@ class AutoModeTokenBank extends Disposable {
 		if (!this._token) {
 			if (this._fetchTokenPromise) {
 				await this._fetchTokenPromise;
-			} else {
-				this._fetchTokenPromise = this._fetchToken();
+			}
+			// If we still don't have a token (e.g., the awaited promise returned nothing), force a new fetch
+			if (!this._token) {
+				this._fetchTokenPromise = this._fetchToken(true);
 				await this._fetchTokenPromise;
 			}
 		}
@@ -61,7 +71,13 @@ class AutoModeTokenBank extends Disposable {
 		return this._token;
 	}
 
-	private async _fetchToken(): Promise<void> {
+
+	private async _fetchToken(force?: boolean): Promise<void> {
+		// If the window isn't active we will skip fetching to save network calls
+		// We will fetch again when the window becomes active
+		if (!this._envService.isActive && !force) {
+			return;
+		}
 		const startTime = Date.now();
 
 		const authToken = (await this._authService.getCopilotToken()).token;
@@ -118,7 +134,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -129,7 +146,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			const keys = Array.from(this._reserveTokens.keys());
 			this._reserveTokens.clearAndDisposeAll();
 			for (const location of keys) {
-				this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+				this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 			}
 		}));
 		this._serviceBrand = undefined;
@@ -170,8 +187,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const conversationId = getConversationId(chatRequest);
 		const entry = this._autoModelCache.get(conversationId);
 		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 
 		// Update the debug name so logs are properly associating this token with the right conversation id now
 		reserveTokenBank.debugName = conversationId;
@@ -247,8 +264,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 
 		// No cached entry, use the reserve token
 		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
