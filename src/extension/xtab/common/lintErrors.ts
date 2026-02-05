@@ -26,7 +26,6 @@ export class LintErrors {
 	private _previousFormttedDiagnostics: readonly DiagnosticDataWithDistance[] | undefined;
 
 	constructor(
-		private readonly _lintOptions: LintOptions,
 		private readonly _documentId: DocumentId,
 		private readonly _document: CurrentDocument,
 		@ILanguageDiagnosticsService private readonly _langDiagService: ILanguageDiagnosticsService,
@@ -52,27 +51,27 @@ export class LintErrors {
 		});
 	}
 
-	private _getRelevantDiagnostics(): readonly DiagnosticDataWithDistance[] {
+	private _getRelevantDiagnostics(options: LintOptions): readonly DiagnosticDataWithDistance[] {
 		let diagnostics = this._diagnostics();
 
-		diagnostics = filterDiagnosticsByDistance(diagnostics, this._lintOptions.maxLineDistance);
+		diagnostics = filterDiagnosticsByDistance(diagnostics, options.maxLineDistance);
 		diagnostics = sortDiagnosticsByDistance(diagnostics);
-		diagnostics = filterDiagnosticsBySeverity(diagnostics, this._lintOptions.warnings);
+		diagnostics = filterDiagnosticsBySeverity(diagnostics, options.warnings);
 
-		return diagnostics.slice(0, this._lintOptions.maxLints);
+		return diagnostics.slice(0, options.maxLints);
 	}
 
-	public getFormattedLintErrors(): string {
-		const diagnostics = this._getRelevantDiagnostics();
+	public getFormattedLintErrors(options: LintOptions): string {
+		const diagnostics = this._getRelevantDiagnostics(options);
 		this._previousFormttedDiagnostics = diagnostics;
 
-		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, this._lintOptions)).join('\n');
+		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, options)).join('\n');
 
-		const lintTag = PromptTags.createLintTag(this._lintOptions.tagName);
+		const lintTag = PromptTags.createLintTag(options.tagName);
 		return `${lintTag.start}\n${formattedDiagnostics}\n${lintTag.end}`;
 	}
 
-	public lineNumberInPreviousFormattedPrompt(lineNumber: number): boolean {
+	public lineNumberInPreviousFormattedPrompt(options: LintOptions, lineNumber: number): boolean {
 		if (!this._previousFormttedDiagnostics) {
 			throw new BugIndicatingError('No previous formatted diagnostics available to check line number against.');
 		}
@@ -83,17 +82,47 @@ export class LintErrors {
 				return true;
 			}
 
-			if (this._lintOptions.showCode === LintOptionShowCode.NO) {
+			if (options.showCode === LintOptionShowCode.NO) {
 				continue;
 			}
 
-			const lineRange = diagnosticsToCodeLineRange(diagnostic.documentRange, this._lintOptions);
+			const lineRange = diagnosticsToCodeLineRange(diagnostic.documentRange, options);
 			if (lineRange.contains(lineNumber)) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	public getData(): string {
+		// Create options with everything enabled for comprehensive telemetry
+		const telemetryOptions: LintOptions = {
+			tagName: 'telemetry',
+			warnings: LintOptionWarning.YES,
+			showCode: LintOptionShowCode.NO,
+			maxLints: 20,
+			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
+		};
+
+		const diagnostics = this._getRelevantDiagnostics(telemetryOptions);
+
+		const telemetryDiagnostics: ILintErrorTelemetry[] = diagnostics.map(diagnostic => ({
+			line: diagnostic.documentRange.startLineNumber,
+			column: diagnostic.documentRange.startColumn,
+			endLine: diagnostic.documentRange.endLineNumber,
+			endColumn: diagnostic.documentRange.endColumn,
+			severity: diagnostic.severity,
+			message: diagnostic.message,
+			code: diagnostic.code,
+			source: diagnostic.source,
+			lineDistance: diagnostic.distance.lineDistance,
+			formatted: formatSingleDiagnostic(diagnostic, this._document.lines, telemetryOptions),
+			formattedCode: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES }),
+			formattedCodeWithSurrounding: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES_WITH_SURROUNDING }),
+		}));
+
+		return JSON.stringify(telemetryDiagnostics);
 	}
 }
 
@@ -220,4 +249,22 @@ class DiagnosticDataWithDistance extends DiagnosticData {
 		super(documentUri, message, severity, range, code, source);
 	}
 
+}
+
+/**
+ * Telemetry data structure for a single lint error.
+ */
+export interface ILintErrorTelemetry {
+	readonly line: number;
+	readonly column: number;
+	readonly endLine: number;
+	readonly endColumn: number;
+	readonly severity: 'error' | 'warning';
+	readonly message: string;
+	readonly code: string | number | undefined;
+	readonly source: string | undefined;
+	readonly lineDistance: number;
+	readonly formatted: string;
+	readonly formattedCode: string;
+	readonly formattedCodeWithSurrounding: string;
 }

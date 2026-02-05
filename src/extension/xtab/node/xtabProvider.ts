@@ -293,7 +293,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.GotCancelled('afterLanguageContextAwait');
 		}
 
-		const lintErrors = promptOptions.lintOptions ? new LintErrors(promptOptions.lintOptions, activeDocument.id, currentDocument, this.langDiagService) : undefined;
+		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
+
+		// Always collect lint errors for telemetry, regardless of prompt configuration
+		telemetryBuilder.setLintErrors(lintErrors.getData());
 
 		const promptPieces = new PromptPieces(
 			currentDocument,

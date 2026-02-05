@@ -381,6 +381,9 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
+
+	/* lint errors info */
+	readonly lintErrors: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -459,6 +462,7 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			lintErrors: this._lintErrors,
 		};
 	}
 
@@ -625,6 +629,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntentParseError: string | undefined;
 	public setEditIntentParseError(error: string): this {
 		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _lintErrors: string | undefined;
+	public setLintErrors(lintErrors: string): this {
+		this._lintErrors = lintErrors;
 		return this;
 	}
 }
