@@ -1378,6 +1378,87 @@
 							"What does this file do?"
 						]
 					}
+				],
+				"commands": [
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
+					},
+					{
+						"name": "review",
+						"description": "%copilot.workspace.review.description%",
+						"when": "github.copilot.advanced.review.intent"
+					},
+					{
+						"name": "tests",
+						"description": "%copilot.workspace.tests.description%",
+						"disambiguation": [
+							{
+								"category": "create_tests",
+								"description": "The user wants to generate unit tests.",
+								"examples": [
+									"Generate tests for my selection using pytest."
+								]
+							}
+						]
+					},
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%",
+						"sampleRequest": "%copilot.workspace.fix.sampleRequest%"
+					},
+					{
+						"name": "new",
+						"description": "%copilot.workspace.new.description%",
+						"sampleRequest": "%copilot.workspace.new.sampleRequest%",
+						"isSticky": true,
+						"disambiguation": [
+							{
+								"category": "create_new_workspace_or_extension",
+								"description": "The user wants to create a complete Visual Studio Code workspace from scratch, such as a new application or a Visual Studio Code extension. Use this category only if the question relates to generating or creating new workspaces in Visual Studio Code. Do not use this category for updating existing code or generating sample code snippets",
+								"examples": [
+									"Scaffold a Node server.",
+									"Create a sample project which uses the fileSystemProvider API.",
+									"react application"
+								]
+							}
+						]
+					},
+					{
+						"name": "newNotebook",
+						"description": "%copilot.workspace.newNotebook.description%",
+						"sampleRequest": "%copilot.workspace.newNotebook.sampleRequest%",
+						"disambiguation": [
+							{
+								"category": "create_jupyter_notebook",
+								"description": "The user wants to create a new Jupyter notebook in Visual Studio Code.",
+								"examples": [
+									"Create a notebook to analyze this CSV file."
+								]
+							}
+						]
+					},
+					{
+						"name": "semanticSearch",
+						"description": "%copilot.workspace.semanticSearch.description%",
+						"sampleRequest": "%copilot.workspace.semanticSearch.sampleRequest%",
+						"when": "config.github.copilot.semanticSearch.enabled"
+					},
+					{
+						"name": "setupTests",
+						"description": "%copilot.vscode.setupTests.description%",
+						"sampleRequest": "%copilot.vscode.setupTests.sampleRequest%",
+						"when": "config.github.copilot.chat.setupTests.enabled",
+						"disambiguation": [
+							{
+								"category": "set_up_tests",
+								"description": "The user wants to configure project test setup, framework, or test runner. The user does not want to fix their existing tests.",
+								"examples": [
+									"Set up tests for this project."
+								]
+							}
+						]
+					}
 				]
 			},
 			{
@@ -1510,85 +1591,7 @@
 						"name": "error",
 						"description": "Make a model request which will result in an error",
 						"when": "github.copilot.chat.debug"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.notebook",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.description%",
-				"isDefault": true,
-				"locations": [
-					"notebook"
-				],
-				"when": "!config.inlineChat.notebookAgent",
-				"commands": [
-					{
-						"name": "fix",
-						"description": "%copilot.workspace.fix.description%"
 					},
-					{
-						"name": "explain",
-						"description": "%copilot.workspace.explain.description%"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.notebookEditorAgent",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.description%",
-				"isDefault": true,
-				"locations": [
-					"notebook"
-				],
-				"when": "config.inlineChat.notebookAgent",
-				"commands": [
-					{
-						"name": "fix",
-						"description": "%copilot.workspace.fix.description%"
-					},
-					{
-						"name": "explain",
-						"description": "%copilot.workspace.explain.description%"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.workspace",
-				"name": "workspace",
-				"fullName": "Workspace",
-				"description": "%copilot.workspace.description%",
-				"when": "!github.copilot.interactiveSession.disabled",
-				"sampleRequest": "%copilot.workspace.sampleRequest%",
-				"locations": [
-					"panel"
-				],
-				"disambiguation": [
-					{
-						"category": "workspace_project_questions",
-						"description": "The user wants to learn about or update the code or files in their current workspace. Questions in this category may be about understanding what the whole workspace does or locating the implementation of some code. This does not include generating or updating tests.",
-						"examples": [
-							"What does this project do?"
-						]
-					},
-					{
-						"category": "find_code_in_workspace",
-						"description": "The user wants to locate the implementation of some functionality in their current workspace.",
-						"examples": [
-							"Where is the tree widget implemented?"
-						]
-					},
-					{
-						"category": "generate_with_workspace_context",
-						"description": "The user wants to generate code based on multiple files in the workspace and did not specify which files to reference.",
-						"examples": [
-							"Create a README for this project."
-						]
-					}
-				],
-				"commands": [
 					{
 						"name": "explain",
 						"description": "%copilot.workspace.explain.description%"
@@ -1667,6 +1670,48 @@
 								]
 							}
 						]
+					}
+				]
+			},
+			{
+				"id": "github.copilot.notebook",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "!config.inlineChat.notebookAgent",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
+					}
+				]
+			},
+			{
+				"id": "github.copilot.notebookEditorAgent",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "config.inlineChat.notebookAgent",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
 					}
 				]
 			},

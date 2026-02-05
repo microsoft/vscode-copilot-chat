@@ -7,7 +7,7 @@ import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { getChatParticipantNameFromId } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -190,8 +190,7 @@ export class ChatParticipantRequestHandler {
 		}
 
 		// Only ask for confirmation if we're invoking the codebase tool or workspace chat participant
-		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase) ||
-			this.chatAgentArgs.agentId === getChatParticipantIdFromName(workspaceAgentName);
+		const isWorkspaceCall = this.request.toolReferences.some(ref => ref.name === ContributedToolName.Codebase);
 		// and only if we can't access all repos in the workspace
 		if (isWorkspaceCall && await this._authenticationUpgradeService.shouldRequestPermissiveSessionUpgrade()) {
 			this._authenticationUpgradeService.showPermissiveSessionUpgradeInChat(this.stream, this.request);
