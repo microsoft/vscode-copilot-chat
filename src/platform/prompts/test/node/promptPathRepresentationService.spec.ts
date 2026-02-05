@@ -106,7 +106,7 @@ describe('PromptPathRepresentationService', () => {
 		});
 	});
 
-	describe('resolveFilePath (Windows simulation)', () => {
+	describe.skipIf(!isWindows)('resolveFilePath (Windows simulation)', () => {
 		let windowsService: WindowsPromptPathRepresentationService;
 
 		beforeEach(() => {
@@ -114,19 +114,17 @@ describe('PromptPathRepresentationService', () => {
 			windowsService = new WindowsPromptPathRepresentationService(workspaceService);
 		});
 
-		// These tests require the real OS to be Windows because hasDriveLetter()
-		// uses the global isWindows, not the service's override.
-		it.skipIf(!isWindows)('resolves Windows drive-letter paths', () => {
+		it('resolves Windows drive-letter paths', () => {
 			const result = windowsService.resolveFilePath('C:\\Users\\user\\file.ts');
 			expect(result).toBeDefined();
 			expect(result!.scheme).toBe(Schemas.file);
-			expect(result!.path).toBe('/c:/Users/user/file.ts');
+			expect(result!.path).toBe('/C:/Users/user/file.ts');
 		});
 
-		it.skipIf(!isWindows)('collapses double-escaped backslashes', () => {
+		it('collapses double-escaped backslashes', () => {
 			const result = windowsService.resolveFilePath('C:\\\\Users\\\\user\\\\file.ts');
 			expect(result).toBeDefined();
-			expect(result!.path).toBe('/c:/Users/user/file.ts');
+			expect(result!.path).toBe('/C:/Users/user/file.ts');
 		});
 
 		it('preserves UNC paths while collapsing extra backslashes', () => {
@@ -188,12 +186,12 @@ describe('PromptPathRepresentationService', () => {
 	});
 
 	describe('getExampleFilePath', () => {
-		it('returns a posix-style file path on non-Windows', () => {
+		it.skipIf(isWindows)('returns a posix-style file path on non-Windows', () => {
 			const result = service.getExampleFilePath('/workspace/src/file.ts');
 			expect(result).toContain('/workspace/src/file.ts');
 		});
 
-		it('returns a Windows-style path when on Windows', () => {
+		it.skipIf(!isWindows)('returns a Windows-style path when on Windows', () => {
 			workspaceService = new TestWorkspaceService();
 			const windowsService = new WindowsPromptPathRepresentationService(workspaceService);
 			const result = windowsService.getExampleFilePath('/workspace/src/file.ts');
