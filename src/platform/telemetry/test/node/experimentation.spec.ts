@@ -496,10 +496,9 @@ describe('ExP Service Tests', () => {
 		await expService.hasTreatments();
 
 		// Set a token with organizations
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
 		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
-
-		// Wait a bit for the update to propagate
-		await new Promise(resolve => setTimeout(resolve, 200));
+		await treatmentsChangePromise;
 
 		// Verify organization list is correctly tracked
 		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
@@ -515,10 +514,9 @@ describe('ExP Service Tests', () => {
 		await extensionContext.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, undefined);
 
 		// Set a token and wait for update
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
 		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
-
-		// Wait a bit for the update to propagate
-		await new Promise(resolve => setTimeout(resolve, 200));
+		await treatmentsChangePromise;
 
 		// Verify value was cached in global state
 		const cachedOrgList = extensionContext.globalState.get<string[]>(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY);
@@ -546,10 +544,9 @@ describe('ExP Service Tests', () => {
 		await expService.hasTreatments();
 
 		// Set a token with no organizations
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
 		copilotTokenService.copilotToken = NoOrgFreeToken;
-
-		// Wait a bit for the update to propagate
-		await new Promise(resolve => setTimeout(resolve, 200));
+		await treatmentsChangePromise;
 
 		// Verify organization list is empty
 		const userInfoStore = new UserInfoStore(extensionContext, copilotTokenService);
