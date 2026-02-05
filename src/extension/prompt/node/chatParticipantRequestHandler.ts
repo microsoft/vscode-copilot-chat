@@ -74,6 +74,7 @@ export class ChatParticipantRequestHandler {
 		private readonly token: CancellationToken,
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly onPaused: Event<boolean>,
+		private readonly yieldRequested: () => boolean,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
@@ -235,9 +236,9 @@ export class ChatParticipantRequestHandler {
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {
-					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.onPaused);
+					chatResult = intent.handleRequest(this.conversation, this.request, this.stream, this.token, this.documentContext, this.chatAgentArgs.agentName, this.location, this.chatTelemetry, this.onPaused, this.yieldRequested);
 				} else {
-					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.onPaused);
+					const intentHandler = this._instantiationService.createInstance(DefaultIntentRequestHandler, intent, this.conversation, this.request, this.stream, this.token, this.documentContext, this.location, this.chatTelemetry, undefined, this.onPaused, this.yieldRequested);
 					chatResult = intentHandler.getResult();
 				}
 

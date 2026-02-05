@@ -379,7 +379,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			agentId: getChatParticipantIdFromName(editorAgentName),
 			agentName: editorAgentName,
 			intentId: request.command,
-		}, Event.None);
+		}, Event.None, () => false);
 		const result = await requestHandler.getResult();
 		if (result.errorDetails) {
 			throw new Error(result.errorDetails.message);
