@@ -17,7 +17,8 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
-import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
+import { PauseController } from '../../intents/node/pauseController';
+import { IToolCallingLoopOptions, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
@@ -143,5 +144,69 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 				subType: 'subagent/search'
 			},
 		}, token);
+	}
+
+	/**
+	 * Gets the subagent ID for this loop.
+	 */
+	private getSubagentId(): string {
+		return this.options.subAgentInvocationId ?? SearchSubagentToolCallingLoop.ID;
+	}
+
+	/**
+	 * Gets the subagent type/name for this loop.
+	 */
+	private getSubagentType(): string {
+		return 'search';
+	}
+
+	public override async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
+		const agentId = this.getSubagentId();
+		const agentType = this.getSubagentType();
+
+		// Execute SubagentStart hook
+		this._logService.trace(`[SearchSubagentToolCallingLoop] Executing SubagentStart hook: agentId=${agentId}, agentType=${agentType}`);
+		const startHookResult = await this.executeSubagentStartHook({
+			agent_id: agentId,
+			agent_type: agentType
+		}, token);
+
+		if (startHookResult.additionalContext) {
+			this._logService.trace(`[SearchSubagentToolCallingLoop] SubagentStart hook provided additional context: ${startHookResult.additionalContext.substring(0, 100)}...`);
+			// The additional context could be used to modify the prompt or behavior
+			// For now, we log it. Subclasses could override createPromptContext to use it.
+		}
+
+		// Track if SubagentStop hook has blocked stopping
+		let subagentStopHookActive = false;
+		let lastResult: IToolCallLoopResult;
+
+		// Run the main loop with SubagentStop hook integration
+		while (true) {
+			// Run the parent implementation
+			lastResult = await super.run(outputStream, token);
+
+			// Execute SubagentStop hook before returning
+			this._logService.trace(`[SearchSubagentToolCallingLoop] Executing SubagentStop hook: agentId=${agentId}, agentType=${agentType}, stop_hook_active=${subagentStopHookActive}`);
+			const stopHookResult = await this.executeSubagentStopHook({
+				agent_id: agentId,
+				agent_type: agentType,
+				stop_hook_active: subagentStopHookActive
+			}, outputStream, token);
+
+			if (stopHookResult.shouldContinue && stopHookResult.reason) {
+				// SubagentStop hook blocked stopping
+				this.showSubagentStopHookBlockedMessage(outputStream, stopHookResult.reason);
+				this._logService.info(`[SearchSubagentToolCallingLoop] SubagentStop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+				subagentStopHookActive = true;
+				// Continue the loop - the parent run will handle the continuation
+				continue;
+			}
+
+			// SubagentStop hook allowed stopping
+			break;
+		}
+
+		return lastResult;
 	}
 }

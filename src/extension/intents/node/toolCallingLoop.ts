@@ -7,7 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, StopHookInput, StopHookOutput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, StopHookInput, StopHookOutput, SubagentStartHookInput, SubagentStartHookOutput, SubagentStopHookInput, SubagentStopHookOutput } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -96,6 +96,24 @@ interface StopHookResult {
 	readonly shouldContinue: boolean;
 	/**
 	 * The reason the agent should continue, if shouldContinue is true.
+	 */
+	readonly reason?: string;
+}
+
+interface SubagentStartHookResult {
+	/**
+	 * Additional context to add to the subagent's context, if any.
+	 */
+	readonly additionalContext?: string;
+}
+
+interface SubagentStopHookResult {
+	/**
+	 * Whether the subagent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reason the subagent should continue, if shouldContinue is true.
 	 */
 	readonly reason?: string;
 }
@@ -246,6 +264,98 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			outputStream.warning(l10n.t('Stop hook: {0}', reason));
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reason}`);
+	}
+
+	/**
+	 * Called when a subagent starts to allow hooks to provide additional context.
+	 * @param input The subagent start hook input containing agent_id and agent_type
+	 * @param token Cancellation token
+	 * @returns Result containing additional context from hooks
+	 */
+	protected async executeSubagentStartHook(input: SubagentStartHookInput, token: CancellationToken | PauseController): Promise<SubagentStartHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SubagentStart', {
+				toolInvocationToken: this.options.request.toolInvocationToken,
+				input: input
+			}, token);
+
+			// Collect additionalContext from all successful hook results
+			const additionalContexts: string[] = [];
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SubagentStartHookOutput;
+						if (hookOutput.additionalContext) {
+							additionalContexts.push(hookOutput.additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						}
+					}
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SubagentStart hook error: ${errorMessage}`);
+				}
+			}
+
+			return {
+				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
+			};
+		} catch (error) {
+			this._logService.error('[ToolCallingLoop] Error executing SubagentStart hook', error);
+			return {};
+		}
+	}
+
+	/**
+	 * Called before a subagent stops to give hooks a chance to block the stop.
+	 * @param input The subagent stop hook input containing agent_id, agent_type, and stop_hook_active flag
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result indicating whether to continue and the reason
+	 */
+	protected async executeSubagentStopHook(input: SubagentStopHookInput, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<SubagentStopHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SubagentStop', {
+				toolInvocationToken: this.options.request.toolInvocationToken,
+				input: input
+			}, token);
+
+			// Check for blocking responses
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SubagentStopHookOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
+							return { shouldContinue: true, reason: hookOutput.reason };
+						}
+					}
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SubagentStop hook error: ${errorMessage}`);
+				}
+			}
+
+			return { shouldContinue: false };
+		} catch (error) {
+			this._logService.error('[ToolCallingLoop] Error executing SubagentStop hook', error);
+			return { shouldContinue: false };
+		}
+	}
+
+	/**
+	 * Shows a message when the subagent stop hook blocks the subagent from stopping.
+	 * Override in subclasses to customize the display.
+	 * @param outputStream The output stream for displaying messages
+	 * @param reason The reason the subagent stop hook blocked stopping
+	 */
+	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
+		if (outputStream) {
+			outputStream.warning(l10n.t('Subagent stop hook: {0}', reason));
+		}
+		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reason}`);
 	}
 
 	private async throwIfCancelled(token: CancellationToken | PauseController) {
