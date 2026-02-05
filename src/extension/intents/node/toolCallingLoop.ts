@@ -388,17 +388,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				this.toolCallRounds.push(result.round);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-					// Before stopping, execute the stop hook
-					const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
-					this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
-					if (stopHookResult.shouldContinue && stopHookResult.reason) {
-						// The stop hook blocked stopping - show reason and continue
-						this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
-						// Store the reason so it can be passed to the model in the next prompt
-						this.stopHookReason = stopHookResult.reason;
-						this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
-						stopHookActive = true;
-						continue;
+					// Before stopping, execute the stop hook (but NOT for subagent requests - those use SubagentStop instead)
+					if (!this.options.request.subAgentInvocationId) {
+						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, token);
+						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reason=${stopHookResult.reason}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reason) {
+							// The stop hook blocked stopping - show reason and continue
+							this.showStopHookBlockedMessage(outputStream, stopHookResult.reason);
+							// Store the reason so it can be passed to the model in the next prompt
+							this.stopHookReason = stopHookResult.reason;
+							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reason: ${stopHookResult.reason}`);
+							stopHookActive = true;
+							continue;
+						}
 					}
 					lastResult = lastResult;
 					break;
