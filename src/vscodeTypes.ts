@@ -106,6 +106,7 @@ export import FileType = vscode.FileType;
 export import ChatSessionStatus = vscode.ChatSessionStatus;
 export import McpHttpServerDefinition = vscode.McpHttpServerDefinition;
 export import McpStdioServerDefinition = vscode.McpStdioServerDefinition;
+export import ThemeIcon = vscode.ThemeIcon;
 
 export const l10n = {
 	/**
