@@ -296,7 +296,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
 
 		// Always collect lint errors for telemetry, regardless of prompt configuration
-		telemetryBuilder.setLintErrors(lintErrors.getData());
+		const lintErrorsData = lintErrors.getData();
+		telemetryBuilder.setLintErrors(lintErrorsData);
+		logContext.setDiagnosticsData(lintErrorsData);
 
 		const promptPieces = new PromptPieces(
 			currentDocument,
@@ -388,7 +390,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// if recording, add diagnostics for the file to the recording and hook up the language context promise to write to the recording
 		if (recordingEnabled) {
-			logContext.setFileDiagnostics(this.langDiagService.getAllDiagnostics());
 			langCtxPromise.then(langCtxs => {
 				if (langCtxs) {
 					logContext.setLanguageContext(langCtxs);

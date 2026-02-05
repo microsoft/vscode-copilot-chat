@@ -31,28 +31,30 @@ export class LintErrors {
 		@ILanguageDiagnosticsService private readonly _langDiagService: ILanguageDiagnosticsService,
 	) { }
 
-	private _diagnostics(): readonly DiagnosticDataWithDistance[] {
-		const resource = this._documentId.toUri();
-		const allDiagnostics = this._langDiagService.getDiagnostics(resource);
+	private _diagnostics(resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
+		const allDiagnostics: [URI, Diagnostic[]][] = resource ? [[resource, this._langDiagService.getDiagnostics(resource)]] : this._langDiagService.getAllDiagnostics();
 
-		return allDiagnostics.map(diagnostic => {
-			const range = new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1);
-			const distance = CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition);
-			return new DiagnosticDataWithDistance(
-				resource,
-				diagnostic.message,
-				diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-				distance,
-				range,
-				this._document.transformer.getOffsetRange(range),
-				diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-				diagnostic.source
-			);
-		});
+		return allDiagnostics.map(fileDiagnostics => {
+			const [uri, diagnostics] = fileDiagnostics;
+			return diagnostics.map(diagnostic => {
+				const range = new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1);
+				const distance = CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition);
+				return new DiagnosticDataWithDistance(
+					uri,
+					diagnostic.message,
+					diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
+					distance,
+					range,
+					this._document.transformer.getOffsetRange(range),
+					diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
+					diagnostic.source
+				);
+			});
+		}).flat();
 	}
 
-	private _getRelevantDiagnostics(options: LintOptions): readonly DiagnosticDataWithDistance[] {
-		let diagnostics = this._diagnostics();
+	private _getRelevantDiagnostics(options: LintOptions, resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
+		let diagnostics = this._diagnostics(resource);
 
 		diagnostics = filterDiagnosticsByDistance(diagnostics, options.maxLineDistance);
 		diagnostics = sortDiagnosticsByDistance(diagnostics);
@@ -62,7 +64,7 @@ export class LintErrors {
 	}
 
 	public getFormattedLintErrors(options: LintOptions): string {
-		const diagnostics = this._getRelevantDiagnostics(options);
+		const diagnostics = this._getRelevantDiagnostics(options, this._documentId.toUri());
 		this._previousFormttedDiagnostics = diagnostics;
 
 		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, options)).join('\n');
@@ -105,9 +107,10 @@ export class LintErrors {
 			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
 		};
 
-		const diagnostics = this._getRelevantDiagnostics(telemetryOptions);
+		const diagnostics = this._getRelevantDiagnostics(telemetryOptions, undefined);
 
-		const telemetryDiagnostics: ILintErrorTelemetry[] = diagnostics.map(diagnostic => ({
+		const telemetryDiagnostics = diagnostics.map(diagnostic => ({
+			uri: diagnostic.documentUri.toString(),
 			line: diagnostic.documentRange.startLineNumber,
 			column: diagnostic.documentRange.startColumn,
 			endLine: diagnostic.documentRange.endLineNumber,
@@ -249,22 +252,4 @@ class DiagnosticDataWithDistance extends DiagnosticData {
 		super(documentUri, message, severity, range, code, source);
 	}
 
-}
-
-/**
- * Telemetry data structure for a single lint error.
- */
-export interface ILintErrorTelemetry {
-	readonly line: number;
-	readonly column: number;
-	readonly endLine: number;
-	readonly endColumn: number;
-	readonly severity: 'error' | 'warning';
-	readonly message: string;
-	readonly code: string | number | undefined;
-	readonly source: string | undefined;
-	readonly lineDistance: number;
-	readonly formatted: string;
-	readonly formattedCode: string;
-	readonly formattedCodeWithSurrounding: string;
 }
