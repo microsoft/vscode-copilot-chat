@@ -19,7 +19,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 /**
  * Parameters for the vscode_commit_memory tool.
  */
-interface IVSCodeCommitMemoryParams {
+export interface IVSCodeCommitMemoryParams {
 	subject: string;
 	fact: string;
 	citations: string;

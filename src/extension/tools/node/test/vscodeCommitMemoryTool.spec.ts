@@ -14,16 +14,8 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ContributedToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
+import { IVSCodeCommitMemoryParams } from '../vscodeCommitMemoryTool';
 import { toolResultToString } from './toolTestUtils';
-
-interface IVSCodeCommitMemoryParams {
-subject: string;
-fact: string;
-citations: string;
-reason: string;
-category: string;
-suggestedContext?: string;
-}
 
 suite('VSCodeCommitMemoryTool', () => {
 let accessor: ITestingServicesAccessor;
