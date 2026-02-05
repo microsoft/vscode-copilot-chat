@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 1
+// version: 2
 
 declare module 'vscode' {
 
@@ -28,32 +28,28 @@ declare module 'vscode' {
 	}
 
 	/**
-	 * The kind of result from a hook execution.
-	 */
-	export enum ChatHookResultKind {
-		/**
-		 * Hook executed successfully (exit code 0).
-		 */
-		Success = 1,
-		/**
-		 * Hook returned an error (any non-zero exit code).
-		 */
-		Error = 2
-	}
-
-	/**
 	 * Result of executing a hook command.
+	 * Contains common flow control fields and the hook's output.
 	 */
 	export interface ChatHookResult {
 		/**
-		 * The kind of result.
+		 * If set, the agent should stop processing entirely after this hook.
+		 * The message is shown to the user but not to the agent.
 		 */
-		readonly kind: ChatHookResultKind;
+		readonly stopReason?: string;
 		/**
-		 * The result from the hook. For success, this is stdout parsed as JSON.
-		 * For errors, this is stderr.
+		 * Message shown to the user.
 		 */
-		readonly result: string | object;
+		readonly messageForUser?: string;
+		/**
+		 * The hook's output (hook-specific fields only).
+		 * For errors, this is the error message string.
+		 */
+		readonly output: unknown;
+		/**
+		 * Whether the hook command executed successfully (exit code 0).
+		 */
+		readonly success: boolean;
 	}
 
 	export namespace chat {

@@ -89,7 +89,7 @@
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
-		"chatHooks@1",
+		"chatHooks@2",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
