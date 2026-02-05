@@ -103,7 +103,7 @@ interface StopShellTool {
 }
 
 interface GrepTool {
-	toolName: 'grep';
+	toolName: 'grep' | 'rg';
 	arguments: {
 		pattern: string;
 		path?: string;
@@ -615,6 +615,8 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 				input,
 				output
 			} satisfies ChatMcpToolInvocationData;
+		} else {
+			genericToolInvocationCompleted(invocation[0], toolCall, event.data);
 		}
 	}
 
@@ -666,31 +668,32 @@ type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName:
 type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
 
-const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult) => void] } = {
-	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, emptyInvocation],
-	'edit': [l10n.t('Edit File'), formatEditToolInvocation, emptyInvocation],
-	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, emptyInvocation],
-	'create': [l10n.t('Create File'), formatCreateToolInvocation, emptyInvocation],
-	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, emptyInvocation],
-	'undo_edit': [l10n.t('Edit File'), formatUndoEdit, emptyInvocation],
-	'view': [l10n.t('Read'), formatViewToolInvocation, emptyInvocation],
+const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
+	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
+	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
+	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
+	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
+	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
+	'undo_edit': [l10n.t('Edit File'), formatUndoEdit, genericToolInvocationCompleted],
+	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
 	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
 	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
-	'write_bash': [l10n.t('Write to Bash'), emptyInvocation, emptyInvocation],
-	'write_powershell': [l10n.t('Write to PowerShell'), emptyInvocation, emptyInvocation],
-	'read_bash': [l10n.t('Read Terminal'), emptyInvocation, emptyInvocation],
-	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, emptyInvocation],
-	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, emptyInvocation],
-	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, emptyInvocation],
+	'write_bash': [l10n.t('Write to Bash'), emptyInvocation, genericToolInvocationCompleted],
+	'write_powershell': [l10n.t('Write to PowerShell'), emptyInvocation, genericToolInvocationCompleted],
+	'read_bash': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
+	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
+	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
+	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
 	'search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
+	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
 	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
 	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
 	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
-	'report_intent': [l10n.t('Report Intent'), emptyInvocation, emptyInvocation],
-	'think': [l10n.t('Thinking'), emptyInvocation, emptyInvocation],
+	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
+	'think': [l10n.t('Thinking'), emptyInvocation, genericToolInvocationCompleted],
 	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation, genericToolInvocationCompleted],
 	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, genericToolInvocationCompleted],
 	'web_search': [l10n.t('Web Search'), emptyInvocation, genericToolInvocationCompleted],
@@ -852,7 +855,7 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
-	} else if (toolCall.toolName === 'grep') {
+	} else if (toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
 		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
@@ -866,8 +869,9 @@ function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart,
 		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
 	} else if (toolCall.toolName === 'search_bash') {
 		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
-	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep') {
-		const noMatches = (result.result?.content || '').toLowerCase().includes('no matches found') || (result.result?.content || '').toLowerCase().includes('no files matched the pattern');
+	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
+		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
+		const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
 		const files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
 		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
@@ -1013,9 +1017,9 @@ function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: Unknown
 	// No custom formatting needed
 }
 
-function genericToolInvocationCompleted(_invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
+function genericToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
 	if (result.success && result.result?.content) {
-		_invocation.toolSpecificData = {
+		invocation.toolSpecificData = {
 			output: typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content, null, 2),
 			input: toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : ''
 		};
