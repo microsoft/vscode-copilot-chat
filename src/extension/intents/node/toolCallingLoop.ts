@@ -46,21 +46,6 @@ import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
 
-/**
- * Result of calling the stop hook.
- * This is an internal type used by the tool calling loop to process hook outputs.
- */
-export interface StopHookResult {
-	/**
-	 * Whether the agent should continue (not stop).
-	 */
-	readonly shouldContinue: boolean;
-	/**
-	 * The reason the agent should continue, if shouldContinue is true.
-	 */
-	readonly reason?: string;
-}
-
 export const enum ToolCallLimitBehavior {
 	Confirm,
 	Stop,
@@ -108,6 +93,17 @@ export interface IToolCallingBuiltPromptEvent {
 }
 
 export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
+
+interface StopHookResult {
+	/**
+	 * Whether the agent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reason the agent should continue, if shouldContinue is true.
+	 */
+	readonly reason?: string;
+}
 
 /**
  * This is a base class that can be used to implement a tool calling loop
