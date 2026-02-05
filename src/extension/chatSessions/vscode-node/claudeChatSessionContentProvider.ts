@@ -13,9 +13,9 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
+import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
-import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 const MODELS_OPTION_ID = 'model';
