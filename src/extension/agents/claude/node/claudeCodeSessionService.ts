@@ -274,9 +274,16 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const messages: StoredSDKMessage[] = [];
 			let currentUuid: string | null = leafUuid;
 			let summaryEntry: SummaryEntry | undefined;
+			const visited = new Set<string>();
 
 			// Follow parent chain to build complete message history
 			while (currentUuid) {
+				if (visited.has(currentUuid)) {
+					// Cycle detected - break to avoid infinite loop
+					break;
+				}
+				visited.add(currentUuid);
+
 				const sdkMessage = allMessages.get(currentUuid);
 				summaryEntry = allSummaries.get(currentUuid) ?? summaryEntry;
 				if (!sdkMessage) {
