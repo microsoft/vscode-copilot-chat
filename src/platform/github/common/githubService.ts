@@ -150,7 +150,7 @@ export interface CustomAgentListItem {
 	model?: string;
 	/**
 	 * @deprecated Backend field being migrated. Maps to `disable-model-invocation` attribute:
-	 * - `infer: true` → agent CAN be invoked by model → `disable-model-invocation: false` (default, omitted)
+	 * - `infer: true` or `undefined` → agent CAN be invoked by model → `disable-model-invocation: false` (default, omitted)
 	 * - `infer: false` → agent CANNOT be invoked by model → `disable-model-invocation: true`
 	 */
 	infer?: boolean;
