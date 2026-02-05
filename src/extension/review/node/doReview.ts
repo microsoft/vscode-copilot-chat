@@ -5,6 +5,16 @@
 
 import * as l10n from '@vscode/l10n';
 import type { Selection, TextEditor, Uri } from 'vscode';
+
+/**
+ * Result of attempting to resolve a selection for review.
+ * Discriminated union to distinguish between different failure reasons.
+ */
+export type SelectionResolutionResult =
+	| { type: 'success'; selection: Selection }
+	| { type: 'no-editor' }
+	| { type: 'no-selection' }
+	| { type: 'cancelled' };
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -122,9 +132,20 @@ export class ReviewSession {
 		}
 
 		const editor = this.tabsAndEditorsService.activeTextEditor;
-		const selection = await this.resolveSelection(group, editor);
-		if (group === 'selection' && selection === undefined) {
-			return undefined;
+		const selectionResult = await this.resolveSelection(group, editor);
+		if (group === 'selection') {
+			if (selectionResult.type === 'no-editor') {
+				this.notificationService.showInformationMessage(l10n.t('Please open a file to review code.'));
+				return undefined;
+			}
+			if (selectionResult.type === 'no-selection') {
+				this.notificationService.showInformationMessage(l10n.t('Please select some code to review.'));
+				return undefined;
+			}
+			if (selectionResult.type === 'cancelled') {
+				// User cancelled the scope selector - silently return
+				return undefined;
+			}
 		}
 
 		const title = getReviewTitle(group, editor);
@@ -145,14 +166,15 @@ export class ReviewSession {
 
 	/**
 	 * Resolves the selection for 'selection' group reviews.
-	 * @returns The selection range, or undefined if selection cannot be determined
+	 * @returns A result indicating success with a selection, or the reason for failure
 	 */
-	private async resolveSelection(group: ReviewGroup, editor: TextEditor | undefined): Promise<Selection | undefined> {
+	private async resolveSelection(group: ReviewGroup, editor: TextEditor | undefined): Promise<SelectionResolutionResult> {
 		if (group !== 'selection') {
-			return editor?.selection;
+			// For non-selection groups, return a dummy success result (selection not used)
+			return { type: 'success', selection: editor?.selection as Selection };
 		}
 		if (!editor) {
-			return undefined;
+			return { type: 'no-editor' };
 		}
 		let selection = editor.selection;
 		if (!selection || selection.isEmpty) {
@@ -162,19 +184,19 @@ export class ReviewSession {
 					includeBlocks: true
 				});
 				if (!rangeOfEnclosingSymbol) {
-					return undefined;
+					return { type: 'no-selection' };
 				}
 				selection = rangeOfEnclosingSymbol;
 			} catch (err) {
 				if (isCancellationError(err)) {
-					return undefined;
+					return { type: 'cancelled' };
 				}
 				// Original behavior: non-cancellation errors are silently ignored
 				// and we fall through with whatever selection we have
 				// Possibly causes https://github.com/microsoft/vscode/issues/276240
 			}
 		}
-		return selection;
+		return { type: 'success', selection };
 	}
 
 	/**
