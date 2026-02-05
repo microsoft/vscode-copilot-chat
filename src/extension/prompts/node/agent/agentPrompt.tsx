@@ -380,7 +380,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
 						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
-						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}					</Tag>
+						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}
+					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}

@@ -355,7 +355,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reason: string): void {
 		if (outputStream) {
-			outputStream.warning(l10n.t('Subagent stop hook: {0}', reason));
+			outputStream.markdown(l10n.t('\n\n**Subagent stop hook:** {0}\n\n', reason));
 		}
 		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reason}`);
 	}
