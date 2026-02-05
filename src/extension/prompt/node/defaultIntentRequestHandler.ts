@@ -141,7 +141,6 @@ export class DefaultIntentRequestHandler {
 				this.request.subAgentName,
 				this.request.sessionId,
 			);
-
 			const resultDetails = await this._requestLogger.captureInvocation(capturingToken, () => this.runWithToolCalling(intentInvocation));
 
 			let chatResult = resultDetails.chatResult || {};
