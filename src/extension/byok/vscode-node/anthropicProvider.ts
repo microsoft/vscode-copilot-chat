@@ -226,15 +226,20 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
+			// Check if model supports adaptive thinking
+			const modelCapabilities = this._knownModels?.[model.id];
+			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+
 			// Build context management configuration
+			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
 			const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 				this._configurationService,
-				(thinkingBudget ?? 0) > 0
+				thinkingEnabled
 			) : undefined;
 
-			// Build betas array for beta API features
+			// Build betas array for beta API features (adaptive thinking doesn't need interleaved-thinking beta)
 			const betas: string[] = [];
-			if (thinkingBudget) {
+			if (thinkingBudget && !supportsAdaptiveThinking) {
 				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
@@ -251,10 +256,9 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				stream: true,
 				system: [system],
 				tools: tools.length > 0 ? tools : undefined,
-				thinking: thinkingBudget ? {
-					type: 'enabled',
-					budget_tokens: thinkingBudget
-				} : undefined,
+				thinking: supportsAdaptiveThinking
+					? { type: 'adaptive' as any }
+					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
 				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 			};
 

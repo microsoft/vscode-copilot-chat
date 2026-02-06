@@ -3153,6 +3153,19 @@
 							"preview",
 							"onExp"
 						]
+					},
+					"github.copilot.chat.anthropic.thinking.effort": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.effort%",
+						"enum": [
+							"low",
+							"medium",
+							"high"
+						],
+						"default": "high",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},

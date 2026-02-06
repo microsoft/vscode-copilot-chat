@@ -109,8 +109,11 @@ export interface IEndpointBody {
 
 	/** Messages API */
 	thinking?: {
-		type: 'enabled' | 'disabled';
+		type: 'enabled' | 'disabled' | 'adaptive';
 		budget_tokens?: number;
+	};
+	output_config?: {
+		effort?: 'low' | 'medium' | 'high';
 	};
 	context_management?: ContextManagement;
 
@@ -208,6 +211,9 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly model: string;
 	readonly apiType?: string;
 	readonly supportsThinkingContentInHistory?: boolean;
+	readonly supportsAdaptiveThinking?: boolean;
+	readonly minThinkingBudget?: number;
+	readonly maxThinkingBudget?: number;
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;

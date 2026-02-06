@@ -55,6 +55,7 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	adaptiveThinking?: boolean;
 	streaming?: boolean;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
@@ -126,7 +127,8 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 				streaming: knownModelInfo?.streaming ?? true,
 				tool_calls: !!knownModelInfo?.toolCalling,
 				vision: !!knownModelInfo?.vision,
-				thinking: !!knownModelInfo?.thinking
+				thinking: !!knownModelInfo?.thinking,
+				adaptive_thinking: !!knownModelInfo?.adaptiveThinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {

@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -114,22 +114,34 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	// Don't enable thinking if explicitly disabled (e.g., continuation without thinking in history)
 	// or if the location is not the chat panel (conversation agent)
-	// or if the model doesn't support interleaved thinking
-	let thinkingBudget: number | undefined;
-	if (isAllowedConversationAgent && !options.disableThinking && modelSupportsInterleavedThinking(endpoint.model)) {
-		const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
-		const maxTokens = options.postOptions.max_tokens ?? 1024;
-		const normalizedBudget = (configuredBudget && configuredBudget > 0)
-			? (configuredBudget < 1024 ? 1024 : configuredBudget)
-			: undefined;
-		thinkingBudget = normalizedBudget
-			? Math.min(maxTokens - 1, normalizedBudget)
-			: undefined;
+	// or if the model doesn't support thinking
+	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
+	if (isAllowedConversationAgent && !options.disableThinking) {
+		if (endpoint.supportsAdaptiveThinking) {
+			// Adaptive thinking: let Claude decide when and how much to think
+			thinkingConfig = { type: 'adaptive' };
+		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
+			// Standard thinking: use explicit budget
+			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
+			const maxTokens = options.postOptions.max_tokens ?? 1024;
+			const minBudget = endpoint.minThinkingBudget ?? 1024;
+			const normalizedBudget = (configuredBudget && configuredBudget > 0)
+				? (configuredBudget < minBudget ? minBudget : configuredBudget)
+				: undefined;
+			const thinkingBudget = normalizedBudget
+				? Math.min(maxTokens - 1, normalizedBudget)
+				: undefined;
+			if (thinkingBudget) {
+				thinkingConfig = { type: 'enabled', budget_tokens: thinkingBudget };
+			}
+		}
 	}
+
+	const thinkingEnabled = !!thinkingConfig;
 
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
-		? getContextManagementFromConfig(configurationService, (thinkingBudget ?? 0) > 0)
+		? getContextManagementFromConfig(configurationService, thinkingEnabled)
 		: undefined;
 
 	return {
@@ -139,10 +151,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		tools: finalTools.length > 0 ? finalTools : undefined,
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
-		thinking: thinkingBudget ? {
-			type: 'enabled',
-			budget_tokens: thinkingBudget,
-		} : undefined,
+		thinking: thinkingConfig,
 		...(contextManagement ? { context_management: contextManagement } : {}),
 	};
 }

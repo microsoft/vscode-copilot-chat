@@ -166,6 +166,7 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
@@ -182,7 +183,8 @@ export function modelSupportsToolSearch(modelId: string): boolean {
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	// TODO: Enable sonnet tool search when supported by all providers
 	// return normalized.startsWith('claude-sonnet-4-5') ||
-	return normalized.startsWith('claude-opus-4-5');
+	return normalized.startsWith('claude-opus-4-6') ||
+		normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -219,6 +221,7 @@ export function modelSupportsMemory(modelId: string): boolean {
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
