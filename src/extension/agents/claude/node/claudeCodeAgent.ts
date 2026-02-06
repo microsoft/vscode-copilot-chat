@@ -531,6 +531,7 @@ export class ClaudeCodeSession extends Disposable {
 	private async _processMessages(): Promise<void> {
 		try {
 			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
+			const pushedToolInvocationIds = new Set<string>();
 			for await (const message of this._queryGenerator!) {
 				// Check if current request was cancelled
 				if (this._currentRequest?.token.isCancellationRequested) {
@@ -543,9 +544,9 @@ export class ClaudeCodeSession extends Disposable {
 				}
 
 				if (message.type === 'assistant') {
-					this.handleAssistantMessage(message, this._currentRequest!.stream, unprocessedToolCalls);
+					this.handleAssistantMessage(message, this._currentRequest!.stream, unprocessedToolCalls, pushedToolInvocationIds);
 				} else if (message.type === 'user') {
-					this.handleUserMessage(message, this._currentRequest!.stream, unprocessedToolCalls, this._currentRequest!.toolInvocationToken, this._currentRequest!.token);
+					this.handleUserMessage(message, this._currentRequest!.stream, unprocessedToolCalls, pushedToolInvocationIds, this._currentRequest!.toolInvocationToken, this._currentRequest!.token);
 				} else if (message.type === 'result') {
 					this.handleResultMessage(message, this._currentRequest!.stream);
 					// Resolve and remove the completed request
@@ -601,7 +602,8 @@ export class ClaudeCodeSession extends Disposable {
 	private handleAssistantMessage(
 		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
-		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
+		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		pushedToolInvocationIds: Set<string>
 	): void {
 		for (const item of message.message.content) {
 			if (item.type === 'text') {
@@ -610,6 +612,12 @@ export class ClaudeCodeSession extends Disposable {
 				stream.push(new ChatResponseThinkingProgressPart(item.thinking));
 			} else if (item.type === 'tool_use') {
 				unprocessedToolCalls.set(item.id, item);
+				// Push tool invocation immediately so it appears in "running" state
+				const invocation = createFormattedToolInvocation(item);
+				if (invocation) {
+					stream.push(invocation);
+					pushedToolInvocationIds.add(item.id);
+				}
 			}
 		}
 	}
@@ -621,13 +629,14 @@ export class ClaudeCodeSession extends Disposable {
 		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		pushedToolInvocationIds: Set<string>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
 		if (Array.isArray(message.message.content)) {
 			for (const toolResult of message.message.content) {
 				if (toolResult.type === 'tool_result') {
-					this.processToolResult(toolResult, stream, unprocessedToolCalls, toolInvocationToken, token);
+					this.processToolResult(toolResult, stream, unprocessedToolCalls, pushedToolInvocationIds, toolInvocationToken, token);
 				}
 			}
 		}
@@ -640,6 +649,7 @@ export class ClaudeCodeSession extends Disposable {
 		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		pushedToolInvocationIds: Set<string>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
@@ -649,20 +659,27 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
-		const invocation = createFormattedToolInvocation(toolUse);
-		if (invocation) {
-			invocation.isError = toolResult.is_error;
-			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
-				invocation.isConfirmed = false;
+		
+		// Only push a new invocation if we haven't already pushed one
+		if (!pushedToolInvocationIds.has(toolUse.id)) {
+			const invocation = createFormattedToolInvocation(toolUse);
+			if (invocation) {
+				invocation.isError = toolResult.is_error;
+				if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
+					invocation.isConfirmed = false;
+				}
+				stream.push(invocation);
 			}
+		} else {
+			// Tool invocation was already pushed in handleAssistantMessage.
+			// We cannot update the invocation's error or confirmation status after it's been pushed,
+			// as the ChatToolInvocationPart is immutable once in the stream.
+			// This means denied tools will show as confirmed, but this is preferable to duplicate invocations.
+			pushedToolInvocationIds.delete(toolUse.id);
 		}
 
 		if (toolUse.name === ClaudeToolNames.TodoWrite) {
 			this.processTodoWriteTool(toolUse, toolInvocationToken, token);
-		}
-
-		if (invocation) {
-			stream.push(invocation);
 		}
 	}
 

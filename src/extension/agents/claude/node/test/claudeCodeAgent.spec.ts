@@ -223,4 +223,84 @@ describe('ClaudeCodeSession', () => {
 		await session.invoke(toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-sonnet');
 		expect(mockService.queryCallCount).toBe(1); // Same query reused
 	});
+
+	it('does not create duplicate tool invocations when tools are used', async () => {
+		const serverConfig = { port: 8080, nonce: 'test-nonce' };
+		const mockService = instantiationService.invokeFunction(accessor => accessor.get(IClaudeCodeSdkService)) as MockClaudeCodeSdkService;
+		
+		// Override the mock to include a tool use
+		mockService.createMockGeneratorWithToolUse = async function* (prompt: AsyncIterable<any>): AsyncGenerator<any, void, unknown> {
+			for await (const _ of prompt) {
+				// Assistant message with tool use
+				yield {
+					type: 'assistant',
+					session_id: 'sess-1',
+					message: {
+						role: 'assistant',
+						content: [
+							{ type: 'text', text: 'I will search for files' },
+							{ 
+								type: 'tool_use',
+								id: 'tool_1',
+								name: 'Glob',
+								input: { pattern: '*.ts' }
+							}
+						]
+					}
+				};
+				// User message with tool result
+				yield {
+					type: 'user',
+					session_id: 'sess-1',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'tool_result',
+								tool_use_id: 'tool_1',
+								content: 'file1.ts\nfile2.ts',
+								is_error: false
+							}
+						]
+					}
+				};
+				// Final result
+				yield {
+					type: 'result',
+					subtype: 'error_max_turns',
+					uuid: 'mock-uuid',
+					session_id: 'sess-1',
+					duration_ms: 0,
+					duration_api_ms: 0,
+					is_error: false,
+					num_turns: 1,
+					total_cost_usd: 0,
+					usage: { input_tokens: 0, output_tokens: 0 },
+					permission_denials: []
+				};
+			}
+		};
+
+		(mockService as any).createMockGenerator = mockService.createMockGeneratorWithToolUse;
+
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined, undefined));
+		
+		// Track pushed items
+		const pushedItems: any[] = [];
+		const stream = new MockChatResponseStream((part: any) => {
+			pushedItems.push(part);
+		});
+
+		await session.invoke('Search for TypeScript files', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
+
+		// Count how many times a Glob tool invocation was pushed
+		const globInvocations = pushedItems.filter((item: any) => 
+			item && typeof item === 'object' && 
+			item.constructor.name === 'ChatToolInvocationPart' &&
+			(item as any).toolName === 'Glob'
+		);
+
+		// Should only have ONE tool invocation for Glob, not two
+		expect(globInvocations.length).toBe(1);
+	});
 });
