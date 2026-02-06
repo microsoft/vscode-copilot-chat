@@ -67,13 +67,13 @@ export class ChatResponseHookPart {
 	continue: boolean;
 	stopReason?: string;
 	systemMessage?: string;
-	metadata?: { readonly [key: string]: any };
+	metadata?: { readonly [key: string]: unknown };
 	constructor(
 		hookType: ChatHookType,
 		shouldContinue: boolean,
 		stopReason?: string,
 		systemMessage?: string,
-		metadata?: { readonly [key: string]: any }
+		metadata?: { readonly [key: string]: unknown }
 	) {
 		this.hookType = hookType;
 		this.continue = shouldContinue;

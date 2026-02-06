@@ -428,7 +428,7 @@ declare module 'vscode' {
 		/** Warning/system message from the hook, shown to the user */
 		systemMessage?: string;
 		/** Optional metadata associated with the hook execution */
-		metadata?: { readonly [key: string]: any };
+		metadata?: { readonly [key: string]: unknown };
 
 		/**
 		 * Creates a new hook progress part.
@@ -438,7 +438,7 @@ declare module 'vscode' {
 		 * @param systemMessage Warning/system message from the hook
 		 * @param metadata Optional metadata
 		 */
-		constructor(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string, metadata?: { readonly [key: string]: any });
+		constructor(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string, metadata?: { readonly [key: string]: unknown });
 	}
 
 	export class ChatResponseReferencePart2 {
