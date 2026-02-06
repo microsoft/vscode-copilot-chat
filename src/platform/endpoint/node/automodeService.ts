@@ -94,11 +94,10 @@ class AutoModeTokenBank extends Disposable {
 			: 'copilotchat.autoModelHint';
 
 		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
-		console.log(`AutoModeService: Using auto mode hint '${autoModeHint}' for location '${this._location}'.`);
 
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
-				'auto_mode': { 'model_hints': ['grok-code-fast-1'] }
+				'auto_mode': { 'model_hints': [autoModeHint] }
 			},
 			headers,
 			method: 'POST'
