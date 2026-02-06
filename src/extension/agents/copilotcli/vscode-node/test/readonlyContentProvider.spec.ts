@@ -7,6 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', () => ({
 	Uri: {
+		file: (path: string) => ({
+			scheme: 'file',
+			path,
+			fsPath: path,
+			toString: () => `file://${path}`,
+		}),
 		from: (components: { scheme: string; path: string; query: string }) => ({
 			scheme: components.scheme,
 			path: components.path,

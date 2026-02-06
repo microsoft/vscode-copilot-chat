@@ -27,6 +27,10 @@ vi.mock('vscode', () => {
 			onDidChangeDiagnostics: mockOnDidChangeDiagnostics,
 		},
 		DiagnosticSeverity,
+		Disposable: class Disposable {
+			constructor(private readonly callOnDispose: () => void) { }
+			dispose() { this.callOnDispose(); }
+		},
 	};
 });
 

@@ -18,6 +18,10 @@ vi.mock('vscode', () => ({
 		get activeTextEditor() { return mockActiveTextEditor.value; },
 		onDidChangeTextEditorSelection: mockOnDidChangeTextEditorSelection,
 	},
+	Disposable: class Disposable {
+		constructor(private readonly callOnDispose: () => void) { }
+		dispose() { this.callOnDispose(); }
+	},
 }));
 
 import { registerSelectionChangedNotification } from '../tools/push/selectionChanged';
