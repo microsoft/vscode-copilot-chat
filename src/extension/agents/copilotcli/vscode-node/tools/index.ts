@@ -9,7 +9,6 @@ import { registerCloseDiffTool } from './closeDiff';
 import { registerGetDiagnosticsTool } from './getDiagnostics';
 import { registerGetSelectionTool, SelectionState } from './getSelection';
 import { registerGetVscodeInfoTool } from './getVscodeInfo';
-import { registerShowNotificationTool } from './showNotification';
 import { ILogger } from '../../../../../platform/log/common/logService';
 import { DiffStateManager } from '../diffState';
 import { ReadonlyContentProvider } from '../readonlyContentProvider';
@@ -24,6 +23,5 @@ export function registerTools(server: McpServer, logger: ILogger, diffState: Dif
 	registerOpenDiffTool(server, logger, diffState, contentProvider);
 	registerCloseDiffTool(server, logger, diffState);
 	registerGetDiagnosticsTool(server, logger);
-	registerShowNotificationTool(server, logger);
 	logger.debug('All MCP tools registered');
 }
