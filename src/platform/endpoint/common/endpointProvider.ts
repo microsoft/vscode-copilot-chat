@@ -8,6 +8,7 @@ import { RequestMetadata } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
+import { Event } from '../../../util/vs/base/common/event';
 import type { ChatRequest } from '../../../vscodeTypes';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../networking/common/networking';
 
@@ -123,6 +124,12 @@ export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {
 	readonly _serviceBrand: undefined;
+
+	/**
+	 * Fires whenever model metadata is refreshed from the server.
+	 * Does not always indicate there is a change, just that the data is fresh.
+	 */
+	readonly onDidModelsRefresh: Event<void>;
 
 	/**
 	 * Gets all the completion models known by the endpoint provider.

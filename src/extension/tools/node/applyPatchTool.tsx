@@ -650,7 +650,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			createEditConfirmation,
 			uris,
 			this._promptContext?.allowedEditUris,
-			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token),
+			options.forceConfirmationReason
 		);
 	}
 

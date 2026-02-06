@@ -14,6 +14,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { renderPromptElement } from '../../prompts/node/base/promptRenderer';
 import { PromptCategorizationPrompt } from '../../prompts/node/panel/promptCategorization';
@@ -35,6 +36,17 @@ export interface IPromptCategorizerService {
 	 */
 	categorizePrompt(request: vscode.ChatRequest, context: vscode.ChatContext): void;
 }
+
+// Categorization outcome values for telemetry
+const CATEGORIZATION_OUTCOMES = {
+	SUCCESS: '',
+	TIMEOUT: 'timeout',
+	REQUEST_FAILED: 'requestFailed',
+	NO_TOOL_CALL: 'noToolCall',
+	PARSE_ERROR: 'parseError',
+	INVALID_CLASSIFICATION: 'invalidClassification',
+	ERROR: 'error',
+} as const;
 
 // ISO 8601 duration regex: PT followed by at least one of hours (H), minutes (M), seconds (S)
 const ISO_8601_DURATION_REGEX = /^PT(?!$)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/;
@@ -108,7 +120,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 
 	private async _categorizePromptAsync(request: vscode.ChatRequest, _context: vscode.ChatContext): Promise<void> {
 		const startTime = Date.now();
-		let success = false;
+		let outcome: typeof CATEGORIZATION_OUTCOMES[keyof typeof CATEGORIZATION_OUTCOMES] = CATEGORIZATION_OUTCOMES.ERROR;
+		let errorDetail = '';
 		let classification: PromptClassification | undefined;
 
 		// Gather context signals (outside try block for telemetry access)
@@ -160,6 +173,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 			}, cts.token);
 
 			if (cts.token.isCancellationRequested) {
+				outcome = CATEGORIZATION_OUTCOMES.TIMEOUT;
+				errorDetail = `Timed out after ${CATEGORIZATION_TIMEOUT_MS}ms`;
 				this.logService.debug('[PromptCategorizer] Request cancelled due to timeout');
 				// Don't return early - still send telemetry below to track timeouts
 			} else if (response.type === ChatFetchResponseType.Success) {
@@ -171,27 +186,50 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 						const parsed = JSON.parse(categorizationCall.arguments);
 						if (isValidClassification(parsed)) {
 							classification = parsed;
-							success = true;
+							outcome = CATEGORIZATION_OUTCOMES.SUCCESS;
 						} else {
-							this.logService.warn(`[PromptCategorizer] Invalid classification structure: ${categorizationCall.arguments.substring(0, 200)}`);
+							outcome = CATEGORIZATION_OUTCOMES.INVALID_CLASSIFICATION;
+							errorDetail = categorizationCall.arguments.substring(0, 200);
+							this.logService.warn(`[PromptCategorizer] Invalid classification structure: ${errorDetail}`);
 						}
 					} catch (parseError) {
-						this.logService.warn(`[PromptCategorizer] Failed to parse tool arguments: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+						outcome = CATEGORIZATION_OUTCOMES.PARSE_ERROR;
+						errorDetail = parseError instanceof Error ? parseError.message : String(parseError);
+						this.logService.warn(`[PromptCategorizer] Failed to parse tool arguments: ${errorDetail}`);
 					}
 				} else {
+					outcome = CATEGORIZATION_OUTCOMES.NO_TOOL_CALL;
+					errorDetail = `${toolCalls.length} tool calls returned, none matched ${CATEGORIZE_PROMPT_TOOL_NAME}`;
 					this.logService.warn('[PromptCategorizer] No categorization tool call found in response');
 				}
 			} else {
+				outcome = CATEGORIZATION_OUTCOMES.REQUEST_FAILED;
+				errorDetail = `Response type: ${response.type}`;
 				this.logService.warn(`[PromptCategorizer] Request failed with type: ${response.type}`);
 			}
+
+			// Release accumulated tool call data that may be retained via finishedCb closure
+			toolCalls.length = 0;
 		} catch (err) {
-			this.logService.error(`[PromptCategorizer] Error during categorization: ${err instanceof Error ? err.message : String(err)}`);
+			if (isCancellationError(err)) {
+				outcome = CATEGORIZATION_OUTCOMES.TIMEOUT;
+				errorDetail = `Request cancelled after ${Date.now() - startTime}ms`;
+			} else {
+				errorDetail = err instanceof Error ? err.message : String(err);
+			}
+			this.logService.error(`[PromptCategorizer] Error during categorization: ${errorDetail}`);
 		} finally {
 			clearTimeout(timeoutHandle);
 			cts.dispose();
 		}
 
 		const latencyMs = Date.now() - startTime;
+
+		// Truncate errorDetail to prevent telemetry backend limits
+		const MAX_ERROR_DETAIL_LENGTH = 500;
+		const truncatedErrorDetail = errorDetail.length > MAX_ERROR_DETAIL_LENGTH
+			? errorDetail.slice(0, MAX_ERROR_DETAIL_LENGTH)
+			: errorDetail;
 
 		// Send telemetry
 		/* __GDPR__
@@ -202,6 +240,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique request identifier within the session" },
 				"modeName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode name being used" },
 				"currentLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language ID of the active editor" },
+				"outcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Classification outcome: empty string for success, or error kind (timeout, requestFailed, noToolCall, parseError, invalidClassification, error)" },
 				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The intent category (e.g., code_generation, code_fixing)" },
 				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The domain category (e.g., frontend, backend)" },
 				"timeEstimateBestCase": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for best case time estimate" },
@@ -211,8 +250,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"numReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of context references attached to the request" },
 				"numToolReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool references in the request" },
 				"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Confidence score of the classification (0.0 to 1.0)" },
-				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in milliseconds to complete the classification" },
-				"success": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether classification succeeded (1) or failed (0)" }
+				"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Time in milliseconds to complete the classification" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent(
@@ -222,6 +260,7 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				requestId: request.id ?? '',
 				modeName: request.modeInstructions2?.name,
 				currentLanguage: currentLanguage ?? '',
+				outcome,
 				intent: classification?.intent ?? 'unknown',
 				domain: classification?.domain ?? 'unknown',
 				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
@@ -234,7 +273,6 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				numToolReferences: request.toolReferences?.length ?? 0,
 				confidence: classification?.confidence ?? 0,
 				latencyMs,
-				success: success ? 1 : 0,
 			}
 		);
 
@@ -252,6 +290,8 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				requestId: request.id ?? '',
 				modeName: request.modeInstructions2?.name,
 				currentLanguage: currentLanguage ?? '',
+				outcome,
+				errorDetail: truncatedErrorDetail,
 				intent: classification?.intent ?? 'unknown',
 				domain: classification?.domain ?? 'unknown',
 				timeEstimateBestCase: classification?.timeEstimate?.bestCase ?? '',
@@ -266,10 +306,9 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				numToolReferences: request.toolReferences?.length ?? 0,
 				confidence: classification?.confidence ?? 0,
 				latencyMs,
-				success: success ? 1 : 0,
 			}
 		);
 
-		this.logService.debug(`[PromptCategorizer] Classification complete: success=${success}, latencyMs=${latencyMs}, intent=${classification?.intent}, domain=${classification?.domain}, scope=${classification?.scope}`);
+		this.logService.debug(`[PromptCategorizer] Classification complete: outcome=${outcome || 'success'}, latencyMs=${latencyMs}, intent=${classification?.intent}, domain=${classification?.domain}, scope=${classification?.scope}`);
 	}
 }

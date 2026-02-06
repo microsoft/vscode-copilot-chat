@@ -2434,6 +2434,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.togglePowerSaveBlocker",
+				"title": "%github.copilot.command.togglePowerSaveBlocker%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.showChatLogView",
 				"title": "%github.copilot.command.showChatLogView%",
 				"category": "Developer"
@@ -4469,7 +4474,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli && workbenchState != empty",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "navigation@0"
 				},
 				{
@@ -5048,7 +5053,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
 				}
 			],
 			"chat/chatSessions": [
@@ -5074,7 +5079,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli && workbenchState != empty",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "3_apply@0"
 				},
 				{

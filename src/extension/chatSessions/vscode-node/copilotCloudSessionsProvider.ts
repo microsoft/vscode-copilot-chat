@@ -1700,6 +1700,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			"copilotcloud.chat.invoke" : {
 				"owner": "joshspicer",
 				"comment": "Event sent when a Copilot Cloud chat request is made.",
+				"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique chat request ID." },
 				"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
 				"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
 				"partnerAgent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The partner agent name (e.g., Copilot, Claude, Codex)." },
@@ -1707,6 +1708,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			}
 		*/
 		this.telemetry.sendMSFTTelemetryEvent('copilotcloud.chat.invoke', {
+			chatRequestId: request.id,
 			hasChatSessionItem: String(!!context.chatSessionContext?.chatSessionItem),
 			isUntitled: String(context.chatSessionContext?.isUntitled),
 			partnerAgent: partnerAgent?.name ?? 'unknown',

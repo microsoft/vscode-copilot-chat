@@ -23,6 +23,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
+import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSessionStateService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
@@ -56,7 +57,8 @@ describe('ChatSessionContentProvider', () => {
 			getModels: vi.fn().mockResolvedValue([
 				{ id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
 				{ id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }
-			])
+			]),
+			mapSdkModelToEndpointModel: vi.fn().mockResolvedValue(undefined)
 		} as any;
 
 		const serviceCollection = store.add(createExtensionUnitTestingServices());
@@ -712,6 +714,165 @@ Second part with more details.",
 		const sessionUri = createClaudeSessionUri('4c289ca8-f8bb-4588-8400-88b78beb784d');
 		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
+	});
+
+	describe('model resolution and caching', () => {
+		it('uses user-selected model from session state', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hello' }],
+						model: 'claude-opus-4-5-20251101',
+					} as any,
+				}],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
+			mockSessionStateService.getModelIdForSession = vi.fn().mockResolvedValue('claude-sonnet-4-20250514');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
+			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).not.toHaveBeenCalled();
+		});
+
+		it('extracts and maps SDK model from session messages when no user selection', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hello' }],
+						model: 'claude-opus-4-5-20251101',
+					} as any,
+				}],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).toHaveBeenCalledWith('claude-opus-4-5-20251101');
+			expect(result.options?.['model']).toBe('claude-opus-4.5');
+		});
+
+		it('falls back to default model when no SDK model in session', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: 'Hello',
+					} as any,
+				}],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockResolvedValue('claude-sonnet-4-20250514');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(mockClaudeCodeModels.getDefaultModel).toHaveBeenCalled();
+			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
+		});
+
+		it('falls back to default model when SDK model cannot be mapped', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hello' }],
+						model: 'claude-unknown-1-0-20251101',
+					} as any,
+				}],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue(undefined);
+			vi.mocked(mockClaudeCodeModels.getDefaultModel).mockResolvedValue('claude-sonnet-4-20250514');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(mockClaudeCodeModels.getDefaultModel).toHaveBeenCalled();
+			expect(result.options?.['model']).toBe('claude-sonnet-4-20250514');
+		});
+
+		it('caches resolved model in session state', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hello' }],
+						model: 'claude-opus-4-5-20251101',
+					} as any,
+				}],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
+
+			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
+			const setModelSpy = vi.spyOn(mockSessionStateService, 'setModelIdForSession');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(setModelSpy).toHaveBeenCalledWith('test-session', 'claude-opus-4.5');
+		});
+
+		it('extracts model from most recent assistant message', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [
+					{
+						type: 'assistant',
+						message: {
+							role: 'assistant',
+							content: [{ type: 'text', text: 'First' }],
+							model: 'claude-haiku-3-5-20250514',
+						} as any,
+					},
+					{
+						type: 'user',
+						message: {
+							role: 'user',
+							content: 'Question',
+						} as any,
+					},
+					{
+						type: 'assistant',
+						message: {
+							role: 'assistant',
+							content: [{ type: 'text', text: 'Second' }],
+							model: 'claude-opus-4-5-20251101',
+						} as any,
+					},
+				],
+			};
+
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+			vi.mocked(mockClaudeCodeModels.mapSdkModelToEndpointModel).mockResolvedValue('claude-opus-4.5');
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).toHaveBeenCalledWith('claude-opus-4-5-20251101');
+		});
 	});
 
 	describe('unavailable model handling', () => {

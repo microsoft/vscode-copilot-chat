@@ -102,6 +102,7 @@
 		]
 	},
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
+	"github.copilot.command.togglePowerSaveBlocker": "Toggle Power Save Blocker",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
 	"github.copilot.command.showOutputChannel": "Show Output Channel",
 	"github.copilot.command.showContextInspectorView": "Inspect Language Context",

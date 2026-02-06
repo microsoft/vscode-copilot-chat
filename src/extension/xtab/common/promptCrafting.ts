@@ -34,7 +34,7 @@ export class PromptPieces {
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly aggressivenessLevel: AggressivenessLevel,
-		public readonly lintErrors: LintErrors | undefined,
+		public readonly lintErrors: LintErrors,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -58,7 +58,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
-	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
+	const lintsWithNewLinePadding = opts.lintOptions ? `\n${lintErrors.getFormattedLintErrors(opts.lintOptions)}\n` : '';
 
 	const basePrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}

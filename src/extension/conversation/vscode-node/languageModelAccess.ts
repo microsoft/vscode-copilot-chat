@@ -163,7 +163,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		};
 		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			if (!this._authenticationService.anyGitHubSession) {
+				this._currentModels = [];
+			}
 			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
+		this._register(this._endpointProvider.onDidModelsRefresh(() => {
+			// Models have been refreshed from CAPI so we should requery them
 			this._onDidChange.fire();
 		}));
 	}
@@ -171,8 +178,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
 		const session = await this._getToken();
 		if (!session) {
-			this._currentModels = [];
-			return [];
+			// Return cached models until we have auth reacquired
+			// We clear this list in onDidAuthenticationChange so signed out should still have model picker clear
+			return this._currentModels;
 		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];

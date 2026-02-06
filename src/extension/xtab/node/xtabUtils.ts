@@ -5,62 +5,57 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 
 
-export function toLines(stream: AsyncIterableObject<{ delta: { text: string } }>) {
-	return new AsyncIterableObject<string>(async (emitter) => {
-		let buffer: string | null = null;
+export async function* toLines(stream: AsyncIterable<{ delta: { text: string } }>): AsyncIterable<string> {
+	let buffer: string | null = null;
 
-		for await (const chunk of stream) {
-			buffer ??= '';
-			buffer += chunk.delta.text;
+	for await (const chunk of stream) {
+		buffer ??= '';
+		buffer += chunk.delta.text;
 
-			const parts: string[] = buffer.split(/\r?\n/);
-			buffer = parts.pop() ?? '';
+		const parts: string[] = buffer.split(/\r?\n/);
+		buffer = parts.pop() ?? '';
 
-			emitter.emitMany(parts);
-		}
+		yield* parts;
+	}
 
-		if (buffer !== null) {
-			emitter.emitOne(buffer);
-		}
-	});
+	if (buffer !== null) {
+		yield buffer;
+	}
 }
 
 /**
  * Remove backticks on the first and last lines.
  */
-export function linesWithBackticksRemoved(linesStream: AsyncIterableObject<string>) {
-	return new AsyncIterableObject<string>(async (emitter) => {
-		let lineN = -1;
+export async function* linesWithBackticksRemoved(linesStream: AsyncIterable<string>): AsyncIterable<string> {
+	let lineN = -1;
 
-		let bufferedBacktickLine: string | undefined;
+	let bufferedBacktickLine: string | undefined;
 
-		for await (const line of linesStream) {
-			++lineN;
+	for await (const line of linesStream) {
+		++lineN;
 
-			if (bufferedBacktickLine) {
-				emitter.emitOne(bufferedBacktickLine);
-				bufferedBacktickLine = undefined;
-			}
-
-			if (line.match(/^```[a-z]*$/)) {
-				if (lineN === 0) {
-					continue;
-				} else {
-					// maybe middle of stream or last line
-					// we set it to buffer; if it's midle of stream, it will be emitted
-					// if last line, it will be omitted
-					bufferedBacktickLine = line;
-				}
-			} else {
-				emitter.emitOne(line);
-			}
+		if (bufferedBacktickLine) {
+			yield bufferedBacktickLine;
+			bufferedBacktickLine = undefined;
 		}
 
-		// ignore bufferedLine
-	});
+		if (line.match(/^```[a-z]*$/)) {
+			if (lineN === 0) {
+				continue;
+			} else {
+				// maybe middle of stream or last line
+				// we set it to buffer; if it's midle of stream, it will be emitted
+				// if last line, it will be omitted
+				bufferedBacktickLine = line;
+			}
+		} else {
+			yield line;
+		}
+	}
+
+	// ignore bufferedLine
 }
 
 export function constructMessages({ systemMsg, userMsg }: { systemMsg: string; userMsg: string }): Raw.ChatMessage[] {

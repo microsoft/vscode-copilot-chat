@@ -121,6 +121,10 @@ declare module 'vscode' {
 	 */
 	export class ChatRequestTurn2 {
 		/**
+		 * The id of the chat request. Used to identity an interaction with any of the chat surfaces.
+		 */
+		readonly id?: string;
+		/**
 		 * The prompt as entered by the user.
 		 *
 		 * Information about references used in this request is stored in {@link ChatRequestTurn.references}.
@@ -158,7 +162,7 @@ declare module 'vscode' {
 		/**
 		 * @hidden
 		 */
-		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined);
+		constructor(prompt: string, command: string | undefined, references: ChatPromptReference[], participant: string, toolReferences: ChatLanguageModelToolReference[], editedFileEvents: ChatRequestEditedFileEvent[] | undefined, id: string | undefined);
 	}
 
 	export class ChatResponseTurn2 {
@@ -256,6 +260,10 @@ declare module 'vscode' {
 		chatSessionId?: string;
 		chatSessionResource?: string;
 		chatInteractionId?: string;
+		/**
+		 * If set, tells the tool that it should include confirmation messages.
+		 */
+		forceConfirmationReason?: string;
 	}
 
 	export interface PreparedToolInvocation {
@@ -341,4 +349,3 @@ declare module 'vscode' {
 	}
 	// #endregion
 }
-
