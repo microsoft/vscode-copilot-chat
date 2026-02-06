@@ -76,6 +76,20 @@ export async function linkify(linkifer: ILinkifyService, text: string): Promise<
 	};
 }
 
+export async function linkifyWithReferences(linkifer: ILinkifyService, text: string, references: readonly { anchor: URI }[]): Promise<LinkifiedText> {
+	const linkifier = linkifer.createLinkifier({ requestId: undefined, references: references as any }, []);
+
+	const initial = await linkifier.append(text, CancellationToken.None);
+	const flushed = await linkifier.flush(CancellationToken.None);
+	if (!flushed) {
+		return initial;
+	}
+
+	return {
+		parts: coalesceParts(initial.parts.concat(flushed.parts)),
+	};
+}
+
 
 export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expectedParts: readonly LinkifiedPart[]) {
 	assert.strictEqual(actualParts.length, expectedParts.length, `got ${JSON.stringify(actualParts)}`);

@@ -124,19 +124,26 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			}
 		}
 
-		// Then fallback to checking references based on filename
-		const name = path.basename(pathText);
-		const refUri = context.references
-			.map(ref => {
-				if ('variableName' in ref.anchor) {
-					return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
-				}
-				return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
-			})
-			.filter((item): item is Uri => !!item)
-			.find(refUri => resources.basename(refUri) === name);
+		// Then fallback to checking references based on filename.
+		// Only do this for simple filenames without directory components - if the user
+		// specified a path like `./node_modules/cli.js`, we shouldn't match a reference
+		// with a completely different path just because the basename matches.
+		if (!pathText.includes('/') && !pathText.includes('\\')) {
+			const name = path.basename(pathText);
+			const refUri = context.references
+				.map(ref => {
+					if ('variableName' in ref.anchor) {
+						return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
+					}
+					return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
+				})
+				.filter((item): item is Uri => !!item)
+				.find(refUri => resources.basename(refUri) === name);
 
-		return refUri;
+			return refUri;
+		}
+
+		return undefined;
 	}
 
 	private async statAndNormalizeUri(uri: Uri, includeDirectorySlash: boolean): Promise<Uri | undefined> {
