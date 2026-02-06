@@ -8,7 +8,7 @@ export function makeTextResult(data: unknown): { content: [{ type: 'text'; text:
 		content: [
 			{
 				type: 'text',
-				text: typeof data === 'string' ? data : JSON.stringify(data, null, 2),
+				text: typeof data === 'string' ? data : (JSON.stringify(data, null, 2) ?? String(data)),
 			},
 		],
 	};
