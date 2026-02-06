@@ -643,13 +643,7 @@ describe('buildChatHistory', () => {
 			// This test loads a real Claude Code session fixture and verifies
 			// the full conversion pipeline produces the expected output
 			const fixturePath = path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
-			let fixtureContent: string;
-			try {
-				fixtureContent = await readFile(fixturePath, 'utf8');
-			} catch {
-				// Skip if fixture doesn't exist (it lives in the content provider test dir)
-				return;
-			}
+			const fixtureContent = await readFile(fixturePath, 'utf8');
 
 			// Parse JSONL manually for this standalone test
 			const lines = fixtureContent.split('\n').filter(l => l.trim());
