@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
 import { IChatEndpoint } from '../../../../../platform/networking/common/networking';
+import { Event } from '../../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -55,6 +56,7 @@ function createMockEndpoint(overrides: {
  */
 class MockEndpointProvider implements IEndpointProvider {
 	declare readonly _serviceBrand: undefined;
+	readonly onDidModelsRefresh = Event.None;
 
 	constructor(private readonly endpoints: IChatEndpoint[]) { }
 
