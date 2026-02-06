@@ -332,6 +332,17 @@ export class RequestLogger extends AbstractRequestLogger {
 		});
 	}
 
+	public override logContentExclusionRules(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): void {
+		this.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'contentExclusion',
+			startTimeMs: Date.now(),
+			icon: Codicon.shield,
+			markdownContent: this._renderContentExclusionToMarkdown(repos, rules, durationMs),
+			isConversationRequest: false
+		});
+	}
+
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		const edits = this._workspaceEditRecorder?.getEditsAndReset();
 		// Extract toolMetadata from response if it exists
@@ -740,6 +751,64 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`Default chat     : ${models.find(m => m.is_chat_default)?.id || 'none'}`);
 			result.push(`Fallback chat    : ${models.find(m => m.is_chat_fallback)?.id || 'none'}`);
 			result.push(`~~~`);
+		}
+
+		result.push(this._renderMarkdownStyles());
+
+		return result.join('\n');
+	}
+
+	private _renderContentExclusionToMarkdown(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): string {
+		const result: string[] = [];
+		result.push(`# Content Exclusion Rules`);
+		result.push(``);
+
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`fetchTime        : ${durationMs}ms`);
+		result.push(`repoCount        : ${repos.length}`);
+		result.push(`totalGlobRules   : ${rules.reduce((sum, r) => sum + r.patterns.length, 0)}`);
+		result.push(`totalIfAnyMatch  : ${rules.reduce((sum, r) => sum + r.ifAnyMatch.length, 0)}`);
+		result.push(`totalIfNoneMatch : ${rules.reduce((sum, r) => sum + r.ifNoneMatch.length, 0)}`);
+		result.push(`~~~`);
+
+		for (let i = 0; i < repos.length; i++) {
+			const repo = repos[i];
+			const repoRules = rules[i];
+			result.push(``);
+			result.push(`## ${repo || '(non-git files)'}`);
+
+			if (repoRules.patterns.length === 0 && repoRules.ifAnyMatch.length === 0 && repoRules.ifNoneMatch.length === 0) {
+				result.push(`_No rules_`);
+				continue;
+			}
+
+			if (repoRules.patterns.length > 0) {
+				result.push(`### Glob Patterns (${repoRules.patterns.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.patterns) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
+
+			if (repoRules.ifAnyMatch.length > 0) {
+				result.push(`### ifAnyMatch Regex (${repoRules.ifAnyMatch.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.ifAnyMatch) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
+
+			if (repoRules.ifNoneMatch.length > 0) {
+				result.push(`### ifNoneMatch Regex (${repoRules.ifNoneMatch.length})`);
+				result.push(`~~~`);
+				for (const pattern of repoRules.ifNoneMatch) {
+					result.push(pattern);
+				}
+				result.push(`~~~`);
+			}
 		}
 
 		result.push(this._renderMarkdownStyles());
