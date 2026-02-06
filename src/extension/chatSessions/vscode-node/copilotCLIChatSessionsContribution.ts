@@ -728,6 +728,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return await this.handleDelegationToCloudConfirmation(request, session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
+			// Lock the repo option with more accurate information.
+			// Previously we just updated it with details of the folder.
+			// If user has selected a repo, then update with repo information (right icons, etc).
+			if (isUntitled) {
+				void this.lockRepoOptionForSession(context, token);
+			}
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
@@ -781,10 +787,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			return;
 		}
 		const { resource } = chatSessionContext.chatSessionItem;
-		const id = SessionIdForCLI.parse(resource);
+		// If we have a real session id that was mapped to this untitled session, then use that.
+		// This way we can get the latest information associated with the real session.
+		const id = _untitledSessionIdMap.get(SessionIdForCLI.parse(resource)) ?? SessionIdForCLI.parse(resource);
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
 		if (folderInfo.folder) {
-			const folderName = this.workspaceService.getWorkspaceFolderName(folderInfo.folder) || basename(folderInfo.folder);
+			const folderName = basename(folderInfo.folder);
 			const option = folderInfo.repository ? toRepositoryOptionItem(folderInfo.repository) : toWorkspaceFolderOptionItem(folderInfo.folder, folderName);
 			const change = { optionId: REPOSITORY_OPTION_ID, value: { ...option, locked: true } };
 			this.contentProvider.notifySessionOptionsChange(resource, [change]);
