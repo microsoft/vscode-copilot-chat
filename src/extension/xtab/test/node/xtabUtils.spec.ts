@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
 import { toLines } from '../../node/xtabUtils';
 
 describe('toLines', () => {
 
 	async function chunksToLines(chunks: string[]) {
-		const iter = AsyncIterableObject.fromArray(chunks.map(text => ({ delta: { text } })));
+		const iter = AsyncIterUtils.fromArray(chunks.map(text => ({ delta: { text } })));
 		const arr: string[] = [];
 		for await (const line of toLines(iter)) {
 			arr.push(line);
