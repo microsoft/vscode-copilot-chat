@@ -94,10 +94,11 @@ class AutoModeTokenBank extends Disposable {
 			: 'copilotchat.autoModelHint';
 
 		const autoModeHint = this._expService.getTreatmentVariable<string>(expName) || 'auto';
+		console.log(`AutoModeService: Using auto mode hint '${autoModeHint}' for location '${this._location}'.`);
 
 		const response = await this._capiClientService.makeRequest<Response>({
 			json: {
-				'auto_mode': { 'model_hints': [autoModeHint] }
+				'auto_mode': { 'model_hints': ['grok-code-fast-1'] }
 			},
 			headers,
 			method: 'POST'
@@ -229,6 +230,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				throw new Error(errorMsg);
 			}
 		}
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
+
 		const existingEndpoints = entry?.endpoints || [];
 		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
 		if (!autoEndpoint) {
@@ -259,7 +262,15 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				}
 				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
 			}
-			return entry.endpoints[0];
+			// Apply vision fallback even on cached entries, since the cached model may not support images
+			const cachedEndpoint = entry.endpoints[0];
+			const fallbackEndpoint = this._applyVisionFallback(chatRequest, cachedEndpoint, entryToken.available_models, knownEndpoints);
+			if (fallbackEndpoint !== cachedEndpoint) {
+				const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, fallbackEndpoint, entryToken.session_token, entryToken.discounted_costs?.[fallbackEndpoint.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs));
+				entry.endpoints[0] = autoEndpoint;
+				return autoEndpoint;
+			}
+			return cachedEndpoint;
 		}
 
 		// No cached entry, use the reserve token
@@ -269,16 +280,36 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
-		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+		let selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
 		if (!selectedModel) {
 			const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
 			this._logService.error(errorMsg);
 			throw new Error(errorMsg);
 		}
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 
 		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank });
 		return autoEndpoint;
+	}
+
+	/**
+	 * If the request contains an image and the selected model doesn't support vision,
+	 * fall back to the first vision-capable model from the available models.
+	 */
+	private _applyVisionFallback(chatRequest: ChatRequest | undefined, selectedModel: IChatEndpoint, availableModels: string[], knownEndpoints: IChatEndpoint[]): IChatEndpoint {
+		if (!hasImage(chatRequest) || selectedModel.supportsVision) {
+			return selectedModel;
+		}
+		const visionModel = availableModels
+			.map(model => knownEndpoints.find(e => e.model === model))
+			.find(endpoint => endpoint?.supportsVision);
+		if (visionModel) {
+			this._logService.trace(`Selected model '${selectedModel.model}' does not support vision, falling back to '${visionModel.model}'.`);
+			return visionModel;
+		}
+		this._logService.warn(`Request contains an image but no vision-capable model is available.`);
+		return selectedModel;
 	}
 
 	private _calculateDiscountRange(discounts: Record<string, number> | undefined): { low: number; high: number } {
@@ -311,5 +342,19 @@ function getConversationId(chatRequest: ChatRequest | undefined): string {
 	if (!chatRequest) {
 		return 'unknown';
 	}
-	return (chatRequest?.toolInvocationToken as { sessionId: string })?.sessionId || 'unknown';
+	return chatRequest?.sessionId || 'unknown';
+}
+
+function hasImage(chatRequest: ChatRequest | undefined): boolean {
+	if (!chatRequest || !chatRequest.references) {
+		return false;
+	}
+	return chatRequest.references.some(ref => {
+		const value = ref.value;
+		return typeof value === 'object' &&
+			value !== null &&
+			'mimeType' in value &&
+			typeof value.mimeType === 'string'
+			&& value.mimeType.startsWith('image/');
+	});
 }

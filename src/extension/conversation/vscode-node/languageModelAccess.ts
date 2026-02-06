@@ -277,7 +277,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				},
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
-					imageInput: endpoint.supportsVision,
+					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				}
 			};
