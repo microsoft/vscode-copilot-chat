@@ -35,7 +35,7 @@ export function registerGetDiagnosticsTool(server: McpServer, logger: ILogger): 
 				filePath: fileUri.fsPath,
 				diagnostics: fileDiagnostics.map(d => ({
 					message: d.message,
-					severity: vscode.DiagnosticSeverity[d.severity],
+					severity: vscode.DiagnosticSeverity[d.severity].toLowerCase(),
 					range: {
 						start: { line: d.range.start.line, character: d.range.start.character },
 						end: { line: d.range.end.line, character: d.range.end.character },
