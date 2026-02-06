@@ -8,6 +8,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
@@ -33,12 +34,13 @@ export class LintErrors {
 
 	private _diagnostics(resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
 		const allDiagnostics: [URI, Diagnostic[]][] = resource ? [[resource, this._langDiagService.getDiagnostics(resource)]] : this._langDiagService.getAllDiagnostics();
+		const activeDocumentUri = this._documentId.toUri();
 
 		return allDiagnostics.map(fileDiagnostics => {
 			const [uri, diagnostics] = fileDiagnostics;
 			return diagnostics.map(diagnostic => {
 				const range = new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1);
-				const distance = CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition);
+				const distance = isEqual(activeDocumentUri, uri) ? CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition) : undefined;
 				return new DiagnosticDataWithDistance(
 					uri,
 					diagnostic.message,
@@ -107,7 +109,9 @@ export class LintErrors {
 			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
 		};
 
-		const diagnostics = this._getRelevantDiagnostics(telemetryOptions, undefined);
+		let diagnostics = this._diagnostics(undefined);
+		diagnostics = filterDiagnosticsBySeverity(diagnostics, LintOptionWarning.YES);
+		diagnostics = sortDiagnosticsByDistance(diagnostics);
 
 		const telemetryDiagnostics = diagnostics.map(diagnostic => ({
 			uri: diagnostic.documentUri.toString(),
@@ -119,7 +123,7 @@ export class LintErrors {
 			message: diagnostic.message,
 			code: diagnostic.code,
 			source: diagnostic.source,
-			lineDistance: diagnostic.distance.lineDistance,
+			lineDistance: diagnostic.distance?.lineDistance,
 			formatted: formatSingleDiagnostic(diagnostic, this._document.lines, telemetryOptions),
 			formattedCode: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES }),
 			formattedCodeWithSurrounding: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES_WITH_SURROUNDING }),
@@ -192,11 +196,22 @@ function formatCodeLine(lineNumber: number, lineContent: string): string {
 }
 
 function filterDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDistance[], distance: number): readonly DiagnosticDataWithDistance[] {
-	return diagnostics.filter(d => d.distance.lineDistance <= distance);
+	return diagnostics.filter(d => d.distance?.lineDistance !== undefined && d.distance.lineDistance <= distance);
 }
 
 function sortDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDistance[]): readonly DiagnosticDataWithDistance[] {
-	return diagnostics.slice().sort((a, b) => CursorDistance.compareFn(a.distance, b.distance));
+	return diagnostics.slice().sort((a, b) => {
+		if (a.distance === undefined && b.distance === undefined) {
+			return 0;
+		}
+		if (a.distance === undefined) {
+			return 1;
+		}
+		if (b.distance === undefined) {
+			return -1;
+		}
+		return CursorDistance.compareFn(a.distance, b.distance);
+	});
 }
 
 function filterDiagnosticsBySeverity(diagnostics: readonly DiagnosticDataWithDistance[], warnings: LintOptionWarning): readonly DiagnosticDataWithDistance[] {
@@ -243,7 +258,7 @@ class DiagnosticDataWithDistance extends DiagnosticData {
 		documentUri: URI,
 		message: string,
 		severity: 'error' | 'warning',
-		public distance: CursorDistance,
+		public distance: CursorDistance | undefined,
 		public documentRange: Range,
 		range: OffsetRange,
 		code: string | number | undefined,
