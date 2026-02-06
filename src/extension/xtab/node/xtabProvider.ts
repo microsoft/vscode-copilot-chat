@@ -295,11 +295,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const lintErrors = new LintErrors(activeDocument.id, currentDocument, this.langDiagService);
 
-		// Always collect lint errors for telemetry, regardless of prompt configuration
-		const lintErrorsData = lintErrors.getData();
-		telemetryBuilder.setLintErrors(lintErrorsData);
-		logContext.setDiagnosticsData(lintErrorsData);
-
 		const promptPieces = new PromptPieces(
 			currentDocument,
 			editWindowLinesRange,
@@ -339,6 +334,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (cancellationToken.isCancellationRequested) {
 			return new NoNextEditReason.GotCancelled('afterDebounce');
 		}
+
+		// Fire-and-forget: collect lint errors for telemetry in background to avoid blocking the main path
+		Promise.resolve().then(() => {
+			const lintErrorsData = lintErrors.getData();
+			telemetryBuilder.setLintErrors(lintErrorsData);
+			logContext.setDiagnosticsData(lintErrorsData);
+		});
 
 		request.fetchIssued = true;
 

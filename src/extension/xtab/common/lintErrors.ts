@@ -105,13 +105,14 @@ export class LintErrors {
 			tagName: 'telemetry',
 			warnings: LintOptionWarning.YES,
 			showCode: LintOptionShowCode.NO,
-			maxLints: 20,
+			maxLints: Number.MAX_SAFE_INTEGER,
 			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
 		};
 
 		let diagnostics = this._diagnostics(undefined);
 		diagnostics = filterDiagnosticsBySeverity(diagnostics, LintOptionWarning.YES);
 		diagnostics = sortDiagnosticsByDistance(diagnostics);
+		diagnostics = diagnostics.slice(0, 20);
 
 		const telemetryDiagnostics = diagnostics.map(diagnostic => ({
 			uri: diagnostic.documentUri.toString(),
