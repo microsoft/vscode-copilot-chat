@@ -96,7 +96,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			if (!shellInfo) {
 				return;
 			}
-			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'terminalProfile');
+			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile');
 			return new TerminalProfile({
 				name: 'GitHub Copilot CLI',
 				shellPath: shellInfo.shellPath,
