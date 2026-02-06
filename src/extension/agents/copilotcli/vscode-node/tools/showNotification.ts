@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import * as vscode from 'vscode';
 import { z } from 'zod';
-import { makeTextResult } from './utils';
 import { ILogger } from '../../../../../platform/log/common/logService';
+import { makeTextResult } from './utils';
 
 const NotificationType = z.enum(['information', 'warning', 'error']);
 
@@ -21,10 +21,8 @@ export function registerShowNotificationTool(server: McpServer, logger: ILogger)
 		'show_notification',
 		'Shows a VS Code notification with optional action buttons. Blocks until the user clicks a button or dismisses the notification.',
 		schema,
-		// @ts-expect-error - zod type instantiation too deep for server.tool() generics
 		async (args: { message: string; type: 'information' | 'warning' | 'error'; buttons?: string[] }) => {
 			const { message, type, buttons } = args;
-			logger.info(`Showing ${type} notification: ${message}`);
 			const buttonLabels = buttons ?? [];
 			if (buttonLabels.length > 0) {
 				logger.trace(`Notification buttons: ${buttonLabels.join(', ')}`);
