@@ -96,20 +96,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			if (!shellInfo) {
 				return;
 			}
-			/* __GDPR__
-				"copilotcli.terminal.open" : {
-					"owner": "DonJayamanne",
-					"comment": "Event sent when a Copilot CLI terminal is opened.",
-					"sessionType" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the terminal is for a new session or resuming an existing one." },
-					"shell" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The shell type used for the terminal." },
-					"terminalCreationMethod" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the terminal was created." }
-				}
-			*/
-			this.telemetryService.sendMSFTTelemetryEvent('copilotcli.terminal.open', {
-				sessionType: 'new',
-				shell: shellInfo.shell,
-				terminalCreationMethod: 'terminalProfile'
-			});
+			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'terminalProfile');
 			return new TerminalProfile({
 				name: 'GitHub Copilot CLI',
 				shellPath: shellInfo.shellPath,
