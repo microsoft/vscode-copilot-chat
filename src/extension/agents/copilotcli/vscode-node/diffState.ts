@@ -98,6 +98,8 @@ export class DiffStateManager {
 	private _updateContext(): void {
 		const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
 		const isActiveDiff = activeTab ? this.getByTab(activeTab) !== undefined : false;
-		vscode.commands.executeCommand('setContext', 'github.copilot.chat.copilotCLI.hasActiveDiff', isActiveDiff);
+		void vscode.commands.executeCommand('setContext', 'github.copilot.chat.copilotCLI.hasActiveDiff', isActiveDiff).then(undefined, err => {
+			this._logger.error(`[DIFF] Failed to update hasActiveDiff context: ${String(err)}`);
+		});
 	}
 }
