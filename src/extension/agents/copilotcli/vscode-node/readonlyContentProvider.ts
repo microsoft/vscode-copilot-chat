@@ -29,9 +29,10 @@ export class ReadonlyContentProvider implements TextDocumentContentProvider {
 }
 
 export function createReadonlyUri(originalPath: string, suffix: string): Uri {
+	const fileUri = Uri.file(originalPath);
 	return Uri.from({
 		scheme: READONLY_SCHEME,
-		path: originalPath,
+		path: fileUri.path,
 		query: suffix,
 	});
 }
