@@ -136,6 +136,8 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 		});
 	}
 
+	private _sessionLabels: Map<string, string> = new Map();
+
 	async _getAllSessions(filter: (sessionId: string) => boolean | undefined, token: CancellationToken): Promise<readonly ICopilotCLISessionItem[]> {
 		try {
 			const sessionManager = await raceCancellationError(this.getSessionManager(), token);
@@ -180,7 +182,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 					const id = metadata.sessionId;
 					const startTime = metadata.startTime.getTime();
 					const endTime = metadata.modifiedTime.getTime();
-					const label = metadata.summary ? labelFromPrompt(metadata.summary) : undefined;
+					const label = this._sessionLabels.get(metadata.sessionId) ?? (metadata.summary ? labelFromPrompt(metadata.summary) : undefined);
 					// CLI adds `<current_datetime>` tags to user prompt, this needs to be removed.
 					// However in summary CLI can end up truncating the prompt and adding `... <current_dateti...` at the end.
 					// So if we see a `<` in the label, we need to load the session to get the first user message.
@@ -201,6 +203,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 						if (!label) {
 							return;
 						}
+						this._sessionLabels.set(metadata.sessionId, label);
 						return {
 							id,
 							label,
@@ -348,6 +351,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 
 	public async deleteSession(sessionId: string): Promise<void> {
 		void this._sessionTracker.trackSession(sessionId, 'delete');
+		this._sessionLabels.delete(sessionId);
 		try {
 			{
 				const session = this._sessionWrappers.get(sessionId);
