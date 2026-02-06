@@ -26,17 +26,17 @@ export class DiffStateManager {
 	constructor(private readonly _logger: ILogger) { }
 
 	register(diff: ActiveDiff): void {
-		this._logger.info(`[DIFF] registerActiveDiff: tabName=${diff.tabName}, diffId=${diff.diffId}, mapSize=${this._activeDiffs.size}`);
+		this._logger.trace(`[DIFF] registerActiveDiff: tabName=${diff.tabName}, diffId=${diff.diffId}, mapSize=${this._activeDiffs.size}`);
 		this._activeDiffs.set(diff.diffId, diff);
-		this._logger.info(`[DIFF] After register, mapSize=${this._activeDiffs.size}`);
+		this._logger.trace(`[DIFF] After register, mapSize=${this._activeDiffs.size}`);
 		this._updateContext();
 	}
 
 	unregister(diffId: string): void {
 		const diff = this._activeDiffs.get(diffId);
-		this._logger.info(`[DIFF] unregisterActiveDiff: diffId=${diffId}, found=${!!diff}, mapSize=${this._activeDiffs.size}`);
+		this._logger.trace(`[DIFF] unregisterActiveDiff: diffId=${diffId}, found=${!!diff}, mapSize=${this._activeDiffs.size}`);
 		this._activeDiffs.delete(diffId);
-		this._logger.info(`[DIFF] After unregister, mapSize=${this._activeDiffs.size}`);
+		this._logger.trace(`[DIFF] After unregister, mapSize=${this._activeDiffs.size}`);
 		this._updateContext();
 	}
 
@@ -51,25 +51,25 @@ export class DiffStateManager {
 
 	getByTab(tab: vscode.Tab): ActiveDiff | undefined {
 		if (!isDiffTab(tab)) {
-			this._logger.info('[DIFF] getActiveDiffByTab: tab is not a diff tab');
+			this._logger.trace('[DIFF] getActiveDiffByTab: tab is not a diff tab');
 			return undefined;
 		}
 		const modifiedUri = tab.input.modified.toString();
-		this._logger.info(`[DIFF] getActiveDiffByTab: looking for modifiedUri=${modifiedUri}, mapSize=${this._activeDiffs.size}`);
+		this._logger.trace(`[DIFF] getActiveDiffByTab: looking for modifiedUri=${modifiedUri}, mapSize=${this._activeDiffs.size}`);
 		for (const diff of this._activeDiffs.values()) {
-			this._logger.info(`[DIFF]   checking diff.modifiedUri=${diff.modifiedUri.toString()}`);
+			this._logger.trace(`[DIFF]   checking diff.modifiedUri=${diff.modifiedUri.toString()}`);
 			if (diff.modifiedUri.toString() === modifiedUri) {
-				this._logger.info('[DIFF]   MATCH found');
+				this._logger.trace('[DIFF]   MATCH found');
 				return diff;
 			}
 		}
-		this._logger.info('[DIFF]   No match found');
+		this._logger.trace('[DIFF]   No match found');
 		return undefined;
 	}
 
 	getForCurrentTab(): ActiveDiff | undefined {
 		const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
-		this._logger.info(`[DIFF] getActiveDiffForCurrentTab: activeTab=${activeTab?.label ?? 'none'}`);
+		this._logger.trace(`[DIFF] getActiveDiffForCurrentTab: activeTab=${activeTab?.label ?? 'none'}`);
 		if (activeTab) {
 			return this.getByTab(activeTab);
 		}
