@@ -118,6 +118,7 @@ import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
+import { ITerminalService } from '../../platform/terminal/common/terminalService';
 export {
 	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
 };
@@ -172,6 +173,7 @@ export interface INESProviderOptions {
 	readonly workspace: ObservableWorkspace;
 	readonly fetcher: IFetcher;
 	readonly copilotTokenManager: ICopilotTokenManager;
+	readonly terminalService: ITerminalService;
 	readonly telemetrySender: ITelemetrySender;
 	readonly logTarget?: ILogTarget;
 	/**
