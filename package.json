@@ -2959,6 +2959,15 @@
 						"default": true,
 						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
+					"github.copilot.chat.additionalReadAccessPaths": {
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"markdownDescription": "%github.copilot.config.additionalReadAccessPaths%",
+						"scope": "window"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,

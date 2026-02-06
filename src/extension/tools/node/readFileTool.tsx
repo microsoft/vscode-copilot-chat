@@ -167,7 +167,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 
 			// Check if file is external (outside workspace, not open in editor, etc.)
 			const isExternal = await this.instantiationService.invokeFunction(
-				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!)
+				accessor => isFileExternalAndNeedsConfirmation(accessor, uri!, { readOnly: true })
 			);
 
 			if (isExternal) {
@@ -192,7 +192,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				};
 			}
 
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext));
+			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri!, this._promptContext, { readOnly: true }));
 			documentSnapshot = await this.getSnapshot(uri);
 		} catch (err) {
 			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false }, uri);
