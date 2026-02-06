@@ -357,4 +357,155 @@ describe('ToolSchemaNormalizer', () => {
 		expect((schema![0].function.parameters as any).properties.multiType.type).toEqual(['string', 'number']);
 		expect((schema![0].function.parameters as any).properties.multiType.nullable).toBeUndefined();
 	});
+
+	test('strips unsupported schema keywords for Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_FLASH, makeTool({
+			field1: {
+				type: 'string',
+				description: 'A field',
+				default: 'hello',
+				title: 'Field 1',
+				minLength: 1,
+				maxLength: 100,
+				pattern: '^[a-z]+$',
+			} as any,
+			field2: {
+				type: 'object',
+				properties: {
+					nested: {
+						type: 'number',
+						minimum: 0,
+						maximum: 100,
+						exclusiveMinimum: 0,
+						exclusiveMaximum: 100,
+					} as any
+				},
+				additionalProperties: false,
+			} as any,
+		}));
+
+		const props = (schema![0].function.parameters as any).properties;
+		// Should keep supported keywords
+		expect(props.field1.type).toBe('string');
+		expect(props.field1.description).toBe('A field');
+		// Should strip unsupported keywords
+		expect(props.field1.default).toBeUndefined();
+		expect(props.field1.title).toBeUndefined();
+		expect(props.field1.minLength).toBeUndefined();
+		expect(props.field1.maxLength).toBeUndefined();
+		expect(props.field1.pattern).toBeUndefined();
+
+		expect(props.field2.type).toBe('object');
+		expect(props.field2.properties).toBeDefined();
+		expect(props.field2.additionalProperties).toBeUndefined();
+
+		// Nested properties should also be stripped
+		expect(props.field2.properties.nested.type).toBe('number');
+		expect(props.field2.properties.nested.minimum).toBeUndefined();
+		expect(props.field2.properties.nested.maximum).toBeUndefined();
+		expect(props.field2.properties.nested.exclusiveMinimum).toBeUndefined();
+		expect(props.field2.properties.nested.exclusiveMaximum).toBeUndefined();
+	});
+
+	test('strips $schema, $defs, and $ref keywords for Gemini models', () => {
+		const tools: any[] = [{
+			type: 'function',
+			function: {
+				name: 'test',
+				description: 'test',
+				parameters: {
+					type: 'object',
+					$schema: 'https://json-schema.org/draft/2020-12/schema',
+					$defs: { foo: { type: 'string' } },
+					properties: {
+						name: {
+							type: 'string',
+							$comment: 'some comment',
+						}
+					},
+				}
+			}
+		}];
+
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_FLASH, tools);
+		const params = schema![0].function.parameters as any;
+		expect(params.$schema).toBeUndefined();
+		expect(params.$defs).toBeUndefined();
+		expect(params.type).toBe('object');
+		expect(params.properties.name.type).toBe('string');
+		expect(params.properties.name.$comment).toBeUndefined();
+	});
+
+	test('does not strip Gemini-unsupported keywords for non-Gemini models', () => {
+		const schema = normalizeToolSchema(CHAT_MODEL.CLAUDE_37_SONNET, makeTool({
+			field: {
+				type: 'string',
+				description: 'A field',
+				title: 'Field Title',
+			} as any,
+		}));
+
+		// For non-Gemini models, title should be preserved
+		expect((schema![0].function.parameters as any).properties.field.title).toBe('Field Title');
+	});
+
+	test('handles Directus-like MCP schema with mixed unsupported keywords for Gemini', () => {
+		const tools: any[] = [{
+			type: 'function',
+			function: {
+				name: 'create_item',
+				description: 'Create a new item in Directus',
+				parameters: {
+					type: 'object',
+					$schema: 'https://json-schema.org/draft/2020-12/schema',
+					properties: {
+						collection: {
+							type: 'string',
+							description: 'Collection name',
+							title: 'Collection',
+						},
+						data: {
+							type: 'object',
+							description: 'Item data',
+							additionalProperties: true,
+							properties: {
+								field1: {
+									type: 'string',
+									default: '',
+									minLength: 0,
+								},
+								field2: {
+									type: ['number', 'null'] as any,
+									minimum: 0,
+								}
+							},
+						},
+					},
+					required: ['collection', 'data'],
+				}
+			}
+		}];
+
+		const schema = normalizeToolSchema(CHAT_MODEL.GEMINI_FLASH, tools);
+		const params = schema![0].function.parameters as any;
+
+		// Top-level unsupported keywords stripped
+		expect(params.$schema).toBeUndefined();
+		expect(params.type).toBe('object');
+		expect(params.required).toEqual(['collection', 'data']);
+
+		// Property-level unsupported keywords stripped
+		expect(params.properties.collection.title).toBeUndefined();
+		expect(params.properties.collection.type).toBe('string');
+		expect(params.properties.collection.description).toBe('Collection name');
+
+		expect(params.properties.data.additionalProperties).toBeUndefined();
+		expect(params.properties.data.properties.field1.default).toBeUndefined();
+		expect(params.properties.data.properties.field1.minLength).toBeUndefined();
+
+		// Nullable conversion should also work alongside keyword stripping
+		expect(params.properties.data.properties.field2.type).toBe('number');
+		expect(params.properties.data.properties.field2.nullable).toBe(true);
+		expect(params.properties.data.properties.field2.minimum).toBeUndefined();
+	});
 });

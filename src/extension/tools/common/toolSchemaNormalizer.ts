@@ -193,6 +193,22 @@ const jsonSchemaRules: ((family: string, node: JsonSchema, didFix: (message: str
 			}
 		});
 	},
+	(family, schema, onFix) => {
+		// Gemini models only support a strict subset of JSON Schema keywords in function calling.
+		// MCP servers (e.g. Directus) may include unsupported keywords like additionalProperties,
+		// $schema, default, title, $defs, etc. which cause Gemini to return 400 "Invalid Argument".
+		if (!isGeminiFamily(family)) {
+			return;
+		}
+		forEachSchemaNode(schema, n => {
+			for (const key of Object.keys(n)) {
+				if (geminiUnsupportedSchemaKeywords.has(key)) {
+					delete (n as any)[key];
+					onFix(`removed unsupported schema keyword '${key}' for Gemini compatibility`);
+				}
+			}
+		});
+	},
 ];
 
 
@@ -265,4 +281,56 @@ const gpt4oUnsupportedSchemaKeywords = new Set([
 	'minItems',
 	'maxItems',
 	'uniqueItems'
+]);
+
+// Keywords in schema that Gemini models do not support. Gemini only accepts a strict subset
+// of JSON Schema: type, description, enum, format, items, properties, required, nullable,
+// anyOf, oneOf, allOf. MCP servers (e.g. Directus) may produce schemas with additional
+// keywords that cause Gemini to return a 400 "Invalid Argument" error.
+const geminiUnsupportedSchemaKeywords = new Set([
+	'$schema',
+	'$defs',
+	'$ref',
+	'$id',
+	'$comment',
+	'$dynamicRef',
+	'$dynamicAnchor',
+	'title',
+	'default',
+	'additionalProperties',
+	'patternProperties',
+	'unevaluatedProperties',
+	'propertyNames',
+	'minProperties',
+	'maxProperties',
+	'minLength',
+	'maxLength',
+	'pattern',
+	'minimum',
+	'maximum',
+	'exclusiveMinimum',
+	'exclusiveMaximum',
+	'multipleOf',
+	'minItems',
+	'maxItems',
+	'uniqueItems',
+	'unevaluatedItems',
+	'contains',
+	'minContains',
+	'maxContains',
+	'const',
+	'not',
+	'if',
+	'then',
+	'else',
+	'contentMediaType',
+	'contentEncoding',
+	'examples',
+	'readOnly',
+	'writeOnly',
+	'deprecated',
+	'dependencies',
+	'dependentRequired',
+	'dependentSchemas',
+	'prefixItems',
 ]);
