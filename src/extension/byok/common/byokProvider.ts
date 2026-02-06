@@ -55,6 +55,7 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	streaming?: boolean;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 	supportedEndpoints?: ModelSupportedEndpoint[];
@@ -121,7 +122,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 			type: 'chat',
 			family: modelId,
 			supports: {
-				streaming: true,
+				streaming: knownModelInfo?.streaming ?? true,
 				tool_calls: !!knownModelInfo?.toolCalling,
 				vision: !!knownModelInfo?.vision,
 				thinking: !!knownModelInfo?.thinking
