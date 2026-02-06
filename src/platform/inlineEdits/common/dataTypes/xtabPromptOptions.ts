@@ -199,6 +199,13 @@ export function isPromptingStrategy(value: string): value is PromptingStrategy {
 	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
+export function isAggressivenessStrategy(strategy: PromptingStrategy | undefined): boolean {
+	return strategy === PromptingStrategy.XtabAggressiveness
+		|| strategy === PromptingStrategy.Xtab275Aggressiveness
+		|| strategy === PromptingStrategy.Xtab275EditIntent
+		|| strategy === PromptingStrategy.Xtab275EditIntentShort;
+}
+
 export enum ResponseFormat {
 	CodeBlock = 'codeBlock',
 	UnifiedWithXml = 'unifiedWithXml',

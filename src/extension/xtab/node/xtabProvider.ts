@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -274,11 +274,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
-		// Log aggressiveness level and user happiness score when using XtabAggressiveness, Xtab275Aggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort prompting strategy
-		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275Aggressiveness ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntentShort) {
+		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
+		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
 			if (userHappinessScore !== undefined) {
 				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
