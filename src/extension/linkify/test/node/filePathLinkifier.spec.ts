@@ -287,4 +287,20 @@ suite('File Path Linkifier', () => {
 			new LinkifyLocationAnchor(refUri)
 		]);
 	});
+
+	test(`Should NOT use reference fallback for text with code-like characters`, async () => {
+		// Text containing $, {, }, (, ) are likely code snippets, not filenames
+		const linkifier = createTestLinkifierService();
+		const refUri = URI.file('/workspace/src/config.js');
+		const references = [{ anchor: refUri }];
+
+		// Code-like text should NOT link to reference even if basename matches
+		const result = await linkifyWithReferences(linkifier,
+			'config.${TerminalSettingId',
+			references
+		);
+		assertPartsEqual(result.parts, [
+			'config.${TerminalSettingId'  // Should remain as plain text
+		]);
+	});
 });

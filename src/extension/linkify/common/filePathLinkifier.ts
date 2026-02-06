@@ -128,7 +128,8 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		// Only do this for simple filenames without directory components - if the user
 		// specified a path like `./node_modules/cli.js`, we shouldn't match a reference
 		// with a completely different path just because the basename matches.
-		if (!pathText.includes('/') && !pathText.includes('\\')) {
+		// Also skip if text contains code-like characters that are rarely in real filenames.
+		if (!pathText.includes('/') && !pathText.includes('\\') && !/[${}()]/.test(pathText)) {
 			const name = path.basename(pathText);
 			const refUri = context.references
 				.map(ref => {
