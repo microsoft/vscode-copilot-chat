@@ -6,7 +6,7 @@ import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, Cha
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatHookOutcome, ChatHookType, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatHookType, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -77,8 +77,8 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
-	hookProgress(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string): ChatResponseStream {
-		this.enqueue(() => this._progress.hookProgress(hookType, message, outcome, reason), false);
+	hookProgress(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string): ChatResponseStream {
+		this.enqueue(() => this._progress.hookProgress(hookType, shouldContinue, stopReason, systemMessage), false);
 		return this;
 	}
 

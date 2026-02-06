@@ -62,25 +62,23 @@ export class ChatResponseThinkingProgressPart {
 
 export type ChatHookType = 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse' | 'SubagentStart' | 'SubagentStop' | 'Stop';
 
-export type ChatHookOutcome = 'success' | 'blocked' | 'denied' | 'error';
-
 export class ChatResponseHookPart {
 	hookType: ChatHookType;
-	message: string;
-	outcome: ChatHookOutcome;
-	reason?: string;
+	continue: boolean;
+	stopReason?: string;
+	systemMessage?: string;
 	metadata?: { readonly [key: string]: any };
 	constructor(
 		hookType: ChatHookType,
-		message: string,
-		outcome: ChatHookOutcome,
-		reason?: string,
+		shouldContinue: boolean,
+		stopReason?: string,
+		systemMessage?: string,
 		metadata?: { readonly [key: string]: any }
 	) {
 		this.hookType = hookType;
-		this.message = message;
-		this.outcome = outcome;
-		this.reason = reason;
+		this.continue = shouldContinue;
+		this.stopReason = stopReason;
+		this.systemMessage = systemMessage;
 		this.metadata = metadata;
 	}
 }

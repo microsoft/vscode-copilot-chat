@@ -414,35 +414,31 @@ declare module 'vscode' {
 	}
 
 	/**
-	 * The outcome of a hook execution.
-	 */
-	export type ChatHookOutcome = 'success' | 'blocked' | 'denied' | 'error';
-
-	/**
 	 * A progress part representing the execution result of a hook.
 	 * Hooks are user-configured scripts that run at specific points during chat processing.
+	 * Aligned with the hook output JSON structure: { continue, stopReason, systemMessage, hookSpecificOutput }.
 	 */
 	export class ChatResponseHookPart {
 		/** The type of hook that was executed */
 		hookType: ChatHookType;
-		/** A message describing the hook execution result */
-		message: string;
-		/** The outcome of the hook execution */
-		outcome: ChatHookOutcome;
-		/** Optional reason for the outcome (e.g., why the hook blocked/denied) */
-		reason?: string;
+		/** Whether processing should continue after hook execution. When false, the hook has blocked/denied the operation. */
+		continue: boolean;
+		/** Message shown to the user when the hook stopped processing (i.e., continue=false) */
+		stopReason?: string;
+		/** Warning/system message from the hook, shown to the user */
+		systemMessage?: string;
 		/** Optional metadata associated with the hook execution */
 		metadata?: { readonly [key: string]: any };
 
 		/**
 		 * Creates a new hook progress part.
 		 * @param hookType The type of hook that was executed
-		 * @param message A message describing the hook execution result
-		 * @param outcome The outcome of the hook execution
-		 * @param reason Optional reason for the outcome
+		 * @param shouldContinue Whether processing should continue after hook execution
+		 * @param stopReason Message shown when processing was stopped
+		 * @param systemMessage Warning/system message from the hook
 		 * @param metadata Optional metadata
 		 */
-		constructor(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string, metadata?: { readonly [key: string]: any });
+		constructor(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string, metadata?: { readonly [key: string]: any });
 	}
 
 	export class ChatResponseReferencePart2 {
@@ -545,11 +541,11 @@ declare module 'vscode' {
 		/**
 		 * Push a hook execution result to this stream.
 		 * @param hookType The type of hook that was executed
-		 * @param message A message describing the hook execution result
-		 * @param outcome The outcome of the hook execution
-		 * @param reason Optional reason for the outcome
+		 * @param shouldContinue Whether processing should continue after hook execution
+		 * @param stopReason Message shown when processing was stopped
+		 * @param systemMessage Warning/system message from the hook
 		 */
-		hookProgress(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string): void;
+		hookProgress(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 

@@ -28,7 +28,6 @@ export import ChatResponseMarkdownPart = vscode.ChatResponseMarkdownPart;
 export import ChatResponseThinkingProgressPart = vscode.ChatResponseThinkingProgressPart;
 export import ChatResponseHookPart = vscode.ChatResponseHookPart;
 export import ChatHookType = vscode.ChatHookType;
-export import ChatHookOutcome = vscode.ChatHookOutcome;
 export import ChatResponseFileTreePart = vscode.ChatResponseFileTreePart;
 export import ChatResponseAnchorPart = vscode.ChatResponseAnchorPart;
 export import ChatResponseProgressPart = vscode.ChatResponseProgressPart;
