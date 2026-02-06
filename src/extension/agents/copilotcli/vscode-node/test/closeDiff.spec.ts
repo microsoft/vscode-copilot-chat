@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
+import { MockMcpServer, parseToolResult } from './testHelpers';
 
 vi.mock('vscode', () => ({
 	Uri: {
@@ -28,29 +29,18 @@ vi.mock('vscode', () => ({
 	},
 }));
 
+interface CloseDiffResult {
+	success: boolean;
+	already_closed: boolean;
+	tab_name: string;
+	message: string;
+}
+
 import {
 	DiffStateManager,
 	type ActiveDiff,
 } from '../diffState';
 import { registerCloseDiffTool } from '../tools/closeDiff';
-
-type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
-
-function createMockServer() {
-	const tools: Map<string, { handler: ToolHandler; schema: unknown }> = new Map();
-	return {
-		tool: (name: string, description: string, schema: unknown, handler: ToolHandler) => {
-			tools.set(name, { handler, schema });
-		},
-		getToolHandler: (name: string) => tools.get(name)?.handler,
-		getToolSchema: (name: string) => tools.get(name)?.schema,
-	};
-}
-
-function parseResult(result: any): any {
-	const text = result.content[0].text;
-	return JSON.parse(text);
-}
 
 describe('closeDiff tool', () => {
 	const logger = new TestLogService();
@@ -71,14 +61,14 @@ describe('closeDiff tool', () => {
 	});
 
 	it('should register the close_diff tool', () => {
-		const mockServer = createMockServer();
+		const mockServer = new MockMcpServer();
 		registerCloseDiffTool(mockServer as any, logger, diffState);
 
 		expect(mockServer.getToolHandler('close_diff')).toBeDefined();
 	});
 
 	it('should close an active diff by tab name', async () => {
-		const mockServer = createMockServer();
+		const mockServer = new MockMcpServer();
 		registerCloseDiffTool(mockServer as any, logger, diffState);
 
 		const diff = createMockDiff('My Test Diff');
@@ -86,7 +76,7 @@ describe('closeDiff tool', () => {
 
 		const handler = mockServer.getToolHandler('close_diff')!;
 		const result = await handler({ tab_name: 'My Test Diff' });
-		const parsed = parseResult(result);
+		const parsed = parseToolResult<CloseDiffResult>(result);
 
 		expect(parsed.success).toBe(true);
 		expect(parsed.already_closed).toBe(false);
@@ -100,12 +90,12 @@ describe('closeDiff tool', () => {
 	});
 
 	it('should return success with already_closed=true for non-existent tab', async () => {
-		const mockServer = createMockServer();
+		const mockServer = new MockMcpServer();
 		registerCloseDiffTool(mockServer as any, logger, diffState);
 
 		const handler = mockServer.getToolHandler('close_diff')!;
 		const result = await handler({ tab_name: 'Non-existent Tab' });
-		const parsed = parseResult(result);
+		const parsed = parseToolResult<CloseDiffResult>(result);
 
 		expect(parsed.success).toBe(true);
 		expect(parsed.already_closed).toBe(true);
@@ -114,7 +104,7 @@ describe('closeDiff tool', () => {
 	});
 
 	it('should be idempotent - closing same tab twice returns success', async () => {
-		const mockServer = createMockServer();
+		const mockServer = new MockMcpServer();
 		registerCloseDiffTool(mockServer as any, logger, diffState);
 
 		const diff = createMockDiff('Idempotent Test');
@@ -123,20 +113,20 @@ describe('closeDiff tool', () => {
 		const handler = mockServer.getToolHandler('close_diff')!;
 
 		const result1 = await handler({ tab_name: 'Idempotent Test' });
-		const parsed1 = parseResult(result1);
+		const parsed1 = parseToolResult<CloseDiffResult>(result1);
 		expect(parsed1.success).toBe(true);
 		expect(parsed1.already_closed).toBe(false);
 
 		diffState.unregister(diff.diffId);
 
 		const result2 = await handler({ tab_name: 'Idempotent Test' });
-		const parsed2 = parseResult(result2);
+		const parsed2 = parseToolResult<CloseDiffResult>(result2);
 		expect(parsed2.success).toBe(true);
 		expect(parsed2.already_closed).toBe(true);
 	});
 
 	it('should close the correct diff when multiple diffs are open', async () => {
-		const mockServer = createMockServer();
+		const mockServer = new MockMcpServer();
 		registerCloseDiffTool(mockServer as any, logger, diffState);
 
 		const diff1 = createMockDiff('First Diff');
@@ -149,7 +139,7 @@ describe('closeDiff tool', () => {
 		const handler = mockServer.getToolHandler('close_diff')!;
 
 		const result = await handler({ tab_name: 'Second Diff' });
-		const parsed = parseResult(result);
+		const parsed = parseToolResult<CloseDiffResult>(result);
 
 		expect(parsed.success).toBe(true);
 		expect(parsed.already_closed).toBe(false);
@@ -167,19 +157,19 @@ describe('closeDiff tool', () => {
 
 	describe('edge cases', () => {
 		it('should handle empty tab name', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: '' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(true);
 		});
 
 		it('should handle tab name with special characters', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const diff = createMockDiff('Diff: src/file.ts → modified (2024-01-23)');
@@ -187,7 +177,7 @@ describe('closeDiff tool', () => {
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: 'Diff: src/file.ts → modified (2024-01-23)' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(false);
@@ -195,12 +185,12 @@ describe('closeDiff tool', () => {
 		});
 
 		it('should handle closing tab that was never opened', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: 'Never Existed Tab' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(true);
@@ -208,7 +198,7 @@ describe('closeDiff tool', () => {
 		});
 
 		it('should handle multiple diffs with same tab name but different diffIds', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const diff1 = createMockDiff('Duplicate Name', 'diff1');
@@ -218,7 +208,7 @@ describe('closeDiff tool', () => {
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: 'Duplicate Name' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(false);
@@ -232,7 +222,7 @@ describe('closeDiff tool', () => {
 		});
 
 		it('should handle rapid successive closes of different tabs', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const diff1 = createMockDiff('Tab A');
@@ -250,9 +240,9 @@ describe('closeDiff tool', () => {
 				handler({ tab_name: 'Tab C' }),
 			]);
 
-			expect(parseResult(result1).success).toBe(true);
-			expect(parseResult(result2).success).toBe(true);
-			expect(parseResult(result3).success).toBe(true);
+			expect(parseToolResult<CloseDiffResult>(result1).success).toBe(true);
+			expect(parseToolResult<CloseDiffResult>(result2).success).toBe(true);
+			expect(parseToolResult<CloseDiffResult>(result3).success).toBe(true);
 
 			expect(diff1.resolve).toHaveBeenCalled();
 			expect(diff2.resolve).toHaveBeenCalled();
@@ -260,7 +250,7 @@ describe('closeDiff tool', () => {
 		});
 
 		it('should handle tab name that is very long', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const longTabName = 'A'.repeat(1000);
@@ -269,7 +259,7 @@ describe('closeDiff tool', () => {
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: longTabName });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(false);
@@ -277,19 +267,19 @@ describe('closeDiff tool', () => {
 		});
 
 		it('should handle whitespace-only tab name', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: '   ' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(true);
 		});
 
 		it('should handle tab name with unicode characters', async () => {
-			const mockServer = createMockServer();
+			const mockServer = new MockMcpServer();
 			registerCloseDiffTool(mockServer as any, logger, diffState);
 
 			const diff = createMockDiff('编辑文件 🔧 файл.ts');
@@ -297,7 +287,7 @@ describe('closeDiff tool', () => {
 
 			const handler = mockServer.getToolHandler('close_diff')!;
 			const result = await handler({ tab_name: '编辑文件 🔧 файл.ts' });
-			const parsed = parseResult(result);
+			const parsed = parseToolResult<CloseDiffResult>(result);
 
 			expect(parsed.success).toBe(true);
 			expect(parsed.already_closed).toBe(false);
