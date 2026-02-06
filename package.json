@@ -2792,20 +2792,20 @@
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
-				"title": "Copilot CLI: Add File Reference to Prompt",
-				"category": "GitHub Copilot"
+				"title": "Add File Reference to Prompt",
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.acceptDiff",
-				"title": "Copilot CLI: Accept Changes",
+				"title": "Accept Changes",
 				"icon": "$(check)",
-				"category": "GitHub Copilot"
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.rejectDiff",
-				"title": "Copilot CLI: Reject Changes",
+				"title": "Reject Changes",
 				"icon": "$(close)",
-				"category": "GitHub Copilot"
+				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.checkoutPullRequestReroute",
