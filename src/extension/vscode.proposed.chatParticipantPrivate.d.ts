@@ -250,6 +250,10 @@ declare module 'vscode' {
 		chatSessionId?: string;
 		chatSessionResource?: string;
 		chatInteractionId?: string;
+		/**
+		 * If set, tells the tool that it should include confirmation messages.
+		 */
+		forceConfirmationReason?: string;
 	}
 
 	export interface PreparedToolInvocation {
