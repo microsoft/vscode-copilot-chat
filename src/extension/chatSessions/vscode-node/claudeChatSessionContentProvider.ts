@@ -87,6 +87,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	public override dispose(): void {
 		this._lastKnownOptions.clear();
+		this._untitledToSdkSession.clear();
 		super.dispose();
 	}
 
@@ -116,6 +117,11 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	// #region Chat Participant Handler
+
+	// Track SDK session IDs for untitled sessions that haven't been swapped yet.
+	// When VS Code yields mid-request, we can't swap yet (no complete session to display),
+	// so we store the SDK session ID to reuse on the next request.
+	private readonly _untitledToSdkSession = new Map<string, string>();
 
 	createHandler(
 		sessionType: string,
@@ -149,19 +155,32 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				throw e;
 			}
 			const permissionMode = this.getPermissionModeForSession(sessionId);
+			const yieldRequested = () => context.yieldRequested;
 
-			const effectiveSessionId = chatSessionContext.isUntitled ? undefined : sessionId;
-			const result = await claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, modelId, permissionMode);
+			// For untitled sessions, check if we have a stored SDK session from a previous yield
+			const untitledKey = chatSessionContext.isUntitled ? chatSessionContext.chatSessionItem.resource.toString() : undefined;
+			const effectiveSessionId = chatSessionContext.isUntitled
+				? this._untitledToSdkSession.get(untitledKey!)
+				: sessionId;
+
+			const result = await claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, modelId, permissionMode, yieldRequested);
 
 			if (chatSessionContext.isUntitled) {
 				if (result.claudeSessionId) {
-					const swapResource = ClaudeSessionUri.forSessionId(result.claudeSessionId);
-					await this.sessionService.waitForSessionReady(swapResource, token);
-					// Tell UI to replace with claude-backed session
-					sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-						resource: swapResource,
-						label: request.prompt ?? 'Claude Agent'
-					});
+					if (context.yieldRequested) {
+						// VS Code will follow up immediately - store the SDK session so the
+						// next request reuses it instead of creating a new one
+						this._untitledToSdkSession.set(untitledKey!, result.claudeSessionId);
+					} else {
+						// Done yielding (or never yielded) - swap to persistent session
+						this._untitledToSdkSession.delete(untitledKey!);
+						const swapResource = ClaudeSessionUri.forSessionId(result.claudeSessionId);
+						await this.sessionService.waitForSessionReady(swapResource, token);
+						sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
+							resource: swapResource,
+							label: request.prompt ?? 'Claude Agent'
+						});
+					}
 				} else if (!result.errorDetails) {
 					// Only show generic warning if we didn't already show a specific error
 					stream.warning(vscode.l10n.t("Failed to create a new Claude Agent session."));
