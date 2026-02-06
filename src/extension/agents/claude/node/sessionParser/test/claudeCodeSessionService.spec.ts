@@ -15,6 +15,7 @@ import { TestWorkspaceService } from '../../../../../../platform/test/node/testW
 import { IWorkspaceService } from '../../../../../../platform/workspace/common/workspaceService';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
 import { CancellationToken, CancellationTokenSource } from '../../../../../../util/vs/base/common/cancellation';
+import { cwd } from '../../../../../../util/vs/base/common/process';
 import { URI } from '../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
@@ -449,7 +450,7 @@ describe('ClaudeCodeSessionService', () => {
 		let noWorkspaceService: ClaudeCodeSessionService;
 		let noWorkspaceMockFs: MockFileSystemService;
 		// No-workspace uses process.cwd() to compute the slug (matching SDK behavior)
-		const cwdSlug = computeFolderSlug(URI.file(process.cwd()));
+		const cwdSlug = computeFolderSlug(URI.file(cwd()));
 
 		beforeEach(() => {
 			noWorkspaceMockFs = new MockFileSystemService();
@@ -504,7 +505,7 @@ describe('ClaudeCodeSessionService', () => {
 		let multiRootService: ClaudeCodeSessionService;
 		let multiRootMockFs: MockFileSystemService;
 		// Multi-root workspaces use process.cwd() to compute the slug (matching SDK behavior)
-		const cwdSlug = computeFolderSlug(URI.file(process.cwd()));
+		const cwdSlug = computeFolderSlug(URI.file(cwd()));
 
 		beforeEach(() => {
 			multiRootMockFs = new MockFileSystemService();
