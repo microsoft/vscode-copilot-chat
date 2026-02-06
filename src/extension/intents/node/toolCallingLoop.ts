@@ -444,13 +444,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 	}
 
-	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
-		let i = 0;
-		let lastResult: IToolCallSingleResult | undefined;
-		let lastRequestMessagesStartingIndexForRun: number | undefined;
-		let stopHookActive = false;
-
-		// Execute SubagentStart hook for subagent requests, or SessionStart hook for regular sessions
+	/**
+	 * Executes start hooks (SessionStart for regular sessions, SubagentStart for subagents).
+	 * Should be called before run() to allow hooks to provide context before the first prompt.
+	 *
+	 * - For subagents: Always executes SubagentStart hook
+	 * - For regular sessions: Only executes SessionStart hook on the first turn
+	 */
+	public async runStartHooks(token: CancellationToken): Promise<void> {
+		// Execute SubagentStart hook for subagent requests, or SessionStart hook for first turn of regular sessions
 		if (this.options.request.subAgentInvocationId) {
 			const startHookResult = await this.executeSubagentStartHook({
 				agent_id: this.options.request.subAgentInvocationId,
@@ -461,14 +463,24 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
 			}
 		} else {
-			const startHookResult = await this.executeSessionStartHook({
-				source: 'new'
-			}, token);
-			if (startHookResult.additionalContext) {
-				this.additionalHookContext = startHookResult.additionalContext;
-				this._logService.info('[ToolCallingLoop] SessionStart hook provided context for session');
+			const isFirstTurn = this.options.conversation.turns.length === 1;
+			if (isFirstTurn) {
+				const startHookResult = await this.executeSessionStartHook({
+					source: 'new'
+				}, token);
+				if (startHookResult.additionalContext) {
+					this.additionalHookContext = startHookResult.additionalContext;
+					this._logService.info('[ToolCallingLoop] SessionStart hook provided context for session');
+				}
 			}
 		}
+	}
+
+	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<IToolCallLoopResult> {
+		let i = 0;
+		let lastResult: IToolCallSingleResult | undefined;
+		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		let stopHookActive = false;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {

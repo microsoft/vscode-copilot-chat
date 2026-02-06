@@ -340,6 +340,12 @@ export class DefaultIntentRequestHandler {
 		}, this));
 
 		try {
+			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
+			try {
+				await loop.runStartHooks(this.token);
+			} catch (error) {
+				this._logService.error('[DefaultIntentRequestHandler] Error executing start hooks', error);
+			}
 			try {
 				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
 			} catch (error) {
