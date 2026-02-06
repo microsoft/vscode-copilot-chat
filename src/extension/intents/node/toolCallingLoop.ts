@@ -287,10 +287,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.warning(l10n.t('Stop hook: {0}', reasons[0]));
+				outputStream.hookProgress('Stop', l10n.t('Stop hook: {0}', reasons[0]), 'blocked');
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.warning(l10n.t('Stop hooks:\n{0}', formattedReasons));
+				outputStream.hookProgress('Stop', l10n.t('Stop hooks:\n{0}', formattedReasons), 'blocked');
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);

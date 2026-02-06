@@ -5,7 +5,7 @@
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
 import type { ChatQuestion, ChatResponseFileTree, ChatResponseStream, ChatResultUsage, ChatToolInvocationStreamData, ChatVulnerability, ChatWorkspaceFileEdit, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
-import { ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, ChatResponseWorkspaceEditPart, MarkdownString, TextEdit } from '../../vscodeTypes';
+import { ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExternalEditPart, ChatResponseFileTreePart, ChatResponseHookPart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, ChatResponseWorkspaceEditPart, ChatHookOutcome, ChatHookType, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
 
@@ -129,6 +129,10 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 
 	thinkingProgress(thinkingDelta: ThinkingDelta): void {
 		this._push(new ChatResponseThinkingProgressPart(thinkingDelta.text ?? '', thinkingDelta.id, thinkingDelta.metadata));
+	}
+
+	hookProgress(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string): void {
+		this._push(new ChatResponseHookPart(hookType, message, outcome, reason));
 	}
 
 	button(command: Command): void {

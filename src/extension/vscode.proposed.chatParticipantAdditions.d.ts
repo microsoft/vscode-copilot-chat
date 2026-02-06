@@ -384,7 +384,7 @@ declare module 'vscode' {
 		constructor(uris: Uri[], callback: () => Thenable<unknown>);
 	}
 
-	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseWorkspaceEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatResponsePullRequestPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart | ChatResponseExternalEditPart | ChatResponseQuestionCarouselPart;
+	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseWorkspaceEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatResponsePullRequestPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart | ChatResponseExternalEditPart | ChatResponseQuestionCarouselPart | ChatResponseHookPart;
 	export class ChatResponseWarningPart {
 		value: MarkdownString;
 		constructor(value: string | MarkdownString);
@@ -411,6 +411,38 @@ declare module 'vscode' {
 		 * @param task A task that will emit thinking parts during its execution
 		 */
 		constructor(value: string | string[], id?: string, metadata?: { readonly [key: string]: any }, task?: (progress: Progress<LanguageModelThinkingPart>) => Thenable<string | void>);
+	}
+
+	/**
+	 * The outcome of a hook execution.
+	 */
+	export type ChatHookOutcome = 'success' | 'blocked' | 'denied' | 'error';
+
+	/**
+	 * A progress part representing the execution result of a hook.
+	 * Hooks are user-configured scripts that run at specific points during chat processing.
+	 */
+	export class ChatResponseHookPart {
+		/** The type of hook that was executed */
+		hookType: ChatHookType;
+		/** A message describing the hook execution result */
+		message: string;
+		/** The outcome of the hook execution */
+		outcome: ChatHookOutcome;
+		/** Optional reason for the outcome (e.g., why the hook blocked/denied) */
+		reason?: string;
+		/** Optional metadata associated with the hook execution */
+		metadata?: { readonly [key: string]: any };
+
+		/**
+		 * Creates a new hook progress part.
+		 * @param hookType The type of hook that was executed
+		 * @param message A message describing the hook execution result
+		 * @param outcome The outcome of the hook execution
+		 * @param reason Optional reason for the outcome
+		 * @param metadata Optional metadata
+		 */
+		constructor(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string, metadata?: { readonly [key: string]: any });
 	}
 
 	export class ChatResponseReferencePart2 {
@@ -509,6 +541,15 @@ declare module 'vscode' {
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
 
 		thinkingProgress(thinkingDelta: ThinkingDelta): void;
+
+		/**
+		 * Push a hook execution result to this stream.
+		 * @param hookType The type of hook that was executed
+		 * @param message A message describing the hook execution result
+		 * @param outcome The outcome of the hook execution
+		 * @param reason Optional reason for the outcome
+		 */
+		hookProgress(hookType: ChatHookType, message: string, outcome: ChatHookOutcome, reason?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
