@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,7 +32,7 @@ interface MockClaudeSession {
 	id: string;
 	messages: Array<{
 		type: 'user' | 'assistant';
-		message: Anthropic.MessageParam | Anthropic.Message;
+		message: Record<string, unknown>;
 	}>;
 }
 
@@ -116,6 +115,8 @@ describe('ChatSessionContentProvider', () => {
 		});
 	}
 
+	// #region Provider-Level Tests
+
 	describe('provideChatSessionContent', () => {
 		it('returns empty history when no existing session', async () => {
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
@@ -126,568 +127,7 @@ describe('ChatSessionContentProvider', () => {
 			expect(result.history).toEqual([]);
 			expect(mockSessionService.getSession).toHaveBeenCalledWith(sessionUri, CancellationToken.None);
 		});
-
-		it('converts user messages to ChatRequestTurn2', async () => {
-			const mockSession: MockClaudeSession = {
-				id: 'test-session',
-				messages: [
-					{
-						type: 'user',
-						message: {
-							role: 'user',
-							content: 'Hello, how are you?'
-						} as Anthropic.MessageParam
-					}
-				]
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-				[
-				  {
-				    "prompt": "Hello, how are you?",
-				    "type": "request",
-				  },
-				]
-			`);
-		});
-
-		it('converts assistant messages with text to ChatResponseTurn2', async () => {
-			const mockSession: MockClaudeSession = {
-				id: 'test-session',
-				messages: [
-					{
-						type: 'assistant',
-						message: {
-							id: 'msg-1',
-							type: 'message',
-							role: 'assistant',
-							content: [
-								{
-									type: 'text',
-									text: 'I am doing well, thank you!'
-								}
-							],
-							model: 'claude-3-sonnet',
-							stop_reason: 'end_turn',
-							stop_sequence: null,
-							usage: { input_tokens: 10, output_tokens: 8 }
-						} as Anthropic.Message
-					}
-				]
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-				[
-				  {
-				    "parts": [
-				      {
-				        "content": "I am doing well, thank you!",
-				        "type": "markdown",
-				      },
-				    ],
-				    "type": "response",
-				  },
-				]
-			`);
-		});
-
-		it('converts assistant messages with tool_use to ChatToolInvocationPart', async () => {
-			const mockSession: MockClaudeSession = {
-				id: 'test-session',
-				messages: [
-					{
-						type: 'assistant',
-						message: {
-							id: 'msg-1',
-							type: 'message',
-							role: 'assistant',
-							content: [
-								{
-									type: 'tool_use',
-									id: 'tool-1',
-									name: 'bash',
-									input: { command: 'ls -la' }
-								}
-							],
-							model: 'claude-3-sonnet',
-							stop_reason: 'tool_use',
-							stop_sequence: null,
-							usage: { input_tokens: 15, output_tokens: 12 }
-						} as Anthropic.Message
-					}
-				]
-			};
-
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-			const sessionUri = createClaudeSessionUri('test-session');
-			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-				[
-				  {
-				    "parts": [
-				      {
-				        "invocationMessage": "Used tool: bash",
-				        "isError": false,
-				        "toolCallId": "tool-1",
-				        "toolName": "bash",
-				        "type": "tool",
-				      },
-				    ],
-				    "type": "response",
-				  },
-				]
-			`);
-		});
 	});
-
-	it('handles mixed content with text and tool_use', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-1',
-						type: 'message',
-						role: 'assistant',
-						content: [
-							{
-								type: 'text',
-								text: 'Let me run a command:'
-							},
-							{
-								type: 'tool_use',
-								id: 'tool-1',
-								name: 'bash',
-								input: { command: 'pwd' }
-							}
-						],
-						model: 'claude-3-sonnet',
-						stop_reason: 'tool_use',
-						stop_sequence: null,
-						usage: { input_tokens: 20, output_tokens: 15 }
-					} as Anthropic.Message
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "parts": [
-			      {
-			        "content": "Let me run a command:",
-			        "type": "markdown",
-			      },
-			      {
-			        "invocationMessage": "Used tool: bash",
-			        "isError": false,
-			        "toolCallId": "tool-1",
-			        "toolName": "bash",
-			        "type": "tool",
-			      },
-			    ],
-			    "type": "response",
-			  },
-			]
-		`);
-	});
-
-	it('handles complete tool invocation flow: user → assistant with tool_use → user with tool_result', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				// Initial user message
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: 'Can you list the files in the current directory?'
-					} as Anthropic.MessageParam
-				},
-				// Assistant message with text and tool_use
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-1',
-						type: 'message',
-						role: 'assistant',
-						content: [
-							{
-								type: 'text',
-								text: 'I\'ll list the files for you.'
-							},
-							{
-								type: 'tool_use',
-								id: 'tool-1',
-								name: 'bash',
-								input: { command: 'ls -la' }
-							}
-						],
-						model: 'claude-3-sonnet',
-						stop_reason: 'tool_use',
-						stop_sequence: null,
-						usage: { input_tokens: 20, output_tokens: 15 }
-					} as Anthropic.Message
-				},
-				// User message with tool_result
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: [
-							{
-								type: 'tool_result',
-								tool_use_id: 'tool-1',
-								content: 'total 8\ndrwxr-xr-x  3 user user 4096 Aug 29 10:00 .\ndrwxr-xr-x  5 user user 4096 Aug 29 09:30 ..\n-rw-r--r--  1 user user  256 Aug 29 10:00 file.txt',
-								is_error: false
-							}
-						]
-					} as Anthropic.MessageParam
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "prompt": "Can you list the files in the current directory?",
-			    "type": "request",
-			  },
-			  {
-			    "parts": [
-			      {
-			        "content": "I'll list the files for you.",
-			        "type": "markdown",
-			      },
-			      {
-			        "invocationMessage": "Used tool: bash",
-			        "isError": false,
-			        "toolCallId": "tool-1",
-			        "toolName": "bash",
-			        "type": "tool",
-			      },
-			    ],
-			    "type": "response",
-			  },
-			]
-		`);
-	}); it('handles user messages with complex content blocks', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: [
-							{
-								type: 'text',
-								text: 'Check this result: '
-							},
-							{
-								type: 'tool_result',
-								tool_use_id: 'tool-1',
-								content: 'Command executed successfully',
-								is_error: false
-							}
-						]
-					} as Anthropic.MessageParam
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "prompt": "Check this result: ",
-			    "type": "request",
-			  },
-			]
-		`);
-	});
-
-	// #region System-reminder filtering tests
-
-	it('filters out system-reminder blocks from user messages', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: [
-							{
-								type: 'text',
-								text: '<system-reminder>\nThe user provided the following references:\n- /path/to/file.ts\n\nIMPORTANT: this context may or may not be relevant.\n</system-reminder>'
-							},
-							{
-								type: 'text',
-								text: 'What does this file do?'
-							}
-						]
-					} as Anthropic.MessageParam
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "prompt": "What does this file do?",
-			    "type": "request",
-			  },
-			]
-		`);
-	});
-
-	it('strips system-reminders from legacy string format user messages', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: '<system-reminder>\nThe user provided references.\n</system-reminder>\n\nWhat does this code do?'
-					} as Anthropic.MessageParam
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "prompt": "What does this code do?",
-			    "type": "request",
-			  },
-			]
-		`);
-	});
-
-	it('produces no request turn when user message is only a system-reminder', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: [
-							{
-								type: 'text',
-								text: '<system-reminder>\nSome internal context.\n</system-reminder>'
-							}
-						]
-					} as Anthropic.MessageParam
-				},
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-1',
-						type: 'message',
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Hello!' }],
-						model: 'claude-3-sonnet',
-						stop_reason: 'end_turn',
-						stop_sequence: null,
-						usage: { input_tokens: 10, output_tokens: 5 }
-					} as Anthropic.Message
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		// Should only have the assistant response, no request turn for the system-reminder-only message
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "parts": [
-			      {
-			        "content": "Hello!",
-			        "type": "markdown",
-			      },
-			    ],
-			    "type": "response",
-			  },
-			]
-		`);
-	});
-
-	// #endregion
-
-	// #region Consecutive message grouping tests
-
-	it('combines consecutive user messages into a single request turn', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: 'First part of my question.'
-					} as Anthropic.MessageParam
-				},
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: 'Second part with more details.'
-					} as Anthropic.MessageParam
-				},
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-1',
-						type: 'message',
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Here is my response.' }],
-						model: 'claude-3-sonnet',
-						stop_reason: 'end_turn',
-						stop_sequence: null,
-						usage: { input_tokens: 20, output_tokens: 10 }
-					} as Anthropic.Message
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-[
-  {
-    "prompt": "First part of my question.
-
-Second part with more details.",
-    "type": "request",
-  },
-  {
-    "parts": [
-      {
-        "content": "Here is my response.",
-        "type": "markdown",
-      },
-    ],
-    "type": "response",
-  },
-]
-		`);
-	});
-
-	it('combines consecutive assistant messages into a single response turn', async () => {
-		const mockSession: MockClaudeSession = {
-			id: 'test-session',
-			messages: [
-				{
-					type: 'user',
-					message: {
-						role: 'user',
-						content: 'Hello'
-					} as Anthropic.MessageParam
-				},
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-1',
-						type: 'message',
-						role: 'assistant',
-						content: [{ type: 'text', text: 'First response part.' }],
-						model: 'claude-3-sonnet',
-						stop_reason: 'tool_use',
-						stop_sequence: null,
-						usage: { input_tokens: 10, output_tokens: 5 }
-					} as Anthropic.Message
-				},
-				{
-					type: 'assistant',
-					message: {
-						id: 'msg-2',
-						type: 'message',
-						role: 'assistant',
-						content: [{ type: 'text', text: 'Second response part.' }],
-						model: 'claude-3-sonnet',
-						stop_reason: 'end_turn',
-						stop_sequence: null,
-						usage: { input_tokens: 15, output_tokens: 8 }
-					} as Anthropic.Message
-				}
-			]
-		};
-
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-		const sessionUri = createClaudeSessionUri('test-session');
-		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
-
-		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
-			[
-			  {
-			    "prompt": "Hello",
-			    "type": "request",
-			  },
-			  {
-			    "parts": [
-			      {
-			        "content": "First response part.",
-			        "type": "markdown",
-			      },
-			      {
-			        "content": "Second response part.",
-			        "type": "markdown",
-			      },
-			    ],
-			    "type": "response",
-			  },
-			]
-		`);
-	});
-
-	// #endregion
 
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
@@ -716,6 +156,10 @@ Second part with more details.",
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
 	});
 
+	// #endregion
+
+	// #region Model Resolution and Caching
+
 	describe('model resolution and caching', () => {
 		it('uses user-selected model from session state', async () => {
 			const session: MockClaudeSession = {
@@ -726,7 +170,7 @@ Second part with more details.",
 						role: 'assistant',
 						content: [{ type: 'text', text: 'Hello' }],
 						model: 'claude-opus-4-5-20251101',
-					} as any,
+					},
 				}],
 			};
 
@@ -750,7 +194,7 @@ Second part with more details.",
 						role: 'assistant',
 						content: [{ type: 'text', text: 'Hello' }],
 						model: 'claude-opus-4-5-20251101',
-					} as any,
+					},
 				}],
 			};
 
@@ -772,7 +216,7 @@ Second part with more details.",
 					message: {
 						role: 'user',
 						content: 'Hello',
-					} as any,
+					},
 				}],
 			};
 
@@ -795,7 +239,7 @@ Second part with more details.",
 						role: 'assistant',
 						content: [{ type: 'text', text: 'Hello' }],
 						model: 'claude-unknown-1-0-20251101',
-					} as any,
+					},
 				}],
 			};
 
@@ -819,7 +263,7 @@ Second part with more details.",
 						role: 'assistant',
 						content: [{ type: 'text', text: 'Hello' }],
 						model: 'claude-opus-4-5-20251101',
-					} as any,
+					},
 				}],
 			};
 
@@ -845,14 +289,14 @@ Second part with more details.",
 							role: 'assistant',
 							content: [{ type: 'text', text: 'First' }],
 							model: 'claude-haiku-3-5-20250514',
-						} as any,
+						},
 					},
 					{
 						type: 'user',
 						message: {
 							role: 'user',
 							content: 'Question',
-						} as any,
+						},
 					},
 					{
 						type: 'assistant',
@@ -860,7 +304,7 @@ Second part with more details.",
 							role: 'assistant',
 							content: [{ type: 'text', text: 'Second' }],
 							model: 'claude-opus-4-5-20251101',
-						} as any,
+						},
 					},
 				],
 			};
@@ -874,6 +318,10 @@ Second part with more details.",
 			expect(mockClaudeCodeModels.mapSdkModelToEndpointModel).toHaveBeenCalledWith('claude-opus-4-5-20251101');
 		});
 	});
+
+	// #endregion
+
+	// #region Unavailable Model Handling
 
 	describe('unavailable model handling', () => {
 		it('shows unavailable option when no models available', async () => {
@@ -919,6 +367,8 @@ Second part with more details.",
 			expect(result.options?.['model']).toBe(UNAVAILABLE_MODEL_ID);
 		});
 	});
+
+	// #endregion
 });
 
 

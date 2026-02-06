@@ -19,11 +19,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "toolName": "Glob",
         "type": "tool",
       },
-    ],
-    "type": "response",
-  },
-  {
-    "parts": [
       {
         "invocationMessage": "Searched for regex \`ClaudeAgentManager\`",
         "isError": undefined,
@@ -31,11 +26,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "toolName": "Grep",
         "type": "tool",
       },
-    ],
-    "type": "response",
-  },
-  {
-    "parts": [
       {
         "content": "Let me check the claudeCodeAgent.ts file which likely contains the ClaudeAgentManager:",
         "type": "markdown",
@@ -47,11 +37,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "toolName": "Read",
         "type": "tool",
       },
-    ],
-    "type": "response",
-  },
-  {
-    "parts": [
       {
         "content": "I'll add a small comment to the ClaudeAgentManager class:",
         "type": "markdown",
