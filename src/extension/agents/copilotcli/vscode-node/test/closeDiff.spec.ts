@@ -22,7 +22,7 @@ vi.mock('vscode', () => ({
 		},
 	},
 	commands: {
-		executeCommand: vi.fn(),
+		executeCommand: vi.fn().mockResolvedValue(undefined),
 	},
 	TabInputTextDiff: class TabInputTextDiff {
 		constructor(public original: any, public modified: any) { }

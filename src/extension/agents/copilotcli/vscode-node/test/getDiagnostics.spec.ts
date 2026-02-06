@@ -119,10 +119,10 @@ describe('getDiagnostics tool', () => {
 		const result = parseToolResult<DiagnosticsFileResult[]>(await handler({ uri: 'file:///test.ts' }));
 
 		const severities = result[0].diagnostics.map(d => d.severity);
-		expect(severities).toContain('Error');
-		expect(severities).toContain('Warning');
-		expect(severities).toContain('Information');
-		expect(severities).toContain('Hint');
+		expect(severities).toContain('error');
+		expect(severities).toContain('warning');
+		expect(severities).toContain('information');
+		expect(severities).toContain('hint');
 	});
 
 	it('should include diagnostic range, source, and code', async () => {
