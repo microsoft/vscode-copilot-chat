@@ -8,7 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { makeTextResult } from './utils';
 import { ILogger } from '../../../../../platform/log/common/logService';
 
-interface SelectionInfo {
+export interface SelectionInfo {
 	text: string;
 	filePath: string;
 	fileUrl: string;
@@ -18,8 +18,6 @@ interface SelectionInfo {
 		isEmpty: boolean;
 	};
 }
-
-let latestSelection: SelectionInfo | null = null;
 
 export function getSelectionInfo(editor: vscode.TextEditor): SelectionInfo {
 	const document = editor.document;
@@ -38,15 +36,19 @@ export function getSelectionInfo(editor: vscode.TextEditor): SelectionInfo {
 	};
 }
 
-export function updateLatestSelection(selection: SelectionInfo | null): void {
-	latestSelection = selection;
+export class SelectionState {
+	private _latestSelection: SelectionInfo | null = null;
+
+	update(selection: SelectionInfo | null): void {
+		this._latestSelection = selection;
+	}
+
+	get latest(): SelectionInfo | null {
+		return this._latestSelection;
+	}
 }
 
-export function getLatestSelection(): SelectionInfo | null {
-	return latestSelection;
-}
-
-export function registerGetSelectionTool(server: McpServer, logger: ILogger): void {
+export function registerGetSelectionTool(server: McpServer, logger: ILogger, selectionState: SelectionState): void {
 	server.tool('get_selection', 'Get text selection. Returns current selection if an editor is active, otherwise returns the latest cached selection. The "current" field indicates if this is from the active editor (true) or cached (false).', async () => {
 		logger.debug('Getting text selection');
 		const editor = vscode.window.activeTextEditor;
@@ -55,9 +57,9 @@ export function registerGetSelectionTool(server: McpServer, logger: ILogger): vo
 			logger.trace(`Returning current selection from: ${selectionInfo.filePath}`);
 			return makeTextResult({ ...selectionInfo, current: true });
 		}
-		if (latestSelection) {
-			logger.trace(`Returning cached selection from: ${latestSelection.filePath}`);
-			return makeTextResult({ ...latestSelection, current: false });
+		if (selectionState.latest) {
+			logger.trace(`Returning cached selection from: ${selectionState.latest.filePath}`);
+			return makeTextResult({ ...selectionState.latest, current: false });
 		}
 		logger.trace('No selection available');
 		return makeTextResult(null);

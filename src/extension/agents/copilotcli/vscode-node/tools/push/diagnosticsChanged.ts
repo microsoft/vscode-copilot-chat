@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { broadcastNotification } from '../../inProcHttpServer';
+import { InProcHttpServer } from '../../inProcHttpServer';
 import { ILogger } from '../../../../../../platform/log/common/logService';
 
 interface DiagnosticInfo {
@@ -53,7 +53,7 @@ function getDiagnosticsForUri(uri: vscode.Uri): DiagnosticInfo {
 	};
 }
 
-export function registerDiagnosticsChangedNotification(logger: ILogger): vscode.Disposable[] {
+export function registerDiagnosticsChangedNotification(logger: ILogger, httpServer: InProcHttpServer): vscode.Disposable[] {
 	const disposables: vscode.Disposable[] = [];
 
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +64,7 @@ export function registerDiagnosticsChangedNotification(logger: ILogger): vscode.
 		debounceTimer = setTimeout(() => {
 			const changedDiagnostics: DiagnosticInfo[] = event.uris.map(uri => getDiagnosticsForUri(uri));
 			logger.trace(`Diagnostics changed for ${event.uris.length} file(s)`);
-			broadcastNotification('diagnostics_changed', {
+			httpServer.broadcastNotification('diagnostics_changed', {
 				uris: changedDiagnostics,
 			} as unknown as Record<string, unknown>);
 		}, 200);

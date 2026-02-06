@@ -7,19 +7,22 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerOpenDiffTool } from './openDiff';
 import { registerCloseDiffTool } from './closeDiff';
 import { registerGetDiagnosticsTool } from './getDiagnostics';
-import { registerGetSelectionTool } from './getSelection';
+import { registerGetSelectionTool, SelectionState } from './getSelection';
 import { registerGetVscodeInfoTool } from './getVscodeInfo';
 import { registerShowNotificationTool } from './showNotification';
 import { ILogger } from '../../../../../platform/log/common/logService';
+import { DiffStateManager } from '../diffState';
+import { ReadonlyContentProvider } from '../readonlyContentProvider';
 
-export { getSelectionInfo, updateLatestSelection, getLatestSelection } from './getSelection';
+export { getSelectionInfo, SelectionState } from './getSelection';
+export type { SelectionInfo } from './getSelection';
 
-export function registerTools(server: McpServer, logger: ILogger): void {
+export function registerTools(server: McpServer, logger: ILogger, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): void {
 	logger.debug('Registering MCP tools...');
 	registerGetVscodeInfoTool(server, logger);
-	registerGetSelectionTool(server, logger);
-	registerOpenDiffTool(server, logger);
-	registerCloseDiffTool(server, logger);
+	registerGetSelectionTool(server, logger, selectionState);
+	registerOpenDiffTool(server, logger, diffState, contentProvider);
+	registerCloseDiffTool(server, logger, diffState);
 	registerGetDiagnosticsTool(server, logger);
 	registerShowNotificationTool(server, logger);
 	logger.debug('All MCP tools registered');

@@ -7,21 +7,25 @@ import { Disposable, TextDocumentContentProvider, Uri, workspace } from 'vscode'
 
 export const READONLY_SCHEME = 'copilot-cli-readonly';
 
-const contentStore = new Map<string, string>();
-
 export class ReadonlyContentProvider implements TextDocumentContentProvider {
+	private readonly _contentStore = new Map<string, string>();
+
 	provideTextDocumentContent(uri: Uri): string {
-		const content = contentStore.get(uri.toString());
+		const content = this._contentStore.get(uri.toString());
 		return content ?? '';
 	}
-}
 
-export function setReadonlyContent(uri: Uri, content: string): void {
-	contentStore.set(uri.toString(), content);
-}
+	setContent(uri: Uri, content: string): void {
+		this._contentStore.set(uri.toString(), content);
+	}
 
-export function clearReadonlyContent(uri: Uri): void {
-	contentStore.delete(uri.toString());
+	clearContent(uri: Uri): void {
+		this._contentStore.delete(uri.toString());
+	}
+
+	register(): Disposable {
+		return workspace.registerTextDocumentContentProvider(READONLY_SCHEME, this);
+	}
 }
 
 export function createReadonlyUri(originalPath: string, suffix: string): Uri {
@@ -30,9 +34,4 @@ export function createReadonlyUri(originalPath: string, suffix: string): Uri {
 		path: originalPath,
 		query: suffix,
 	});
-}
-
-export function registerReadonlyContentProvider(): Disposable {
-	const provider = new ReadonlyContentProvider();
-	return workspace.registerTextDocumentContentProvider(READONLY_SCHEME, provider);
 }

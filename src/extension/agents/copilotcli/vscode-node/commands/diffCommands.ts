@@ -4,19 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { getActiveDiffForCurrentTab } from '../diffState';
+import { DiffStateManager } from '../diffState';
 import { ILogger } from '../../../../../platform/log/common/logService';
 
 export const ACCEPT_DIFF_COMMAND = 'github.copilot.chat.copilotCLI.acceptDiff';
 export const REJECT_DIFF_COMMAND = 'github.copilot.chat.copilotCLI.rejectDiff';
 
-export function registerDiffCommands(logger: ILogger): vscode.Disposable[] {
+export function registerDiffCommands(logger: ILogger, diffState: DiffStateManager): vscode.Disposable[] {
 	const disposables: vscode.Disposable[] = [];
 
 	disposables.push(
 		vscode.commands.registerCommand(ACCEPT_DIFF_COMMAND, () => {
 			logger.info('[DIFF] ===== ACCEPT COMMAND =====');
-			const diff = getActiveDiffForCurrentTab();
+			const diff = diffState.getForCurrentTab();
 			if (!diff) {
 				logger.info('[DIFF] No active diff found for accept');
 				return;
@@ -32,7 +32,7 @@ export function registerDiffCommands(logger: ILogger): vscode.Disposable[] {
 	disposables.push(
 		vscode.commands.registerCommand(REJECT_DIFF_COMMAND, () => {
 			logger.info('[DIFF] ===== REJECT COMMAND =====');
-			const diff = getActiveDiffForCurrentTab();
+			const diff = diffState.getForCurrentTab();
 			if (!diff) {
 				logger.info('[DIFF] No active diff found for reject');
 				return;

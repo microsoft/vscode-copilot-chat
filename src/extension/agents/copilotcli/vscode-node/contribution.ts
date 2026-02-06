@@ -9,11 +9,11 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../../common/contributions';
 import { registerAddFileReferenceCommand, registerDiffCommands } from './commands';
-import { initDiffState, setupDiffContextTracking } from './diffState';
-import { initInProcHttpServer, startInProcHttpServer } from './inProcHttpServer';
+import { DiffStateManager } from './diffState';
+import { InProcHttpServer } from './inProcHttpServer';
 import { cleanupStaleLockFiles, createLockFile } from './lockFile';
-import { registerReadonlyContentProvider } from './readonlyContentProvider';
-import { registerTools } from './tools';
+import { ReadonlyContentProvider } from './readonlyContentProvider';
+import { registerTools, SelectionState } from './tools';
 import { registerSelectionChangedNotification, registerDiagnosticsChangedNotification } from './tools/push';
 
 export class CopilotCLIContrib extends Disposable implements IExtensionContribution {
@@ -27,19 +27,21 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 
 		const logger = logService.createSubLogger('CopilotCLI');
 
-		// Initialize modules with logger
-		initDiffState(logger);
-		initInProcHttpServer(logger);
+		// Create shared instances
+		const diffState = new DiffStateManager(logger);
+		const httpServer = new InProcHttpServer(logger);
+		const selectionState = new SelectionState();
+		const contentProvider = new ReadonlyContentProvider();
 
 		// Register commands
-		this._register(registerAddFileReferenceCommand(logger));
-		for (const d of registerDiffCommands(logger)) {
+		this._register(registerAddFileReferenceCommand(logger, httpServer));
+		for (const d of registerDiffCommands(logger, diffState)) {
 			this._register(d);
 		}
-		for (const d of setupDiffContextTracking()) {
+		for (const d of diffState.setupContextTracking()) {
 			this._register(d);
 		}
-		this._register(registerReadonlyContentProvider());
+		this._register(contentProvider.register());
 
 		// Clean up any stale lockfiles from previous sessions
 		const cleanedCount = cleanupStaleLockFiles(logger);
@@ -48,23 +50,23 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 		}
 
 		// Start the MCP server
-		this._startMcpServer(logger);
+		this._startMcpServer(logger, httpServer, diffState, selectionState, contentProvider);
 	}
 
-	private async _startMcpServer(logger: ILogger): Promise<void> {
+	private async _startMcpServer(logger: ILogger, httpServer: InProcHttpServer, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): Promise<void> {
 		try {
-			const { disposable, serverUri, headers } = await startInProcHttpServer({
+			const { disposable, serverUri, headers } = await httpServer.start({
 				id: 'vscode-copilot-cli',
 				serverLabel: 'VS Code Copilot CLI',
 				serverVersion: '0.0.1',
 				registerTools: server => {
-					registerTools(server, logger);
+					registerTools(server, logger, diffState, selectionState, contentProvider);
 				},
 				registerPushNotifications: () => {
-					for (const d of registerSelectionChangedNotification(logger)) {
+					for (const d of registerSelectionChangedNotification(logger, httpServer, selectionState)) {
 						this._register(d);
 					}
-					for (const d of registerDiagnosticsChangedNotification(logger)) {
+					for (const d of registerDiagnosticsChangedNotification(logger, httpServer)) {
 						this._register(d);
 					}
 				},

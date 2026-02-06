@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { broadcastNotification } from '../inProcHttpServer';
+import { InProcHttpServer } from '../inProcHttpServer';
 import { getSelectionInfo } from '../tools';
 import { ILogger } from '../../../../../platform/log/common/logService';
 
@@ -21,7 +21,7 @@ export interface FileReferenceInfo {
 export const ADD_FILE_REFERENCE_COMMAND = 'github.copilot.chat.copilotCLI.addFileReference';
 export const ADD_FILE_REFERENCE_NOTIFICATION = 'add_file_reference';
 
-export function registerAddFileReferenceCommand(logger: ILogger): vscode.Disposable {
+export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InProcHttpServer): vscode.Disposable {
 	return vscode.commands.registerCommand(ADD_FILE_REFERENCE_COMMAND, (uri?: vscode.Uri) => {
 		logger.debug('Add file reference command executed');
 
@@ -35,7 +35,7 @@ export function registerAddFileReferenceCommand(logger: ILogger): vscode.Disposa
 			};
 
 			logger.info(`Broadcasting file reference from explorer: ${uri.fsPath}`);
-			broadcastNotification(
+			httpServer.broadcastNotification(
 				ADD_FILE_REFERENCE_NOTIFICATION,
 				fileReferenceInfo as unknown as Record<string, unknown>,
 			);
@@ -65,6 +65,6 @@ export function registerAddFileReferenceCommand(logger: ILogger): vscode.Disposa
 		};
 
 		logger.info(`Broadcasting file reference: ${selectionInfo.filePath}`);
-		broadcastNotification(ADD_FILE_REFERENCE_NOTIFICATION, fileReferenceInfo as unknown as Record<string, unknown>);
+		httpServer.broadcastNotification(ADD_FILE_REFERENCE_NOTIFICATION, fileReferenceInfo as unknown as Record<string, unknown>);
 	});
 }

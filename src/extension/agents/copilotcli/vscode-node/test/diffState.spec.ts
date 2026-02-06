@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import {
-	registerActiveDiff,
-	unregisterActiveDiff,
-	getActiveDiffByTabName,
-	hasActiveDiffs,
+	DiffStateManager,
 	type ActiveDiff,
 } from '../diffState';
 
@@ -35,6 +33,8 @@ vi.mock('vscode', () => ({
 }));
 
 describe('diffState', () => {
+	let diffState: DiffStateManager;
+
 	const createMockDiff = (tabName: string, diffIdSuffix?: string): ActiveDiff => ({
 		diffId: `/tmp/modified-${diffIdSuffix ?? tabName}.ts`,
 		tabName: tabName,
@@ -46,104 +46,94 @@ describe('diffState', () => {
 	});
 
 	beforeEach(() => {
-		const testDiffIds = [
-			'/tmp/modified-Test Diff 1.ts', '/tmp/modified-Test Diff 2.ts', '/tmp/modified-Test Diff 3.ts',
-			'/tmp/modified-My Diff Tab.ts', '/tmp/modified-Another Tab.ts', '/tmp/modified-Existing Tab.ts',
-			'/tmp/modified-diff1.ts', '/tmp/modified-diff2.ts',
-			'/tmp/modified-v1.ts', '/tmp/modified-v2.ts',
-			'/tmp/modified-Original Tab.ts', '/tmp/modified-new.ts',
-		];
-		for (let i = 0; i < 10; i++) {
-			testDiffIds.push(`/tmp/modified-Concurrent Tab ${i}.ts`);
-		}
-		testDiffIds.forEach(id => unregisterActiveDiff(id));
+		diffState = new DiffStateManager(new TestLogService());
 	});
 
-	describe('registerActiveDiff and getActiveDiffByTabName', () => {
+	describe('register and getByTabName', () => {
 		it('should register and retrieve a diff by tabName', () => {
 			const diff = createMockDiff('Test Diff 1');
-			registerActiveDiff(diff);
+			diffState.register(diff);
 
-			const retrieved = getActiveDiffByTabName('Test Diff 1');
+			const retrieved = diffState.getByTabName('Test Diff 1');
 			expect(retrieved).toBe(diff);
 		});
 
 		it('should return undefined for non-existent tabName', () => {
-			const retrieved = getActiveDiffByTabName('non-existent');
+			const retrieved = diffState.getByTabName('non-existent');
 			expect(retrieved).toBeUndefined();
 		});
 	});
 
-	describe('unregisterActiveDiff', () => {
+	describe('unregister', () => {
 		it('should remove a registered diff', () => {
 			const diff = createMockDiff('Test Diff 2');
-			registerActiveDiff(diff);
-			expect(getActiveDiffByTabName('Test Diff 2')).toBe(diff);
+			diffState.register(diff);
+			expect(diffState.getByTabName('Test Diff 2')).toBe(diff);
 
-			unregisterActiveDiff(diff.diffId);
-			expect(getActiveDiffByTabName('Test Diff 2')).toBeUndefined();
+			diffState.unregister(diff.diffId);
+			expect(diffState.getByTabName('Test Diff 2')).toBeUndefined();
 		});
 
 		it('should not throw when unregistering non-existent diff', () => {
-			expect(() => unregisterActiveDiff('/tmp/non-existent.ts')).not.toThrow();
+			expect(() => diffState.unregister('/tmp/non-existent.ts')).not.toThrow();
 		});
 	});
 
-	describe('getActiveDiffByTabName', () => {
+	describe('getByTabName', () => {
 		it('should find diff by tab name', () => {
 			const diff1 = createMockDiff('My Diff Tab');
 			const diff2 = createMockDiff('Another Tab');
-			registerActiveDiff(diff1);
-			registerActiveDiff(diff2);
+			diffState.register(diff1);
+			diffState.register(diff2);
 
-			const found = getActiveDiffByTabName('My Diff Tab');
+			const found = diffState.getByTabName('My Diff Tab');
 			expect(found).toBe(diff1);
 
-			const found2 = getActiveDiffByTabName('Another Tab');
+			const found2 = diffState.getByTabName('Another Tab');
 			expect(found2).toBe(diff2);
 		});
 
 		it('should return undefined for non-existent tab name', () => {
 			const diff = createMockDiff('Existing Tab');
-			registerActiveDiff(diff);
+			diffState.register(diff);
 
-			const found = getActiveDiffByTabName('Non-existent Tab');
+			const found = diffState.getByTabName('Non-existent Tab');
 			expect(found).toBeUndefined();
 		});
 
 		it('should allow multiple diffs with same tab name but different diffIds', () => {
 			const diff1 = createMockDiff('Duplicate Name', 'diff1');
 			const diff2 = createMockDiff('Duplicate Name', 'diff2');
-			registerActiveDiff(diff1);
-			registerActiveDiff(diff2);
+			diffState.register(diff1);
+			diffState.register(diff2);
 
-			const found = getActiveDiffByTabName('Duplicate Name');
+			const found = diffState.getByTabName('Duplicate Name');
 			expect(found).toBe(diff1);
 
-			unregisterActiveDiff(diff1.diffId);
-			const foundAfter = getActiveDiffByTabName('Duplicate Name');
+			diffState.unregister(diff1.diffId);
+			const foundAfter = diffState.getByTabName('Duplicate Name');
 			expect(foundAfter).toBe(diff2);
 		});
 	});
 
 	describe('hasActiveDiffs', () => {
 		it('should return false when no diffs are registered', () => {
-			expect(hasActiveDiffs()).toBe(false);
+			expect(diffState.hasActiveDiffs()).toBe(false);
 		});
 
 		it('should return true when diffs are registered', () => {
 			const diff = createMockDiff('Test Diff 3');
-			registerActiveDiff(diff);
-			expect(hasActiveDiffs()).toBe(true);
+			diffState.register(diff);
+			expect(diffState.hasActiveDiffs()).toBe(true);
 		});
 
 		it('should return false after all diffs are unregistered', () => {
 			const diff = createMockDiff('Test Diff 3');
-			registerActiveDiff(diff);
-			expect(hasActiveDiffs()).toBe(true);
+			diffState.register(diff);
+			expect(diffState.hasActiveDiffs()).toBe(true);
 
-			unregisterActiveDiff(diff.diffId);
-			expect(hasActiveDiffs()).toBe(false);
+			diffState.unregister(diff.diffId);
+			expect(diffState.hasActiveDiffs()).toBe(false);
 		});
 	});
 
@@ -168,14 +158,14 @@ describe('diffState', () => {
 				resolve: vi.fn(),
 			};
 
-			registerActiveDiff(diff1);
-			registerActiveDiff(diff2);
+			diffState.register(diff1);
+			diffState.register(diff2);
 
-			expect(getActiveDiffByTabName('file.ts (version 1)')).toBe(diff1);
-			expect(getActiveDiffByTabName('file.ts (version 2)')).toBe(diff2);
+			expect(diffState.getByTabName('file.ts (version 1)')).toBe(diff1);
+			expect(diffState.getByTabName('file.ts (version 2)')).toBe(diff2);
 
-			unregisterActiveDiff(diff1.diffId);
-			unregisterActiveDiff(diff2.diffId);
+			diffState.unregister(diff1.diffId);
+			diffState.unregister(diff2.diffId);
 		});
 
 		it('should handle re-registering same diffId (overwrites)', () => {
@@ -190,12 +180,12 @@ describe('diffState', () => {
 				resolve: vi.fn(),
 			};
 
-			registerActiveDiff(diff1);
-			expect(getActiveDiffByTabName('Original Tab')).toBe(diff1);
+			diffState.register(diff1);
+			expect(diffState.getByTabName('Original Tab')).toBe(diff1);
 
-			registerActiveDiff(diff2);
-			expect(getActiveDiffByTabName('Original Tab')).toBeUndefined();
-			expect(getActiveDiffByTabName('New Tab')).toBe(diff2);
+			diffState.register(diff2);
+			expect(diffState.getByTabName('Original Tab')).toBeUndefined();
+			expect(diffState.getByTabName('New Tab')).toBe(diff2);
 		});
 
 		it('should handle concurrent registrations', () => {
@@ -203,13 +193,13 @@ describe('diffState', () => {
 				createMockDiff(`Concurrent Tab ${i}`)
 			);
 
-			diffs.forEach(registerActiveDiff);
+			diffs.forEach(diff => diffState.register(diff));
 
 			diffs.forEach((diff, i) => {
-				expect(getActiveDiffByTabName(`Concurrent Tab ${i}`)).toBe(diff);
+				expect(diffState.getByTabName(`Concurrent Tab ${i}`)).toBe(diff);
 			});
 
-			diffs.forEach(diff => unregisterActiveDiff(diff.diffId));
+			diffs.forEach(diff => diffState.unregister(diff.diffId));
 		});
 	});
 });

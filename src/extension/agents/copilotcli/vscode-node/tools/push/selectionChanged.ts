@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { broadcastNotification } from '../../inProcHttpServer';
-import { getSelectionInfo, updateLatestSelection } from '../getSelection';
+import { InProcHttpServer } from '../../inProcHttpServer';
+import { getSelectionInfo, SelectionState } from '../getSelection';
 import { ILogger } from '../../../../../../platform/log/common/logService';
 
-export function registerSelectionChangedNotification(logger: ILogger): vscode.Disposable[] {
+export function registerSelectionChangedNotification(logger: ILogger, httpServer: InProcHttpServer, selectionState: SelectionState): vscode.Disposable[] {
 	const disposables: vscode.Disposable[] = [];
 
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -18,9 +18,9 @@ export function registerSelectionChangedNotification(logger: ILogger): vscode.Di
 		}
 		debounceTimer = setTimeout(() => {
 			const selectionInfo = getSelectionInfo(event.textEditor);
-			updateLatestSelection(selectionInfo);
+			selectionState.update(selectionInfo);
 			logger.trace(`Selection changed in: ${selectionInfo.filePath}`);
-			broadcastNotification('selection_changed', selectionInfo as unknown as Record<string, unknown>);
+			httpServer.broadcastNotification('selection_changed', selectionInfo as unknown as Record<string, unknown>);
 		}, 200);
 	};
 
@@ -28,7 +28,7 @@ export function registerSelectionChangedNotification(logger: ILogger): vscode.Di
 
 	// Initialize with current selection if there's an active editor
 	if (vscode.window.activeTextEditor) {
-		updateLatestSelection(getSelectionInfo(vscode.window.activeTextEditor));
+		selectionState.update(getSelectionInfo(vscode.window.activeTextEditor));
 	}
 
 	logger.debug('Registered selection change notification');

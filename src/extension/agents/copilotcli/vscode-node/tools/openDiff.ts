@@ -8,9 +8,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { registerActiveDiff, unregisterActiveDiff, getActiveDiffByTab } from '../diffState';
+import { DiffStateManager } from '../diffState';
 import { makeTextResult } from './utils';
-import { createReadonlyUri, setReadonlyContent, clearReadonlyContent } from '../readonlyContentProvider';
+import { ReadonlyContentProvider, createReadonlyUri } from '../readonlyContentProvider';
 import { ILogger } from '../../../../../platform/log/common/logService';
 
 function makeErrorResult(message: string): { content: [{ type: 'text'; text: string }]; isError: true } {
@@ -20,7 +20,7 @@ function makeErrorResult(message: string): { content: [{ type: 'text'; text: str
 	};
 }
 
-export function registerOpenDiffTool(server: McpServer, logger: ILogger): void {
+export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffState: DiffStateManager, contentProvider: ReadonlyContentProvider): void {
 	const schema = {
 		original_file_path: z.string().describe('Path to the original file'),
 		new_file_contents: z.string().describe('The new file contents to compare against'),
@@ -59,8 +59,8 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger): void {
 				logger.info(`[DIFF] modifiedUri=${newUri.toString()}`);
 
 				// Set the content for both readonly documents
-				setReadonlyContent(originalUri, originalContent);
-				setReadonlyContent(newUri, new_file_contents);
+				contentProvider.setContent(originalUri, originalContent);
+				contentProvider.setContent(newUri, new_file_contents);
 
 				const title = tab_name;
 				// Open diff with readonly virtual documents on both sides
@@ -86,9 +86,9 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger): void {
 						}
 						cleanedUp = true;
 						disposables.forEach(d => { d.dispose(); });
-						unregisterActiveDiff(diffId);
-						clearReadonlyContent(originalUri);
-						clearReadonlyContent(newUri);
+						diffState.unregister(diffId);
+						contentProvider.clearContent(originalUri);
+						contentProvider.clearContent(newUri);
 						logger.info('[DIFF] cleanup() done');
 					};
 
@@ -123,7 +123,7 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger): void {
 
 					// Register this diff so editor title buttons can access it
 					logger.info('[DIFF] Registering diff');
-					registerActiveDiff({
+					diffState.register({
 						diffId,
 						tabName: tab_name,
 						originalUri,
@@ -141,7 +141,7 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger): void {
 								if (closedTab.input instanceof vscode.TabInputTextDiff) {
 									logger.info(`[DIFF] closedTab modifiedUri=${closedTab.input.modified.toString()}`);
 								}
-								const diff = getActiveDiffByTab(closedTab);
+								const diff = diffState.getByTab(closedTab);
 								logger.info(`[DIFF] getActiveDiffByTab returned: ${diff?.diffId ?? 'undefined'}`);
 								if (diff && diff.diffId === diffId) {
 									logger.info(`[DIFF] MATCH - Tab closed manually: ${tab_name}`);

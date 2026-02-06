@@ -25,45 +25,6 @@ interface DisposableLike {
 	dispose: () => void;
 }
 
-const transports: Record<string, StreamableHTTPServerTransport> = {};
-
-let _logger: ILogger | undefined;
-
-export function initInProcHttpServer(logger: ILogger): void {
-	_logger = logger;
-}
-
-function registerTransport(sessionId: string, transport: StreamableHTTPServerTransport): void {
-	transports[sessionId] = transport;
-	_logger?.info(`Client connected: ${sessionId}`);
-}
-
-function unregisterTransport(sessionId: string): void {
-	delete transports[sessionId];
-	_logger?.info(`Client disconnected: ${sessionId}`);
-}
-
-function getTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
-	return transports[sessionId];
-}
-
-export function broadcastNotification(method: string, params: Record<string, unknown>): void {
-	const message = {
-		jsonrpc: '2.0' as const,
-		method,
-		params,
-	};
-
-	const sessionCount = Object.keys(transports).length;
-	_logger?.trace(`Broadcasting notification "${method}" to ${sessionCount} client(s)`);
-
-	for (const sessionId in transports) {
-		transports[sessionId].send(message).catch(() => {
-			_logger?.debug(`Failed to send notification "${method}" to client ${sessionId}`);
-		});
-	}
-}
-
 class AsyncLazy<T> {
 	private _value: T | undefined;
 	private _promise: Promise<T> | undefined;
@@ -88,164 +49,201 @@ class AsyncLazy<T> {
 	}
 }
 
-export async function startInProcHttpServer(
-	mcpOptions: McpProviderOptions,
-): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {
-	let socketPath: string | undefined;
+export class InProcHttpServer {
+	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
 
-	_logger?.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
+	constructor(private readonly _logger: ILogger) { }
 
-	try {
-		const nonce = crypto.randomUUID();
-		socketPath = await getRandomSocketPath();
-		_logger?.trace(`Generated socket path: ${socketPath}`);
-
-		const expressModule = (await expressLazy.value) as unknown as {
-			default?: typeof import('express');
-		} & typeof import('express');
-		const expressApp = expressModule.default || expressModule;
-
-		const app: express.Application = (expressApp as () => express.Application)();
-
-		app.use(expressApp.json());
-		app.use((req: express.Request, res: express.Response, next: express.NextFunction) =>
-			authMiddleware(nonce, req, res, next),
-		);
-
-		app.post('/mcp', (req: express.Request, res: express.Response) => handlePost(mcpOptions, req, res));
-		app.get('/mcp', handleGetDelete);
-		app.delete('/mcp', handleGetDelete);
-
-		const httpServer = app.listen(socketPath);
-		_logger?.debug('HTTP server listening on socket');
-
-		// Register push notifications if provided
-		if (mcpOptions.registerPushNotifications) {
-			_logger?.debug('Registering push notifications...');
-			await Promise.resolve(mcpOptions.registerPushNotifications());
-		}
-
-		return {
-			disposable: {
-				dispose: () => {
-					_logger?.info('Shutting down MCP server...');
-					for (const sessionId in transports) {
-						void transports[sessionId].close();
-						unregisterTransport(sessionId);
-					}
-
-					if (httpServer.listening) {
-						httpServer.close();
-						httpServer.closeAllConnections();
-					}
-
-					void tryCleanupSocket(socketPath);
-					_logger?.debug('MCP server shutdown complete');
-				},
-			},
-			serverUri: vscode.Uri.from({
-				scheme: os.platform() === 'win32' ? 'pipe' : 'unix',
-				path: socketPath,
-				fragment: '/mcp',
-			}),
-			headers: {
-				Authorization: `Nonce ${nonce}`,
-			},
+	broadcastNotification(method: string, params: Record<string, unknown>): void {
+		const message = {
+			jsonrpc: '2.0' as const,
+			method,
+			params,
 		};
-	} catch (err) {
-		void tryCleanupSocket(socketPath);
-		throw err;
-	}
-}
 
-function authMiddleware(nonce: string, req: express.Request, res: express.Response, next: express.NextFunction): void {
-	if (req.headers.authorization !== `Nonce ${nonce}`) {
-		_logger?.debug(`Unauthorized request to ${req.method} ${req.path}`);
-		res.status(401).send('Unauthorized');
-		return;
+		const sessionCount = Object.keys(this._transports).length;
+		this._logger.trace(`Broadcasting notification "${method}" to ${sessionCount} client(s)`);
+
+		for (const sessionId in this._transports) {
+			this._transports[sessionId].send(message).catch(() => {
+				this._logger.debug(`Failed to send notification "${method}" to client ${sessionId}`);
+			});
+		}
 	}
 
-	next();
-}
+	async start(
+		mcpOptions: McpProviderOptions,
+	): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {
+		let socketPath: string | undefined;
 
-async function handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
-	const sessionId = req.headers['mcp-session-id'] as string | undefined;
-	_logger?.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
-
-	const isInitializeRequest = await isInitializeRequestLazy.value;
-	const { StreamableHTTPServerTransport } = await streamableHttpLazy.value;
-
-	let transport: StreamableHTTPServerTransport;
-	const existingTransport = sessionId ? getTransport(sessionId) : undefined;
-	if (sessionId && existingTransport) {
-		transport = existingTransport;
-	} else if (!sessionId && isInitializeRequest(req.body)) {
-		_logger?.debug('Creating new MCP session...');
-		transport = new StreamableHTTPServerTransport({
-			sessionIdGenerator: () => crypto.randomUUID(),
-			onsessioninitialized: newSessionId => {
-				registerTransport(newSessionId, transport);
-			},
-			onsessionclosed: closedSessionId => {
-				unregisterTransport(closedSessionId);
-			},
-			enableDnsRebindingProtection: true,
-			allowedHosts: ['localhost'],
-		});
-
-		const { McpServer } = await mcpServerLazy.value;
-		const server = new McpServer({
-			name: mcpOptions.id,
-			title: mcpOptions.serverLabel,
-			version: mcpOptions.serverVersion,
-		});
+		this._logger.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
 
 		try {
-			_logger?.debug('Registering MCP tools...');
-			await Promise.resolve(mcpOptions.registerTools(server));
+			const nonce = crypto.randomUUID();
+			socketPath = await getRandomSocketPath();
+			this._logger.trace(`Generated socket path: ${socketPath}`);
+
+			const expressModule = (await expressLazy.value) as unknown as {
+				default?: typeof import('express');
+			} & typeof import('express');
+			const expressApp = expressModule.default || expressModule;
+
+			const app: express.Application = (expressApp as () => express.Application)();
+
+			app.use(expressApp.json());
+			app.use((req: express.Request, res: express.Response, next: express.NextFunction) =>
+				this._authMiddleware(nonce, req, res, next),
+			);
+
+			app.post('/mcp', (req: express.Request, res: express.Response) => this._handlePost(mcpOptions, req, res));
+			app.get('/mcp', (req: express.Request, res: express.Response) => this._handleGetDelete(req, res));
+			app.delete('/mcp', (req: express.Request, res: express.Response) => this._handleGetDelete(req, res));
+
+			const httpServer = app.listen(socketPath);
+			this._logger.debug('HTTP server listening on socket');
+
+			// Register push notifications if provided
+			if (mcpOptions.registerPushNotifications) {
+				this._logger.debug('Registering push notifications...');
+				await Promise.resolve(mcpOptions.registerPushNotifications());
+			}
+
+			return {
+				disposable: {
+					dispose: () => {
+						this._logger.info('Shutting down MCP server...');
+						for (const sessionId in this._transports) {
+							void this._transports[sessionId].close();
+							this._unregisterTransport(sessionId);
+						}
+
+						if (httpServer.listening) {
+							httpServer.close();
+							httpServer.closeAllConnections();
+						}
+
+						void tryCleanupSocket(socketPath);
+						this._logger.debug('MCP server shutdown complete');
+					},
+				},
+				serverUri: vscode.Uri.from({
+					scheme: os.platform() === 'win32' ? 'pipe' : 'unix',
+					path: socketPath,
+					fragment: '/mcp',
+				}),
+				headers: {
+					Authorization: `Nonce ${nonce}`,
+				},
+			};
 		} catch (err) {
-			const errMsg = err instanceof Error ? err.message : String(err);
-			_logger?.error(`Failed to register MCP tools: ${errMsg}`);
-			res.status(500).json({
+			void tryCleanupSocket(socketPath);
+			throw err;
+		}
+	}
+
+	private _registerTransport(sessionId: string, transport: StreamableHTTPServerTransport): void {
+		this._transports[sessionId] = transport;
+		this._logger.info(`Client connected: ${sessionId}`);
+	}
+
+	private _unregisterTransport(sessionId: string): void {
+		delete this._transports[sessionId];
+		this._logger.info(`Client disconnected: ${sessionId}`);
+	}
+
+	private _getTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
+		return this._transports[sessionId];
+	}
+
+	private _authMiddleware(nonce: string, req: express.Request, res: express.Response, next: express.NextFunction): void {
+		if (req.headers.authorization !== `Nonce ${nonce}`) {
+			this._logger.debug(`Unauthorized request to ${req.method} ${req.path}`);
+			res.status(401).send('Unauthorized');
+			return;
+		}
+
+		next();
+	}
+
+	private async _handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
+		const sessionId = req.headers['mcp-session-id'] as string | undefined;
+		this._logger.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
+
+		const isInitializeRequest = await isInitializeRequestLazy.value;
+		const { StreamableHTTPServerTransport } = await streamableHttpLazy.value;
+
+		let transport: StreamableHTTPServerTransport;
+		const existingTransport = sessionId ? this._getTransport(sessionId) : undefined;
+		if (sessionId && existingTransport) {
+			transport = existingTransport;
+		} else if (!sessionId && isInitializeRequest(req.body)) {
+			this._logger.debug('Creating new MCP session...');
+			transport = new StreamableHTTPServerTransport({
+				sessionIdGenerator: () => crypto.randomUUID(),
+				onsessioninitialized: newSessionId => {
+					this._registerTransport(newSessionId, transport);
+				},
+				onsessionclosed: closedSessionId => {
+					this._unregisterTransport(closedSessionId);
+				},
+				enableDnsRebindingProtection: true,
+				allowedHosts: ['localhost'],
+			});
+
+			const { McpServer } = await mcpServerLazy.value;
+			const server = new McpServer({
+				name: mcpOptions.id,
+				title: mcpOptions.serverLabel,
+				version: mcpOptions.serverVersion,
+			});
+
+			try {
+				this._logger.debug('Registering MCP tools...');
+				await Promise.resolve(mcpOptions.registerTools(server));
+			} catch (err) {
+				const errMsg = err instanceof Error ? err.message : String(err);
+				this._logger.error(`Failed to register MCP tools: ${errMsg}`);
+				res.status(500).json({
+					jsonrpc: '2.0',
+					error: {
+						code: -32000,
+						message: `Failed to register MCP tools: ${errMsg}`,
+					},
+					id: null,
+				});
+				return;
+			}
+
+			await server.connect(transport);
+		} else {
+			this._logger.debug('Bad request: No valid session ID provided');
+			res.status(400).json({
 				jsonrpc: '2.0',
 				error: {
 					code: -32000,
-					message: `Failed to register MCP tools: ${errMsg}`,
+					message: 'Bad Request: No valid session ID provided',
 				},
 				id: null,
 			});
 			return;
 		}
 
-		await server.connect(transport);
-	} else {
-		_logger?.debug('Bad request: No valid session ID provided');
-		res.status(400).json({
-			jsonrpc: '2.0',
-			error: {
-				code: -32000,
-				message: 'Bad Request: No valid session ID provided',
-			},
-			id: null,
-		});
-		return;
+		await transport.handleRequest(req, res, req.body);
 	}
 
-	await transport.handleRequest(req, res, req.body);
-}
+	private async _handleGetDelete(req: express.Request, res: express.Response): Promise<void> {
+		const sessionId = req.headers['mcp-session-id'] as string | undefined;
+		this._logger.trace(`${req.method} /mcp request, sessionId: ${sessionId ?? '(none)'}`);
 
-async function handleGetDelete(req: express.Request, res: express.Response): Promise<void> {
-	const sessionId = req.headers['mcp-session-id'] as string | undefined;
-	_logger?.trace(`${req.method} /mcp request, sessionId: ${sessionId ?? '(none)'}`);
+		const transport = sessionId ? this._getTransport(sessionId) : undefined;
+		if (!sessionId || !transport) {
+			this._logger.debug(`Invalid or missing session ID for ${req.method} request`);
+			res.status(400).send('Invalid or missing session ID');
+			return;
+		}
 
-	const transport = sessionId ? getTransport(sessionId) : undefined;
-	if (!sessionId || !transport) {
-		_logger?.debug(`Invalid or missing session ID for ${req.method} request`);
-		res.status(400).send('Invalid or missing session ID');
-		return;
+		await transport.handleRequest(req, res);
 	}
-
-	await transport.handleRequest(req, res);
 }
 
 async function getRandomSocketPath(): Promise<string> {
