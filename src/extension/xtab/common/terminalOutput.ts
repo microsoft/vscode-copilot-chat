@@ -8,7 +8,7 @@ import { ITerminalService } from '../../../platform/terminal/common/terminalServ
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 
-const MAX_BUFFER_CHARS = 4000;
+const MAX_BUFFER_CHARS = 2000;
 
 interface LastTerminalActivity {
 	readonly terminal: vscode.Terminal;
