@@ -416,14 +416,12 @@ declare module 'vscode' {
 	/**
 	 * A progress part representing the execution result of a hook.
 	 * Hooks are user-configured scripts that run at specific points during chat processing.
-	 * Aligned with the hook output JSON structure: { continue, stopReason, systemMessage, hookSpecificOutput }.
+	 * If {@link stopReason} is set, the hook blocked/denied the operation.
 	 */
 	export class ChatResponseHookPart {
 		/** The type of hook that was executed */
 		hookType: ChatHookType;
-		/** Whether processing should continue after hook execution. When false, the hook has blocked/denied the operation. */
-		continue: boolean;
-		/** Message shown to the user when the hook stopped processing (i.e., continue=false) */
+		/** If set, the hook blocked processing. This message is shown to the user. */
 		stopReason?: string;
 		/** Warning/system message from the hook, shown to the user */
 		systemMessage?: string;
@@ -433,12 +431,11 @@ declare module 'vscode' {
 		/**
 		 * Creates a new hook progress part.
 		 * @param hookType The type of hook that was executed
-		 * @param shouldContinue Whether processing should continue after hook execution
 		 * @param stopReason Message shown when processing was stopped
 		 * @param systemMessage Warning/system message from the hook
 		 * @param metadata Optional metadata
 		 */
-		constructor(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string, metadata?: { readonly [key: string]: unknown });
+		constructor(hookType: ChatHookType, stopReason?: string, systemMessage?: string, metadata?: { readonly [key: string]: unknown });
 	}
 
 	export class ChatResponseReferencePart2 {
@@ -541,11 +538,10 @@ declare module 'vscode' {
 		/**
 		 * Push a hook execution result to this stream.
 		 * @param hookType The type of hook that was executed
-		 * @param shouldContinue Whether processing should continue after hook execution
-		 * @param stopReason Message shown when processing was stopped
+		 * @param stopReason If set, the hook blocked processing. This message is shown to the user.
 		 * @param systemMessage Warning/system message from the hook
 		 */
-		hookProgress(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string): void;
+		hookProgress(hookType: ChatHookType, stopReason?: string, systemMessage?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 

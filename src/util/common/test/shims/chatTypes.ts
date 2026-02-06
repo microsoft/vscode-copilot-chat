@@ -64,19 +64,16 @@ export type ChatHookType = 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 
 
 export class ChatResponseHookPart {
 	hookType: ChatHookType;
-	continue: boolean;
 	stopReason?: string;
 	systemMessage?: string;
 	metadata?: { readonly [key: string]: unknown };
 	constructor(
 		hookType: ChatHookType,
-		shouldContinue: boolean,
 		stopReason?: string,
 		systemMessage?: string,
 		metadata?: { readonly [key: string]: unknown }
 	) {
 		this.hookType = hookType;
-		this.continue = shouldContinue;
 		this.stopReason = stopReason;
 		this.systemMessage = systemMessage;
 		this.metadata = metadata;

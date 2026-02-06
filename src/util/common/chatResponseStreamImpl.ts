@@ -131,8 +131,8 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		this._push(new ChatResponseThinkingProgressPart(thinkingDelta.text ?? '', thinkingDelta.id, thinkingDelta.metadata));
 	}
 
-	hookProgress(hookType: ChatHookType, shouldContinue: boolean, stopReason?: string, systemMessage?: string): void {
-		this._push(new ChatResponseHookPart(hookType, shouldContinue, stopReason, systemMessage));
+	hookProgress(hookType: ChatHookType, stopReason?: string, systemMessage?: string): void {
+		this._push(new ChatResponseHookPart(hookType, stopReason, systemMessage));
 	}
 
 	button(command: Command): void {
