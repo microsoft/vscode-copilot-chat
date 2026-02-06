@@ -90,7 +90,8 @@ export class InProcHttpServer {
 
 			const app: express.Application = (expressApp as () => express.Application)();
 
-			app.use(expressApp.json());
+			// MCP requests like open_diff include full file contents which can exceed the default ~100KB limit
+			app.use(expressApp.json({ limit: '10mb' }));
 			app.use((req: express.Request, res: express.Response, next: express.NextFunction) =>
 				this._authMiddleware(nonce, req, res, next),
 			);
