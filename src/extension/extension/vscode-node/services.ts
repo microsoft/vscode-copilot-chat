@@ -116,6 +116,7 @@ import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionR
 import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
+import { ISubagentSessionStore, SubagentSessionStore } from '../../subagentSessionStore/node/subagentSessionStore';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -140,6 +141,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(IConversationStore, new ConversationStore());
+	builder.define(ISubagentSessionStore, new SubagentSessionStore());
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));

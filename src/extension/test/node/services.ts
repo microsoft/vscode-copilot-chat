@@ -64,6 +64,7 @@ import { IChatDiskSessionResources } from '../../prompts/common/chatDiskSessionR
 import { ChatDiskSessionResources } from '../../prompts/node/chatDiskSessionResourcesImpl';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
+import { ISubagentSessionStore, SubagentSessionStore } from '../../subagentSessionStore/node/subagentSessionStore';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -132,6 +133,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
+	testingServiceCollection.define(ISubagentSessionStore, new SyncDescriptor(SubagentSessionStore));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
 	testingServiceCollection.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));

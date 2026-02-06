@@ -162,6 +162,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		return this.options.conversation.getLatestTurn();
 	}
 
+	/**
+	 * Pre-populates the tool call state from a prior subagent session.
+	 * This is used when resuming a subagent with its full prior context:
+	 * the prior rounds and results are loaded so the prompt builder includes
+	 * them as conversation history.
+	 */
+	public hydrateFromPriorSession(priorRounds: IToolCallRound[], priorResults: Record<string, LanguageModelToolResult2>): void {
+		this.toolCallRounds = [...priorRounds];
+		this.toolCallResults = { ...this.toolCallResults, ...priorResults };
+		this._logService.info(`[ToolCallingLoop] Hydrated ${priorRounds.length} prior rounds and ${Object.keys(priorResults).length} results from prior subagent session`);
+	}
+
 	constructor(
 		protected readonly options: TOptions,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,

@@ -489,7 +489,7 @@ describe('ChatReplayNotebookSerializer', () => {
 			// Element cell should show token usage
 			const elementCell = notebookData.cells[2];
 			expect(elementCell.value).toContain('#### Element: PromptElement');
-			expect(elementCell.value).toContain('**Tokens:** 5,000 / 100,000');
+			expect(elementCell.value).toContain('**Tokens:** 5,000 / 100,000 (5.0%)');
 		});
 
 		it('formats request entries with metadata (non-ChatMLSuccess)', async () => {

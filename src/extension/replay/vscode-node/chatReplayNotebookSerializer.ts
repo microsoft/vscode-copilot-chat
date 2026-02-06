@@ -214,15 +214,15 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 				lines.push(`**Model:** ${metadata.model}`);
 			}
 			if (metadata.duration !== undefined) {
-				lines.push(`**Duration:** ${metadata.duration.toLocaleString()}ms`);
+				lines.push(`**Duration:** ${metadata.duration.toLocaleString('en-US')}ms`);
 			}
 			if (metadata.usage) {
 				const usage = metadata.usage;
 				if (usage.prompt_tokens !== undefined) {
-					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString()}`);
+					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString('en-US')}`);
 				}
 				if (usage.completion_tokens !== undefined) {
-					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString()}`);
+					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString('en-US')}`);
 				}
 			}
 		}
@@ -238,7 +238,7 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 
 		if (log.tokens !== undefined && log.maxTokens !== undefined) {
 			const percentage = ((log.tokens / log.maxTokens) * 100).toFixed(1);
-			lines.push(`**Tokens:** ${log.tokens.toLocaleString()} / ${log.maxTokens.toLocaleString()} (${percentage}%)`);
+			lines.push(`**Tokens:** ${log.tokens.toLocaleString('en-US')} / ${log.maxTokens.toLocaleString('en-US')} (${percentage}%)`);
 		}
 
 		return lines.join('\n');
@@ -256,15 +256,15 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 				lines.push(`**Model:** ${metadata.model}`);
 			}
 			if (metadata.duration !== undefined) {
-				lines.push(`**Duration:** ${metadata.duration.toLocaleString()}ms`);
+				lines.push(`**Duration:** ${metadata.duration.toLocaleString('en-US')}ms`);
 			}
 			if (metadata.usage) {
 				const usage = metadata.usage;
 				if (usage.prompt_tokens !== undefined) {
-					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString()}`);
+					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString('en-US')}`);
 				}
 				if (usage.completion_tokens !== undefined) {
-					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString()}`);
+					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString('en-US')}`);
 				}
 			}
 			if (metadata.startTime) {

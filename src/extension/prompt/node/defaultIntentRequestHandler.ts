@@ -40,6 +40,7 @@ import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
+import { ISubagentSessionStore } from '../../subagentSessionStore/node/subagentSessionStore';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -95,6 +96,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
+		@ISubagentSessionStore private readonly _subagentSessionStore: ISubagentSessionStore,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -324,6 +326,18 @@ export class DefaultIntentRequestHandler {
 
 		store.add(Event.once(loop.onDidBuildPrompt)(this._sendInitialChatReferences, this));
 
+		// Hydrate the loop from a prior subagent session if resuming
+		const resumeId = this.request.resumeSubAgentInvocationId;
+		if (resumeId) {
+			const priorSession = this._subagentSessionStore.getSession(resumeId);
+			if (priorSession) {
+				loop.hydrateFromPriorSession(priorSession.toolCallRounds, priorSession.toolCallResults);
+				this._logService.info(`[DefaultIntentRequestHandler] Resumed subagent session ${resumeId} with ${priorSession.toolCallRounds.length} prior rounds`);
+			} else {
+				this._logService.warn(`[DefaultIntentRequestHandler] Resume requested for subagent ${resumeId} but no prior session found`);
+			}
+		}
+
 		// We need to wait for all response handlers to finish before
 		// we can dispose the store. This is because the telemetry machine
 		// still needs the tokenizers to count tokens. There was a case in vitests
@@ -362,6 +376,22 @@ export class DefaultIntentRequestHandler {
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
 			result.chatResult = this.resultWithMetadatas(result.chatResult);
+
+			// Save subagent session for potential future resume
+			if (this.request.subAgentInvocationId) {
+				const responseText = result.response.type === ChatFetchResponseType.Success ? result.response.value : '';
+				this._subagentSessionStore.saveSession({
+					subAgentInvocationId: this.request.subAgentInvocationId,
+					subAgentName: this.request.subAgentName,
+					originalPrompt: this.request.prompt,
+					toolCallRounds: result.toolCallRounds,
+					toolCallResults: result.toolCallResults,
+					lastResponse: responseText,
+					savedAt: Date.now(),
+				});
+				this._logService.info(`[DefaultIntentRequestHandler] Saved subagent session ${this.request.subAgentInvocationId} with ${result.toolCallRounds.length} rounds`);
+			}
+
 			return { ...result, lastRequestTelemetry: loop.telemetry };
 		} finally {
 			await Promise.allSettled(responseHandlers);

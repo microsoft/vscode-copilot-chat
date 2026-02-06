@@ -31,6 +31,7 @@ import { DefaultIntentRequestHandler } from '../../../prompt/node/defaultIntentR
 import { IDocumentContext } from '../../../prompt/node/documentContext';
 import { IIntent, IIntentInvocation, IIntentInvocationContext, IIntentSlashCommandInfo } from '../../../prompt/node/intents';
 import { isTestFile } from '../../../prompt/node/testFiles';
+import { ISubagentSessionStore } from '../../../subagentSessionStore/node/subagentSessionStore';
 import { ContributedToolName } from '../../../tools/common/toolNames';
 import { TestFromSourceInvocation } from './testFromSrcInvocation';
 import { TestFromTestInvocation } from './testFromTestInvocation';
@@ -239,8 +240,9 @@ class RequestHandler extends DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService authenticationService: IAuthenticationService,
 		@IChatHookService chatHookService: IChatHookService,
+		@ISubagentSessionStore subagentSessionStore: ISubagentSessionStore,
 	) {
-		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService);
+		super(intent, conversation, request, stream, token, documentContext, location, chatTelemetry, undefined, undefined, instantiationService, conversationOptions, telemetryService, logService, surveyService, requestLogger, editSurvivalTrackerService, authenticationService, chatHookService, subagentSessionStore);
 	}
 
 	/**

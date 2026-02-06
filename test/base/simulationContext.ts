@@ -10,6 +10,7 @@ import { IIntentService, IntentService } from '../../src/extension/intents/node/
 import { ITestGenInfoStorage, TestGenInfoStorage } from '../../src/extension/intents/node/testIntent/testInfoStorage';
 import { ILinkifyService, LinkifyService } from '../../src/extension/linkify/common/linkifyService';
 import { ChatMLFetcherImpl } from '../../src/extension/prompt/node/chatMLFetcher';
+import { ISubagentSessionStore, SubagentSessionStore } from '../../src/extension/subagentSessionStore/node/subagentSessionStore';
 import { createExtensionUnitTestingServices, ISimulationModelConfig } from '../../src/extension/test/node/services';
 import { AIEvaluationService, IAIEvaluationService } from '../../src/extension/testing/node/aiEvaluationService';
 import { IChatMLFetcher } from '../../src/platform/chat/common/chatMLFetcher';
@@ -289,6 +290,7 @@ export async function createSimulationAccessor(
 	testingServiceCollection.define(ITestProvider, new SyncDescriptor(NullTestProvider));
 	testingServiceCollection.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage));
 	testingServiceCollection.define(IConversationStore, new SyncDescriptor(ConversationStore));
+	testingServiceCollection.define(ISubagentSessionStore, new SyncDescriptor(SubagentSessionStore));
 	testingServiceCollection.define(IReviewService, new SyncDescriptor(SimulationReviewService));
 	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IReleaseNotesService, new SyncDescriptor(ReleaseNotesService));

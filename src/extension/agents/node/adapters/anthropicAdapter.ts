@@ -282,7 +282,9 @@ class AnthropicAdapter implements IProtocolAdapter {
 					service_tier: null,
 					server_tool_use: null,
 					cache_creation: null,
-					inference_geo: null
+					// NOTE: Some Anthropic SDK versions used to include extra usage fields
+					// (e.g. `inference_geo`). We intentionally only emit fields that exist
+					// in the current SDK's `Usage` type.
 				}
 			}
 		};
