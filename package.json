@@ -2434,6 +2434,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.togglePowerSaveBlocker",
+				"title": "%github.copilot.command.togglePowerSaveBlocker%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.showChatLogView",
 				"title": "%github.copilot.command.showChatLogView%",
 				"category": "Developer"
