@@ -131,8 +131,8 @@ describe('PromptPathRepresentationService', () => {
 			const result = windowsService.resolveFilePath('\\\\server\\share\\\\file.ts');
 			expect(result).toBeDefined();
 			// UNC paths get their leading \\ preserved
-			expect(result!.path).toContain('server');
-			expect(result!.path).toContain('share');
+			expect(result?.toString()).toContain('server');
+			expect(result?.toString()).toContain('share');
 		});
 
 		it('resolves backslash-only path as Windows path', () => {
