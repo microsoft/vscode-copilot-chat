@@ -5536,6 +5536,7 @@
 		"terminal": {
 			"profiles": [
 				{
+					"icon": "copilot",
 					"id": "copilot-cli",
 					"title": "GitHub Copilot CLI"
 				}
