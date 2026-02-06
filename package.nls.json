@@ -132,7 +132,7 @@
 	"github.copilot.config.terminalChatLocation.terminal": "Open terminal inline chat",
 	"github.copilot.config.scopeSelection": "Whether to prompt the user to select a specific symbol scope if the user uses `/explain` and the active editor has no selection.",
 	"github.copilot.config.debugTerminalCommands": "Whether to quick fix hints in the debug terminal and the `copilot-debug` command.",
-	"github.copilot.config.additionalReadAccessPaths": "A list of absolute folder paths outside of the workspace that Copilot Chat tools (such as `read_file`, `grep_search`, `file_search`, and `list_dir`) are allowed to read from without requiring confirmation. Edit operations remain restricted to the workspace.",
+	"github.copilot.config.additionalReadAccessPaths": "A list of absolute folder paths outside of the workspace that Copilot Chat is allowed to read from without requiring confirmation. Edit operations remain restricted to the workspace.",
 	"github.copilot.config.debugTerminalCommandPatterns": "A list of commands for which the \"Debug Command\" quick fix action should be shown in the debug terminal.",
 	"github.copilot.config.codeGeneration.instructions": "A set of instructions that will be added to Copilot requests that generate code.\nInstructions can come from: \n- a file in the workspace: `{ \"file\": \"fileName\" }`\n- text in natural language: `{ \"text\": \"Use underscore for field names.\" }`\n\nNote: Keep your instructions short and precise. Poor instructions can degrade Copilot's quality and performance.",
 	"github.copilot.config.codeGeneration.instructions.deprecated": "Use instructions files instead. See https://aka.ms/vscode-ghcp-custom-instructions for more information.",
