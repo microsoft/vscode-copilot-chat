@@ -4518,7 +4518,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli && workbenchState != empty",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "navigation@0"
 				},
 				{
@@ -5097,7 +5097,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
 				}
 			],
 			"chat/chatSessions": [
@@ -5123,7 +5123,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli && workbenchState != empty",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "3_apply@0"
 				},
 				{
@@ -5788,8 +5788,8 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.2.31",
-		"@anthropic-ai/sdk": "^0.72.1",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.34",
+		"@anthropic-ai/sdk": "^0.73.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.403",
 		"@google/genai": "^1.22.0",

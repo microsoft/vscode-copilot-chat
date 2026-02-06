@@ -144,6 +144,7 @@ class TestTelemetrySender implements ITelemetrySender {
 
 class TestEndpointProvider implements IEndpointProvider {
 	readonly _serviceBrand: undefined;
+	readonly onDidModelsRefresh = Event.None;
 
 	async getAllCompletionModels(forceRefresh?: boolean) {
 		return [];

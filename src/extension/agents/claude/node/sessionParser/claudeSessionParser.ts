@@ -721,12 +721,14 @@ function processLineForMetadata(
 					if (typeof msgContent === 'string') {
 						state.firstUserMessageContent = msgContent;
 					} else if (Array.isArray(msgContent)) {
+						// Concatenate all text blocks - system-reminders are stripped later like comments
+						const textParts: string[] = [];
 						for (const block of msgContent) {
 							if (block.type === 'text' && 'text' in block) {
-								state.firstUserMessageContent = block.text;
-								break;
+								textParts.push(block.text);
 							}
 						}
+						state.firstUserMessageContent = textParts.join('\n');
 					}
 				}
 			}
