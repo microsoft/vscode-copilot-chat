@@ -6,16 +6,26 @@
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeCodeSession } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
+
+// Import the tool permission handlers
+import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
+
+// Import the hooks to trigger self-registration
+import '../../agents/claude/vscode-node/hooks/index';
+
 import { buildChatHistory } from './chatHistoryBuilder';
-import { ClaudeSessionUri } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
@@ -38,6 +48,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IClaudeSlashCommandService private readonly slashCommandService: IClaudeSlashCommandService,
 	) {
 		super();
 
@@ -103,6 +114,65 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	public getPermissionModeForSession(sessionId: string): PermissionMode {
 		return this.sessionStateService.getPermissionModeForSession(sessionId);
 	}
+
+	// #region Chat Participant Handler
+
+	createHandler(
+		sessionType: string,
+		claudeAgentManager: ClaudeAgentManager,
+		sessionItemProvider: ClaudeChatSessionItemProvider,
+	): ChatExtendedRequestHandler {
+		return async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> => {
+			const { chatSessionContext } = context;
+			if (!chatSessionContext) {
+				/* Via @claude */
+				// TODO: Think about how this should work
+				stream.markdown(vscode.l10n.t("Start a new Claude Agent session"));
+				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${sessionType}`, title: vscode.l10n.t("Start Session") });
+				return {};
+			}
+
+			// Try to handle as a slash command first
+			const slashResult = await this.slashCommandService.tryHandleCommand(request.prompt, stream, token);
+			if (slashResult.handled) {
+				return slashResult.result ?? {};
+			}
+
+			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			let modelId: string;
+			try {
+				modelId = await this.getModelIdForSession(sessionId);
+			} catch (e) {
+				if (e instanceof NoClaudeModelsAvailableError) {
+					return { errorDetails: { message: e.message } };
+				}
+				throw e;
+			}
+			const permissionMode = this.getPermissionModeForSession(sessionId);
+
+			const effectiveSessionId = chatSessionContext.isUntitled ? undefined : sessionId;
+			const result = await claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, modelId, permissionMode);
+
+			if (chatSessionContext.isUntitled) {
+				if (result.claudeSessionId) {
+					const swapResource = ClaudeSessionUri.forSessionId(result.claudeSessionId);
+					await this.sessionService.waitForSessionReady(swapResource, token);
+					// Tell UI to replace with claude-backed session
+					sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
+						resource: swapResource,
+						label: request.prompt ?? 'Claude Agent'
+					});
+				} else if (!result.errorDetails) {
+					// Only show generic warning if we didn't already show a specific error
+					stream.warning(vscode.l10n.t("Failed to create a new Claude Agent session."));
+				}
+			}
+
+			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
+		};
+	}
+
+	// #endregion
 
 	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
 		const models = await this.claudeCodeModels.getModels();
