@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
+import { Terminal, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -87,6 +87,21 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			await fs.writeFile(this.powershellScriptPath, powershellScript);
 			await fs.chmod(this.shellScriptPath, 0o750);
 		}
+
+		const provideTerminalProfile = async () => {
+			const shellInfo = await this.getShellInfo([]);
+			if (!shellInfo) {
+				return;
+			}
+			return new TerminalProfile({
+				name: 'Copilot CLI',
+				shellPath: shellInfo.shellPath,
+				shellArgs: shellInfo.shellArgs,
+				iconPath: shellInfo.iconPath,
+			});
+		};
+		this._register(window.registerTerminalProfileProvider('copilot-cli', { provideTerminalProfile }));
+
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string) {
