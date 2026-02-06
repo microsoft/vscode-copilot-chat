@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
+import { Terminal, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -21,6 +21,7 @@ import powershellScript from './copilotCLIShim.ps1';
 
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
+const COPILOT_ICON = new ThemeIcon('copilot');
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
@@ -87,6 +88,21 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			await fs.writeFile(this.powershellScriptPath, powershellScript);
 			await fs.chmod(this.shellScriptPath, 0o750);
 		}
+
+		const provideTerminalProfile = async () => {
+			const shellInfo = await this.getShellInfo([]);
+			if (!shellInfo) {
+				return;
+			}
+			return new TerminalProfile({
+				name: 'GitHub Copilot CLI',
+				shellPath: shellInfo.shellPath,
+				shellArgs: shellInfo.shellArgs,
+				iconPath: shellInfo.iconPath,
+			});
+		};
+		this._register(window.registerTerminalProfileProvider('copilot-cli', { provideTerminalProfile }));
+
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string) {
@@ -202,14 +218,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		if (!profile) {
 			return;
 		}
-		let iconPath: ThemeIcon | undefined = undefined;
-		try {
-			if (profile.icon) {
-				iconPath = new ThemeIcon(profile.icon);
-			}
-		} catch {
-			//
-		}
+		const iconPath = COPILOT_ICON;
 		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
 		const paths = profile.path ? (Array.isArray(profile.path) ? profile.path : [profile.path]) : [];
 		const shellPath = (await getFirstAvailablePath(paths)) || this.envService.shell;

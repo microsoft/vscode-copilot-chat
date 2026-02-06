@@ -1,7 +1,7 @@
 [
   {
     "name": "pythonFlaskApp",
-    "question": "@workspace /setupTests pytest",
+    "question": "/setupTests pytest",
     "expectations": {
       "filePatterns": [".*?test.*?"],
       "installCommandPattern": "pip install pytest",

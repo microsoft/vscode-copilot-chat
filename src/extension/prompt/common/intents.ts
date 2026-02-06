@@ -31,6 +31,12 @@ export interface IToolCallRound {
 	toolCalls: IToolCall[];
 	thinking?: ThinkingData;
 	statefulMarker?: string;
+	/**
+	 * Additional context from a hook that was executed after this round completed.
+	 * For example, when a stop hook blocks the agent from stopping, this contains
+	 * the message to show the model about what requirements must be addressed.
+	 */
+	hookContext?: string;
 }
 
 export interface InternalToolReference extends vscode.ChatLanguageModelToolReference {
@@ -101,6 +107,10 @@ export interface IBuildPromptContext {
 	 * continuation that requires a specific user message.
 	 */
 	readonly hasStopHookQuery?: boolean;
+	/**
+	 * Additional context provided by a hook.
+	 */
+	readonly additionalHookContext?: string;
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');

@@ -25,7 +25,7 @@ import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
-import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
@@ -651,10 +651,13 @@ export class ClaudeCodeSession extends Disposable {
 		unprocessedToolCalls.delete(toolResult.tool_use_id!);
 		const invocation = createFormattedToolInvocation(toolUse);
 		if (invocation) {
+			invocation.isComplete = true;
 			invocation.isError = toolResult.is_error;
 			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
 				invocation.isConfirmed = false;
 			}
+			// Populate tool output for display in chat UI
+			completeToolInvocation(toolUse, toolResult, invocation);
 		}
 
 		if (toolUse.name === ClaudeToolNames.TodoWrite) {

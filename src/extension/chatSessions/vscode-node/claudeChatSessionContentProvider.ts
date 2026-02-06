@@ -11,7 +11,7 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
-import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
+import { completeToolInvocation, createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
@@ -372,12 +372,15 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		for (const block of content) {
 			if (isToolResultBlock(block)) {
 				const toolUse = toolContext.unprocessedToolCalls.get(block.tool_use_id);
-				if (toolUse) {
+				if (toolUse && isToolUseBlock(toolUse)) {
 					toolContext.unprocessedToolCalls.delete(block.tool_use_id);
 					const pendingInvocation = toolContext.pendingToolInvocations.get(block.tool_use_id);
 					if (pendingInvocation) {
+						pendingInvocation.isComplete = true;
 						pendingInvocation.isConfirmed = true;
 						pendingInvocation.isError = block.is_error;
+						// Populate tool output for display in chat UI
+						completeToolInvocation(toolUse, block, pendingInvocation);
 						toolContext.pendingToolInvocations.delete(block.tool_use_id);
 					}
 				}
