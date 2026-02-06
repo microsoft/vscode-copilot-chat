@@ -38,4 +38,5 @@ import './testFailureTool';
 import './toolReplayTool';
 import './usagesTool';
 import './vscodeAPITool';
+import './vscodeCommitMemoryTool';
 import './vscodeCmdTool';
