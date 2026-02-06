@@ -482,6 +482,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
 		let stopHookActive = false;
 
+		// Execute SubagentStart hook for subagent requests to get additional context
+		if (this.options.request.subAgentInvocationId) {
+			const startHookResult = await this.executeSubagentStartHook({
+				agent_id: this.options.request.subAgentInvocationId,
+				agent_type: this.options.request.subAgentName ?? 'default'
+			}, token);
+			if (startHookResult.additionalContext) {
+				this.additionalHookContext = startHookResult.additionalContext;
+				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
+			}
+		}
+
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
 				lastResult = this.hitToolCallLimit(outputStream, lastResult);
