@@ -7,7 +7,7 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, StopHookInput, StopHookOutput, SubagentStartHookInput, SubagentStartHookOutput, SubagentStopHookInput, SubagentStopHookOutput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, SessionStartHookInput, SessionStartHookOutput, StopHookInput, StopHookOutput, SubagentStartHookInput, SubagentStartHookOutput, SubagentStopHookInput, SubagentStopHookOutput } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -293,6 +293,46 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/**
+	 * Called when a session starts to allow hooks to provide additional context.
+	 * @param input The session start hook input containing source
+	 * @param token Cancellation token
+	 * @returns Result containing additional context from hooks
+	 */
+	protected async executeSessionStartHook(input: SessionStartHookInput, token: CancellationToken): Promise<SubagentStartHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SessionStart', {
+				toolInvocationToken: this.options.request.toolInvocationToken,
+				input: input
+			}, token);
+
+			// Collect additionalContext from all successful hook results
+			const additionalContexts: string[] = [];
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SessionStartHookOutput;
+						if (hookOutput.additionalContext) {
+							additionalContexts.push(hookOutput.additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						}
+					}
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SessionStart hook error: ${errorMessage}`);
+				}
+			}
+
+			return {
+				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
+			};
+		} catch (error) {
+			this._logService.error('[ToolCallingLoop] Error executing SessionStart hook', error);
+			return {};
+		}
+	}
+
+	/**
 	 * Called when a subagent starts to allow hooks to provide additional context.
 	 * @param input The subagent start hook input containing agent_id and agent_type
 	 * @param token Cancellation token
@@ -396,6 +436,38 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private async throwIfCancelled(token: CancellationToken | PauseController) {
 		if (await this.checkAsync(token)) {
 			throw new CancellationError();
+		}
+	}
+
+	/**
+	 * Executes start hooks (SessionStart for regular sessions, SubagentStart for subagents).
+	 * Should be called before run() to allow hooks to provide context before the first prompt.
+	 *
+	 * - For subagents: Always executes SubagentStart hook
+	 * - For regular sessions: Only executes SessionStart hook on the first turn
+	 */
+	public async runStartHooks(token: CancellationToken | PauseController): Promise<void> {
+		// Execute SubagentStart hook for subagent requests, or SessionStart hook for first turn of regular sessions
+		if (this.options.request.subAgentInvocationId) {
+			const startHookResult = await this.executeSubagentStartHook({
+				agent_id: this.options.request.subAgentInvocationId,
+				agent_type: this.options.request.subAgentName ?? 'default'
+			}, token);
+			if (startHookResult.additionalContext) {
+				this.additionalHookContext = startHookResult.additionalContext;
+				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
+			}
+		} else {
+			const isFirstTurn = this.options.conversation.turns.length === 1;
+			if (isFirstTurn) {
+				const startHookResult = await this.executeSessionStartHook({
+					source: 'new'
+				}, token);
+				if (startHookResult.additionalContext) {
+					this.additionalHookContext = startHookResult.additionalContext;
+					this._logService.info('[ToolCallingLoop] SessionStart hook provided context for session');
+				}
+			}
 		}
 	}
 
