@@ -119,7 +119,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	private _metadataFileMtimes = new ResourceMap<number>();
 
 	// Full session cache for getSession (keyed by session resource URI)
-	private _fullSessionCache = new ResourceMap<IClaudeCodeSession>();
+	// Stores the session along with the source file URI and mtime for freshness checking
+	private _fullSessionCache = new ResourceMap<{ session: IClaudeCodeSession; fileUri: URI; mtime: number }>();
 
 	// Track session directories for subagent detection
 	private _sessionDirs = new ResourceMap<Set<string>>();
@@ -169,10 +170,18 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 * Get a specific session with full content by its resource URI.
 	 */
 	async getSession(resource: URI, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
-		// Check full session cache first
+		// Check full session cache with mtime-based freshness
 		const cached = this._fullSessionCache.get(resource);
 		if (cached !== undefined) {
-			return cached;
+			try {
+				const stat = await this._fileSystem.stat(cached.fileUri);
+				if (stat.mtime <= cached.mtime) {
+					return cached.session;
+				}
+			} catch {
+				// File gone or error — fall through to reload
+			}
+			this._fullSessionCache.delete(resource);
 		}
 
 		const targetId = resource.path.slice(1); // Remove leading '/' from path
@@ -186,9 +195,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
 			const sessionFileUri = URI.joinPath(projectDirUri, `${targetId}.jsonl`);
 
-			// Check if this file exists
+			// Check if this file exists and capture mtime for cache freshness
+			let fileMtime: number;
 			try {
-				await this._fileSystem.stat(sessionFileUri);
+				const stat = await this._fileSystem.stat(sessionFileUri);
+				fileMtime = stat.mtime;
 			} catch {
 				continue; // File doesn't exist in this project dir
 			}
@@ -196,7 +207,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			// Load and parse the full session
 			const session = await this._loadFullSession(targetId, projectDirUri, token);
 			if (session !== undefined) {
-				this._fullSessionCache.set(resource, session);
+				this._fullSessionCache.set(resource, { session, fileUri: sessionFileUri, mtime: fileMtime });
 				return session;
 			}
 		}

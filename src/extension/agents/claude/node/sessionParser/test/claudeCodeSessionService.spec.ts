@@ -259,14 +259,14 @@ describe('ClaudeCodeSessionService', () => {
 			const session1 = await service.getSession(sessionResource, CancellationToken.None);
 			expect(session1).toBeDefined();
 
-			// Second call - should use cache
+			// Second call - should use cache (with one stat call for mtime freshness check)
 			mockFs.resetStatCallCount();
 			const session2 = await service.getSession(sessionResource, CancellationToken.None);
 
 			expect(session2).toBeDefined();
 			expect(session2?.id).toBe(session1?.id);
-			// Should not have made any stat calls on second call since it's cached
-			expect(mockFs.getStatCallCount()).toBe(0);
+			// Should make exactly one stat call to verify the cached file hasn't changed
+			expect(mockFs.getStatCallCount()).toBe(1);
 		});
 	});
 
