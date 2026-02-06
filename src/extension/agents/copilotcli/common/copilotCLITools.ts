@@ -286,7 +286,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 	const match = content.match(prMetadataRegex);
 
 	if (match) {
-		const [fullMatch, uri, title, description, author, linkTag] = match;
+		const [fullMatch, title, description, author, linkTag] = match;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
 			.replace(/&apos;/g, `'`)
@@ -296,7 +296,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 			.replace(/&amp;/g, '&');
 
 		const prPart = new ChatResponsePullRequestPart(
-			Uri.parse(uri),
+			{ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', linkTag), arguments: [Number(linkTag.substring(1))] },
 			unescapeXml(title),
 			unescapeXml(description),
 			unescapeXml(author),

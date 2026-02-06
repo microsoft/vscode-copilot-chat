@@ -314,7 +314,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				for (const part of result.content) {
 					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
 						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
-						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
+						outputStream?.push(new ChatResponsePullRequestPart({ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', data.linkTag), arguments: [Number(data.linkTag.substring(1))] }, data.title, data.description, data.author, data.linkTag));
 					}
 				}
 			}

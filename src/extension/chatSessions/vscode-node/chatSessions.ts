@@ -49,9 +49,8 @@ import { IPullRequestFileChangesService, PullRequestFileChangesService } from '.
 
 
 // https://github.com/microsoft/vscode-pull-request-github/blob/8a5c9a145cd80ee364a3bed9cf616b2bd8ac74c2/src/github/copilotApi.ts#L56-L71
-export interface CrossChatSessionWithPR extends vscode.ChatSessionItem {
+export interface CrossChatSessionWithPR {
 	pullRequestDetails: {
-		id: string;
 		number: number;
 		repository: {
 			owner: {
