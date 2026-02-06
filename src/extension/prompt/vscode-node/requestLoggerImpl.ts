@@ -763,13 +763,20 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`# Content Exclusion Rules`);
 		result.push(``);
 
+		const totals = rules.reduce((sum, r) => {
+			sum.patterns += r.patterns.length;
+			sum.ifAnyMatch += r.ifAnyMatch.length;
+			sum.ifNoneMatch += r.ifNoneMatch.length;
+			return sum;
+		}, { patterns: 0, ifAnyMatch: 0, ifNoneMatch: 0 });
+
 		result.push(`## Metadata`);
 		result.push(`~~~`);
 		result.push(`fetchTime        : ${durationMs}ms`);
 		result.push(`repoCount        : ${repos.length}`);
-		result.push(`totalGlobRules   : ${rules.reduce((sum, r) => sum + r.patterns.length, 0)}`);
-		result.push(`totalIfAnyMatch  : ${rules.reduce((sum, r) => sum + r.ifAnyMatch.length, 0)}`);
-		result.push(`totalIfNoneMatch : ${rules.reduce((sum, r) => sum + r.ifNoneMatch.length, 0)}`);
+		result.push(`totalGlobRules   : ${totals.patterns}`);
+		result.push(`totalIfAnyMatch  : ${totals.ifAnyMatch}`);
+		result.push(`totalIfNoneMatch : ${totals.ifNoneMatch}`);
 		result.push(`~~~`);
 
 		for (let i = 0; i < repos.length; i++) {
