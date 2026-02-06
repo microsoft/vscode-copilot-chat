@@ -808,7 +808,9 @@ export function makeUriConfirmationChecker(configuration: IConfigurationService,
 		for (const pattern of Object.keys(hookFilesLocations)) {
 			// Skip home directory patterns as they are handled separately
 			if (!pattern.startsWith('~/')) {
-				hookFilesPatterns[pattern] = false;
+				// Ensure patterns have proper glob prefix to match within workspace
+				const normalizedPattern = pattern.startsWith('**/') || pattern.startsWith('/') ? pattern : '**/' + pattern;
+				hookFilesPatterns[normalizedPattern] = false;
 			}
 		}
 	}
