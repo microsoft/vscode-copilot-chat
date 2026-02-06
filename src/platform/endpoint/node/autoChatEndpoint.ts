@@ -4,17 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
-import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
@@ -33,11 +28,6 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 		_discountPercent: number,
 		public readonly discountRange: { low: number; high: number },
 		@IDomainService _domainService: IDomainService,
-		@ICAPIClientService _capiClientService: ICAPIClientService,
-		@IFetcherService _fetcherService: IFetcherService,
-		@IEnvService _envService: IEnvService,
-		@ITelemetryService _telemetryService: ITelemetryService,
-		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
@@ -48,11 +38,6 @@ export class AutoChatEndpoint extends CopilotChatEndpoint {
 		super(
 			calculateAutoModelInfo(_wrappedEndpoint, _sessionToken, _discountPercent),
 			_domainService,
-			_capiClientService,
-			_fetcherService,
-			_envService,
-			_telemetryService,
-			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
 			_instantiationService,

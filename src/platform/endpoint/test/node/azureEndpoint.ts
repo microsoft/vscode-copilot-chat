@@ -5,17 +5,13 @@
 
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { ILogService } from '../../../log/common/logService';
-import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
 import { RawMessageConversionCallback } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
-import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
@@ -25,10 +21,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 	constructor(
 		private readonly _azureModel: string,
 		@IDomainService domainService: IDomainService,
-		@ICAPIClientService capiClient: ICAPIClientService,
-		@IFetcherService fetcherService: IFetcherService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private instantiationService: IInstantiationService,
@@ -57,10 +49,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClient,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -121,10 +109,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 				delete body.max_tokens;
 			}
 		}
-	}
-
-	override async acceptChatPolicy(): Promise<boolean> {
-		return true;
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

@@ -5,18 +5,13 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../../../platform/chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../../../platform/endpoint/common/domainService';
 import { ModelSupportedEndpoint } from '../../../../../platform/endpoint/common/endpointProvider';
-import { IEnvService } from '../../../../../platform/env/common/envService';
 import { ILogService } from '../../../../../platform/log/common/logService';
-import { IFetcherService } from '../../../../../platform/networking/common/fetcherService';
 import { ICreateEndpointBodyOptions } from '../../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { IModelConfig, OpenAICompatibleTestEndpoint } from '../openaiCompatibleEndpoint';
@@ -49,12 +44,7 @@ const createTestOptions = (messages: Raw.ChatMessage[]): ICreateEndpointBodyOpti
 
 // Mock implementations
 const createMockServices = () => ({
-	fetcherService: {} as IFetcherService,
 	domainService: {} as IDomainService,
-	capiClientService: {} as ICAPIClientService,
-	envService: {} as IEnvService,
-	telemetryService: {} as ITelemetryService,
-	authService: {} as IAuthenticationService,
 	chatMLFetcher: {} as IChatMLFetcher,
 	tokenizerProvider: {} as ITokenizerProvider,
 	instantiationService: {
@@ -112,11 +102,6 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 			const endpoint = new OpenAICompatibleTestEndpoint(
 				modelConfig,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -141,11 +126,6 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 			const endpoint = new OpenAICompatibleTestEndpoint(
 				modelConfig,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -180,11 +160,6 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 			const endpoint = new OpenAICompatibleTestEndpoint(
 				modelConfig,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -223,11 +198,6 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 			const endpoint = new OpenAICompatibleTestEndpoint(
 				azureModelConfig,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,

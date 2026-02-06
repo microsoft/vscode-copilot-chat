@@ -3,17 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -52,10 +48,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		_configuredModelName: string | undefined,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IDomainService _domainService: IDomainService,
-		@IFetcherService _fetcherService: IFetcherService,
-		@ICAPIClientService _capiClientService: ICAPIClientService,
-		@ITelemetryService _telemetryService: ITelemetryService,
-		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
@@ -66,10 +58,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		super(
 			chatModelInfo,
 			_domainService,
-			_capiClientService,
-			_fetcherService,
-			_telemetryService,
-			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
 			_instantiationService,
