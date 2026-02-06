@@ -220,7 +220,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly isFallback: boolean;
 	readonly customModel?: CustomModel;
 	readonly isExtensionContributed?: boolean;
-	readonly policy: 'enabled' | { terms: string };
 	readonly maxPromptImages?: number;
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
@@ -243,12 +242,6 @@ export interface IChatEndpoint extends IEndpoint {
 		cancellationToken?: CancellationToken,
 		location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>>;
-
-	/**
-	 * Accepts the chat policy for the given endpoint, enabling its usage.
-	 * @returns A promise that resolves to true if the chat policy was accepted, false otherwise.
-	 */
-	acceptChatPolicy(): Promise<boolean>;
 
 	/**
 	 * Flights a request from the chat endpoint returning a chat response.

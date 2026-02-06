@@ -229,13 +229,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
-
-			// If we need privacy confirmation, i.e with 3rd party models. We will return a confirmation response and return early
-			const privacyConfirmation = await this.requestPolicyConfirmation(request, stream);
-			if (typeof privacyConfirmation === 'boolean') {
-				return {};
-			}
-			request = privacyConfirmation;
 			// If we need to switch to the base model, this function will handle it
 			// Otherwise it just returns the same request passed into it
 			request = await this.switchToBaseModel(request, stream);
@@ -258,26 +251,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, () => context.yieldRequested);
 			return await handler.getResult();
 		};
-	}
-
-	/**
-	 * Handles showing the privacy confirmation in cases such as 3rd party models
-	 * @param request The current chat request
-	 * @param stream The chat response stream
-	 * @returns True if a privacy confirmation is shown, otherwise a chat request object. This is used sometimes to modify the prompt
-	 */
-	private async requestPolicyConfirmation(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<boolean | ChatRequest> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(request);
-		if (endpoint.policy === 'enabled') {
-			return request;
-		}
-		// Accept the policy and agree to the terms. Then send the request through so the LLM can answer it
-		if (request.acceptedConfirmationData?.[0]?.prompt && (await endpoint.acceptChatPolicy())) {
-			return { ...request, prompt: request.acceptedConfirmationData[0].prompt };
-		}
-		// User is being prompted for the first time to acknowledge
-		stream.confirmation(`Enable ${endpoint.name} for all clients`, endpoint.policy.terms, { prompt: request.prompt }, ['Enable']);
-		return true;
 	}
 
 	private async switchToBaseModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {

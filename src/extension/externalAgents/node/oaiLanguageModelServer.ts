@@ -420,10 +420,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportedEditTools;
 	}
 
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
-	}
-
 	public async processResponseFromChatEndpoint(
 		telemetryService: ITelemetryService,
 		logService: ILogService,
@@ -464,10 +460,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 				await body.destroy();
 			}
 		});
-	}
-
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
 	}
 
 	public makeChatRequest(
