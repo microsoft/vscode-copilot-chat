@@ -375,7 +375,7 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineDistance: number | undefined;
 	};
 
-	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275Aggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 

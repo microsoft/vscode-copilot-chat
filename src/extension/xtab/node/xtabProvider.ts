@@ -274,8 +274,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
-		// Log aggressiveness level and user happiness score when using XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort prompting strategy
+		// Log aggressiveness level and user happiness score when using XtabAggressiveness, Xtab275Aggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort prompting strategy
 		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness ||
+			promptOptions.promptingStrategy === PromptingStrategy.Xtab275Aggressiveness ||
 			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent ||
 			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntentShort) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
@@ -1155,6 +1156,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.PatchBased01:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
+			case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:
 			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
 			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
 				return xtab275SystemPrompt;
