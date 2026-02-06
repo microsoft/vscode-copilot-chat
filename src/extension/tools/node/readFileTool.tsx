@@ -355,7 +355,7 @@ class ReadFileResult extends PromptElement<ReadFileResultProps> {
 		}
 
 		return <>
-			{this.props.useCodeFences && range.end.line + 1 !== documentSnapshot.lineCount || this.props.truncated ? <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></ > : undefined}
+			{this.props.useCodeFences && range.end.line + 1 !== documentSnapshot.lineCount || this.props.truncated ? <>File: `{this.promptPathRepresentationService.getFilePath(this.props.uri)}`. Lines {range.start.line + 1} to {range.end.line + 1} ({documentSnapshot.lineCount} lines total): <br /></> : undefined}
 			<CodeBlock
 				uri={this.props.uri}
 				code={contents}
