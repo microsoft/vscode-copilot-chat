@@ -70,6 +70,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info
 		this._modelFetcher.onDidModelsRefresh(() => {
 			this._chatEndpoints.clear();
+			this._embeddingEndpoints.clear();
 			this._onDidModelsRefresh.fire();
 		});
 	}
