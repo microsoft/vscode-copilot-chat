@@ -71,6 +71,12 @@ export function registerDiagnosticsChangedNotification(logger: ILogger, httpServ
 	};
 
 	disposables.push(vscode.languages.onDidChangeDiagnostics(handleDiagnosticsChange));
+	disposables.push(new vscode.Disposable(() => {
+		if (debounceTimer !== undefined) {
+			clearTimeout(debounceTimer);
+			debounceTimer = undefined;
+		}
+	}));
 
 	logger.debug('Registered diagnostics change notification');
 	return disposables;

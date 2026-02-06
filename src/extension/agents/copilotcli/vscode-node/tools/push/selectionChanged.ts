@@ -25,6 +25,12 @@ export function registerSelectionChangedNotification(logger: ILogger, httpServer
 	};
 
 	disposables.push(vscode.window.onDidChangeTextEditorSelection(handleSelectionChange));
+	disposables.push(new vscode.Disposable(() => {
+		if (debounceTimer !== undefined) {
+			clearTimeout(debounceTimer);
+			debounceTimer = undefined;
+		}
+	}));
 
 	// Initialize with current selection if there's an active editor
 	if (vscode.window.activeTextEditor) {
