@@ -789,7 +789,8 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		const { resource } = chatSessionContext.chatSessionItem;
 		// If we have a real session id that was mapped to this untitled session, then use that.
 		// This way we can get the latest information associated with the real session.
-		const id = _untitledSessionIdMap.get(SessionIdForCLI.parse(resource)) ?? SessionIdForCLI.parse(resource);
+		const parsedId = SessionIdForCLI.parse(resource);
+		const id = _untitledSessionIdMap.get(parsedId) ?? parsedId;
 		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
 		if (folderInfo.folder) {
 			const folderName = basename(folderInfo.folder);
