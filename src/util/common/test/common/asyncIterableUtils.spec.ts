@@ -134,7 +134,7 @@ describe('AsyncIterableUtils', () => {
 
 describe('AsyncIterUtilsExt', () => {
 
-	describe('toLines', () => {
+	describe('splitLines', () => {
 
 		async function chunksToLines(chunks: string[]) {
 			const iter = AsyncIterUtils.fromArray(chunks);
