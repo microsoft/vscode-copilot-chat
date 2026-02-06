@@ -24,6 +24,7 @@ import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, ExtensionMode, Fil
 import { t } from './l10n';
 import { NewSymbolName, NewSymbolNameTag, NewSymbolNameTriggerKind } from './newSymbolName';
 import { TerminalShellExecutionCommandLineConfidence } from './terminal';
+import { ThemeIcon } from './themes';
 
 const shim: typeof vscodeTypes = {
 	Position,
@@ -129,7 +130,8 @@ const shim: typeof vscodeTypes = {
 		getSession: async () => { throw new Error('authentication.getSession not mocked in test'); }
 	},
 	McpHttpServerDefinition,
-	McpStdioServerDefinition
+	McpStdioServerDefinition,
+	ThemeIcon
 };
 
 export = shim;

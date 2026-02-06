@@ -431,6 +431,262 @@ describe('ChatSessionContentProvider', () => {
 		`);
 	});
 
+	// #region System-reminder filtering tests
+
+	it('filters out system-reminder blocks from user messages', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'text',
+								text: '<system-reminder>\nThe user provided the following references:\n- /path/to/file.ts\n\nIMPORTANT: this context may or may not be relevant.\n</system-reminder>'
+							},
+							{
+								type: 'text',
+								text: 'What does this file do?'
+							}
+						]
+					} as Anthropic.MessageParam
+				}
+			]
+		};
+
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "prompt": "What does this file do?",
+			    "type": "request",
+			  },
+			]
+		`);
+	});
+
+	it('strips system-reminders from legacy string format user messages', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: '<system-reminder>\nThe user provided references.\n</system-reminder>\n\nWhat does this code do?'
+					} as Anthropic.MessageParam
+				}
+			]
+		};
+
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "prompt": "What does this code do?",
+			    "type": "request",
+			  },
+			]
+		`);
+	});
+
+	it('produces no request turn when user message is only a system-reminder', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'text',
+								text: '<system-reminder>\nSome internal context.\n</system-reminder>'
+							}
+						]
+					} as Anthropic.MessageParam
+				},
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-1',
+						type: 'message',
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hello!' }],
+						model: 'claude-3-sonnet',
+						stop_reason: 'end_turn',
+						stop_sequence: null,
+						usage: { input_tokens: 10, output_tokens: 5 }
+					} as Anthropic.Message
+				}
+			]
+		};
+
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+		// Should only have the assistant response, no request turn for the system-reminder-only message
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "parts": [
+			      {
+			        "content": "Hello!",
+			        "type": "markdown",
+			      },
+			    ],
+			    "type": "response",
+			  },
+			]
+		`);
+	});
+
+	// #endregion
+
+	// #region Consecutive message grouping tests
+
+	it('combines consecutive user messages into a single request turn', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: 'First part of my question.'
+					} as Anthropic.MessageParam
+				},
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: 'Second part with more details.'
+					} as Anthropic.MessageParam
+				},
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-1',
+						type: 'message',
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Here is my response.' }],
+						model: 'claude-3-sonnet',
+						stop_reason: 'end_turn',
+						stop_sequence: null,
+						usage: { input_tokens: 20, output_tokens: 10 }
+					} as Anthropic.Message
+				}
+			]
+		};
+
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+[
+  {
+    "prompt": "First part of my question.
+
+Second part with more details.",
+    "type": "request",
+  },
+  {
+    "parts": [
+      {
+        "content": "Here is my response.",
+        "type": "markdown",
+      },
+    ],
+    "type": "response",
+  },
+]
+		`);
+	});
+
+	it('combines consecutive assistant messages into a single response turn', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: 'Hello'
+					} as Anthropic.MessageParam
+				},
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-1',
+						type: 'message',
+						role: 'assistant',
+						content: [{ type: 'text', text: 'First response part.' }],
+						model: 'claude-3-sonnet',
+						stop_reason: 'tool_use',
+						stop_sequence: null,
+						usage: { input_tokens: 10, output_tokens: 5 }
+					} as Anthropic.Message
+				},
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-2',
+						type: 'message',
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Second response part.' }],
+						model: 'claude-3-sonnet',
+						stop_reason: 'end_turn',
+						stop_sequence: null,
+						usage: { input_tokens: 15, output_tokens: 8 }
+					} as Anthropic.Message
+				}
+			]
+		};
+
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "prompt": "Hello",
+			    "type": "request",
+			  },
+			  {
+			    "parts": [
+			      {
+			        "content": "First response part.",
+			        "type": "markdown",
+			      },
+			      {
+			        "content": "Second response part.",
+			        "type": "markdown",
+			      },
+			    ],
+			    "type": "response",
+			  },
+			]
+		`);
+	});
+
+	// #endregion
+
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 

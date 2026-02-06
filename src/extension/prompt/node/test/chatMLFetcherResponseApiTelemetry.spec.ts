@@ -30,6 +30,7 @@ import { TestLogService } from '../../../../platform/testing/common/testLogServi
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IPowerService } from '../../../power/common/powerService';
 import { ChatMLFetcherImpl } from '../chatMLFetcher';
 
 describe('ChatMLFetcherImpl Response API telemetry', () => {
@@ -62,6 +63,7 @@ describe('ChatMLFetcherImpl Response API telemetry', () => {
 			createMockConversationOptions(),
 			configurationService,
 			experimentationService,
+			createMockPowerService(),
 		);
 	});
 
@@ -384,6 +386,13 @@ function createMockConversationOptions() {
 		temperature: 0.5,
 		topP: 1,
 		rejectionMessage: 'rejected',
+	};
+}
+
+function createMockPowerService(): IPowerService {
+	return {
+		_serviceBrand: undefined,
+		acquirePowerSaveBlocker: () => ({ dispose: () => { } }),
 	};
 }
 

@@ -277,6 +277,10 @@ export interface AgentUserMessageProps extends BasePromptElementProps, AgentUser
 	readonly editedFileEvents?: readonly ChatRequestEditedFileEvent[];
 	readonly sessionId?: string;
 	readonly sessionResource?: string;
+	/** When true, indicates this is a stop hook continuation where the stop hook query is rendered as a separate message. */
+	readonly hasStopHookQuery?: boolean;
+	/** Additional context provided by SubagentStart hooks. */
+	readonly additionalHookContext?: string;
 }
 
 export function getUserMessagePropsFromTurn(turn: Turn, endpoint: IChatEndpoint, customizations?: AgentUserMessageCustomizations): AgentUserMessageProps {
@@ -304,6 +308,8 @@ export function getUserMessagePropsFromAgentProps(agentProps: AgentPromptProps, 
 		chatVariables: agentProps.promptContext.chatVariables,
 		enableCacheBreakpoints: agentProps.enableCacheBreakpoints,
 		editedFileEvents: agentProps.promptContext.editedFileEvents,
+		hasStopHookQuery: agentProps.promptContext.hasStopHookQuery,
+		additionalHookContext: agentProps.promptContext.additionalHookContext,
 		// TODO:@roblourens
 		sessionId: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionId,
 		sessionResource: (agentProps.promptContext.tools?.toolInvocationToken as any)?.sessionResource,
@@ -374,6 +380,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
 						{hasTodoTool && <TodoListContextPrompt sessionResource={this.props.sessionResource} />}
+						{this.props.additionalHookContext && <AdditionalHookContextPrompt context={this.props.additionalHookContext} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<Tag name='reminderInstructions'>
@@ -451,6 +458,19 @@ class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 		return (
 			!this.envService.isSimulation() && <>The current date is {dateStr}.</>
 		);
+	}
+}
+
+interface AdditionalHookContextPromptProps extends BasePromptElementProps {
+	readonly context: string;
+}
+
+/**
+ * Renders additional context provided by hooks.
+ */
+class AdditionalHookContextPrompt extends PromptElement<AdditionalHookContextPromptProps> {
+	async render(state: void, sizing: PromptSizing) {
+		return <>Additional instructions from hooks: {this.props.context}</>;
 	}
 }
 

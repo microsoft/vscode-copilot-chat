@@ -628,6 +628,7 @@ export function extractSessionMetadata(
 	const state = {
 		summary: undefined as string | undefined,
 		firstMessageTimestamp: undefined as Date | undefined,
+		lastMessageTimestamp: undefined as Date | undefined,
 		firstUserMessageContent: undefined as string | undefined,
 		foundSessionId: false,
 	};
@@ -651,6 +652,7 @@ export function extractSessionMetadata(
 interface MetadataExtractionState {
 	summary: string | undefined;
 	firstMessageTimestamp: Date | undefined;
+	lastMessageTimestamp: Date | undefined;
 	firstUserMessageContent: string | undefined;
 	foundSessionId: boolean;
 }
@@ -671,7 +673,7 @@ function processLineForMetadata(
 
 	// Fast string check before JSON.parse - skip lines that can't match
 	const mightBeSummary = trimmed.includes('"type":"summary"') || trimmed.includes('"type": "summary"');
-	const mightBeMessage = !state.foundSessionId && (
+	const mightBeMessage = (
 		trimmed.includes('"type":"user"') || trimmed.includes('"type": "user"') ||
 		trimmed.includes('"type":"assistant"') || trimmed.includes('"type": "assistant"')
 	);
@@ -698,43 +700,43 @@ function processLineForMetadata(
 				state.summary = summaryResult.content.summary;
 			}
 		}
-		// Check early termination
-		if (state.summary !== undefined && state.firstMessageTimestamp !== undefined) {
-			return { shouldContinue: false };
-		}
 		return { shouldContinue: true };
 	}
 
-	// Try message validation
+	// Try message validation - always process to track both first and last timestamps
 	if (mightBeMessage) {
 		const messageResult = vMessageEntry.validate(parsed);
 		if (!messageResult.error) {
 			const entry = messageResult.content;
-			state.foundSessionId = true;
-			state.firstMessageTimestamp = new Date(entry.timestamp);
+			const messageTimestamp = new Date(entry.timestamp);
 
-			// Extract user message content for label fallback
-			if (entry.type === 'user') {
-				const msgContent = entry.message.content;
-				if (typeof msgContent === 'string') {
-					state.firstUserMessageContent = msgContent;
-				} else if (Array.isArray(msgContent)) {
-					for (const block of msgContent) {
-						if (block.type === 'text' && 'text' in block) {
-							state.firstUserMessageContent = block.text;
-							break;
+			// Track first message timestamp and content
+			if (state.firstMessageTimestamp === undefined) {
+				state.foundSessionId = true;
+				state.firstMessageTimestamp = messageTimestamp;
+
+				// Extract user message content for label fallback
+				if (entry.type === 'user') {
+					const msgContent = entry.message.content;
+					if (typeof msgContent === 'string') {
+						state.firstUserMessageContent = msgContent;
+					} else if (Array.isArray(msgContent)) {
+						for (const block of msgContent) {
+							if (block.type === 'text' && 'text' in block) {
+								state.firstUserMessageContent = block.text;
+								break;
+							}
 						}
 					}
 				}
 			}
+
+			// Always update last message timestamp (messages are chronological in file)
+			state.lastMessageTimestamp = messageTimestamp;
 		}
 	}
 
-	// Early termination: we have both summary and timestamp
-	if (state.summary !== undefined && state.firstMessageTimestamp !== undefined) {
-		return { shouldContinue: false };
-	}
-
+	// No early termination - we need to read all messages to get lastMessageTimestamp
 	return { shouldContinue: true };
 }
 
@@ -743,11 +745,11 @@ function processLineForMetadata(
  */
 function buildMetadataResult(
 	sessionId: string,
-	fileMtime: Date,
+	_fileMtime: Date,
 	state: MetadataExtractionState
 ): IClaudeCodeSessionInfo | null {
-	// Need at least some indication this is a valid session file
-	if (!state.foundSessionId && state.summary === undefined) {
+	// Require at least one message for a valid session
+	if (state.firstMessageTimestamp === undefined || state.lastMessageTimestamp === undefined) {
 		return null;
 	}
 
@@ -765,7 +767,9 @@ function buildMetadataResult(
 	return {
 		id: sessionId,
 		label,
-		timestamp: state.firstMessageTimestamp ?? fileMtime,
+		timestamp: state.firstMessageTimestamp,
+		firstMessageTimestamp: state.firstMessageTimestamp,
+		lastMessageTimestamp: state.lastMessageTimestamp,
 	};
 }
 
@@ -773,8 +777,8 @@ function buildMetadataResult(
  * Extract metadata from a session file using streaming to minimize memory usage.
  *
  * This is optimized for listing many sessions where we only need basic metadata.
- * It reads the file line-by-line and stops early once all needed data is found,
- * avoiding loading entire large session files into memory.
+ * It reads the file line-by-line to extract timestamps and labels without
+ * loading entire large session files into memory.
  *
  * @param filePath The filesystem path to the .jsonl session file
  * @param sessionId Session ID (from filename)
@@ -794,6 +798,7 @@ export async function extractSessionMetadataStreaming(
 	const state: MetadataExtractionState = {
 		summary: undefined,
 		firstMessageTimestamp: undefined,
+		lastMessageTimestamp: undefined,
 		firstUserMessageContent: undefined,
 		foundSessionId: false,
 	};

@@ -12,11 +12,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "content": "I'll add a small comment to ClaudeAgentManager. Let me first find this file in the codebase.",
         "type": "markdown",
       },
-    ],
-    "type": "response",
-  },
-  {
-    "parts": [
       {
         "invocationMessage": "Searched for files matching \`**/ClaudeAgentManager*\`",
         "isError": undefined,
@@ -45,11 +40,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "content": "Let me check the claudeCodeAgent.ts file which likely contains the ClaudeAgentManager:",
         "type": "markdown",
       },
-    ],
-    "type": "response",
-  },
-  {
-    "parts": [
       {
         "invocationMessage": "Read [](file:///Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts)",
         "isError": undefined,
@@ -67,10 +57,6 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
         "type": "markdown",
       },
     ],
-    "type": "response",
-  },
-  {
-    "parts": [],
     "type": "response",
   },
   {

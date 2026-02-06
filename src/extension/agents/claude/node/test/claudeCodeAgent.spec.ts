@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
@@ -19,6 +20,11 @@ function createMockLangModelServer(): ClaudeLanguageModelServer {
 	return {
 		incrementUserInitiatedMessageCount: vi.fn()
 	} as unknown as ClaudeLanguageModelServer;
+}
+
+/** Helper to convert a string prompt to TextBlockParam array for tests */
+function toPromptBlocks(text: string): Anthropic.TextBlockParam[] {
+	return [{ type: 'text', text }];
 }
 
 const TEST_MODEL_ID = 'claude-3-sonnet';
@@ -93,7 +99,7 @@ describe('ClaudeCodeSession', () => {
 		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', TEST_MODEL_ID, undefined));
 		const stream = new MockChatResponseStream();
 
-		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, TEST_MODEL_ID);
+		await session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, TEST_MODEL_ID);
 
 		expect(stream.output.join('\n')).toContain('Hello from mock!');
 	});
@@ -107,8 +113,8 @@ describe('ClaudeCodeSession', () => {
 		const stream2 = new MockChatResponseStream();
 
 		// Start both requests simultaneously
-		const promise1 = session.invoke('First', {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, TEST_MODEL_ID);
-		const promise2 = session.invoke('Second', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, TEST_MODEL_ID);
+		const promise1 = session.invoke(toPromptBlocks('First'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, TEST_MODEL_ID);
+		const promise2 = session.invoke(toPromptBlocks('Second'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, TEST_MODEL_ID);
 
 		// Wait for both to complete
 		await Promise.all([promise1, promise2]);
@@ -126,7 +132,7 @@ describe('ClaudeCodeSession', () => {
 		const source = new CancellationTokenSource();
 		source.cancel();
 
-		await expect(session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, source.token, TEST_MODEL_ID)).rejects.toThrow();
+		await expect(session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, source.token, TEST_MODEL_ID)).rejects.toThrow();
 	});
 
 	it('cleans up resources when disposed', async () => {
@@ -139,7 +145,7 @@ describe('ClaudeCodeSession', () => {
 
 		// Any new requests should be rejected
 		const stream = new MockChatResponseStream();
-		await expect(session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, TEST_MODEL_ID))
+		await expect(session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, TEST_MODEL_ID))
 			.rejects.toThrow('Session disposed');
 	});
 
@@ -158,8 +164,8 @@ describe('ClaudeCodeSession', () => {
 
 		// Both sessions should work independently
 		await Promise.all([
-			session1.invoke('Hello from session 1', {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, TEST_MODEL_ID),
-			session2.invoke('Hello from session 2', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, TEST_MODEL_ID)
+			session1.invoke(toPromptBlocks('Hello from session 1'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, TEST_MODEL_ID),
+			session2.invoke(toPromptBlocks('Hello from session 2'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, TEST_MODEL_ID)
 		]);
 
 		expect(stream1.output.join('\n')).toContain('Hello from mock!');
@@ -172,7 +178,7 @@ describe('ClaudeCodeSession', () => {
 		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, mockServer, 'test-session', 'claude-3-opus', undefined));
 		const stream = new MockChatResponseStream();
 
-		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, 'claude-3-opus');
+		await session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None, 'claude-3-opus');
 
 		expect(stream.output.join('\n')).toContain('Hello from mock!');
 	});
@@ -188,12 +194,12 @@ describe('ClaudeCodeSession', () => {
 
 		// First request with initial model
 		const stream1 = new MockChatResponseStream();
-		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, 'claude-3-sonnet');
+		await session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, 'claude-3-sonnet');
 		expect(mockService.queryCallCount).toBe(1);
 
 		// Second request with different model should call setModel on existing session
 		const stream2 = new MockChatResponseStream();
-		await session.invoke('Hello again', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-opus');
+		await session.invoke(toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-opus');
 		expect(mockService.queryCallCount).toBe(1); // Same query reused
 		expect(mockService.setModelCallCount).toBe(1); // setModel was called
 		expect(mockService.lastSetModel).toBe('claude-3-opus');
@@ -209,12 +215,12 @@ describe('ClaudeCodeSession', () => {
 
 		// First request
 		const stream1 = new MockChatResponseStream();
-		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, 'claude-3-sonnet');
+		await session.invoke(toPromptBlocks('Hello'), {} as vscode.ChatParticipantToolToken, stream1, CancellationToken.None, 'claude-3-sonnet');
 		expect(mockService.queryCallCount).toBe(1);
 
 		// Second request with same model should reuse session
 		const stream2 = new MockChatResponseStream();
-		await session.invoke('Hello again', {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-sonnet');
+		await session.invoke(toPromptBlocks('Hello again'), {} as vscode.ChatParticipantToolToken, stream2, CancellationToken.None, 'claude-3-sonnet');
 		expect(mockService.queryCallCount).toBe(1); // Same query reused
 	});
 });
