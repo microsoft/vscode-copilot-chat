@@ -13,6 +13,7 @@ import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vsco
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
 import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
@@ -77,6 +78,7 @@ import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
+import { SessionTranscriptService } from '../../chat/vscode-node/sessionTranscriptService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CopilotInlineCompletionItemProviderService } from '../../completions/vscode-node/copilotInlineCompletionItemProviderService';
@@ -194,6 +196,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IDevContainerConfigurationService, new SyncDescriptor(DevContainerConfigurationServiceImpl));
 	builder.define(IChatAgentService, new SyncDescriptor(ChatAgentService));
 	builder.define(IChatHookService, new SyncDescriptor(ChatHookService));
+	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));

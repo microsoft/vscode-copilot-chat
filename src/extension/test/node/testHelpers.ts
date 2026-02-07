@@ -24,6 +24,7 @@ export class TestChatRequest implements ChatRequest {
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
+	public hasHooksEnabled = false;
 
 	constructor(
 		public prompt: string,

@@ -5,8 +5,9 @@
 
 import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
-import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
@@ -140,6 +141,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
+	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
 	return testingServiceCollection;
 }
 
