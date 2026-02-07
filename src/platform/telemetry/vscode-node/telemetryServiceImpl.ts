@@ -70,7 +70,8 @@ export class TelemetryService extends BaseTelemetryService {
 			externalGHAIKey,
 			estrictedGHAIKey,
 			tokenStore,
-			useNewTelemetryLibGetter
+			useNewTelemetryLibGetter,
+			customFetcher
 		);
 		super(tokenStore, capiClientService, microsoftTelemetrySender, ghTelemetrySender);
 

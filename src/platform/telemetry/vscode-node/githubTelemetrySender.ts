@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AppInsightsClientOptions, TelemetryReporter } from '@vscode/extension-telemetry';
+import { AppInsightsClientOptions, CustomFetcher, TelemetryReporter } from '@vscode/extension-telemetry';
 import * as os from 'os';
 import { env, TelemetryLogger, TelemetrySender } from 'vscode';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
@@ -152,7 +152,8 @@ function createGitHubTelemetryReporter(
 	envService: IEnvService,
 	useNewTelemetryLibGetter: () => boolean,
 	tokenStore: ICopilotTokenStore,
-	extensionName: string
+	extensionName: string,
+	customFetcher?: CustomFetcher
 ): TelemetrySender {
 	// Always create the OLD reporter (default)
 	const oldReporter = new AzureInsightReporter(
@@ -189,7 +190,7 @@ function createGitHubTelemetryReporter(
 		}
 	};
 
-	// TelemetryReporter handles XHR override internally for Node.js
+	// Pass customFetcher to use the extension's fetcher service (handles proxy/cert/fallbacks)
 	const newReporter = new TelemetryReporter(
 		key,
 		[], // replacementOptions - empty to disable redaction
@@ -197,7 +198,7 @@ function createGitHubTelemetryReporter(
 			ignoreBuiltInCommonProperties: true,
 			ignoreUnhandledErrors: true
 		},
-		undefined, // customFetcher - use default
+		customFetcher,
 		appInsightsOptions
 	);
 
@@ -215,7 +216,8 @@ export class GitHubTelemetrySender extends BaseGHTelemetrySender {
 		standardTelemetryAIKey: string,
 		enhancedTelemetryAIKey: string,
 		tokenStore: ICopilotTokenStore,
-		useNewTelemetryLibGetter: () => boolean
+		useNewTelemetryLibGetter: () => boolean,
+		customFetcher?: CustomFetcher
 	) {
 		const telemetryLoggerFactory = (enhanced: boolean): TelemetryLogger => {
 			const key = enhanced ? enhancedTelemetryAIKey : standardTelemetryAIKey;
@@ -225,7 +227,8 @@ export class GitHubTelemetrySender extends BaseGHTelemetrySender {
 				envService,
 				useNewTelemetryLibGetter,
 				tokenStore,
-				extensionName
+				extensionName,
+				customFetcher
 			);
 			const logger = env.createTelemetryLogger(sender, {
 				ignoreBuiltInCommonProperties: true,
