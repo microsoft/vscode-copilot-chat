@@ -228,16 +228,11 @@ export class AgentIntent extends EditCodeIntent {
 				maxToolResultLength: Infinity,
 			});
 
-			const progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
-				report: value => {
-					if (value && typeof value === 'object' && 'message' in value && typeof value.message === 'string') {
-						stream.progress(value.message);
-					}
-				}
-			};
-
 			stream.progress(l10n.t('Summarizing conversation history...'));
 
+			const progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
+				report: () => { }
+			};
 			const renderer = PromptRenderer.create(this.instantiationService, endpoint, SummarizedConversationHistory, {
 				...propsInfo.props,
 				triggerSummarize: true,
