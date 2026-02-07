@@ -173,7 +173,7 @@ export class AgentIntent extends EditCodeIntent {
 		chatTelemetry: ChatTelemetryBuilder,
 		yieldRequested: () => boolean
 	): Promise<vscode.ChatResult> {
-		if (request.command === 'summarize') {
+		if (request.command === 'compact') {
 			return this.handleSummarizeCommand(conversation, request, stream, token);
 		}
 
@@ -186,25 +186,19 @@ export class AgentIntent extends EditCodeIntent {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResult> {
-		const enabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory);
-		if (!enabled) {
-			stream.markdown(l10n.t('Conversation history summarization is disabled. Enable it via `github.copilot.chat.summarizeAgentConversationHistory.enabled` setting.'));
-			return {};
-		}
-
 		normalizeSummariesOnRounds(conversation.turns);
 
-		// Exclude the current /summarize turn.
+		// Exclude the current /compact turn.
 		const history = conversation.turns.slice(0, -1);
 		if (history.length === 0) {
-			stream.markdown(l10n.t('Nothing to summarize. Start a conversation first.'));
+			stream.markdown(l10n.t('Nothing to compact. Start a conversation first.'));
 			return {};
 		}
 
 		// The summarization metadata needs to be associated with a tool call round.
 		const lastRoundId = history.at(-1)?.rounds.at(-1)?.id;
 		if (!lastRoundId) {
-			stream.markdown(l10n.t('Nothing to summarize. Start a conversation with tool calls first.'));
+			stream.markdown(l10n.t('Nothing to compact. Start a conversation with tool calls first.'));
 			return {};
 		}
 
@@ -228,7 +222,7 @@ export class AgentIntent extends EditCodeIntent {
 				maxToolResultLength: Infinity,
 			});
 
-			stream.progress(l10n.t('Summarizing conversation history...'));
+			stream.progress(l10n.t('Compacting conversation...'));
 
 			const progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
 				report: () => { }
@@ -236,15 +230,16 @@ export class AgentIntent extends EditCodeIntent {
 			const renderer = PromptRenderer.create(this.instantiationService, endpoint, SummarizedConversationHistory, {
 				...propsInfo.props,
 				triggerSummarize: true,
+				summarizationInstructions: request.prompt || undefined,
 			});
 			const result = await renderer.render(progress, token);
 			const summaryMetadata = result.metadata.get(SummarizedConversationHistoryMetadata);
 			if (!summaryMetadata) {
-				stream.markdown(l10n.t('Unable to summarize conversation history.'));
+				stream.markdown(l10n.t('Unable to compact conversation.'));
 				return {};
 			}
 
-			stream.markdown(l10n.t('Summarized conversation history.'));
+			stream.markdown(l10n.t('Compacted conversation.'));
 			const lastTurn = conversation.getLatestTurn();
 
 			const chatResult: vscode.ChatResult = {
@@ -274,7 +269,7 @@ export class AgentIntent extends EditCodeIntent {
 			}
 
 			const message = e instanceof Error ? e.message : String(e);
-			stream.markdown(l10n.t('Failed to summarize conversation history: {0}', message));
+			stream.markdown(l10n.t('Failed to compact conversation: {0}', message));
 			return {};
 		}
 	}

@@ -1596,9 +1596,8 @@
 						"when": "github.copilot.chat.debug"
 					},
 					{
-						"name": "summarize",
-						"description": "%copilot.agent.summarize.description%",
-						"when": "config.github.copilot.chat.summarizeAgentConversationHistory.enabled"
+						"name": "compact",
+						"description": "%copilot.agent.compact.description%"
 					},
 					{
 						"name": "explain",
