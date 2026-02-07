@@ -35,16 +35,16 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
-import { cwd } from '../../../../../util/vs/base/common/process';
 import { isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
 import {
 	buildSessions,
 	buildSubagentSession,
 	extractSessionMetadata,
 	extractSessionMetadataStreaming,
-	parseSessionFileContent,
 	ParseError,
+	parseSessionFileContent,
 	ParseStats,
 } from './claudeSessionParser';
 import {
@@ -145,7 +145,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
-		@INativeEnvService private readonly _nativeEnvService: INativeEnvService
+		@INativeEnvService private readonly _nativeEnvService: INativeEnvService,
+		@IFolderRepositoryManager private readonly _folderRepositoryManager: IFolderRepositoryManager
 	) { }
 
 	/**
@@ -300,27 +301,22 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 	/**
 	 * Get the project directory slugs to scan for sessions.
-	 * Handles single vs multi-folder workspaces and provides error handling for cwd resolution.
+	 *
+	 * - Single-root: slug for that one folder
+	 * - Multi-root: slug for every workspace folder
+	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
 	private _getProjectSlugs(): string[] {
 		const folders = this._workspace.getWorkspaceFolders();
 
-		if (folders.length === 1) {
-			return [this._computeFolderSlug(folders[0])];
+		if (folders.length > 0) {
+			return folders.map(folder => this._computeFolderSlug(folder));
 		}
 
-		let cwdUri: URI | undefined;
-		try {
-			cwdUri = URI.file(cwd());
-		} catch (error) {
-			this._logService.error('[ClaudeCodeSessionService] Failed to resolve current working directory for session discovery', error);
-			if (folders.length > 0) {
-				cwdUri = folders[0];
-			}
-		}
-
-		if (cwdUri) {
-			return [this._computeFolderSlug(cwdUri)];
+		// Empty workspace: use all known folders from the folder repository manager
+		const mruEntries = this._folderRepositoryManager.getFolderMRU();
+		if (mruEntries.length > 0) {
+			return mruEntries.map(entry => this._computeFolderSlug(entry.folder));
 		}
 
 		return [];

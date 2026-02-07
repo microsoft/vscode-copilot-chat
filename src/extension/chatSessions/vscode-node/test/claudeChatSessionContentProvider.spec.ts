@@ -26,6 +26,7 @@ import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSe
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/claudeSlashCommandService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../common/folderRepositoryManager';
 import { ClaudeChatSessionContentProvider, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
 
 // Mock types for testing
@@ -37,45 +38,116 @@ interface MockClaudeSession {
 	}>;
 }
 
+class MockFolderRepositoryManager implements IFolderRepositoryManager {
+	declare _serviceBrand: undefined;
+
+	private readonly _untitledFolders = new Map<string, vscode.Uri>();
+	private _mruEntries: FolderRepositoryMRUEntry[] = [];
+	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
+
+	setMRUEntries(entries: FolderRepositoryMRUEntry[]): void {
+		this._mruEntries = entries;
+	}
+
+	setLastUsedFolderIdInUntitledWorkspace(id: string | undefined): void {
+		this._lastUsedFolderIdInUntitledWorkspace = id;
+	}
+
+	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
+		this._untitledFolders.set(sessionId, folderUri);
+	}
+
+	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
+		return this._untitledFolders.get(sessionId);
+	}
+
+	deleteUntitledSessionFolder(sessionId: string): void {
+		this._untitledFolders.delete(sessionId);
+	}
+
+	async getFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> {
+		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
+	}
+
+	async initializeFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> {
+		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
+	}
+
+	getFolderMRU(): FolderRepositoryMRUEntry[] {
+		return this._mruEntries;
+	}
+
+	async deleteMRUEntry(): Promise<void> { }
+
+	getLastUsedFolderIdInUntitledWorkspace(): string | undefined {
+		return this._lastUsedFolderIdInUntitledWorkspace;
+	}
+}
+
+function createDefaultMocks() {
+	const mockSessionService: IClaudeCodeSessionService = {
+		getSession: vi.fn()
+	} as any;
+
+	const mockClaudeCodeModels: IClaudeCodeModels = {
+		resolveModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
+		getDefaultModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
+		setDefaultModel: vi.fn().mockResolvedValue(undefined),
+		getModels: vi.fn().mockResolvedValue([
+			{ id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+			{ id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }
+		]),
+		mapSdkModelToEndpointModel: vi.fn().mockResolvedValue(undefined)
+	} as any;
+
+	const mockFolderRepositoryManager = new MockFolderRepositoryManager();
+
+	return { mockSessionService, mockClaudeCodeModels, mockFolderRepositoryManager };
+}
+
+function createProviderWithServices(
+	store: DisposableStore,
+	workspaceFolders: URI[],
+	mocks: ReturnType<typeof createDefaultMocks>,
+): { provider: ClaudeChatSessionContentProvider; accessor: ITestingServicesAccessor } {
+	const serviceCollection = store.add(createExtensionUnitTestingServices());
+
+	const workspaceService = new TestWorkspaceService(workspaceFolders);
+	serviceCollection.set(IWorkspaceService, workspaceService);
+
+	serviceCollection.define(IClaudeCodeSessionService, mocks.mockSessionService);
+	serviceCollection.define(IClaudeCodeModels, mocks.mockClaudeCodeModels);
+	serviceCollection.define(IFolderRepositoryManager, mocks.mockFolderRepositoryManager);
+	serviceCollection.define(IClaudeSlashCommandService, {
+		_serviceBrand: undefined,
+		tryHandleCommand: vi.fn().mockResolvedValue({ handled: false }),
+		getRegisteredCommands: vi.fn().mockReturnValue([]),
+	});
+
+	const accessor = serviceCollection.createTestingAccessor();
+	const instaService = accessor.get(IInstantiationService);
+	const provider = instaService.createInstance(ClaudeChatSessionContentProvider);
+	return { provider, accessor };
+}
+
 describe('ChatSessionContentProvider', () => {
 	let mockSessionService: IClaudeCodeSessionService;
 	let mockClaudeCodeModels: IClaudeCodeModels;
+	let mockFolderRepositoryManager: MockFolderRepositoryManager;
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
 	let accessor: ITestingServicesAccessor;
 	const workspaceFolderUri = URI.file('/project');
 
 	beforeEach(() => {
-		mockSessionService = {
-			getSession: vi.fn()
-		} as any;
+		const mocks = createDefaultMocks();
+		mockSessionService = mocks.mockSessionService;
+		mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+		mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
 
-		mockClaudeCodeModels = {
-			resolveModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
-			getDefaultModel: vi.fn().mockResolvedValue('claude-3-5-sonnet-20241022'),
-			setDefaultModel: vi.fn().mockResolvedValue(undefined),
-			getModels: vi.fn().mockResolvedValue([
-				{ id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-				{ id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' }
-			]),
-			mapSdkModelToEndpointModel: vi.fn().mockResolvedValue(undefined)
-		} as any;
-
-		const serviceCollection = store.add(createExtensionUnitTestingServices());
-
-		const workspaceService = new TestWorkspaceService([workspaceFolderUri]);
-		serviceCollection.set(IWorkspaceService, workspaceService);
-
-		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
-		serviceCollection.define(IClaudeCodeModels, mockClaudeCodeModels);
-		serviceCollection.define(IClaudeSlashCommandService, {
-			_serviceBrand: undefined,
-			tryHandleCommand: vi.fn().mockResolvedValue({ handled: false }),
-			getRegisteredCommands: vi.fn().mockReturnValue([]),
-		});
-		accessor = serviceCollection.createTestingAccessor();
-		const instaService = accessor.get(IInstantiationService);
-		provider = instaService.createInstance(ClaudeChatSessionContentProvider);
+		const result = createProviderWithServices(store, [workspaceFolderUri], mocks);
+		provider = result.provider;
+		accessor = result.accessor;
 	});
 
 	afterEach(() => {
@@ -371,6 +443,214 @@ describe('ChatSessionContentProvider', () => {
 			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			expect(result.options?.['model']).toBe(UNAVAILABLE_MODEL_ID);
+		});
+	});
+
+	// #endregion
+
+	// #region Folder Option Tests
+
+	describe('folder option - single-root workspace', () => {
+		it('does NOT include folder option group when single-root workspace', async () => {
+			const options = await provider.provideChatSessionProviderOptions();
+			const folderGroup = options.optionGroups?.find(g => g.id === 'folder');
+			expect(folderGroup).toBeUndefined();
+		});
+
+		it('getFolderInfoForSession returns the one workspace folder as cwd', () => {
+			const folderInfo = provider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(workspaceFolderUri.fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([]);
+		});
+
+		it('does NOT include folder in provideChatSessionContent options', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
+			expect(result.options?.['folder']).toBeUndefined();
+		});
+	});
+
+	describe('folder option - multi-root workspace', () => {
+		const folderA = URI.file('/project-a');
+		const folderB = URI.file('/project-b');
+		const folderC = URI.file('/project-c');
+		let multiRootProvider: ClaudeChatSessionContentProvider;
+
+		beforeEach(() => {
+			const mocks = createDefaultMocks();
+			mockSessionService = mocks.mockSessionService;
+			mockClaudeCodeModels = mocks.mockClaudeCodeModels;
+			mockFolderRepositoryManager = mocks.mockFolderRepositoryManager;
+
+			const result = createProviderWithServices(store, [folderA, folderB, folderC], mocks);
+			multiRootProvider = result.provider;
+		});
+
+		it('includes folder option group with all workspace folders', async () => {
+			const options = await multiRootProvider.provideChatSessionProviderOptions();
+			const folderGroup = options.optionGroups?.find(g => g.id === 'folder');
+
+			expect(folderGroup).toBeDefined();
+			expect(folderGroup!.items).toHaveLength(3);
+			expect(folderGroup!.items.map(i => i.id)).toEqual([
+				folderA.fsPath,
+				folderB.fsPath,
+				folderC.fsPath,
+			]);
+		});
+
+		it('defaults cwd to first workspace folder when no selection made', () => {
+			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(folderA.fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([folderB.fsPath, folderC.fsPath]);
+		});
+
+		it('uses selected folder as cwd after provideHandleOptionsChange', async () => {
+			const sessionUri = createClaudeSessionUri('test-session');
+			await multiRootProvider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'folder', value: folderB.fsPath }],
+				CancellationToken.None,
+			);
+
+			const folderInfo = multiRootProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(folderB.fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([folderA.fsPath, folderC.fsPath]);
+		});
+
+		it('includes default folder in provideChatSessionContent options for untitled session', async () => {
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await multiRootProvider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			// Should include folder option as string (not locked) for untitled sessions
+			expect(result.options?.['folder']).toBe(folderA.fsPath);
+		});
+
+		it('locks folder option for existing sessions', async () => {
+			const session: MockClaudeSession = {
+				id: 'test-session',
+				messages: [{
+					type: 'user',
+					message: { role: 'user', content: 'Hello' },
+				}],
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await multiRootProvider.provideChatSessionContent(sessionUri, CancellationToken.None);
+
+			const folderOption = result.options?.['folder'];
+			expect(folderOption).toBeDefined();
+			expect(typeof folderOption).toBe('object');
+			expect((folderOption as vscode.ChatSessionProviderOptionItem).locked).toBe(true);
+		});
+
+		it('locked folder option preserves the selected folder, not the first one', async () => {
+			// Simulate user selecting folder B before the session is created
+			const untitledSessionUri = createClaudeSessionUri('untitled-session');
+			await multiRootProvider.provideHandleOptionsChange(
+				untitledSessionUri,
+				[{ optionId: 'folder', value: folderB.fsPath }],
+				CancellationToken.None,
+			);
+
+			// Verify the selection took effect
+			const folderInfo = multiRootProvider.getFolderInfoForSession('untitled-session');
+			expect(folderInfo.cwd).toBe(folderB.fsPath);
+
+			// Now load the same session as an existing session (post-swap scenario)
+			const session: MockClaudeSession = {
+				id: 'untitled-session',
+				messages: [{
+					type: 'user',
+					message: { role: 'user', content: 'Hello' },
+				}],
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
+
+			const result = await multiRootProvider.provideChatSessionContent(untitledSessionUri, CancellationToken.None);
+
+			const folderOption = result.options?.['folder'] as vscode.ChatSessionProviderOptionItem;
+			expect(folderOption).toBeDefined();
+			expect(folderOption.locked).toBe(true);
+			// Should show folder B (the selected folder), not folder A (the first)
+			expect(folderOption.id).toBe(folderB.fsPath);
+		});
+	});
+
+	describe('folder option - empty workspace', () => {
+		let emptyWorkspaceProvider: ClaudeChatSessionContentProvider;
+		let emptyMocks: ReturnType<typeof createDefaultMocks>;
+
+		beforeEach(() => {
+			emptyMocks = createDefaultMocks();
+			mockSessionService = emptyMocks.mockSessionService;
+			mockClaudeCodeModels = emptyMocks.mockClaudeCodeModels;
+			mockFolderRepositoryManager = emptyMocks.mockFolderRepositoryManager;
+
+			const result = createProviderWithServices(store, [], emptyMocks);
+			emptyWorkspaceProvider = result.provider;
+		});
+
+		it('includes folder option group with MRU entries', async () => {
+			const mruFolder = URI.file('/recent/project');
+			const mruRepo = URI.file('/recent/repo');
+			mockFolderRepositoryManager.setMRUEntries([
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
+				{ folder: mruRepo, repository: mruRepo, lastAccessed: Date.now() - 1000, isUntitledSessionSelection: false },
+			]);
+
+			const options = await emptyWorkspaceProvider.provideChatSessionProviderOptions();
+			const folderGroup = options.optionGroups?.find(g => g.id === 'folder');
+
+			expect(folderGroup).toBeDefined();
+			expect(folderGroup!.items).toHaveLength(2);
+			expect(folderGroup!.items[0].id).toBe(mruFolder.fsPath);
+			expect(folderGroup!.items[1].id).toBe(mruRepo.fsPath);
+		});
+
+		it('shows empty folder options when no MRU entries', async () => {
+			const options = await emptyWorkspaceProvider.provideChatSessionProviderOptions();
+			const folderGroup = options.optionGroups?.find(g => g.id === 'folder');
+
+			expect(folderGroup).toBeDefined();
+			expect(folderGroup!.items).toHaveLength(0);
+		});
+
+		it('getFolderInfoForSession uses MRU fallback when no selection', () => {
+			const mruFolder = URI.file('/recent/project');
+			mockFolderRepositoryManager.setMRUEntries([
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
+			]);
+
+			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(mruFolder.fsPath);
+			expect(folderInfo.additionalDirectories).toEqual([]);
+		});
+
+		it('getFolderInfoForSession throws when no folder available', () => {
+			expect(() => emptyWorkspaceProvider.getFolderInfoForSession('test-session'))
+				.toThrow('No folder available');
+		});
+
+		it('getFolderInfoForSession uses selected folder over MRU', async () => {
+			const mruFolder = URI.file('/recent/project');
+			const selectedFolder = URI.file('/selected/project');
+			mockFolderRepositoryManager.setMRUEntries([
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: true },
+			]);
+
+			const sessionUri = createClaudeSessionUri('test-session');
+			await emptyWorkspaceProvider.provideHandleOptionsChange(
+				sessionUri,
+				[{ optionId: 'folder', value: selectedFolder.fsPath }],
+				CancellationToken.None,
+			);
+
+			const folderInfo = emptyWorkspaceProvider.getFolderInfoForSession('test-session');
+			expect(folderInfo.cwd).toBe(selectedFolder.fsPath);
 		});
 	});
 

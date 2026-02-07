@@ -17,7 +17,7 @@ import { MockChatResponseStream } from '../../../test/node/testHelpers';
 import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWorkspaceFolderService';
 import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../../common/chatSessionWorktreeService';
 import { IFolderRepositoryManager } from '../../common/folderRepositoryManager';
-import { FolderRepositoryManager } from '../folderRepositoryManagerImpl';
+import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
 
 /**
  * Fake implementation of IChatSessionWorktreeService for testing.
@@ -225,9 +225,9 @@ export class FakeFolderRepositoryManager extends mock<IFolderRepositoryManager>(
 	}
 }
 
-describe('FolderRepositoryManager', () => {
+describe('CopilotCLIFolderRepositoryManager', () => {
 	const disposables = new DisposableStore();
-	let manager: FolderRepositoryManager;
+	let manager: CopilotCLIFolderRepositoryManager;
 	let worktreeService: FakeChatSessionWorktreeService;
 	let workspaceFolderService: FakeChatSessionWorkspaceFolderService;
 	let sessionService: FakeCopilotCLISessionService;
@@ -248,7 +248,7 @@ describe('FolderRepositoryManager', () => {
 			override error = vi.fn();
 		}();
 
-		manager = new FolderRepositoryManager(
+		manager = new CopilotCLIFolderRepositoryManager(
 			worktreeService,
 			workspaceFolderService,
 			sessionService,
@@ -499,7 +499,7 @@ describe('FolderRepositoryManager', () => {
 			// Use empty workspace to trigger trust check
 			workspaceService = new MockWorkspaceService([]);
 			workspaceService.trustResponse = false;
-			manager = new FolderRepositoryManager(
+			manager = new CopilotCLIFolderRepositoryManager(
 				worktreeService,
 				workspaceFolderService,
 				sessionService,
@@ -678,7 +678,7 @@ describe('FolderRepositoryManager', () => {
 		it('handles empty workspace scenarios', async () => {
 			// Create manager with no workspace folders
 			workspaceService = new MockWorkspaceService([]);
-			manager = new FolderRepositoryManager(
+			manager = new CopilotCLIFolderRepositoryManager(
 				worktreeService,
 				workspaceFolderService,
 				sessionService,
