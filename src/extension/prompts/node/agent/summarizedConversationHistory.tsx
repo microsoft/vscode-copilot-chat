@@ -498,7 +498,7 @@ class ConversationHistorySummarizer {
 			}, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
-				if (result.resultKind === 'error') {
+				if (result.success === false) {
 					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
 					this.logService.error(`[ConversationHistorySummarizer] PreCompact hook error: ${errorMessage}`);
 				}

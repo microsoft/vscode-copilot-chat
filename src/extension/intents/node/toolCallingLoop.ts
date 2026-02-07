@@ -45,7 +45,6 @@ import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/p
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
-import { isHookAbortError, processHookResults } from './hookResultProcessor';
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -95,13 +94,6 @@ export interface IToolCallingBuiltPromptEvent {
 }
 
 export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
-
-interface StartHookResult {
-	/**
-	 * Additional context to add to the agent's context, if any.
-	 */
-	readonly additionalContext?: string;
-}
 
 interface StopHookResult {
 	/**
@@ -251,47 +243,39 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param token Cancellation token
 	 * @returns Result indicating whether to continue and the reasons
 	 */
-	protected async executeStopHook(input: StopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StopHookResult> {
+	protected async executeStopHook(input: StopHookInput, outputStream: ChatResponseStream | undefined, sessionId: string, token: CancellationToken): Promise<StopHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('Stop', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
 				input: input
 			}, sessionId, token);
 
+			// Collect all blocking reasons (deduplicated)
 			const blockingReasons = new Set<string>();
-			processHookResults({
-				hookType: 'Stop',
-				results,
-				outputStream,
-				logService: this._logService,
-				onSuccess: (output) => {
+			for (const result of results) {
+				if (result.success === true) {
+					// Output may be a parsed object or a JSON string
+					const output = result.output;
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as StopHookOutput;
-						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						this._logService.trace(`[DefaultToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
 						if (hookOutput.decision === 'block' && hookOutput.reason) {
-							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
+							this._logService.trace(`[DefaultToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
 							blockingReasons.add(hookOutput.reason);
 						}
 					}
-				},
-				// Collect errors as blocking reasons (stderr from exit code != 0)
-				onError: (errorMessage) => {
-					if (errorMessage) {
-						this._logService.trace(`[ToolCallingLoop] Stop hook error collected as blocking reason: ${errorMessage}`);
-						blockingReasons.add(errorMessage);
-					}
-				},
-			});
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[DefaultToolCallingLoop] Stop hook error: ${errorMessage}`);
+				}
+			}
 
 			if (blockingReasons.size > 0) {
 				return { shouldContinue: true, reasons: [...blockingReasons] };
 			}
 			return { shouldContinue: false };
 		} catch (error) {
-			if (isHookAbortError(error)) {
-				throw error;
-			}
-			this._logService.error('[ToolCallingLoop] Error executing Stop hook', error);
+			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
 			return { shouldContinue: false };
 		}
 	}
@@ -317,24 +301,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/**
 	 * Called when a session starts to allow hooks to provide additional context.
 	 * @param input The session start hook input containing source
-	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
 	 * @returns Result containing additional context from hooks
 	 */
-	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StartHookResult> {
+	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('SessionStart', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
 				input: input
 			}, sessionId, token);
 
+			// Collect additionalContext from all successful hook results
 			const additionalContexts: string[] = [];
-			processHookResults({
-				hookType: 'SessionStart',
-				results,
-				outputStream,
-				logService: this._logService,
-				onSuccess: (output) => {
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SessionStartHookOutput;
 						if (hookOutput.additionalContext) {
@@ -342,18 +323,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
 						}
 					}
-				},
-				// SessionStart blocking errors and stopReason are silently ignored
-				ignoreErrors: true,
-			});
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SessionStart hook error: ${errorMessage}`);
+				}
+			}
 
 			return {
 				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
 			};
 		} catch (error) {
-			if (isHookAbortError(error)) {
-				throw error;
-			}
 			this._logService.error('[ToolCallingLoop] Error executing SessionStart hook', error);
 			return {};
 		}
@@ -362,24 +341,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/**
 	 * Called when a subagent starts to allow hooks to provide additional context.
 	 * @param input The subagent start hook input containing agent_id and agent_type
-	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
 	 * @returns Result containing additional context from hooks
 	 */
-	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStartHookResult> {
+	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('SubagentStart', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
 				input: input
 			}, sessionId, token);
 
+			// Collect additionalContext from all successful hook results
 			const additionalContexts: string[] = [];
-			processHookResults({
-				hookType: 'SubagentStart',
-				results,
-				outputStream,
-				logService: this._logService,
-				onSuccess: (output) => {
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SubagentStartHookOutput;
 						if (hookOutput.additionalContext) {
@@ -387,18 +363,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
 						}
 					}
-				},
-				// SubagentStart blocking errors and stopReason are silently ignored
-				ignoreErrors: true,
-			});
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SubagentStart hook error: ${errorMessage}`);
+				}
+			}
 
 			return {
 				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
 			};
 		} catch (error) {
-			if (isHookAbortError(error)) {
-				throw error;
-			}
 			this._logService.error('[ToolCallingLoop] Error executing SubagentStart hook', error);
 			return {};
 		}
@@ -411,20 +385,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param token Cancellation token
 	 * @returns Result indicating whether to continue and the reasons
 	 */
-	protected async executeSubagentStopHook(input: SubagentStopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStopHookResult> {
+	protected async executeSubagentStopHook(input: SubagentStopHookInput, outputStream: ChatResponseStream | undefined, sessionId: string, token: CancellationToken): Promise<SubagentStopHookResult> {
 		try {
 			const results = await this._chatHookService.executeHook('SubagentStop', {
 				toolInvocationToken: this.options.request.toolInvocationToken,
 				input: input
 			}, sessionId, token);
 
+			// Collect all blocking reasons (deduplicated)
 			const blockingReasons = new Set<string>();
-			processHookResults({
-				hookType: 'SubagentStop',
-				results,
-				outputStream,
-				logService: this._logService,
-				onSuccess: (output) => {
+			for (const result of results) {
+				if (result.success === true) {
+					const output = result.output;
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SubagentStopHookOutput;
 						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
@@ -433,24 +405,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							blockingReasons.add(hookOutput.reason);
 						}
 					}
-				},
-				// Collect errors as blocking reasons (stderr from exit code != 0)
-				onError: (errorMessage) => {
-					if (errorMessage) {
-						this._logService.trace(`[ToolCallingLoop] SubagentStop hook error collected as blocking reason: ${errorMessage}`);
-						blockingReasons.add(errorMessage);
-					}
-				},
-			});
+				} else if (result.success === false) {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this._logService.error(`[ToolCallingLoop] SubagentStop hook error: ${errorMessage}`);
+				}
+			}
 
 			if (blockingReasons.size > 0) {
 				return { shouldContinue: true, reasons: [...blockingReasons] };
 			}
 			return { shouldContinue: false };
 		} catch (error) {
-			if (isHookAbortError(error)) {
-				throw error;
-			}
 			this._logService.error('[ToolCallingLoop] Error executing SubagentStop hook', error);
 			return { shouldContinue: false };
 		}
@@ -487,9 +452,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 *
 	 * - For subagents: Always executes SubagentStart hook
 	 * - For regular sessions: Only executes SessionStart hook on the first turn
-	 * @throws HookAbortError if a hook requests the session/subagent to abort
 	 */
-	public async runStartHooks(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<void> {
+	public async runStartHooks(token: CancellationToken): Promise<void> {
 		const sessionId = this.options.conversation.sessionId;
 		const hasHooks = this.options.request.hasHooksEnabled;
 
@@ -498,7 +462,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			const startHookResult = await this.executeSubagentStartHook({
 				agent_id: this.options.request.subAgentInvocationId,
 				agent_type: this.options.request.subAgentName ?? 'default',
-			}, sessionId, outputStream, token);
+			}, sessionId, token);
 			if (startHookResult.additionalContext) {
 				this.additionalHookContext = startHookResult.additionalContext;
 				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
@@ -533,7 +497,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			if (isFirstTurn) {
 				const startHookResult = await this.executeSessionStartHook({
 					source: 'new',
-				}, sessionId, outputStream, token);
+				}, sessionId, token);
 				if (startHookResult.additionalContext) {
 					this.additionalHookContext = startHookResult.additionalContext;
 					this._logService.info('[ToolCallingLoop] SessionStart hook provided context for session');
@@ -560,7 +524,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			const startHookResult = await this.executeSubagentStartHook({
 				agent_id: this.options.request.subAgentInvocationId,
 				agent_type: this.options.request.subAgentName ?? 'default',
-			}, sessionId, outputStream, token);
+			}, sessionId, token);
 			if (startHookResult.additionalContext) {
 				this.additionalHookContext = startHookResult.additionalContext;
 				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
@@ -599,7 +563,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							agent_id: this.options.request.subAgentInvocationId,
 							agent_type: this.options.request.subAgentName ?? 'default',
 							stop_hook_active: stopHookActive,
-						}, sessionId, outputStream, token);
+						}, outputStream, sessionId, token);
 						const joinedReasons = stopHookResult.reasons?.join('; ');
 						this._logService.info(`[ToolCallingLoop] Subagent stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
 						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
@@ -614,7 +578,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							continue;
 						}
 					} else {
-						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, sessionId, outputStream, token);
+						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, outputStream, sessionId, token);
 						const joinedReasons = stopHookResult.reasons?.join('; ');
 						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
 						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
