@@ -495,7 +495,7 @@ class ConversationHistorySummarizer {
 				input: {
 					trigger: 'auto',
 				} satisfies PreCompactHookInput
-			}, this.token ?? CancellationToken.None);
+			}, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
 				if (result.success === false) {
