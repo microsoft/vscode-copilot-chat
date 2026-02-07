@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs';
 import {
 	IHistoricalTurn,
 	ISessionTranscriptService,
@@ -77,7 +78,7 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 		try {
 			await createDirectoryIfNotExists(this._fileSystemService, dir);
 		} catch (err) {
-			this._logService.error('[SessionTranscript] Failed to create transcripts directory');
+			this._logService.error('[SessionTranscript] Failed to create transcripts directory', err);
 			return;
 		}
 
@@ -268,7 +269,10 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 		}
 	}
 
-	/**\n\t * Replay historical conversation turns into the session buffer.\n\t * Each turn produces: user.message → (assistant.turn_start → assistant.message → assistant.turn_end) × N rounds.\n\t */
+	/**
+	 * Replay historical conversation turns into the session buffer.
+	 * Each turn produces: user.message → (assistant.turn_start → assistant.message → assistant.turn_end) × N rounds.
+	 */
 	private _replayHistory(sessionId: string, history: readonly IHistoricalTurn[]): void {
 		for (const [turnIndex, turn] of history.entries()) {
 			const turnTimestamp = new Date(turn.timestamp).toISOString();
@@ -347,16 +351,9 @@ export class SessionTranscriptService implements ISessionTranscriptService {
 	 */
 	private async _writeToFile(session: IActiveSession, content: string): Promise<void> {
 		try {
-			let existingContent = '';
-			try {
-				const existing = await this._fileSystemService.readFile(session.uri);
-				existingContent = new TextDecoder().decode(existing);
-			} catch {
-				// File doesn't exist yet
-			}
-			await this._fileSystemService.writeFile(session.uri, Buffer.from(existingContent + content, 'utf-8'));
+			await fs.promises.appendFile(session.uri.fsPath, content, 'utf-8');
 		} catch (err) {
-			this._logService.error('[SessionTranscript] Failed to write transcript entries');
+			this._logService.error('[SessionTranscript] Failed to write transcript entries', err);
 		}
 	}
 }
