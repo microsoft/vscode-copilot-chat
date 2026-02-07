@@ -90,7 +90,7 @@ describe('AgentIntent /summarize command', () => {
 			'agent',
 			ChatLocation.Agent,
 			chatTelemetry,
-			Event.None,
+			() => false
 		);
 
 		return { result, stream };
