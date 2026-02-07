@@ -139,6 +139,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const thinkingEnabled = !!thinkingConfig;
 
+	// Build output config with effort level for adaptive thinking
+	const effort = endpoint.supportsAdaptiveThinking
+		? configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+		: undefined;
+
 	// Build context management configuration
 	const contextManagement = isAllowedConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
 		? getContextManagementFromConfig(configurationService, thinkingEnabled)
@@ -152,6 +157,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		top_p: options.postOptions.top_p,
 		max_tokens: options.postOptions.max_tokens,
 		thinking: thinkingConfig,
+		...(effort ? { output_config: { effort } } : {}),
 		...(contextManagement ? { context_management: contextManagement } : {}),
 	};
 }
