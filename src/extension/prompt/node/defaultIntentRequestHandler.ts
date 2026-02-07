@@ -169,7 +169,6 @@ export class DefaultIntentRequestHandler {
 			} else if (err instanceof EmptyPromptError) {
 				return {};
 			} else if (isHookAbortError(err)) {
-				this.stream.markdown(err.stopReason);
 				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
