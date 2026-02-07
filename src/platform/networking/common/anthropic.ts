@@ -154,6 +154,7 @@ export interface ContextManagementResponse {
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)
@@ -173,7 +174,8 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 }
 
 /**
- * Tool search is only supported by:
+ * Tool search is supported by:
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * @param modelId The model ID to check
  * @returns true if the model supports tool search
@@ -210,6 +212,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)

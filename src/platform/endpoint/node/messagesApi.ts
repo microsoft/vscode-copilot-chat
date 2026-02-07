@@ -88,6 +88,8 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 
 	const toolSearchEnabled = isAnthropicToolSearchEnabled(endpoint, configurationService, experimentationService);
 	const isAllowedConversationAgent = options.location === ChatLocation.Agent || options.location === ChatLocation.MessagesProxy;
+	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
+	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
@@ -100,11 +102,11 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 				required: (tool.function.parameters as { required?: string[] })?.required ?? [],
 			},
 			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
-			...(toolSearchEnabled && isAllowedConversationAgent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
+			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
 	// Build final tools array, adding tool search tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
-	if (isAllowedConversationAgent && toolSearchEnabled) {
+	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
 	}
 
@@ -143,7 +145,7 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 		: undefined;
 
 	// Build context management configuration
-	const contextManagement = isAllowedConversationAgent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
+	const contextManagement = isAllowedConversationAgent && !isSubagent && isAnthropicContextEditingEnabled(endpoint, configurationService, experimentationService)
 		? getContextManagementFromConfig(configurationService, thinkingEnabled)
 		: undefined;
 
