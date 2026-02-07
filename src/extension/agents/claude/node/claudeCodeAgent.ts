@@ -719,6 +719,9 @@ export class ClaudeCodeSession extends Disposable {
 				unprocessedToolCalls.set(item.id, item);
 				const invocation = createFormattedToolInvocation(item, false);
 				if (invocation) {
+					if (message.parent_tool_use_id) {
+						invocation.subAgentInvocationId = message.parent_tool_use_id;
+					}
 					invocation.enablePartialUpdate = true;
 					stream.push(invocation);
 				}

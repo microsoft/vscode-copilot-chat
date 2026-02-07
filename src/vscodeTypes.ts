@@ -96,6 +96,7 @@ export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
+export import ChatSubagentToolInvocationData = vscode.ChatSubagentToolInvocationData;
 export import ChatMcpToolInvocationData = vscode.ChatMcpToolInvocationData;
 export import McpToolInvocationContentData = vscode.McpToolInvocationContentData;
 export import ChatResponseTurn2 = vscode.ChatResponseTurn2;

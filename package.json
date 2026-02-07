@@ -114,7 +114,7 @@
 		"mappedEditsProvider",
 		"aiRelatedInformation",
 		"aiSettingsSearch",
-		"chatParticipantAdditions@2",
+		"chatParticipantAdditions@3",
 		"defaultChatParticipant@4",
 		"contribSourceControlInputBoxMenu",
 		"authLearnMore",
@@ -1594,6 +1594,11 @@
 						"name": "error",
 						"description": "Make a model request which will result in an error",
 						"when": "github.copilot.chat.debug"
+					},
+					{
+						"name": "summarize",
+						"description": "%copilot.agent.summarize.description%",
+						"when": "config.github.copilot.chat.summarizeAgentConversationHistory.enabled"
 					},
 					{
 						"name": "explain",

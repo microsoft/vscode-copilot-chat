@@ -244,6 +244,7 @@ export const vAssistantMessageContent = vObj({
 	stop_reason: vNullable(vString()),
 	stop_sequence: vNullable(vString()),
 	usage: vUsage,
+	parent_tool_use_id: vNullable(vString()),
 });
 export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageContent>;
 

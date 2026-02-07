@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 2
+// version: 3
 
 declare module 'vscode' {
 
@@ -302,6 +302,30 @@ declare module 'vscode' {
 		values: Array<Uri | Location>;
 	}
 
+	export class ChatSubagentToolInvocationData {
+		/**
+		 * A description of the subagent's purpose or task.
+		 */
+		description?: string;
+
+		/**
+		 * The name of the subagent being invoked.
+		 */
+		agentName?: string;
+
+		/**
+		 * The prompt given to the subagent.
+		 */
+		prompt?: string;
+
+		/**
+		 * The result text from the subagent after completion.
+		 */
+		result?: string;
+
+		constructor(description?: string, agentName?: string, prompt?: string, result?: string);
+	}
+
 	export class ChatToolInvocationPart {
 		toolName: string;
 		toolCallId: string;
@@ -311,7 +335,7 @@ declare module 'vscode' {
 		pastTenseMessage?: string | MarkdownString;
 		isConfirmed?: boolean;
 		isComplete?: boolean;
-		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatToolResourcesInvocationData | ChatSimpleToolResultData;
+		toolSpecificData?: ChatTerminalToolInvocationData | ChatMcpToolInvocationData | ChatTodoToolInvocationData | ChatSimpleToolResultData | ChatToolResourcesInvocationData | ChatSubagentToolInvocationData;
 		subAgentInvocationId?: string;
 		presentation?: 'hidden' | 'hiddenAfterComplete' | undefined;
 
