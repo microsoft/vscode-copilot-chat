@@ -50,6 +50,9 @@ export type IChatModelCapabilities = {
 		vision?: boolean;
 		prediction?: boolean;
 		thinking?: boolean;
+		adaptive_thinking?: boolean;
+		max_thinking_budget?: number;
+		min_thinking_budget?: number;
 	};
 };
 

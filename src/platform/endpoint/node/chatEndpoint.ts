@@ -17,7 +17,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
@@ -123,6 +123,9 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
 	public readonly supportsPrediction: boolean;
+	public readonly supportsAdaptiveThinking?: boolean;
+	public readonly minThinkingBudget?: number;
+	public readonly maxThinkingBudget?: number;
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -158,6 +161,9 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsToolCalls = !!modelMetadata.capabilities.supports.tool_calls;
 		this.supportsVision = !!modelMetadata.capabilities.supports.vision;
 		this.supportsPrediction = !!modelMetadata.capabilities.supports.prediction;
+		this.supportsAdaptiveThinking = modelMetadata.capabilities.supports.adaptive_thinking;
+		this.minThinkingBudget = modelMetadata.capabilities.supports.min_thinking_budget;
+		this.maxThinkingBudget = modelMetadata.capabilities.supports.max_thinking_budget;
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
@@ -176,11 +182,8 @@ export class ChatEndpoint implements IChatEndpoint {
 
 			const betaFeatures: string[] = [];
 
-			// Add thinking beta if enabled
-			if (modelSupportsInterleavedThinking(this.model)) {
+			if (!this.supportsAdaptiveThinking) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
-			} else {
-				headers['capi-beta-1'] = 'true';
 			}
 
 			// Add context management beta if enabled

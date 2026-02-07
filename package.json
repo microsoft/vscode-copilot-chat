@@ -90,7 +90,7 @@
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatHooks@2",
+		"chatHooks@3",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -3157,6 +3157,19 @@
 						"tags": [
 							"preview",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.effort": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.effort%",
+						"enum": [
+							"low",
+							"medium",
+							"high"
+						],
+						"default": "high",
+						"tags": [
+							"preview"
 						]
 					}
 				}
