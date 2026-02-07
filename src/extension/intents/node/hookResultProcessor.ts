@@ -53,6 +53,17 @@ export interface ProcessHookResultsOptions {
 	logService: ILogService;
 	/** Callback for handling successful hook results. Called with the output for each success. */
 	onSuccess: (output: unknown) => void;
+	/**
+	 * When true, errors are shown to the user but do not throw HookAbortError.
+	 * Use for hooks like SubagentStart where errors should be non-blocking.
+	 */
+	ignoreErrors?: boolean;
+	/**
+	 * Callback for handling error results. When provided, errors are passed to this callback
+	 * instead of being shown to the user. Use for Stop/SubagentStop hooks where errors
+	 * should be collected as blocking reasons.
+	 */
+	onError?: (errorMessage: string) => void;
 }
 
 /**
@@ -63,7 +74,7 @@ export interface ProcessHookResultsOptions {
  * @throws HookAbortError if any result contains a stopReason or an error result is encountered
  */
 export function processHookResults(options: ProcessHookResultsOptions): void {
-	const { hookType, results, outputStream, logService, onSuccess } = options;
+	const { hookType, results, outputStream, logService, onSuccess, ignoreErrors, onError } = options;
 
 	const warnings: string[] = [];
 
@@ -82,15 +93,26 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 
 		// Handle success
 		if (result.resultKind === 'success') {
+			if (result.warningMessage) {
+				warnings.push(result.warningMessage);
+			}
 			onSuccess(result.output);
 		}
 
-		// Handle error - always abort
+		// Handle error - abort unless ignoreErrors is set or onError is provided
 		if (result.resultKind === 'error') {
 			const errorMessage = typeof result.output === 'string' && result.output ? result.output : '';
 			logService.error(`[ToolCallingLoop] ${hookType} hook error: ${errorMessage}`);
-			outputStream?.hookProgress(hookType, formatHookErrorMessage(errorMessage));
-			throw new HookAbortError(hookType, errorMessage);
+			if (onError) {
+				// Pass error to callback (for Stop/SubagentStop to collect as blocking reason)
+				onError(errorMessage);
+				return;
+			} else {
+				outputStream?.hookProgress(hookType, formatHookErrorMessage(errorMessage));
+				if (!ignoreErrors) {
+					throw new HookAbortError(hookType, errorMessage);
+				}
+			}
 		}
 	}
 

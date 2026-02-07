@@ -274,6 +274,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 					}
 				},
+				// Collect errors as blocking reasons (stderr from exit code != 0)
+				onError: (errorMessage) => {
+					if (errorMessage) {
+						this._logService.trace(`[ToolCallingLoop] Stop hook error collected as blocking reason: ${errorMessage}`);
+						blockingReasons.add(errorMessage);
+					}
+				},
 			});
 
 			if (blockingReasons.size > 0) {
@@ -381,6 +388,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 					}
 				},
+				// SubagentStart errors are non-blocking: show stderr to user but don't abort
+				ignoreErrors: true,
 			});
 
 			return {
@@ -423,6 +432,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
 							blockingReasons.add(hookOutput.reason);
 						}
+					}
+				},
+				// Collect errors as blocking reasons (stderr from exit code != 0)
+				onError: (errorMessage) => {
+					if (errorMessage) {
+						this._logService.trace(`[ToolCallingLoop] SubagentStop hook error collected as blocking reason: ${errorMessage}`);
+						blockingReasons.add(errorMessage);
 					}
 				},
 			});
