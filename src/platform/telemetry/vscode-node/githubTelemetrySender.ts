@@ -122,14 +122,12 @@ class TelemetryReporterAdapter implements TelemetrySender {
 	sendErrorData(error: Error, data?: Record<string, unknown>): void {
 		const { properties, measurements } = this.extractPropertiesAndMeasurements(data);
 
-		// Use either NEW or OLD API based on experiment flag (not both)
+		// Use either NEW or OLD API based on experiment flag
 		if (this.useNewTelemetryLib && this.newReporter) {
 			// Get dynamic tracking ID (changes per event) - NEW API: per-event tag overrides
 			const trackingId = this.tokenStore?.copilotToken?.getTokenValue('tid');
 			const tagOverrides = trackingId ? { 'ai.user.id': trackingId } : undefined;
 
-			// Use sendDangerousTelemetryException to send to the exceptions table (not events table)
-			// This matches the old API's trackException behavior
 			this.newReporter.sendDangerousTelemetryException(error, properties, measurements, tagOverrides);
 		} else {
 			// Default: use OLD API
