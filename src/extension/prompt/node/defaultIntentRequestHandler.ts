@@ -36,7 +36,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
-import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, HookAbortError, isHookAbortError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
@@ -167,6 +167,10 @@ export class DefaultIntentRequestHandler {
 			} else if (isCancellationError(err)) {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
+				return {};
+			} else if (isHookAbortError(err)) {
+				this.stream.markdown(err.stopReason);
+				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
 
@@ -341,15 +345,17 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
-			try {
-				await loop.runStartHooks(this.token);
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing start hooks', error);
-			}
-			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
+			await loop.runStartHooks(this.stream, this.token);
+			const hookResults = await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
+			// Check for stopReason - abort if any hook requests it
+			for (const result of hookResults) {
+				if (result.stopReason) {
+					throw new HookAbortError('UserPromptSubmit', result.stopReason);
+				}
+				// Show warning messages but continue
+				if (result.resultKind === 'warning' && result.warningMessage) {
+					this.stream.warning(result.warningMessage);
+				}
 			}
 			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {

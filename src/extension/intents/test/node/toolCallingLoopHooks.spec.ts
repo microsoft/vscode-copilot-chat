@@ -103,7 +103,7 @@ class TestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptions> {
 
 	// Expose the protected method for testing
 	public async testRunStartHooks(token: CancellationToken): Promise<void> {
-		await this.runStartHooks(token);
+		await this.runStartHooks(undefined, token);
 	}
 
 	// Expose additionalHookContext for verification
@@ -252,7 +252,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 1' },
 				},
 			]);
@@ -279,15 +279,15 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 1' },
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 2' },
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 3' },
 				},
 			]);
@@ -314,15 +314,15 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 1' },
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: {}, // No additionalContext
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 3' },
 				},
 			]);
@@ -349,15 +349,15 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 1' },
 				},
 				{
-					success: false,
+					resultKind: 'error',
 					output: 'Hook error message',
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Context from hook 3' },
 				},
 			]);
@@ -434,7 +434,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Custom context for prompt' },
 				},
 			]);
@@ -548,7 +548,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Subagent-specific context' },
 				},
 			]);
@@ -578,11 +578,11 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'First subagent context' },
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: { additionalContext: 'Second subagent context' },
 				},
 			]);
