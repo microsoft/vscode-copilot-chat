@@ -144,7 +144,8 @@
 		"mcpServerDefinitions",
 		"tabInputMultiDiff",
 		"workspaceTrust",
-		"environmentPower"
+		"environmentPower",
+		"terminalProfileGroup"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -5597,7 +5598,8 @@
 				{
 					"icon": "copilot",
 					"id": "copilot-cli",
-					"title": "GitHub Copilot CLI"
+					"title": "GitHub Copilot CLI",
+					"group": "ai"
 				}
 			]
 		}
