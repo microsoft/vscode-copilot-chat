@@ -134,9 +134,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	// Stores the session along with the source file URI and mtime for freshness checking
 	private _fullSessionCache = new ResourceMap<{ session: IClaudeCodeSession; fileUri: URI; mtime: number }>();
 
-	// Track session directories for subagent detection
-	private _sessionDirs = new ResourceMap<Set<string>>();
-
 	// Debugging information
 	private _lastParseErrors: ParseError[] = [];
 	private _lastParseStats: ParseStats | undefined;
@@ -404,16 +401,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return [];
 		}
 
-		// Track session directories for later use in getSession
-		const sessionDirs = new Set<string>();
 		const metadataTasks: Promise<{ metadata: IClaudeCodeSessionInfo | null; fileUri: URI } | null>[] = [];
 
 		for (const [name, type] of entries) {
-			if (type === FileType.Directory) {
-				sessionDirs.add(name);
-				continue;
-			}
-
 			if (type !== FileType.File || !name.endsWith('.jsonl')) {
 				continue;
 			}
@@ -426,8 +416,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const fileUri = URI.joinPath(projectDirUri, name);
 			metadataTasks.push(this._extractSessionMetadata(sessionId, fileUri, token));
 		}
-
-		this._sessionDirs.set(projectDirUri, sessionDirs);
 
 		const results = await Promise.allSettled(metadataTasks);
 		if (token.isCancellationRequested) {
@@ -564,10 +552,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			// Load subagents if available
-			const sessionDirs = this._sessionDirs.get(projectDirUri);
-			if (sessionDirs?.has(sessionId)) {
-				const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
-				const { subagents } = await this._loadSubagentsForSession(sessionId, subagentsDirUri, token);
+			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
+			const subagentEntries = await this._tryReadDirectory(subagentsDirUri);
+			if (subagentEntries.length > 0) {
+				const { subagents } = await this._loadSubagentsFromEntries(sessionId, subagentsDirUri, subagentEntries, token);
 				if (subagents.length > 0) {
 					session = { ...session, subagents };
 				}
@@ -588,17 +576,14 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	// #region Subagent Loading
 
 	/**
-	 * Load all subagents for a specific session.
+	 * Load all subagents for a specific session from pre-read directory entries.
 	 */
-	private async _loadSubagentsForSession(
+	private async _loadSubagentsFromEntries(
 		sessionId: string,
 		subagentsDirUri: URI,
+		entries: [string, FileType][],
 		token: CancellationToken
 	): Promise<{ sessionId: string; subagents: ISubagentSession[] }> {
-		const entries = await this._tryReadDirectory(subagentsDirUri);
-		if (entries.length === 0) {
-			return { sessionId, subagents: [] };
-		}
 
 		const subagentTasks: Promise<ISubagentSession | null>[] = [];
 

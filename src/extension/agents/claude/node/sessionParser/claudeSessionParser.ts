@@ -533,16 +533,14 @@ export function buildSubagentSession(
 	chainLinks: ReadonlyMap<string, ChainLinkLike>
 ): ISubagentSession | null {
 	// Build message chain from scratch - subagent files are typically linear
-	// Find leaf nodes (messages not referenced as parents)
+	// Find leaf nodes (messages not referenced as parents by other messages).
+	// Only consider references from actual messages, not chain links (which
+	// include progress entries that would otherwise mark all messages as
+	// non-leaves).
 	const referencedAsParent = new Set<string>();
 	for (const message of messages.values()) {
 		if (message.parentUuid !== null) {
 			referencedAsParent.add(message.parentUuid);
-		}
-	}
-	for (const chainLink of chainLinks.values()) {
-		if (chainLink.parentUuid !== null) {
-			referencedAsParent.add(chainLink.parentUuid);
 		}
 	}
 
