@@ -343,7 +343,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
 		});
 
-		it('should abort on failed hook results', async () => {
+		it('should silently ignore failed hook results (blocking errors are ignored)', async () => {
 			const conversation = createTestConversation(1);
 			const request = createMockChatRequest();
 
@@ -372,7 +372,50 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			);
 			disposables.add(loop);
 
-			await expect(loop.testRunStartHooks(tokenSource.token)).rejects.toThrow('Hook SessionStart aborted: Hook error message');
+			// Should NOT throw - blocking errors are silently ignored for SessionStart
+			await expect(loop.testRunStartHooks(tokenSource.token)).resolves.not.toThrow();
+
+			// Only non-error results should be processed
+			const additionalContext = loop.getAdditionalHookContext();
+			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
+		});
+
+		it('should silently ignore stopReason (continue: false) from hook results', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest();
+
+			mockChatHookService.setHookResults('SessionStart', [
+				{
+					resultKind: 'success',
+					output: { additionalContext: 'Context from hook 1' },
+				},
+				{
+					resultKind: 'success',
+					output: { additionalContext: 'Context from hook 2' },
+					stopReason: 'Build failed, should be ignored',
+				},
+				{
+					resultKind: 'success',
+					output: { additionalContext: 'Context from hook 3' },
+				},
+			]);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			// Should NOT throw - stopReason is silently ignored for SessionStart
+			await expect(loop.testRunStartHooks(tokenSource.token)).resolves.not.toThrow();
+
+			// Results with stopReason are skipped, only other results are processed
+			const additionalContext = loop.getAdditionalHookContext();
+			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
 		});
 	});
 

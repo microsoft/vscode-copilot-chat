@@ -54,8 +54,8 @@ export interface ProcessHookResultsOptions {
 	/** Callback for handling successful hook results. Called with the output for each success. */
 	onSuccess: (output: unknown) => void;
 	/**
-	 * When true, errors are shown to the user but do not throw HookAbortError.
-	 * Use for hooks like SubagentStart where errors should be non-blocking.
+	 * When true, errors and stopReason are completely ignored (no throw, no warning, no hookProgress).
+	 * Use for hooks like SessionStart/SubagentStart where blocking errors should be silently ignored.
 	 */
 	ignoreErrors?: boolean;
 	/**
@@ -79,9 +79,14 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 	const warnings: string[] = [];
 
 	for (const result of results) {
-		// Check for stopReason - abort immediately
+		// Check for stopReason - abort immediately (unless ignoreErrors is set)
 		if (result.stopReason) {
+			if (ignoreErrors) {
+				logService.trace(`[ToolCallingLoop] ${hookType} hook stopReason ignored: ${result.stopReason}`);
+				continue;
+			}
 			logService.info(`[ToolCallingLoop] ${hookType} hook requested abort: ${result.stopReason}`);
+			outputStream?.hookProgress(hookType, result.stopReason);
 			throw new HookAbortError(hookType, result.stopReason);
 		}
 
@@ -107,11 +112,12 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				// Pass error to callback (for Stop/SubagentStop to collect as blocking reason)
 				onError(errorMessage);
 				return;
+			} else if (ignoreErrors) {
+				// Completely ignore error - no throw, no hookProgress (silently continue)
+				continue;
 			} else {
 				outputStream?.hookProgress(hookType, formatHookErrorMessage(errorMessage));
-				if (!ignoreErrors) {
-					throw new HookAbortError(hookType, errorMessage);
-				}
+				throw new HookAbortError(hookType, errorMessage);
 			}
 		}
 	}

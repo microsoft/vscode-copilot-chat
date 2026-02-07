@@ -320,7 +320,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
 	 * @returns Result containing additional context from hooks
-	 * @throws HookAbortError if a hook requests the session to abort
 	 */
 	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StartHookResult> {
 		try {
@@ -344,6 +343,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 					}
 				},
+				// SessionStart blocking errors and stopReason are silently ignored
+				ignoreErrors: true,
 			});
 
 			return {
@@ -364,7 +365,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * @param outputStream The output stream for displaying messages
 	 * @param token Cancellation token
 	 * @returns Result containing additional context from hooks
-	 * @throws HookAbortError if a hook requests the subagent to abort
 	 */
 	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
@@ -388,7 +388,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						}
 					}
 				},
-				// SubagentStart errors are non-blocking: show stderr to user but don't abort
+				// SubagentStart blocking errors and stopReason are silently ignored
 				ignoreErrors: true,
 			});
 
