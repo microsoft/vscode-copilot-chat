@@ -291,7 +291,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			if (isHookAbortError(error)) {
 				throw error;
 			}
-			this._logService.error('[DefaultToolCallingLoop] Error executing Stop hook', error);
+			this._logService.error('[ToolCallingLoop] Error executing Stop hook', error);
 			return { shouldContinue: false };
 		}
 	}
