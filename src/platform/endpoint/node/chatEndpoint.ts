@@ -6,7 +6,6 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import * as l10n from '@vscode/l10n';
 import { OpenAI, Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
-import { createRequestHMAC } from '../../../util/common/crypto';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { deepClone, mixin } from '../../../util/vs/base/common/objects';
@@ -18,10 +17,10 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, modelSupportsInterleavedThinking } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
@@ -32,7 +31,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
-import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
@@ -120,7 +119,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
 	public readonly showInModelPicker: boolean;
-	public readonly isDefault: boolean;
 	public readonly isFallback: boolean;
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
@@ -132,15 +130,10 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly maxPromptImages?: number | undefined;
 
 	private readonly _supportsStreaming: boolean;
-	private _policyDetails: ModelPolicy | undefined;
 
 	constructor(
 		public readonly modelMetadata: IChatModelInformation,
 		@IDomainService protected readonly _domainService: IDomainService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
-		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
@@ -161,21 +154,20 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.isPremium = modelMetadata.billing?.is_premium;
 		this.multiplier = modelMetadata.billing?.multiplier;
 		this.restrictedToSkus = modelMetadata.billing?.restricted_to;
-		this.isDefault = modelMetadata.is_chat_default;
 		this.isFallback = modelMetadata.is_chat_fallback;
 		this.supportsToolCalls = !!modelMetadata.capabilities.supports.tool_calls;
 		this.supportsVision = !!modelMetadata.capabilities.supports.vision;
 		this.supportsPrediction = !!modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
-		this._policyDetails = modelMetadata.policy;
 		this.customModel = modelMetadata.custom_model;
 		this.maxPromptImages = modelMetadata.capabilities.limits?.vision?.max_prompt_images;
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public getExtraHeaders(location?: ChatLocation): Record<string, string> {
 		const headers: Record<string, string> = { ...this.modelMetadata.requestHeaders };
 
-		if (this.useMessagesApi) {
+		const isAllowedConversationAgentModel = location === ChatLocation.Agent || location === ChatLocation.MessagesProxy;
+		if (isAllowedConversationAgentModel && this.useMessagesApi) {
 
 			const modelProviderPreference = this._configurationService.getConfig(ConfigKey.TeamInternal.ModelProviderPreference);
 			if (modelProviderPreference) {
@@ -185,8 +177,10 @@ export class ChatEndpoint implements IChatEndpoint {
 			const betaFeatures: string[] = [];
 
 			// Add thinking beta if enabled
-			if (this._getThinkingBudget()) {
+			if (modelSupportsInterleavedThinking(this.model)) {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
+			} else {
+				headers['capi-beta-1'] = 'true';
 			}
 
 			// Add context management beta if enabled
@@ -251,16 +245,6 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	public get degradationReason(): string | undefined {
 		return this.modelMetadata.warning_messages?.at(0)?.message ?? this.modelMetadata.info_messages?.at(0)?.message;
-	}
-
-	public get policy(): 'enabled' | { terms: string } {
-		if (!this._policyDetails) {
-			return 'enabled';
-		}
-		if (this._policyDetails.state === 'enabled') {
-			return 'enabled';
-		}
-		return { terms: this._policyDetails.terms ?? 'Unknown policy terms' };
 	}
 
 	public get apiType(): string {
@@ -394,34 +378,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 	}
 
-	public async acceptChatPolicy(): Promise<boolean> {
-		if (this.policy === 'enabled') {
-			return true;
-		}
-		try {
-			const response = await postRequest(
-				this._fetcherService,
-				this._telemetryService,
-				this._capiClientService,
-				{ type: RequestType.ModelPolicy, modelId: this.model },
-				(await this._authService.getCopilotToken()).token,
-				await createRequestHMAC(process.env.HMAC_SECRET),
-				'chat-policy',
-				generateUuid(),
-				{
-					state: 'enabled'
-				},
-			);
-			// Mark it enabled locally. It will be refreshed on the next fetch
-			if (response.ok && this._policyDetails) {
-				this._policyDetails.state = 'enabled';
-			}
-			return response.ok;
-		} catch {
-			return false;
-		}
-	}
-
 	public acquireTokenizer(): ITokenizer {
 		return this._tokenizerProvider.acquireTokenizer(this);
 	}
@@ -494,10 +450,6 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		super(
 			modelMetadata,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
@@ -514,7 +466,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		expectedNumChoices: number,
 		finishCallback: FinishedCallback,
 		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken | undefined
+		cancellationToken?: CancellationToken | undefined,
+		_location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>> {
 		// We must override this to a num choices > 1 because remote agents can do internal function calls which emit multiple completions even when N > 1
 		// It's awful that they do this, but we have to support it

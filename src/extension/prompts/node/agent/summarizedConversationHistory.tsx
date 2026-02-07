@@ -10,6 +10,7 @@ import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -39,7 +40,6 @@ import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentPrompt, AgentPromptProps, AgentUserMessage, AgentUserMessageCustomizations, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
-import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	readonly simpleMode?: boolean;
@@ -206,6 +206,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		// Iterate over the turns in reverse order until we find a turn with a tool call round that was summarized
 		const history: PromptElement[] = [];
 
+		// If we have a stop hook query, add it as a new user message at the very end of the conversation.
+		// Push it first so that after history.reverse() it will be last.
+		if (this.props.promptContext.hasStopHookQuery) {
+			history.push(<UserMessage priority={901}>{this.props.promptContext.query}</UserMessage>);
+		}
+
 		// Handle the possibility that we summarized partway through the current turn (e.g. if we accumulated many tool call rounds)
 		let summaryForCurrentTurn: string | undefined = undefined;
 		let thinkingForFirstRoundAfterSummarization: ThinkingData | undefined = undefined;
@@ -242,10 +248,12 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 			</PrioritizedList>);
 		}
 
-		if (!this.props.promptContext.isContinuation) {
+		// Render the original user message:
+		// - Always render for non-continuation (normal first iteration)
+		// - Also render for stop hook continuation (the original message is needed, frozen content will provide it)
+		if (!this.props.promptContext.isContinuation || this.props.promptContext.hasStopHookQuery) {
 			history.push(<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props, {
 				userQueryTagName: this.props.userQueryTagName,
-				attachmentHint: this.props.attachmentHint,
 				ReminderInstructionsClass: this.props.ReminderInstructionsClass,
 				ToolReferencesHintClass: this.props.ToolReferencesHintClass,
 			})} />);
@@ -297,7 +305,6 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 			} else if (!turn.isContinuation) {
 				turnComponents.push(<AgentUserMessage flexGrow={1} {...getUserMessagePropsFromTurn(turn, this.props.endpoint, {
 					userQueryTagName: this.props.userQueryTagName,
-					attachmentHint: this.props.attachmentHint,
 					ReminderInstructionsClass: this.props.ReminderInstructionsClass,
 					ToolReferencesHintClass: this.props.ToolReferencesHintClass,
 				})} />);

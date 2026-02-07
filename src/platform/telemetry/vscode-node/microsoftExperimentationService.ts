@@ -129,12 +129,14 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
 	getFilters(): Map<string, string | undefined> {
-		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}, IsVscodeTeamMember: ${this._userInfoStore.isVscodeTeamMember}`);
+		const orgListString = this._userInfoStore.organizationList?.join(',');
+		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}, IsVscodeTeamMember: ${this._userInfoStore.isVscodeTeamMember}, OrganizationList: ${orgListString}`);
 		const filters = new Map<string, string | undefined>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
 		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1 ? '1' : '0');
 		filters.set('X-GitHub-Copilot-IsVscodeTeamMember', this._userInfoStore.isVscodeTeamMember ? '1' : '0');
+		filters.set('X-GitHub-Copilot-OrganizationList', orgListString);
 		return filters;
 	}
 

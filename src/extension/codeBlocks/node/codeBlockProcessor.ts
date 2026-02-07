@@ -118,12 +118,14 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	workspaceEdit = this.forward(this._wrapped.workspaceEdit?.bind(this._wrapped) || (() => { }));
 	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
 	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
+	hookProgress = this.forward(this._wrapped.hookProgress.bind(this._wrapped));
 	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
 	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
 	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
 	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
 	beginToolInvocation = this.forward(this._wrapped.beginToolInvocation.bind(this._wrapped));
 	updateToolInvocation = this.forward(this._wrapped.updateToolInvocation.bind(this._wrapped));
+	usage = this.forward(this._wrapped.usage.bind(this._wrapped));
 
 	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
 		this._codeBlockProcessor.flush();

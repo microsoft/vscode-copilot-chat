@@ -24,6 +24,7 @@ export class TestChatRequest implements ChatRequest {
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
+	public hasHooksEnabled = false;
 
 	constructor(
 		public prompt: string,
@@ -46,6 +47,10 @@ export class MockChatResponseStream extends ChatResponseStreamImpl {
 		super(push, () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 	}
 	override markdown(content: string | MarkdownString): void {
+		this.output.push(typeof content === 'string' ? content : content.value);
+	}
+	override warning(content: string | MarkdownString): void {
+		super.warning(content);
 		this.output.push(typeof content === 'string' ? content : content.value);
 	}
 	override codeblockUri(uri: URI): void {

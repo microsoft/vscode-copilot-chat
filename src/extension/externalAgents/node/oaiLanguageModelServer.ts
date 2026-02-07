@@ -384,10 +384,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.restrictedToSkus;
 	}
 
-	public get isDefault(): boolean {
-		return this.base.isDefault;
-	}
-
 	public get isFallback(): boolean {
 		return this.base.isFallback;
 	}
@@ -422,10 +418,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get supportedEditTools(): readonly EndpointEditToolName[] | undefined {
 		return this.base.supportedEditTools;
-	}
-
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
 	}
 
 	public async processResponseFromChatEndpoint(
@@ -468,10 +460,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 				await body.destroy();
 			}
 		});
-	}
-
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
 	}
 
 	public makeChatRequest(

@@ -41,6 +41,7 @@ export interface ITelemetryUserConfig {
 	readonly _serviceBrand: undefined;
 	trackingId: string | undefined;
 	organizationsList: string | undefined;
+	enterpriseList: string | undefined;
 	optedIn: boolean;
 }
 
@@ -49,6 +50,7 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 	// tracking id from auth token
 	public trackingId: string | undefined;
 	public organizationsList: string | undefined;
+	public enterpriseList: string | undefined;
 	public optedIn: boolean;
 
 	constructor(
@@ -72,6 +74,7 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 			if (trackingId !== undefined) {
 				this.trackingId = trackingId;
 				this.organizationsList = token.organizationList.toString();
+				this.enterpriseList = token.enterpriseList.toString();
 				this.optedIn = enhancedTelemetry;
 			}
 		});

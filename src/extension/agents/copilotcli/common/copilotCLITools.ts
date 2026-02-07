@@ -5,11 +5,12 @@
 
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ChatPromptReference, ChatTerminalToolInvocationData, ExtendedChatResponsePart } from 'vscode';
+import type { ChatPromptReference, ChatTerminalToolInvocationData, ChatTodoStatus, ChatTodoToolInvocationData, ExtendedChatResponsePart } from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
 import { isLocation } from '../../../../util/common/types';
 import { decodeBase64 } from '../../../../util/vs/base/common/buffer';
 import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { isAbsolutePath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatMcpToolInvocationData, ChatRequestTurn2, ChatResponseCodeblockUriPart, ChatResponseMarkdownPart, ChatResponsePullRequestPart, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, Location, MarkdownString, McpToolInvocationContentData, Range, Uri } from '../../../../vscodeTypes';
 import type { MCP } from '../../../common/modelContextProtocol';
@@ -102,7 +103,7 @@ interface StopShellTool {
 }
 
 interface GrepTool {
-	toolName: 'grep';
+	toolName: 'grep' | 'rg';
 	arguments: {
 		pattern: string;
 		path?: string;
@@ -225,7 +226,11 @@ export type ToolInfo = StringReplaceEditorTool | EditTool | CreateTool | ViewToo
 	SearchTool | SearchBashTool | SemanticCodeSearchTool |
 	ReplyToCommentTool | CodeReviewTool | WebFetchTool | UpdateTodoTool | WebSearchTool;
 
-export type ToolCall = ToolInfo & { toolCallId: string };
+export type ToolCall = ToolInfo & {
+	toolCallId: string;
+	mcpServerName?: string | undefined;
+	mcpToolName?: string | undefined;
+};
 export type UnknownToolCall = { toolName: string; arguments: unknown; toolCallId: string };
 
 function isInstructionAttachmentPath(path: string): boolean {
@@ -309,7 +314,7 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(sessionId: string, events: readonly SessionEvent[], getVSCodeRequestId: (sdkRequestId: string) => { requestId: string; toolIdEditMap: Record<string, string> } | undefined, delegationSummaryService: IChatDelegationSummaryService, logger: ILogger, workingDirectory?: URI): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, [ChatToolInvocationPart, toolData: ToolCall]>();
@@ -431,7 +436,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 				break;
 			}
 			case 'tool.execution_complete': {
-				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger) ?? [undefined, undefined];
+				const [responsePart, toolCall] = processToolExecutionComplete(event, pendingToolInvocations, logger, workingDirectory) ?? [undefined, undefined];
 				if (responsePart && toolCall && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					const editId = details?.toolIdEditMap ? details.toolIdEditMap[toolCall.toolCallId] : undefined;
 					const editedUris = getAffectedUrisForEditTool(toolCall);
@@ -563,7 +568,7 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, pendin
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>, logger: ILogger, workingDirectory?: URI): [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall] | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -583,37 +588,35 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			const mcpContent = event.data.mcpContent as MCP.ContentBlock[] | undefined;
 			if (mcpContent && mcpContent.length > 0) {
 				const output = convertMcpContentToToolInvocationData(mcpContent, logger);
-				const toolCall = invocation[1];
 				// Use tool arguments as input, formatted as JSON
 				const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
 
 				invocation[0].toolSpecificData = {
 					input,
 					output
-				} as ChatMcpToolInvocationData;
+				} satisfies ChatMcpToolInvocationData;
 			}
 		}
 
-		if (toolCall.toolName === 'bash' || toolCall.toolName === 'powershell') {
-			const result = event.data.result?.content || '';
-			// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
-			const exitCodeStr = result ? /<exited with exit code (\d+)>$/.exec(result)?.[1] : undefined;
-			const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
-			// Lets remove the last line containing the exit code from the output.
-			const text = (exitCode !== undefined ? result.replace(/<exited with exit code \d+>$/, '').trimEnd() : result).replace(/\n/g, '\r\n');
-			const toolSpecificData: ChatTerminalToolInvocationData = {
-				commandLine: {
-					original: toolCall.arguments.command,
-				},
-				language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
-				state: {
-					exitCode
-				},
-				output: {
-					text
-				}
-			};
-			invocation[0].toolSpecificData = toolSpecificData;
+		if (Object.hasOwn(ToolFriendlyNameAndHandlers, toolCall.toolName)) {
+			const [, , postFormatter] = ToolFriendlyNameAndHandlers[toolCall.toolName];
+			(postFormatter as PostInvocationFormatter)(invocation[0], toolCall, event.data, workingDirectory);
+		} else if (toolCall.mcpServerName && toolCall.mcpToolName) {
+			const toolCall = invocation[1];
+			// Use tool arguments as input, formatted as JSON
+			const input = toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : '';
+			const mimeType = 'text/plain';
+			const output: McpToolInvocationContentData[] = [new McpToolInvocationContentData(
+				new TextEncoder().encode(event.data.result?.content || ''),
+				mimeType
+			)];
+
+			invocation[0].toolSpecificData = {
+				input,
+				output
+			} satisfies ChatMcpToolInvocationData;
+		} else {
+			genericToolInvocationCompleted(invocation[0], toolCall, event.data);
 		}
 	}
 
@@ -623,12 +626,17 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 /**
  * Creates a formatted tool invocation part for CopilotCLI tools
  */
-export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolName: string; arguments?: unknown }, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function createCopilotCLIToolInvocation(data: {
+	toolCallId: string; toolName: string; arguments?: unknown; mcpServerName?: string | undefined;
+	mcpToolName?: string | undefined;
+}, editId?: string): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (!Object.hasOwn(ToolFriendlyNameAndHandlers, data.toolName)) {
-		const invocation = new ChatToolInvocationPart(data.toolName ?? 'unknown', data.toolCallId ?? '', false);
+		const mcpServer = l10n.t('MCP Server');
+		const toolName = data.mcpServerName && data.mcpToolName ? `${data.mcpServerName}, ${data.mcpToolName} (${mcpServer})` : data.toolName;
+		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
-		formatGenericInvocation(invocation, data as ToolCall);
+		invocation.invocationMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
 		return invocation;
 	}
 
@@ -655,37 +663,41 @@ export function createCopilotCLIToolInvocation(data: { toolCallId: string; toolN
 }
 
 type Formatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, editId?: string) => void;
+type PostInvocationFormatter = (invocation: ChatToolInvocationPart, toolCall: ToolCall, result: ToolCallResult, workingDirectory?: URI) => void;
 type ToolCallFor<T extends ToolCall['toolName']> = Extract<ToolCall, { toolName: T }>;
+type ToolCallResult = ToolExecutionCompleteEvent['data'];
 
-const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [string, (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void] } = {
-	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation],
-	'edit': [l10n.t('Edit File'), formatEditToolInvocation],
-	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation],
-	'create': [l10n.t('Create File'), formatCreateToolInvocation],
-	'insert': [l10n.t('Edit File'), formatInsertToolInvocation],
-	'undo_edit': [l10n.t('Edit File'), formatUndoEdit],
-	'view': [l10n.t('Read'), formatViewToolInvocation],
-	'bash': [l10n.t('Run Shell Command'), formatShellInvocation],
-	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation],
-	'write_bash': [l10n.t('Write to Bash'), emptyInvocation],
-	'write_powershell': [l10n.t('Write to PowerShell'), emptyInvocation],
-	'read_bash': [l10n.t('Read Terminal'), emptyInvocation],
-	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation],
-	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation],
-	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation],
-	'search': [l10n.t('Search'), formatSearchToolInvocation],
-	'grep': [l10n.t('Search'), formatSearchToolInvocation],
-	'glob': [l10n.t('Search'), formatSearchToolInvocation],
-	'search_bash': [l10n.t('Search'), formatSearchToolInvocation],
-	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation],
-	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation],
-	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation],
-	'report_intent': [l10n.t('Report Intent'), emptyInvocation],
-	'think': [l10n.t('Thinking'), emptyInvocation],
-	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation],
-	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation],
-	'web_search': [l10n.t('Web Search'), emptyInvocation],
-	'update_todo': [l10n.t('Update Todo'), emptyInvocation],
+
+const ToolFriendlyNameAndHandlers: { [K in ToolCall['toolName']]: [title: string, pre: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>) => void, post: (invocation: ChatToolInvocationPart, toolCall: ToolCallFor<K>, result: ToolCallResult, workingDirectory?: URI) => void] } = {
+	'str_replace_editor': [l10n.t('Edit File'), formatStrReplaceEditorInvocation, genericToolInvocationCompleted],
+	'edit': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
+	'str_replace': [l10n.t('Edit File'), formatEditToolInvocation, genericToolInvocationCompleted],
+	'create': [l10n.t('Create File'), formatCreateToolInvocation, genericToolInvocationCompleted],
+	'insert': [l10n.t('Edit File'), formatInsertToolInvocation, genericToolInvocationCompleted],
+	'undo_edit': [l10n.t('Edit File'), formatUndoEdit, genericToolInvocationCompleted],
+	'view': [l10n.t('Read'), formatViewToolInvocation, genericToolInvocationCompleted],
+	'bash': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
+	'powershell': [l10n.t('Run Shell Command'), formatShellInvocation, formatShellInvocationCompleted],
+	'write_bash': [l10n.t('Write to Bash'), emptyInvocation, genericToolInvocationCompleted],
+	'write_powershell': [l10n.t('Write to PowerShell'), emptyInvocation, genericToolInvocationCompleted],
+	'read_bash': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
+	'read_powershell': [l10n.t('Read Terminal'), emptyInvocation, genericToolInvocationCompleted],
+	'stop_bash': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
+	'stop_powershell': [l10n.t('Stop Terminal Session'), emptyInvocation, genericToolInvocationCompleted],
+	'search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'grep': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
+	'rg': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
+	'glob': [l10n.t('Search'), formatSearchToolInvocation, formatSearchToolInvocationCompleted],
+	'search_bash': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'semantic_code_search': [l10n.t('Search'), formatSearchToolInvocation, genericToolInvocationCompleted],
+	'reply_to_comment': [l10n.t('Reply to Comment'), formatReplyToCommentInvocation, genericToolInvocationCompleted],
+	'code_review': [l10n.t('Code Review'), formatCodeReviewInvocation, genericToolInvocationCompleted],
+	'report_intent': [l10n.t('Report Intent'), emptyInvocation, genericToolInvocationCompleted],
+	'think': [l10n.t('Thinking'), emptyInvocation, genericToolInvocationCompleted],
+	'report_progress': [l10n.t('Progress update'), formatProgressToolInvocation, genericToolInvocationCompleted],
+	'web_fetch': [l10n.t('Fetch Web Content'), emptyInvocation, genericToolInvocationCompleted],
+	'web_search': [l10n.t('Web Search'), emptyInvocation, genericToolInvocationCompleted],
+	'update_todo': [l10n.t('Update Todo'), formatUpdateTodoInvocation, formatUpdateTodoInvocationCompleted],
 };
 
 
@@ -810,6 +822,28 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: She
 		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell'
 	} as ChatTerminalToolInvocationData;
 }
+function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: ShellTool, result: ToolCallResult): void {
+	const resultContent = result.result?.content || '';
+	// Exit code will be at the end of the result in the last line in the form of `<exited with exit code ${output.exitCode}>`,
+	const exitCodeStr = resultContent ? /<exited with exit code (\d+)>$/.exec(resultContent)?.[1] : undefined;
+	const exitCode = exitCodeStr ? parseInt(exitCodeStr, 10) : undefined;
+	// Lets remove the last line containing the exit code from the output.
+	const text = (exitCode !== undefined ? resultContent.replace(/<exited with exit code \d+>$/, '').trimEnd() : resultContent).replace(/\n/g, '\r\n');
+	const toolSpecificData: ChatTerminalToolInvocationData = {
+		commandLine: {
+			original: toolCall.arguments.command,
+		},
+		language: toolCall.toolName === 'bash' ? 'bash' : 'powershell',
+		state: {
+			exitCode
+		},
+		output: {
+			text
+		}
+	};
+	invocation.toolSpecificData = toolSpecificData;
+
+}
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
 		invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
@@ -819,10 +853,41 @@ function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall
 		invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
 	} else if (toolCall.toolName === 'glob') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
-	} else if (toolCall.toolName === 'grep') {
+		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+	} else if (toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
 		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
-		invocation.invocationMessage = `Search: \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.invocationMessage = `Search for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}`;
+	}
+}
+
+function formatSearchToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool, result: ToolCallResult, workingDirectory?: URI): void {
+	if (toolCall.toolName === 'search') {
+		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}  \nReason: ${toolCall.arguments.reason}`;
+	} else if (toolCall.toolName === 'semantic_code_search') {
+		// invocation.invocationMessage = `Criteria: ${toolCall.arguments.question}`;
+	} else if (toolCall.toolName === 'search_bash') {
+		// invocation.invocationMessage = `Command: \`${toolCall.arguments.command}\``;
+	} else if (toolCall.toolName === 'glob' || toolCall.toolName === 'grep' || toolCall.toolName === 'rg') {
+		const messagesIndicatingNoMatches = ['Pattern matched but no output generated', 'Pattern matched but no files found', 'No matches found', 'no files matched the pattern'].map(msg => msg.toLowerCase());
+		const noMatches = messagesIndicatingNoMatches.some(msg => (result.result?.content || '').toLowerCase().includes(msg));
+		const searchInPath = toolCall.arguments.path ? ` in \`${toolCall.arguments.path}\`` : '';
+		const files = !noMatches && result.success && typeof result.result?.content === 'string' ? result.result.content.split('\n') : [];
+		const successMessage = files.length ? `, ${files.length} result${files.length > 1 ? 's' : ''}` : '.';
+		invocation.pastTenseMessage = `Searched for files matching \`${toolCall.arguments.pattern}\`${searchInPath}${successMessage}`;
+		let searchPath = toolCall.arguments.path ? Uri.file(toolCall.arguments.path) : workingDirectory;
+		if (toolCall.arguments.path && workingDirectory && searchPath && !isAbsolutePath(searchPath)) {
+			searchPath = Uri.joinPath(workingDirectory, toolCall.arguments.path);
+		}
+		invocation.toolSpecificData = {
+			values: files.map(file => {
+				if (!file.startsWith('./') || !searchPath) {
+					return Uri.file(file);
+				}
+				return Uri.joinPath(searchPath, file.substring(2));
+			})
+		};
 	}
 }
 
@@ -836,8 +901,112 @@ function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, tool
 	invocation.originMessage = toolCall.arguments.reply;
 }
 
-function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall): void {
-	invocation.invocationMessage = l10n.t("Used tool: {0}", toolCall.toolName ?? 'unknown');
+
+/**
+ * Parse markdown todo list into structured ChatTodoToolInvocationData.
+ * Extracts title from first non-empty line (strips leading #), parses checklist items,
+ * and generates sequential numeric IDs.
+ */
+function parseTodoMarkdown(markdown: string): { title: string; todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> } {
+	const lines = markdown.split('\n');
+	const todoList: Array<{ id: number; title: string; status: ChatTodoStatus }> = [];
+	let title = 'Updated todo list';
+	let inCodeBlock = false;
+	let currentItem: { title: string; status: ChatTodoStatus } | null = null;
+
+	for (const line of lines) {
+		// Track code fences
+		if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
+			inCodeBlock = !inCodeBlock;
+			continue;
+		}
+
+		// Skip lines inside code blocks
+		if (inCodeBlock) {
+			continue;
+		}
+
+		// Extract title from first non-empty line
+		if (title === 'Updated todo list' && line.trim()) {
+			const trimmed = line.trim();
+			// Check if it's not a list item
+			if (!trimmed.match(/^[-*+]\s+\[.\]/) && !trimmed.match(/^\d+[.)]\s+\[.\]/)) {
+				// Strip leading # for headings
+				title = trimmed.replace(/^#+\s*/, '');
+			}
+		}
+
+		// Parse checklist items (unordered and ordered lists)
+		const unorderedMatch = line.match(/^\s*[-*+]\s+\[(.?)\]\s*(.*)$/);
+		const orderedMatch = line.match(/^\s*\d+[.)]\s+\[(.?)\]\s*(.*)$/);
+		const match = unorderedMatch || orderedMatch;
+
+		if (match) {
+			// Save previous item if exists
+			if (currentItem && currentItem.title.trim()) {
+				todoList.push({
+					id: todoList.length + 1,
+					title: currentItem.title.trim(),
+					status: currentItem.status
+				});
+			}
+
+			const checkboxChar = match[1];
+			const itemTitle = match[2];
+
+			// Map checkbox character to status
+			let status: ChatTodoStatus;
+			if (checkboxChar === 'x' || checkboxChar === 'X') {
+				status = 3; // ChatTodoStatus.Completed
+			} else if (checkboxChar === '>' || checkboxChar === '~') {
+				status = 2; // ChatTodoStatus.InProgress
+			} else {
+				status = 1; // ChatTodoStatus.NotStarted
+			}
+
+			currentItem = { title: itemTitle, status };
+		} else if (currentItem && line.trim() && (line.startsWith('  ') || line.startsWith('\t'))) {
+			// Continuation line - append to current item
+			currentItem.title += ' ' + line.trim();
+		}
+	}
+
+	// Add the last item
+	if (currentItem && currentItem.title.trim()) {
+		todoList.push({
+			id: todoList.length + 1,
+			title: currentItem.title.trim(),
+			status: currentItem.status
+		});
+	}
+
+	return { title, todoList };
+}
+
+function formatUpdateTodoInvocation(invocation: ChatToolInvocationPart, toolCall: UpdateTodoTool): void {
+	const args = toolCall.arguments;
+	const parsed = args.todos ? parseTodoMarkdown(args.todos) : { title: '', todoList: [] };
+	if (!args.todos || !parsed) {
+		invocation.invocationMessage = 'Updated todo list';
+		return;
+	}
+
+	invocation.invocationMessage = parsed.title;
+	invocation.toolSpecificData = {
+		todoList: parsed.todoList
+	} as ChatTodoToolInvocationData;
+}
+
+function formatUpdateTodoInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: UpdateTodoTool, result: ToolCallResult): void {
+	const parsed = toolCall.arguments.todos ? parseTodoMarkdown(toolCall.arguments.todos) : { title: '', todoList: [] };
+	// Re-parse todo markdown on completion to ensure UI has final state
+	if (parsed.todoList.length > 0) {
+		invocation.invocationMessage = parsed.title;
+		invocation.toolSpecificData = {
+			todoList: parsed.todoList
+		} as ChatTodoToolInvocationData;
+	}
+
 }
 
 /**
@@ -845,5 +1014,15 @@ function formatGenericInvocation(invocation: ChatToolInvocationPart, toolCall: U
  * The `toolCall` parameter is unused and present for interface consistency.
  */
 function emptyInvocation(_invocation: ChatToolInvocationPart, _toolCall: UnknownToolCall): void {
-	//
+	// No custom formatting needed
+}
+
+function genericToolInvocationCompleted(invocation: ChatToolInvocationPart, toolCall: UnknownToolCall, result: ToolCallResult): void {
+	if (result.success && result.result?.content) {
+		invocation.toolSpecificData = {
+			output: typeof result.result.content === 'string' ? result.result.content : JSON.stringify(result.result.content, null, 2),
+			input: toolCall.arguments ? JSON.stringify(toolCall.arguments, null, 2) : ''
+		};
+	}
+
 }

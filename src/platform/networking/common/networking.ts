@@ -124,7 +124,7 @@ export interface IEndpointFetchOptions {
 
 export interface IEndpoint {
 	readonly urlOrRequestMetadata: string | RequestMetadata;
-	getExtraHeaders?(): Record<string, string>;
+	getExtraHeaders?(location?: ChatLocation): Record<string, string>;
 	getEndpointFetchOptions?(): IEndpointFetchOptions;
 	interceptBody?(body: IEndpointBody | undefined): void;
 	acquireTokenizer(): ITokenizer;
@@ -176,6 +176,8 @@ export interface IMakeChatRequestOptions {
 	disableThinking?: boolean;
 	/** Enable retrying once on simple network errors like ECONNRESET. */
 	canRetryOnceWithoutRollback?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export type IChatRequestTelemetryProperties = {
@@ -191,6 +193,8 @@ export type IChatRequestTelemetryProperties = {
 	retryAfterFilterCategory?: string;
 	/** A subtype for categorizing the request with a messageSource- eg subagent */
 	subType?: string;
+	/** For a subagent: The request ID of the parent request that invoked this subagent. */
+	parentRequestId?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
@@ -213,11 +217,9 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly degradationReason?: string;
 	readonly multiplier?: number;
 	readonly restrictedToSkus?: string[];
-	readonly isDefault: boolean;
 	readonly isFallback: boolean;
 	readonly customModel?: CustomModel;
 	readonly isExtensionContributed?: boolean;
-	readonly policy: 'enabled' | { terms: string };
 	readonly maxPromptImages?: number;
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
@@ -237,14 +239,9 @@ export interface IChatEndpoint extends IEndpoint {
 		expectedNumChoices: number,
 		finishCallback: FinishedCallback,
 		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken
+		cancellationToken?: CancellationToken,
+		location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>>;
-
-	/**
-	 * Accepts the chat policy for the given endpoint, enabling its usage.
-	 * @returns A promise that resolves to true if the chat policy was accepted, false otherwise.
-	 */
-	acceptChatPolicy(): Promise<boolean>;
 
 	/**
 	 * Flights a request from the chat endpoint returning a chat response.
@@ -313,6 +310,7 @@ function networkRequest(
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
 	canRetryOnce: boolean = true,
+	location?: ChatLocation,
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
@@ -333,7 +331,7 @@ function networkRequest(
 		'OpenAI-Intent': intent, // Tells CAPI who flighted this request. Helps find buggy features
 		'X-GitHub-Api-Version': '2025-05-01',
 		...additionalHeaders,
-		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders() : {}),
+		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders(location) : {}),
 	};
 
 	if (endpoint.interceptBody) {
@@ -408,6 +406,7 @@ export function postRequest(
 	cancelToken?: CancellationToken,
 	useFetcher?: FetcherId,
 	canRetryOnce: boolean = true,
+	location?: ChatLocation,
 ): Promise<Response> {
 	return networkRequest(fetcherService,
 		telemetryService,
@@ -422,6 +421,7 @@ export function postRequest(
 		cancelToken,
 		useFetcher,
 		canRetryOnce,
+		location,
 	);
 }
 

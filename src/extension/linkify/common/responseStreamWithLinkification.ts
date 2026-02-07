@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatToolInvocationStreamData, ChatVulnerability, ChatWorkspaceFileEdit, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
+import type { ChatQuestion, ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatResultUsage, ChatToolInvocationStreamData, ChatVulnerability, ChatWorkspaceFileEdit, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatHookType, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatToolInvocationPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -74,6 +74,11 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 
 	warning(value: string | MarkdownString): ChatResponseStream {
 		this.enqueue(() => this._progress.warning(value), false);
+		return this;
+	}
+
+	hookProgress(hookType: ChatHookType, stopReason?: string, systemMessage?: string): ChatResponseStream {
+		this.enqueue(() => this._progress.hookProgress(hookType, stopReason, systemMessage), false);
 		return this;
 	}
 
@@ -169,6 +174,11 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 
 	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
 		return this.enqueue(() => this._progress.questionCarousel(questions, allowSkip), true);
+	}
+
+	usage(usage: ChatResultUsage): ChatResponseStream {
+		this.enqueue(() => this._progress.usage(usage), false);
+		return this;
 	}
 
 	//#endregion

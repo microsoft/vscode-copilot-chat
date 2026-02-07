@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.109.0-20260124",
+		"vscode": "^1.110.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -89,6 +89,8 @@
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
+		"agentSessionsWorkspace",
+		"chatHooks@2",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -112,7 +114,7 @@
 		"mappedEditsProvider",
 		"aiRelatedInformation",
 		"aiSettingsSearch",
-		"chatParticipantAdditions",
+		"chatParticipantAdditions@1",
 		"defaultChatParticipant@4",
 		"contribSourceControlInputBoxMenu",
 		"authLearnMore",
@@ -141,7 +143,8 @@
 		"chatPromptFiles",
 		"mcpServerDefinitions",
 		"tabInputMultiDiff",
-		"workspaceTrust"
+		"workspaceTrust",
+		"environmentPower"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1378,6 +1381,87 @@
 							"What does this file do?"
 						]
 					}
+				],
+				"commands": [
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
+					},
+					{
+						"name": "review",
+						"description": "%copilot.workspace.review.description%",
+						"when": "github.copilot.advanced.review.intent"
+					},
+					{
+						"name": "tests",
+						"description": "%copilot.workspace.tests.description%",
+						"disambiguation": [
+							{
+								"category": "create_tests",
+								"description": "The user wants to generate unit tests.",
+								"examples": [
+									"Generate tests for my selection using pytest."
+								]
+							}
+						]
+					},
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%",
+						"sampleRequest": "%copilot.workspace.fix.sampleRequest%"
+					},
+					{
+						"name": "new",
+						"description": "%copilot.workspace.new.description%",
+						"sampleRequest": "%copilot.workspace.new.sampleRequest%",
+						"isSticky": true,
+						"disambiguation": [
+							{
+								"category": "create_new_workspace_or_extension",
+								"description": "The user wants to create a complete Visual Studio Code workspace from scratch, such as a new application or a Visual Studio Code extension. Use this category only if the question relates to generating or creating new workspaces in Visual Studio Code. Do not use this category for updating existing code or generating sample code snippets",
+								"examples": [
+									"Scaffold a Node server.",
+									"Create a sample project which uses the fileSystemProvider API.",
+									"react application"
+								]
+							}
+						]
+					},
+					{
+						"name": "newNotebook",
+						"description": "%copilot.workspace.newNotebook.description%",
+						"sampleRequest": "%copilot.workspace.newNotebook.sampleRequest%",
+						"disambiguation": [
+							{
+								"category": "create_jupyter_notebook",
+								"description": "The user wants to create a new Jupyter notebook in Visual Studio Code.",
+								"examples": [
+									"Create a notebook to analyze this CSV file."
+								]
+							}
+						]
+					},
+					{
+						"name": "semanticSearch",
+						"description": "%copilot.workspace.semanticSearch.description%",
+						"sampleRequest": "%copilot.workspace.semanticSearch.sampleRequest%",
+						"when": "config.github.copilot.semanticSearch.enabled"
+					},
+					{
+						"name": "setupTests",
+						"description": "%copilot.vscode.setupTests.description%",
+						"sampleRequest": "%copilot.vscode.setupTests.sampleRequest%",
+						"when": "config.github.copilot.chat.setupTests.enabled",
+						"disambiguation": [
+							{
+								"category": "set_up_tests",
+								"description": "The user wants to configure project test setup, framework, or test runner. The user does not want to fix their existing tests.",
+								"examples": [
+									"Set up tests for this project."
+								]
+							}
+						]
+					}
 				]
 			},
 			{
@@ -1515,85 +1599,7 @@
 						"name": "summarize",
 						"description": "%copilot.agent.summarize.description%",
 						"when": "config.github.copilot.chat.summarizeAgentConversationHistory.enabled"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.notebook",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.description%",
-				"isDefault": true,
-				"locations": [
-					"notebook"
-				],
-				"when": "!config.inlineChat.notebookAgent",
-				"commands": [
-					{
-						"name": "fix",
-						"description": "%copilot.workspace.fix.description%"
 					},
-					{
-						"name": "explain",
-						"description": "%copilot.workspace.explain.description%"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.notebookEditorAgent",
-				"name": "GitHubCopilot",
-				"fullName": "GitHub Copilot",
-				"description": "%copilot.description%",
-				"isDefault": true,
-				"locations": [
-					"notebook"
-				],
-				"when": "config.inlineChat.notebookAgent",
-				"commands": [
-					{
-						"name": "fix",
-						"description": "%copilot.workspace.fix.description%"
-					},
-					{
-						"name": "explain",
-						"description": "%copilot.workspace.explain.description%"
-					}
-				]
-			},
-			{
-				"id": "github.copilot.workspace",
-				"name": "workspace",
-				"fullName": "Workspace",
-				"description": "%copilot.workspace.description%",
-				"when": "!github.copilot.interactiveSession.disabled",
-				"sampleRequest": "%copilot.workspace.sampleRequest%",
-				"locations": [
-					"panel"
-				],
-				"disambiguation": [
-					{
-						"category": "workspace_project_questions",
-						"description": "The user wants to learn about or update the code or files in their current workspace. Questions in this category may be about understanding what the whole workspace does or locating the implementation of some code. This does not include generating or updating tests.",
-						"examples": [
-							"What does this project do?"
-						]
-					},
-					{
-						"category": "find_code_in_workspace",
-						"description": "The user wants to locate the implementation of some functionality in their current workspace.",
-						"examples": [
-							"Where is the tree widget implemented?"
-						]
-					},
-					{
-						"category": "generate_with_workspace_context",
-						"description": "The user wants to generate code based on multiple files in the workspace and did not specify which files to reference.",
-						"examples": [
-							"Create a README for this project."
-						]
-					}
-				],
-				"commands": [
 					{
 						"name": "explain",
 						"description": "%copilot.workspace.explain.description%"
@@ -1672,6 +1678,48 @@
 								]
 							}
 						]
+					}
+				]
+			},
+			{
+				"id": "github.copilot.notebook",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "!config.inlineChat.notebookAgent",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
+					}
+				]
+			},
+			{
+				"id": "github.copilot.notebookEditorAgent",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "config.inlineChat.notebookAgent",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
 					}
 				]
 			},
@@ -1957,6 +2005,11 @@
 										"default": false,
 										"description": "Whether the model supports thinking capabilities"
 									},
+									"streaming": {
+										"type": "boolean",
+										"default": true,
+										"description": "Whether the model supports streaming responses. Defaults to true."
+									},
 									"zeroDataRetentionEnabled": {
 										"type": "boolean",
 										"default": false,
@@ -2050,6 +2103,11 @@
 										"type": "boolean",
 										"default": false,
 										"description": "Whether the model supports thinking capabilities"
+									},
+									"streaming": {
+										"type": "boolean",
+										"default": true,
+										"description": "Whether the model supports streaming responses. Defaults to true."
 									},
 									"zeroDataRetentionEnabled": {
 										"type": "boolean",
@@ -2391,6 +2449,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.togglePowerSaveBlocker",
+				"title": "%github.copilot.command.togglePowerSaveBlocker%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.showChatLogView",
 				"title": "%github.copilot.command.showChatLogView%",
 				"category": "Developer"
@@ -2606,6 +2669,16 @@
 				"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"title": "Export All Prompt Logs as JSON...",
 				"icon": "$(export)"
+			},
+			{
+				"command": "github.copilot.chat.debug.exportTrajectories",
+				"title": "Export Agent Trajectories",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.chat.debug.exportSingleTrajectory",
+				"title": "Export Trajectory...",
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.nes.captureExpected.start",
@@ -2901,6 +2974,15 @@
 						"default": true,
 						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
+					"github.copilot.chat.additionalReadAccessPaths": {
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"markdownDescription": "%github.copilot.config.additionalReadAccessPaths%",
+						"scope": "window"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3055,6 +3137,26 @@
 						"markdownDescription": "%github.copilot.config.copilotMemory.enabled%",
 						"tags": [
 							"preview"
+						]
+					},
+					"github.copilot.chat.anthropic.useMessagesApi": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.useMessagesApi%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.budgetTokens": {
+						"type": "number",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
+						"minimum": 0,
+						"maximum": 32000,
+						"default": 16000,
+						"tags": [
+							"preview",
+							"onExp"
 						]
 					}
 				}
@@ -3540,15 +3642,6 @@
 						],
 						"description": "%github.copilot.config.alternateGeminiModelFPrompt.enabled%"
 					},
-					"github.copilot.chat.anthropic.useMessagesApi": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.useMessagesApi%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.anthropic.contextEditing.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3593,17 +3686,6 @@
 						"enum": [
 							"off",
 							"detailed"
-						]
-					},
-					"github.copilot.chat.anthropic.thinking.budgetTokens": {
-						"type": "number",
-						"markdownDescription": "%github.copilot.config.anthropic.thinking.budgetTokens%",
-						"minimum": 0,
-						"maximum": 32000,
-						"default": 4000,
-						"tags": [
-							"experimental",
-							"onExp"
 						]
 					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
@@ -4283,6 +4365,14 @@
 							"onExp"
 						]
 					},
+					"github.copilot.chat.searchSubagent.useAgenticProxy": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.searchSubagent.useAgenticProxy%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.searchSubagent.model": {
 						"type": "string",
 						"default": "",
@@ -4408,7 +4498,7 @@
 			"chat/input/editing/sessionToolbar": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "navigation@0"
 				},
 				{
@@ -4432,6 +4522,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.chat.debug.exportSingleTrajectory",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.chat.triggerPermissiveSignIn",
 					"when": "false"
@@ -4727,6 +4821,11 @@
 					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
 					"when": "view == copilot-chat && viewItem == chatprompt",
 					"group": "export@3"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportSingleTrajectory",
+					"when": "view == copilot-chat && viewItem == chatprompt",
+					"group": "export@4"
 				}
 			],
 			"searchPanel/aiResults/commands": [
@@ -4978,7 +5077,7 @@
 			"multiDiffEditor/content": [
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "resourceScheme == copilotcli-worktree-changes"
+					"when": "resourceScheme == copilotcli-worktree-changes && workbenchState != empty && !isAgentSessionsWorkspace"
 				}
 			],
 			"chat/chatSessions": [
@@ -5004,7 +5103,7 @@
 				},
 				{
 					"command": "github.copilot.chat.applyCopilotCLIAgentSessionChanges",
-					"when": "chatSessionType == copilotcli",
+					"when": "chatSessionType == copilotcli && workbenchState != empty && !isAgentSessionsWorkspace",
 					"group": "3_apply@0"
 				},
 				{
@@ -5374,13 +5473,13 @@
 			{
 				"type": "claude-code",
 				"name": "claude",
-				"displayName": "Claude Agent",
+				"displayName": "Claude",
 				"icon": "$(claude)",
 				"welcomeTitle": "Claude Agent",
 				"welcomeMessage": "Powered by the same agent as Claude Code",
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
-				"description": "The Claude Agent works on your local machine",
+				"description": "%github.copilot.session.providerDescription.claude%",
 				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
 				"capabilities": {
@@ -5420,14 +5519,14 @@
 			{
 				"type": "copilotcli",
 				"name": "cli",
-				"displayName": "Background Agent",
+				"displayName": "Background",
 				"icon": "$(worktree)",
 				"welcomeTitle": "Background Agent",
 				"welcomeMessage": "Run tasks in the background",
 				"inputPlaceholder": "Run tasks in the background, type `#` for adding context",
-				"order": 2,
+				"order": 1,
 				"canDelegate": true,
-				"description": "Delegate tasks to a background agent.",
+				"description": "%github.copilot.session.providerDescription.background%",
 				"when": "config.github.copilot.chat.backgroundAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -5453,14 +5552,14 @@
 					"copilot-swe-agent"
 				],
 				"name": "cloud",
-				"displayName": "Cloud Agent",
+				"displayName": "Cloud",
 				"icon": "$(cloud)",
 				"welcomeTitle": "Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Delegate tasks to the cloud, type `#` for adding context",
-				"order": 1,
+				"order": 2,
 				"canDelegate": true,
-				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"description": "%github.copilot.session.providerDescription.cloud%",
 				"when": "config.github.copilot.chat.cloudAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
@@ -5507,7 +5606,16 @@
 			{
 				"path": "./assets/prompts/init.prompt.md"
 			}
-		]
+		],
+		"terminal": {
+			"profiles": [
+				{
+					"icon": "copilot",
+					"id": "copilot-cli",
+					"title": "GitHub Copilot CLI"
+				}
+			]
+		}
 	},
 	"prettier": {
 		"useTabs": true,
@@ -5519,7 +5627,7 @@
 		"prepare": "husky",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
-		"build": "node .esbuild.ts",
+		"build": "node .esbuild.ts --sourcemaps",
 		"compile": "node .esbuild.ts --dev",
 		"watch": "npm-run-all -p watch:*",
 		"watch:esbuild": "node .esbuild.ts --watch --dev",
@@ -5653,10 +5761,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.2.5",
-		"@anthropic-ai/sdk": "^0.71.2",
-		"@github/blackbird-external-ingest-utils": "^0.1.0",
-		"@github/copilot": "^0.0.388",
+		"@anthropic-ai/claude-agent-sdk": "0.2.33",
+		"@anthropic-ai/sdk": "^0.73.0",
+		"@github/blackbird-external-ingest-utils": "^0.2.0",
+		"@github/copilot": "^0.0.400",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

@@ -1,7 +1,7 @@
 [
   {
     "name": "webAppWithWebpack",
-    "question": "@workspace /setupTests",
+    "question": "/setupTests",
     "keywords": {
       "anyOf": [
         "playwright",

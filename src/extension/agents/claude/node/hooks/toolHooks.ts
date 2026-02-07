@@ -17,7 +17,7 @@ import { ILogService } from '../../../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../../../platform/requestLogger/node/requestLogger';
 import { ClaudeToolNames } from '../../common/claudeTools';
 import { IClaudeSessionStateService } from '../claudeSessionStateService';
-import { registerClaudeHook } from './claudeHookRegistry';
+import { registerClaudeHook } from '../../common/claudeHookRegistry';
 
 /**
  * Logging hook for PreToolUse events.

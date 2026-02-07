@@ -957,14 +957,17 @@ export class TelemetrySender implements IDisposable {
 			providerId,
 			activeDocumentLanguageId,
 			status: suggestionStatus,
+			modelName,
 			prompt,
 			response,
 			alternativeAction,
 			postProcessingOutcome,
 			activeDocumentRepository,
 			repositoryUrls,
+			cursorJumpModelName,
 			cursorJumpPrompt,
 			cursorJumpResponse,
+			lintErrors,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -976,14 +979,17 @@ export class TelemetrySender implements IDisposable {
 				providerId,
 				activeDocumentLanguageId,
 				suggestionStatus,
+				modelName,
 				prompt,
 				modelResponse: modelResponse === undefined || modelResponse.response.type !== ChatFetchResponseType.Success ? undefined : modelResponse.response.value,
 				alternativeAction: alternativeAction ? JSON.stringify(alternativeAction) : undefined,
 				postProcessingOutcome,
 				activeDocumentRepository,
 				repositories: JSON.stringify(repositoryUrls),
+				cursorJumpModelName,
 				cursorJumpPrompt,
 				cursorJumpResponse,
+				lintErrors,
 			})
 		);
 	}

@@ -11,6 +11,7 @@ import { TestingCacheSalts } from '../../../../../test/base/salts';
 import { CurrentTestRunInfo } from '../../../../../test/base/simulationContext';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { SequencerByKey } from '../../../../util/vs/base/common/async';
+import { Event } from '../../../../util/vs/base/common/event';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
@@ -122,6 +123,8 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 export class TestEndpointProvider implements IEndpointProvider {
 
 	declare readonly _serviceBrand: undefined;
+
+	readonly onDidModelsRefresh = Event.None;
 
 	private _testEmbeddingEndpoint: IEmbeddingsEndpoint | undefined;
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
