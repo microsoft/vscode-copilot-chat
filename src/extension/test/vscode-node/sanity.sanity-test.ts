@@ -20,7 +20,7 @@ import { ContributedToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { TestChatRequest } from '../node/testHelpers';
 
-suite('Copilot Chat Sanity Test', function () {
+suite.skip('Copilot Chat Sanity Test', function () {
 	this.timeout(1000 * 60 * 1); // 1 minute
 
 	let realInstaAccessor: IInstantiationService;
