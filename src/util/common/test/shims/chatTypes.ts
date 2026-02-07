@@ -60,6 +60,26 @@ export class ChatResponseThinkingProgressPart {
 	}
 }
 
+export type ChatHookType = 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse' | 'SubagentStart' | 'SubagentStop' | 'Stop';
+
+export class ChatResponseHookPart {
+	hookType: ChatHookType;
+	stopReason?: string;
+	systemMessage?: string;
+	metadata?: { readonly [key: string]: unknown };
+	constructor(
+		hookType: ChatHookType,
+		stopReason?: string,
+		systemMessage?: string,
+		metadata?: { readonly [key: string]: unknown }
+	) {
+		this.hookType = hookType;
+		this.stopReason = stopReason;
+		this.systemMessage = systemMessage;
+		this.metadata = metadata;
+	}
+}
+
 export class ChatResponseExternalEditPart {
 	applied: Thenable<string>;
 	didGetApplied!: (value: string) => void;

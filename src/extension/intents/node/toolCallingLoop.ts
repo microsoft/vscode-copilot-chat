@@ -285,10 +285,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.warning(l10n.t('Stop hook: {0}', reasons[0]));
+				outputStream.hookProgress('Stop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.warning(l10n.t('Stop hooks:\n{0}', formattedReasons));
+				outputStream.hookProgress('Stop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
@@ -426,10 +426,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
 		if (outputStream) {
 			if (reasons.length === 1) {
-				outputStream.markdown('\n\n' + l10n.t('**Subagent stop hook:** {0}', reasons[0]) + '\n\n');
+				outputStream.hookProgress('SubagentStop', reasons[0]);
 			} else {
 				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
-				outputStream.markdown('\n\n' + l10n.t('**Subagent stop hooks:**\n{0}', formattedReasons) + '\n\n');
+				outputStream.hookProgress('SubagentStop', formattedReasons);
 			}
 		}
 		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reasons.join('; ')}`);
