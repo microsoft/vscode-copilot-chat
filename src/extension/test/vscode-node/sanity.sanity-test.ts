@@ -33,6 +33,7 @@ suite('Copilot Chat Sanity Test', function () {
 		sandbox = sinon.createSandbox();
 		sandbox.stub(vscode.commands, 'registerCommand').returns({ dispose: () => { } });
 		sandbox.stub(vscode.workspace, 'registerFileSystemProvider').returns({ dispose: () => { } });
+		sandbox.stub(vscode.window, 'registerTerminalQuickFixProvider').returns({ dispose: () => { } });
 		const extension = vscode.extensions.getExtension('Github.copilot-chat');
 		assert.ok(extension, 'Extension is not available');
 		realContext = await extension.activate();
