@@ -25,7 +25,6 @@ import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 import { isCancellationError } from '../../../util/vs/base/common/errors';
-import { Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -172,13 +171,13 @@ export class AgentIntent extends EditCodeIntent {
 		agentName: string,
 		location: ChatLocation,
 		chatTelemetry: ChatTelemetryBuilder,
-		onPaused: Event<boolean>
+		yieldRequested: () => boolean
 	): Promise<vscode.ChatResult> {
 		if (request.command === 'summarize') {
 			return this.handleSummarizeCommand(conversation, request, stream, token);
 		}
 
-		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, onPaused);
+		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, yieldRequested);
 	}
 
 	private async handleSummarizeCommand(
