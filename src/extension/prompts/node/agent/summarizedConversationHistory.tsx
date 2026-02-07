@@ -8,7 +8,7 @@ import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata,
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
-import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
+import { IChatHookService, PreCompactHookInput } from '../../../../platform/chat/common/chatHookService';
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -494,7 +494,7 @@ class ConversationHistorySummarizer {
 				toolInvocationToken,
 				input: {
 					trigger: 'auto',
-				}
+				} satisfies PreCompactHookInput
 			}, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
