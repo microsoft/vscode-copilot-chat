@@ -15,9 +15,9 @@ import { TestWorkspaceService } from '../../../../../../platform/test/node/testW
 import { IWorkspaceService } from '../../../../../../platform/workspace/common/workspaceService';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
 import { CancellationToken, CancellationTokenSource } from '../../../../../../util/vs/base/common/cancellation';
-import { cwd } from '../../../../../../util/vs/base/common/process';
 import { URI } from '../../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../../../../../chatSessions/common/folderRepositoryManager';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
 
@@ -25,6 +25,24 @@ function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path
 		.replace(/^\/([a-z]):/i, (_, driveLetter) => driveLetter.toUpperCase() + '-')
 		.replace(/[\/ .]/g, '-');
+}
+
+class MockFolderRepositoryManager implements IFolderRepositoryManager {
+	declare _serviceBrand: undefined;
+	private _mruEntries: FolderRepositoryMRUEntry[] = [];
+
+	setMRUEntries(entries: FolderRepositoryMRUEntry[]): void {
+		this._mruEntries = entries;
+	}
+
+	setUntitledSessionFolder(): void { }
+	getUntitledSessionFolder(): undefined { return undefined; }
+	deleteUntitledSessionFolder(): void { }
+	async getFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
+	async initializeFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
+	getFolderMRU(): FolderRepositoryMRUEntry[] { return this._mruEntries; }
+	async deleteMRUEntry(): Promise<void> { }
+	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }
 }
 
 describe('ClaudeCodeSessionService', () => {
@@ -47,6 +65,7 @@ describe('ClaudeCodeSessionService', () => {
 		// Create mock workspace service with the test workspace folder
 		const workspaceService = store.add(new TestWorkspaceService([folderUri]));
 		testingServiceCollection.set(IWorkspaceService, workspaceService);
+		testingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
 
 		const accessor = testingServiceCollection.createTestingAccessor();
 		mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
@@ -446,31 +465,38 @@ describe('ClaudeCodeSessionService', () => {
 	// ========================================================================
 
 	describe('no-workspace scenario', () => {
+		const mruFolder = URI.file('/recent/project');
+		const mruSlug = computeFolderSlug(mruFolder);
 		let noWorkspaceDirUri: URI;
 		let noWorkspaceService: ClaudeCodeSessionService;
 		let noWorkspaceMockFs: MockFileSystemService;
-		// No-workspace uses process.cwd() to compute the slug (matching SDK behavior)
-		const cwdSlug = computeFolderSlug(URI.file(cwd()));
+		let noWorkspaceFolderManager: MockFolderRepositoryManager;
 
 		beforeEach(() => {
 			noWorkspaceMockFs = new MockFileSystemService();
+			noWorkspaceFolderManager = new MockFolderRepositoryManager();
 			const noWorkspaceTestingServiceCollection = store.add(createExtensionUnitTestingServices(store));
 			noWorkspaceTestingServiceCollection.set(IFileSystemService, noWorkspaceMockFs);
 
 			// Create mock workspace service with no workspace folders (empty)
 			const emptyWorkspaceService = store.add(new TestWorkspaceService([]));
 			noWorkspaceTestingServiceCollection.set(IWorkspaceService, emptyWorkspaceService);
+			noWorkspaceTestingServiceCollection.define(IFolderRepositoryManager, noWorkspaceFolderManager);
+
+			// Set up MRU entries so the service can discover sessions
+			noWorkspaceFolderManager.setMRUEntries([
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
+			]);
 
 			const accessor = noWorkspaceTestingServiceCollection.createTestingAccessor();
 			noWorkspaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
 			const nativeEnvService = accessor.get(INativeEnvService);
-			// When there's no workspace, sessions are stored based on process.cwd()
-			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', cwdSlug);
+			noWorkspaceDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', mruSlug);
 			noWorkspaceService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
-		it('loads sessions from process.cwd() directory when there are no workspace folders', async () => {
+		it('loads sessions from MRU folder directories when there are no workspace folders', async () => {
 			const fileName = 'no-workspace-session.jsonl';
 			const fileContents = JSON.stringify({
 				parentUuid: null,
@@ -491,21 +517,73 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions[0].label).toBe('session without workspace');
 		});
 
-		it('returns empty array when process.cwd() directory does not exist', async () => {
-			// Don't mock any directory - simulate non-existent directory
+		it('returns empty array when no MRU entries exist', async () => {
+			noWorkspaceFolderManager.setMRUEntries([]);
+			const noMruServiceCollection = store.add(createExtensionUnitTestingServices(store));
+			noMruServiceCollection.set(IFileSystemService, new MockFileSystemService());
+			noMruServiceCollection.set(IWorkspaceService, store.add(new TestWorkspaceService([])));
+			noMruServiceCollection.define(IFolderRepositoryManager, noWorkspaceFolderManager);
 
-			const sessions = await noWorkspaceService.getAllSessions(CancellationToken.None);
+			const accessor = noMruServiceCollection.createTestingAccessor();
+			const noMruService = accessor.get(IInstantiationService).createInstance(ClaudeCodeSessionService);
 
+			const sessions = await noMruService.getAllSessions(CancellationToken.None);
 			expect(sessions).toHaveLength(0);
+		});
+
+		it('discovers sessions across all MRU folder slugs', async () => {
+			const mruFolder2 = URI.file('/another/project');
+			const mruSlug2 = computeFolderSlug(mruFolder2);
+
+			noWorkspaceFolderManager.setMRUEntries([
+				{ folder: mruFolder, repository: undefined, lastAccessed: Date.now(), isUntitledSessionSelection: false },
+				{ folder: mruFolder2, repository: undefined, lastAccessed: Date.now() - 1000, isUntitledSessionSelection: false },
+			]);
+
+			const noWorkspaceTestingServiceCollection2 = store.add(createExtensionUnitTestingServices(store));
+			const mockFs2 = new MockFileSystemService();
+			noWorkspaceTestingServiceCollection2.set(IFileSystemService, mockFs2);
+			noWorkspaceTestingServiceCollection2.set(IWorkspaceService, store.add(new TestWorkspaceService([])));
+			noWorkspaceTestingServiceCollection2.define(IFolderRepositoryManager, noWorkspaceFolderManager);
+
+			const accessor2 = noWorkspaceTestingServiceCollection2.createTestingAccessor();
+			const mockFs2Actual = accessor2.get(IFileSystemService) as MockFileSystemService;
+			const nativeEnv2 = accessor2.get(INativeEnvService);
+			const dir1 = URI.joinPath(nativeEnv2.userHome, '.claude', 'projects', mruSlug);
+			const dir2 = URI.joinPath(nativeEnv2.userHome, '.claude', 'projects', mruSlug2);
+
+			const fileName1 = 'session-mru1.jsonl';
+			const fileName2 = 'session-mru2.jsonl';
+			mockFs2Actual.mockDirectory(dir1, [[fileName1, FileType.File]]);
+			mockFs2Actual.mockFile(URI.joinPath(dir1, fileName1), JSON.stringify({
+				parentUuid: null, sessionId: 'session-mru1', type: 'user',
+				message: { role: 'user', content: 'from mru 1' }, uuid: 'u1', timestamp: new Date().toISOString()
+			}), 1000);
+			mockFs2Actual.mockDirectory(dir2, [[fileName2, FileType.File]]);
+			mockFs2Actual.mockFile(URI.joinPath(dir2, fileName2), JSON.stringify({
+				parentUuid: null, sessionId: 'session-mru2', type: 'user',
+				message: { role: 'user', content: 'from mru 2' }, uuid: 'u2', timestamp: new Date().toISOString()
+			}), 1000);
+
+			const service2 = accessor2.get(IInstantiationService).createInstance(ClaudeCodeSessionService);
+			const sessions = await service2.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(2);
+			const ids = sessions.map(s => s.id);
+			expect(ids).toContain('session-mru1');
+			expect(ids).toContain('session-mru2');
 		});
 	});
 
 	describe('multi-root workspace scenario', () => {
-		let multiRootDirUri: URI;
+		const folder1 = URI.file('/project1');
+		const folder2 = URI.file('/project2');
+		const folder1Slug = computeFolderSlug(folder1);
+		const folder2Slug = computeFolderSlug(folder2);
+		let folder1DirUri: URI;
+		let folder2DirUri: URI;
 		let multiRootService: ClaudeCodeSessionService;
 		let multiRootMockFs: MockFileSystemService;
-		// Multi-root workspaces use process.cwd() to compute the slug (matching SDK behavior)
-		const cwdSlug = computeFolderSlug(URI.file(cwd()));
 
 		beforeEach(() => {
 			multiRootMockFs = new MockFileSystemService();
@@ -513,21 +591,21 @@ describe('ClaudeCodeSessionService', () => {
 			multiRootTestingServiceCollection.set(IFileSystemService, multiRootMockFs);
 
 			// Create mock workspace service with multiple workspace folders
-			const folder1 = URI.file('/project1');
-			const folder2 = URI.file('/project2');
 			const multiRootWorkspaceService = store.add(new TestWorkspaceService([folder1, folder2]));
 			multiRootTestingServiceCollection.set(IWorkspaceService, multiRootWorkspaceService);
+			multiRootTestingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
 
 			const accessor = multiRootTestingServiceCollection.createTestingAccessor();
 			multiRootMockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 			const instaService = accessor.get(IInstantiationService);
 			const nativeEnvService = accessor.get(INativeEnvService);
-			// Multi-root workspaces use process.cwd() slug to match where SDK stores sessions
-			multiRootDirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', cwdSlug);
+			// Multi-root workspaces scan all workspace folder slugs
+			folder1DirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', folder1Slug);
+			folder2DirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', folder2Slug);
 			multiRootService = instaService.createInstance(ClaudeCodeSessionService);
 		});
 
-		it('loads sessions from process.cwd() directory for multi-root workspaces', async () => {
+		it('loads sessions from all workspace folder directories for multi-root workspaces', async () => {
 			const fileName = 'multi-root-session.jsonl';
 			const fileContents = JSON.stringify({
 				parentUuid: null,
@@ -538,8 +616,8 @@ describe('ClaudeCodeSessionService', () => {
 				timestamp: new Date().toISOString()
 			});
 
-			multiRootMockFs.mockDirectory(multiRootDirUri, [[fileName, FileType.File]]);
-			multiRootMockFs.mockFile(URI.joinPath(multiRootDirUri, fileName), fileContents, 1000);
+			multiRootMockFs.mockDirectory(folder1DirUri, [[fileName, FileType.File]]);
+			multiRootMockFs.mockFile(URI.joinPath(folder1DirUri, fileName), fileContents, 1000);
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
@@ -548,34 +626,48 @@ describe('ClaudeCodeSessionService', () => {
 			expect(sessions[0].label).toBe('session in multi-root workspace');
 		});
 
-		it('returns empty array when process.cwd() directory does not exist for multi-root', async () => {
-			// Don't mock any directory - simulate non-existent directory
+		it('returns empty array when no workspace folder directories exist for multi-root', async () => {
+			// Don't mock any directory - simulate non-existent directories
 
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
 			expect(sessions).toHaveLength(0);
 		});
 
-		it('uses process.cwd() directory not individual folder slugs for multi-root', async () => {
-			// Mock the process.cwd() directory with a session
-			const fileName = 'shared-session.jsonl';
-			const fileContents = JSON.stringify({
+		it('discovers sessions across all workspace folder slugs for multi-root', async () => {
+			// Mock sessions in both folder directories
+			const fileName1 = 'session-from-folder1.jsonl';
+			const fileContents1 = JSON.stringify({
 				parentUuid: null,
-				sessionId: 'shared-session',
+				sessionId: 'session-from-folder1',
 				type: 'user',
-				message: { role: 'user', content: 'shared session' },
-				uuid: 'uuid-shared',
+				message: { role: 'user', content: 'from folder 1' },
+				uuid: 'uuid-folder1',
 				timestamp: new Date().toISOString()
 			});
 
-			multiRootMockFs.mockDirectory(multiRootDirUri, [[fileName, FileType.File]]);
-			multiRootMockFs.mockFile(URI.joinPath(multiRootDirUri, fileName), fileContents, 1000);
+			const fileName2 = 'session-from-folder2.jsonl';
+			const fileContents2 = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'session-from-folder2',
+				type: 'user',
+				message: { role: 'user', content: 'from folder 2' },
+				uuid: 'uuid-folder2',
+				timestamp: new Date().toISOString()
+			});
 
-			// The session should only come from the process.cwd() directory, not individual folder slugs
+			multiRootMockFs.mockDirectory(folder1DirUri, [[fileName1, FileType.File]]);
+			multiRootMockFs.mockFile(URI.joinPath(folder1DirUri, fileName1), fileContents1, 1000);
+
+			multiRootMockFs.mockDirectory(folder2DirUri, [[fileName2, FileType.File]]);
+			multiRootMockFs.mockFile(URI.joinPath(folder2DirUri, fileName2), fileContents2, 1000);
+
 			const sessions = await multiRootService.getAllSessions(CancellationToken.None);
 
-			expect(sessions).toHaveLength(1);
-			expect(sessions[0].id).toBe('shared-session');
+			expect(sessions).toHaveLength(2);
+			const ids = sessions.map(s => s.id);
+			expect(ids).toContain('session-from-folder1');
+			expect(ids).toContain('session-from-folder2');
 		});
 	});
 
@@ -594,6 +686,7 @@ describe('ClaudeCodeSessionService', () => {
 
 			const spaceWorkspaceService = store.add(new TestWorkspaceService([spaceFolderUri]));
 			spaceTestingServiceCollection.set(IWorkspaceService, spaceWorkspaceService);
+			spaceTestingServiceCollection.define(IFolderRepositoryManager, new MockFolderRepositoryManager());
 
 			const accessor = spaceTestingServiceCollection.createTestingAccessor();
 			spaceMockFs = accessor.get(IFileSystemService) as MockFileSystemService;

@@ -380,7 +380,8 @@ export async function simulateEditingScenario(
 				model: null!, // https://github.com/microsoft/vscode-copilot/issues/9475
 				tools: new Map(),
 				id: '1',
-				sessionId: '1'
+				sessionId: '1',
+				hasHooksEnabled: false,
 			};
 
 			// Run intent detection

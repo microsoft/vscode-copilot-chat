@@ -64,7 +64,7 @@ export class MockChatHookService implements IChatHookService {
 		return this.hookCalls.filter(call => call.hookType === hookType);
 	}
 
-	async executeHook(hookType: ChatHookType, options: { input?: unknown }, _token?: CancellationToken): Promise<ChatHookResult[]> {
+	async executeHook(hookType: ChatHookType, options: { input?: unknown }, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
 		// Track the call
 		this.hookCalls.push({ hookType, input: options.input });
 
