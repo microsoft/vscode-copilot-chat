@@ -250,6 +250,9 @@ export class AgentIntent extends EditCodeIntent {
 			}
 
 			stream.markdown(l10n.t('Summarized conversation history.'));
+			const lastTurn = conversation.getLatestTurn();
+			lastTurn.setMetadata(summaryMetadata);
+
 			return {
 				metadata: {
 					summary: {
