@@ -37,7 +37,8 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
-import { EmptyPromptError, isHookAbortError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { isHookAbortError } from '../../intents/node/hookResultProcessor';
+import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
