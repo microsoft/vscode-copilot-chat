@@ -1143,9 +1143,6 @@ export class EmptyPromptError extends Error {
 	}
 }
 
-// Re-export hook utilities for consumers that import from this module
-export { HookAbortError, isHookAbortError } from './hookResultProcessor';
-
 export interface IToolCallSingleResult {
 	response: ChatResponse;
 	round: IToolCallRound;
