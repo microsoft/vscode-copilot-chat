@@ -140,4 +140,19 @@ export interface SubagentStopHookOutput {
 	readonly reason?: string;
 }
 
+/**
+ * Input passed to the PreCompact hook.
+ */
+export interface PreCompactHookInput {
+	/**
+	 * How the compaction was triggered.
+	 * "auto" when the conversation is too long for the prompt budget.
+	 */
+	readonly trigger: 'auto';
+	/**
+	 * Custom instructions for the compaction, if any.
+	 */
+	readonly custom_instructions?: string;
+}
+
 //#endregion
