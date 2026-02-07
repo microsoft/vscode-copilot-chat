@@ -118,10 +118,8 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	let thinkingConfig: { type: 'enabled' | 'adaptive'; budget_tokens?: number } | undefined;
 	if (isAllowedConversationAgent && !options.disableThinking) {
 		if (endpoint.supportsAdaptiveThinking) {
-			// Adaptive thinking: let Claude decide when and how much to think
 			thinkingConfig = { type: 'adaptive' };
 		} else if (endpoint.maxThinkingBudget && endpoint.minThinkingBudget) {
-			// Standard thinking: use explicit budget
 			const configuredBudget = configurationService.getExperimentBasedConfig(ConfigKey.AnthropicThinkingBudget, experimentationService);
 			const maxTokens = options.postOptions.max_tokens ?? 1024;
 			const minBudget = endpoint.minThinkingBudget ?? 1024;

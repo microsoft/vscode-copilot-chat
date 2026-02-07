@@ -261,7 +261,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				system: [system],
 				tools: tools.length > 0 ? tools : undefined,
 				thinking: supportsAdaptiveThinking
-					? { type: 'adaptive' as any }
+					? { type: 'adaptive' as const }
 					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
 				...(effort ? { output_config: { effort } } : {}),
 				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
