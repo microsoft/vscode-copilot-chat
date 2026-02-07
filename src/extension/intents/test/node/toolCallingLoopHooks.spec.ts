@@ -343,7 +343,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
 		});
 
-		it('should ignore failed hook results', async () => {
+		it('should abort on failed hook results', async () => {
 			const conversation = createTestConversation(1);
 			const request = createMockChatRequest();
 
@@ -372,10 +372,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			);
 			disposables.add(loop);
 
-			await loop.testRunStartHooks(tokenSource.token);
-
-			const additionalContext = loop.getAdditionalHookContext();
-			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
+			await expect(loop.testRunStartHooks(tokenSource.token)).rejects.toThrow('Hook SessionStart aborted: Hook error message');
 		});
 	});
 
