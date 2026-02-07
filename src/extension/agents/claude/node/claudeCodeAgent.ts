@@ -22,6 +22,7 @@ import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
@@ -52,7 +53,17 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId: string, permissionMode?: PermissionMode, yieldRequested?: () => boolean): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(
+		claudeSessionId: string | undefined,
+		request: vscode.ChatRequest,
+		_context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken,
+		modelId: string,
+		permissionMode: PermissionMode,
+		folderInfo: ClaudeFolderInfo,
+		yieldRequested?: () => boolean
+	): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const langModelServer = await this.getLangModelServer();
@@ -66,7 +77,7 @@ export class ClaudeAgentManager extends Disposable {
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, folderInfo);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -220,7 +231,8 @@ export class ClaudeCodeSession extends Disposable {
 		private readonly langModelServer: ClaudeLanguageModelServer,
 		public sessionId: string | undefined,
 		initialModelId: string,
-		initialPermissionMode: PermissionMode | undefined,
+		initialPermissionMode: PermissionMode,
+		private readonly _folderInfo: ClaudeFolderInfo,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
@@ -231,7 +243,7 @@ export class ClaudeCodeSession extends Disposable {
 	) {
 		super();
 		this._currentModelId = initialModelId;
-		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		this._currentPermissionMode = initialPermissionMode;
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
@@ -313,7 +325,7 @@ export class ClaudeCodeSession extends Disposable {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
 		modelId: string,
-		permissionMode?: PermissionMode,
+		permissionMode: PermissionMode,
 		yieldRequested?: () => boolean
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -332,10 +344,7 @@ export class ClaudeCodeSession extends Disposable {
 
 		// Update model and permission mode on active session if they changed
 		await this._setModel(modelId);
-
-		if (permissionMode !== undefined) {
-			await this._setPermissionMode(permissionMode);
-		}
+		await this._setPermissionMode(permissionMode);
 
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
@@ -381,25 +390,12 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	private async _doStartSession(token: vscode.CancellationToken): Promise<void> {
-		const directories = this.workspaceService.getWorkspaceFolders().map(folder => folder.fsPath);
-		let additionalDirectories: string[] | undefined = directories;
-		let cwd: string | undefined;
-		// For single-root workspaces, set cwd to the root and no additional directories
-		// For empty or multi-root workspaces, don't set cwd
-		if (directories.length === 1) {
-			cwd = directories[0];
-			additionalDirectories = [];
-		}
+		const { cwd, additionalDirectories } = this._folderInfo;
 
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			// cwd being undefined means the SDK will use process.cwd()
-			// we do this for multi-root workspaces or no workspace
-			// ideally there would be a better value for multi-root workspaces
-			// but the SDK currently only supports a single cwd which is used
-			// for history files
 			cwd,
 			additionalDirectories,
 			// We allow this because we handle the visibility of
@@ -422,7 +418,7 @@ export class ClaudeCodeSession extends Disposable {
 			// Pass the model selection to the SDK
 			model: this._currentModelId,
 			// Pass the permission mode to the SDK
-			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
+			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
