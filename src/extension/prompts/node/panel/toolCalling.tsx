@@ -7,6 +7,7 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
@@ -183,6 +184,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const endpointProvider: IEndpointProvider = accessor.get(IEndpointProvider);
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -242,8 +244,19 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
 					};
 
+					const transcriptSessionId = promptContext.conversation?.sessionId;
+					if (transcriptSessionId) {
+						let parsedArgs: unknown;
+						try { parsedArgs = JSON.parse(props.toolCall.arguments); } catch { parsedArgs = props.toolCall.arguments; }
+						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
+					}
+
 					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+
+					if (transcriptSessionId) {
+						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
+					}
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
 					toolResult = errResult.result;
@@ -254,6 +267,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						outcome = outcome === ToolInvocationOutcome.DisabledByUser ? outcome : ToolInvocationOutcome.Error;
 						extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
 						logService.error(`Error from tool ${props.toolCall.name} with args ${props.toolCall.arguments}`, toErrorMessage(err, true));
+					}
+					if (promptContext.conversation?.sessionId) {
+						sessionTranscriptService.logToolExecutionComplete(promptContext.conversation.sessionId, props.toolCall.id, false);
 					}
 				}
 			}

@@ -132,6 +132,7 @@ suite('defaultIntentRequestHandler', () => {
 		tools = new Map();
 		id = generateUuid();
 		sessionId = generateUuid();
+		hasHooksEnabled = false;
 	}
 
 	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));

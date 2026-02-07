@@ -15,12 +15,16 @@ export interface IChatHookService {
 	 * Execute all hooks of the specified type for the current chat session.
 	 * Hooks are configured in hooks.json files in the workspace.
 	 *
+	 * If a `sessionId` is provided, the session transcript is flushed to disk
+	 * before the hook runs so that hook scripts see up-to-date content.
+	 *
 	 * @param hookType The type of hook to execute.
 	 * @param options Hook execution options including the input data.
+	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
 	 * @returns A promise that resolves to an array of hook execution results.
 	 */
-	executeHook(hookType: vscode.ChatHookType, options: vscode.ChatHookExecutionOptions, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
+	executeHook(hookType: vscode.ChatHookType, options: vscode.ChatHookExecutionOptions, sessionId?: string, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
 }
 
 //#region Hook Input/Output Types
