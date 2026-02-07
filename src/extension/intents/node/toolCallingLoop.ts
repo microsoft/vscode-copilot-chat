@@ -353,6 +353,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				} else if (result.resultKind === 'error') {
 					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
 					this._logService.error(`[ToolCallingLoop] SessionStart hook error: ${errorMessage}`);
+					outputStream?.warning(l10n.t('SessionStart hook error: {0}', errorMessage));
+					throw new HookAbortError('SessionStart', errorMessage);
 				}
 			}
 
