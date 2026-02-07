@@ -282,8 +282,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 					service_tier: null,
 					server_tool_use: null,
 					cache_creation: null,
-					inference_geo: null
-				}
+				} as Anthropic.Usage
 			}
 		};
 

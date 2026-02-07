@@ -35,16 +35,16 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
-import { cwd } from '../../../../../util/vs/base/common/process';
 import { isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
 import {
 	buildSessions,
 	buildSubagentSession,
 	extractSessionMetadata,
 	extractSessionMetadataStreaming,
-	parseSessionFileContent,
 	ParseError,
+	parseSessionFileContent,
 	ParseStats,
 } from './claudeSessionParser';
 import {
@@ -105,6 +105,18 @@ export interface IClaudeCodeSessionService {
 	 * Get parse statistics from the last session load (for debugging).
 	 */
 	getLastParseStats(): ParseStats | undefined;
+
+	/**
+	 * Polls until the session's JSONL file contains a complete session
+	 * (i.e., the last message is from the assistant). This is necessary because
+	 * the CLI child process may not have flushed the JSONL to disk by the time
+	 * the parent process receives the result message via stdout.
+	 *
+	 * TODO: Is there a better way to do this? There seems to be a race condition
+	 * between Claude returning to us and it writing to disk. This could be removed
+	 * if Claude SDK gives us a way to list sessions.
+	 */
+	waitForSessionReady(resource: URI, token: CancellationToken): Promise<void>;
 }
 
 // #endregion
@@ -133,7 +145,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
-		@INativeEnvService private readonly _nativeEnvService: INativeEnvService
+		@INativeEnvService private readonly _nativeEnvService: INativeEnvService,
+		@IFolderRepositoryManager private readonly _folderRepositoryManager: IFolderRepositoryManager
 	) { }
 
 	/**
@@ -229,6 +242,23 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		return this._lastParseStats;
 	}
 
+	async waitForSessionReady(resource: URI, token: CancellationToken): Promise<void> {
+		const maxAttempts = 20; // 20 × 100ms = 2s max wait
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			if (token.isCancellationRequested) {
+				return;
+			}
+			const session = await this.getSession(resource, token);
+			if (session && session.messages.length > 0) {
+				const lastMsg = session.messages[session.messages.length - 1];
+				if (lastMsg.type === 'assistant') {
+					return;
+				}
+			}
+			await new Promise<void>(resolve => setTimeout(resolve, 100));
+		}
+	}
+
 	// #region Directory Discovery
 
 	/**
@@ -271,27 +301,22 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 	/**
 	 * Get the project directory slugs to scan for sessions.
-	 * Handles single vs multi-folder workspaces and provides error handling for cwd resolution.
+	 *
+	 * - Single-root: slug for that one folder
+	 * - Multi-root: slug for every workspace folder
+	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
 	private _getProjectSlugs(): string[] {
 		const folders = this._workspace.getWorkspaceFolders();
 
-		if (folders.length === 1) {
-			return [this._computeFolderSlug(folders[0])];
+		if (folders.length > 0) {
+			return folders.map(folder => this._computeFolderSlug(folder));
 		}
 
-		let cwdUri: URI | undefined;
-		try {
-			cwdUri = URI.file(cwd());
-		} catch (error) {
-			this._logService.error('[ClaudeCodeSessionService] Failed to resolve current working directory for session discovery', error);
-			if (folders.length > 0) {
-				cwdUri = folders[0];
-			}
-		}
-
-		if (cwdUri) {
-			return [this._computeFolderSlug(cwdUri)];
+		// Empty workspace: use all known folders from the folder repository manager
+		const mruEntries = this._folderRepositoryManager.getFolderMRU();
+		if (mruEntries.length > 0) {
+			return mruEntries.map(entry => this._computeFolderSlug(entry.folder));
 		}
 
 		return [];

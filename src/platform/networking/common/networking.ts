@@ -109,8 +109,11 @@ export interface IEndpointBody {
 
 	/** Messages API */
 	thinking?: {
-		type: 'enabled' | 'disabled';
+		type: 'enabled' | 'disabled' | 'adaptive';
 		budget_tokens?: number;
+	};
+	output_config?: {
+		effort?: 'low' | 'medium' | 'high';
 	};
 	context_management?: ContextManagement;
 
@@ -208,6 +211,9 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly model: string;
 	readonly apiType?: string;
 	readonly supportsThinkingContentInHistory?: boolean;
+	readonly supportsAdaptiveThinking?: boolean;
+	readonly minThinkingBudget?: number;
+	readonly maxThinkingBudget?: number;
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
@@ -220,7 +226,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly isFallback: boolean;
 	readonly customModel?: CustomModel;
 	readonly isExtensionContributed?: boolean;
-	readonly policy: 'enabled' | { terms: string };
 	readonly maxPromptImages?: number;
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
@@ -243,12 +248,6 @@ export interface IChatEndpoint extends IEndpoint {
 		cancellationToken?: CancellationToken,
 		location?: ChatLocation,
 	): Promise<AsyncIterableObject<ChatCompletion>>;
-
-	/**
-	 * Accepts the chat policy for the given endpoint, enabling its usage.
-	 * @returns A promise that resolves to true if the chat policy was accepted, false otherwise.
-	 */
-	acceptChatPolicy(): Promise<boolean>;
 
 	/**
 	 * Flights a request from the chat endpoint returning a chat response.

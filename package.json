@@ -2000,6 +2000,11 @@
 										"default": false,
 										"description": "Whether the model supports thinking capabilities"
 									},
+									"streaming": {
+										"type": "boolean",
+										"default": true,
+										"description": "Whether the model supports streaming responses. Defaults to true."
+									},
 									"zeroDataRetentionEnabled": {
 										"type": "boolean",
 										"default": false,
@@ -2093,6 +2098,11 @@
 										"type": "boolean",
 										"default": false,
 										"description": "Whether the model supports thinking capabilities"
+									},
+									"streaming": {
+										"type": "boolean",
+										"default": true,
+										"description": "Whether the model supports streaming responses. Defaults to true."
 									},
 									"zeroDataRetentionEnabled": {
 										"type": "boolean",
@@ -2976,6 +2986,15 @@
 						"default": true,
 						"description": "%github.copilot.config.organizationInstructions.enabled%"
 					},
+					"github.copilot.chat.additionalReadAccessPaths": {
+						"type": "array",
+						"default": [],
+						"items": {
+							"type": "string"
+						},
+						"markdownDescription": "%github.copilot.config.additionalReadAccessPaths%",
+						"scope": "window"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3150,6 +3169,19 @@
 						"tags": [
 							"preview",
 							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.effort": {
+						"type": "string",
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.effort%",
+						"enum": [
+							"low",
+							"medium",
+							"high"
+						],
+						"default": "high",
+						"tags": [
+							"preview"
 						]
 					}
 				}
@@ -5788,10 +5820,10 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.2.34",
+		"@anthropic-ai/claude-agent-sdk": "0.2.33",
 		"@anthropic-ai/sdk": "^0.73.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
-		"@github/copilot": "^0.0.403",
+		"@github/copilot": "^0.0.400",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

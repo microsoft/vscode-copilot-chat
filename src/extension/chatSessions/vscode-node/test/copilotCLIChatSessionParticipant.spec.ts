@@ -39,7 +39,7 @@ import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWork
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
-import { FolderRepositoryManager } from '../folderRepositoryManagerImpl';
+import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
 
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
@@ -186,7 +186,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
-	let folderRepositoryManager: FolderRepositoryManager;
+	let folderRepositoryManager: CopilotCLIFolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
 	let contentProvider: CopilotCLIChatSessionContentProvider;
 	const cliSessions: TestCopilotCLISession[] = [];
@@ -260,7 +260,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				// tracked by vi.fn
 			});
 		}();
-		folderRepositoryManager = new FolderRepositoryManager(
+		folderRepositoryManager = new CopilotCLIFolderRepositoryManager(
 			worktree,
 			workspaceFolderService,
 			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,

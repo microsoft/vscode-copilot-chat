@@ -112,6 +112,7 @@ export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 			name: model.name,
 			url,
 			thinking: modelConfiguration?.thinking,
+			streaming: modelConfiguration?.streaming,
 			requestHeaders: modelConfiguration?.requestHeaders,
 			editTools: model.capabilities?.editTools?.filter(isEndpointEditToolName),
 			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled

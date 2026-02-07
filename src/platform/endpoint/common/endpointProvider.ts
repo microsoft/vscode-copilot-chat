@@ -12,11 +12,6 @@ import { Event } from '../../../util/vs/base/common/event';
 import type { ChatRequest } from '../../../vscodeTypes';
 import { IChatEndpoint, IEmbeddingsEndpoint } from '../../networking/common/networking';
 
-export type ModelPolicy = {
-	state: 'enabled' | 'disabled' | 'unconfigured';
-	terms?: string;
-};
-
 export type CustomModel = {
 	key_name: string;
 	owner_name: string;
@@ -55,6 +50,9 @@ export type IChatModelCapabilities = {
 		vision?: boolean;
 		prediction?: boolean;
 		thinking?: boolean;
+		adaptive_thinking?: boolean;
+		max_thinking_budget?: number;
+		min_thinking_budget?: number;
 	};
 };
 
@@ -80,7 +78,6 @@ export enum ModelSupportedEndpoint {
 export interface IModelAPIResponse {
 	id: string;
 	name: string;
-	policy?: ModelPolicy;
 	model_picker_enabled: boolean;
 	preview?: boolean;
 	is_chat_default: boolean;

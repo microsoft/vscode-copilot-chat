@@ -7,24 +7,6 @@ import { Raw } from '@vscode/prompt-tsx';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 
 
-export async function* toLines(stream: AsyncIterable<{ delta: { text: string } }>): AsyncIterable<string> {
-	let buffer: string | null = null;
-
-	for await (const chunk of stream) {
-		buffer ??= '';
-		buffer += chunk.delta.text;
-
-		const parts: string[] = buffer.split(/\r?\n/);
-		buffer = parts.pop() ?? '';
-
-		yield* parts;
-	}
-
-	if (buffer !== null) {
-		yield buffer;
-	}
-}
-
 /**
  * Remove backticks on the first and last lines.
  */
