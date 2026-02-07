@@ -571,6 +571,19 @@ export class ChatToolInvocationPart {
 	}
 }
 
+export class ChatSubagentToolInvocationData {
+	description?: string;
+	agentName?: string;
+	prompt?: string;
+	result?: string;
+	constructor(description?: string, agentName?: string, prompt?: string, result?: string) {
+		this.description = description;
+		this.agentName = agentName;
+		this.prompt = prompt;
+		this.result = result;
+	}
+}
+
 export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 
 	constructor(

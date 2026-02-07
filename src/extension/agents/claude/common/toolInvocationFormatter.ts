@@ -8,7 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatSimpleToolResultData, ChatTerminalToolInvocationData } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatSubagentToolInvocationData, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
 import { ClaudeToolNames, ExitPlanModeInput, LSInput } from './claudeTools';
 
 // #region Tool Result Content Extraction
@@ -262,6 +262,12 @@ function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolUs
 function formatTaskInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const description = (toolUse.input as AgentInput)?.description ?? '';
 	invocation.invocationMessage = new MarkdownString(l10n.t("Completed Task: \"{0}\"", description));
+
+	const input = toolUse.input as AgentInput;
+	invocation.toolSpecificData = new ChatSubagentToolInvocationData(
+		input.description,
+		input.subagent_type,
+		input.prompt);
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
