@@ -64,6 +64,9 @@ export function completeToolInvocation(
 		case ClaudeToolNames.TodoWrite:
 			// These tools have their own UI handling (edit diffs, todo list)
 			break;
+		case ClaudeToolNames.Task:
+			completeTaskInvocation(invocation, resultContent);
+			break;
 		default:
 			completeGenericInvocation(invocation, toolUse, resultContent);
 			break;
@@ -147,6 +150,20 @@ function completeSearchInvocation(
 		output: resultContent
 	};
 	invocation.toolSpecificData = toolSpecificData;
+}
+
+/**
+ * Completes a Task tool invocation by setting the result on its ChatSubagentToolInvocationData.
+ * The toolSpecificData was already populated by formatTaskInvocation with description/agentName/prompt;
+ * this adds the result text from the subagent's execution.
+ */
+function completeTaskInvocation(
+	invocation: ChatToolInvocationPart,
+	resultContent: string
+): void {
+	if (invocation.toolSpecificData instanceof ChatSubagentToolInvocationData) {
+		invocation.toolSpecificData.result = resultContent;
+	}
 }
 
 /**

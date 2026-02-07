@@ -194,6 +194,15 @@ export function parseSessionFileContent(
  * Convert a user message entry's timestamp from string to Date.
  */
 function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
+	// Extract agentId from toolUseResult if present (links Task tool_use to subagent).
+	// The toolUseResult field is typed as string | object by the validator; for Task tools
+	// it's an object containing { agentId, status, prompt, ... }. The `in` check narrows
+	// the type so no unsafe cast is needed.
+	let toolUseResultAgentId: string | undefined;
+	if (entry.toolUseResult && typeof entry.toolUseResult === 'object' && 'agentId' in entry.toolUseResult && typeof entry.toolUseResult.agentId === 'string') {
+		toolUseResultAgentId = entry.toolUseResult.agentId;
+	}
+
 	return {
 		uuid: entry.uuid,
 		sessionId: entry.sessionId,
@@ -208,6 +217,7 @@ function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
 		gitBranch: entry.gitBranch,
 		slug: entry.slug,
 		agentId: entry.agentId,
+		toolUseResultAgentId,
 	};
 }
 
