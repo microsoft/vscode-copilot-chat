@@ -247,6 +247,12 @@ export const vAssistantMessageContent = vObj({
 });
 export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageContent>;
 
+/**
+ * Model ID used by the SDK for synthetic messages (e.g., "No response requested." from abort).
+ * These messages should be filtered out from display and processing.
+ */
+export const SYNTHETIC_MODEL_ID = '<synthetic>';
+
 // #endregion
 
 // #region Session Entry Validators

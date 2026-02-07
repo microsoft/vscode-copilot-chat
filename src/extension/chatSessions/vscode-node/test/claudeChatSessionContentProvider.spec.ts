@@ -24,6 +24,7 @@ import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolI
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../../agents/claude/node/claudeSessionStateService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/sessionParser/claudeCodeSessionService';
+import { IClaudeSlashCommandService } from '../../../agents/claude/vscode-node/claudeSlashCommandService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider, UNAVAILABLE_MODEL_ID } from '../claudeChatSessionContentProvider';
 
@@ -67,6 +68,11 @@ describe('ChatSessionContentProvider', () => {
 
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
 		serviceCollection.define(IClaudeCodeModels, mockClaudeCodeModels);
+		serviceCollection.define(IClaudeSlashCommandService, {
+			_serviceBrand: undefined,
+			tryHandleCommand: vi.fn().mockResolvedValue({ handled: false }),
+			getRegisteredCommands: vi.fn().mockReturnValue([]),
+		});
 		accessor = serviceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
 		provider = instaService.createInstance(ClaudeChatSessionContentProvider);

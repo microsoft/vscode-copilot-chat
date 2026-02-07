@@ -32,6 +32,7 @@ import { ISimulationTestContext } from '../../../platform/simulationTestContext/
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
+import { AsyncIterUtils, AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -58,7 +59,7 @@ import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
-import { charCount, constructMessages, linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { charCount, constructMessages, linesWithBackticksRemoved } from './xtabUtils';
 
 namespace RetryState {
 	export class NotRetrying { public static INSTANCE = new NotRetrying(); }
@@ -685,7 +686,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				logContext.setResponse(responseSoFar);
 			});
 
-		const llmLinesStream = toLines(fetchStreamSource.stream);
+		const llmLinesStream = AsyncIterUtilsExt.splitLines(AsyncIterUtils.map(fetchStreamSource.stream, (chunk) => chunk.delta.text));
 
 		// logging of times
 		// removal of cursor tag if option is set
