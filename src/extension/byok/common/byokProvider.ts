@@ -97,6 +97,7 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		maxInputTokens: inputTokens,
 		name: chatModelInfo.name,
 		isUserSelectable: true,
+		multiplierNumeric: 0,
 		capabilities: {
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
 			imageInput: chatModelInfo.capabilities.supports.vision,
@@ -162,6 +163,7 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 		detail: providerName,
 		family: id,
 		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		multiplierNumeric: 0,
 		capabilities: {
 			toolCalling: capabilities.toolCalling,
 			imageInput: capabilities.vision
