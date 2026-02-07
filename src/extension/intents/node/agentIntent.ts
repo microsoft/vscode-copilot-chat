@@ -31,7 +31,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { AnthropicTokenUsageMetadata, Conversation, normalizeSummariesOnRounds, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, normalizeSummariesOnRounds, RenderedUserMessageMetadata, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -251,9 +251,8 @@ export class AgentIntent extends EditCodeIntent {
 
 			stream.markdown(l10n.t('Summarized conversation history.'));
 			const lastTurn = conversation.getLatestTurn();
-			lastTurn.setMetadata(summaryMetadata);
 
-			return {
+			const chatResult: vscode.ChatResult = {
 				metadata: {
 					summary: {
 						toolCallRoundId: summaryMetadata.toolCallRoundId,
@@ -261,6 +260,19 @@ export class AgentIntent extends EditCodeIntent {
 					}
 				}
 			};
+
+			// setResponse must be called so that turn.resultMetadata?.summary
+			// is available for normalizeSummariesOnRounds on subsequent turns.
+			lastTurn.setResponse(
+				TurnStatus.Success,
+				{ type: 'model', message: '' },
+				undefined,
+				chatResult,
+			);
+
+			lastTurn.setMetadata(summaryMetadata);
+
+			return chatResult;
 		} catch (e) {
 			if (isCancellationError(e)) {
 				return {};
