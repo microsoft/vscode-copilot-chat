@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { CancellationToken, ChatRequest, LanguageModelToolInformation, Progress } from 'vscode';
+import type { CancellationToken, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -38,20 +40,18 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 	}
 
-	private async getEndpoint(request: ChatRequest) {
-		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
-		}
-		return endpoint;
+	private async getEndpoint() {
+		return await this.endpointProvider.getChatEndpoint('copilot-fast');
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -85,7 +85,7 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 	}
 
 	protected async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		return endpoint.makeChatRequest2({
 			...opts,
 			debugName: McpToolCallingLoop.ID,

@@ -307,14 +307,16 @@ class AnthropicPromptResolver implements IAgentPrompt {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) { }
 
+	private isSonnet4(endpoint: IChatEndpoint): boolean {
+		return endpoint.model === 'claude-sonnet-4' || endpoint.model === 'claude-sonnet-4-20250514';
+	}
+
 	resolveSystemPrompt(endpoint: IChatEndpoint): SystemPrompt | undefined {
-		const normalizedModel = endpoint.model?.replace(/\./g, '-');
-		if (normalizedModel?.startsWith('claude-sonnet-4-5') ||
-			normalizedModel?.startsWith('claude-haiku-4-5') ||
-			normalizedModel?.startsWith('claude-opus-4-5')) {
-			return Claude45DefaultPrompt;
+		// Claude Sonnet 4 (not 4.5) uses the default Anthropic prompt
+		if (this.isSonnet4(endpoint)) {
+			return DefaultAnthropicAgentPrompt;
 		}
-		return DefaultAnthropicAgentPrompt;
+		return Claude45DefaultPrompt;
 	}
 
 	resolveReminderInstructions(endpoint: IChatEndpoint): ReminderInstructionsConstructor | undefined {

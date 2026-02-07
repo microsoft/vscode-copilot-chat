@@ -71,14 +71,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 		let server: RequestServer | undefined;
 
-		const getExportableLogEntries = (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): LoggedInfo[] => {
+		const getExportableLogEntries = (treeItem: ChatPromptItem): LoggedInfo[] => {
 			if (!treeItem || !treeItem.children) {
 				return [];
-			}
-
-			// lastChatRequestItem logs the actual request info, so use it if present
-			if (lastChatRequestItem && treeItem.children.length > 0 && treeItem.children[0] instanceof ChatRequestItem) {
-				treeItem.children[0] = lastChatRequestItem;
 			}
 
 			const logEntries = treeItem.children.map(child => {
@@ -92,8 +87,8 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		};
 
 		// Helper method to process log entries for a single prompt using shared export function
-		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem, lastChatRequestItem?: ChatRequestItem): Promise<ExportedPrompt | undefined> => {
-			const logEntries = getExportableLogEntries(treeItem, lastChatRequestItem);
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<ExportedPrompt | undefined> => {
+			const logEntries = getExportableLogEntries(treeItem);
 
 			if (logEntries.length === 0) {
 				return;
@@ -427,10 +422,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Filter out utility requests (e.g., model list fetch, title generation) - only export conversation requests
+			// Filter to only include ChatPromptItem entries
 			const exportableItems = allTreeItems.filter(item =>
-				item instanceof ChatPromptItem ||
-				(item instanceof ChatRequestItem && item.info.entry.isConversationRequest !== false)
+				item instanceof ChatPromptItem
 			);
 
 			if (exportableItems.length === 0) {
@@ -467,16 +461,12 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			try {
 				const allPromptsContent: ExportedPrompt[] = [];
 
-				let lastChatRequestItem: ChatRequestItem | undefined;
 				for (const exportableItem of exportableItems) {
-					if (exportableItem instanceof ChatRequestItem) {
-						lastChatRequestItem = exportableItem;
-					} else if (exportableItem instanceof ChatPromptItem) {
-						const promptObject = await preparePromptLogsAsJson(exportableItem, lastChatRequestItem);
+					if (exportableItem instanceof ChatPromptItem) {
+						const promptObject = await preparePromptLogsAsJson(exportableItem);
 						if (promptObject) {
 							allPromptsContent.push(promptObject);
 						}
-						lastChatRequestItem = undefined;
 					}
 				}
 
@@ -490,19 +480,21 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				// Write to the selected file
 				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));
 
-				// Show success message with option to reveal the file
-				const revealAction = 'Reveal in Explorer';
-				const openAction = 'Open File';
-				const result = await vscode.window.showInformationMessage(
-					`Successfully exported ${exportData.totalPrompts} prompts with ${exportData.totalLogEntries} log entries to ${saveUri.fsPath}`,
-					revealAction,
-					openAction
-				);
+				// Show success message with option to reveal the file (only for user-initiated calls)
+				if (!savePath) {
+					const revealAction = 'Reveal in Explorer';
+					const openAction = 'Open File';
+					const result = await vscode.window.showInformationMessage(
+						`Successfully exported ${exportData.totalPrompts} prompts with ${exportData.totalLogEntries} log entries to ${saveUri.fsPath}`,
+						revealAction,
+						openAction
+					);
 
-				if (result === revealAction) {
-					await vscode.commands.executeCommand('revealFileInOS', saveUri);
-				} else if (result === openAction) {
-					await vscode.commands.executeCommand('vscode.open', saveUri);
+					if (result === revealAction) {
+						await vscode.commands.executeCommand('revealFileInOS', saveUri);
+					} else if (result === openAction) {
+						await vscode.commands.executeCommand('vscode.open', saveUri);
+					}
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);

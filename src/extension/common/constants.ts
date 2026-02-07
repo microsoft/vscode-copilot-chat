@@ -19,7 +19,6 @@ export const enum Intent {
 	Terminal = 'terminal',
 	TerminalExplain = 'terminalExplain',
 	VSCode = 'vscode',
-	Workspace = 'workspace',
 	Unknown = 'unknown',
 	SetupTests = 'setupTests',
 	Editor = 'editor',
@@ -37,7 +36,7 @@ export const GITHUB_PLATFORM_AGENT = 'github.copilot-dynamic.platform';
 
 // TODO@jrieken THIS IS WEIRD. We should read this from package.json
 export const agentsToCommands: Partial<Record<Intent, Record<string, Intent>>> = {
-	[Intent.Workspace]: {
+	[Intent.Agent]: {
 		'explain': Intent.Explain,
 		'edit': Intent.Edit,
 		'review': Intent.Review,

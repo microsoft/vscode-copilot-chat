@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import type { Diagnostic, InlineCompletionContext, Uri } from 'vscode';
+import type { InlineCompletionContext } from 'vscode';
 import * as yaml from 'yaml';
 import * as errors from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -12,7 +12,7 @@ import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { SerializedEdit } from './dataTypes/editUtils';
 import { FetchCancellationError } from './dataTypes/fetchCancellationError';
-import { LanguageContextResponse, SerializedContextResponse, SerializedDiagnostic, serializeFileDiagnostics, serializeLanguageContext } from './dataTypes/languageContext';
+import { LanguageContextResponse, SerializedContextResponse, serializeLanguageContext } from './dataTypes/languageContext';
 import { RootedLineEdit } from './dataTypes/rootedLineEdit';
 import { DebugRecorderBookmark } from './debugRecorderBookmark';
 import { ISerializedNextEditRequest, StatelessNextEditRequest } from './statelessNextEditProvider';
@@ -557,21 +557,9 @@ export class InlineEditRequestLogContext {
 		this._logs.push(`\`\`\`${language}\n${code}\n\`\`\`\n`);
 	}
 
-	private _fileDiagnostics: [Uri, Diagnostic[]][] | undefined;
-	setFileDiagnostics(fileDiagnostics: [Uri, Diagnostic[]][]): void {
+	private _fileDiagnostics: string | undefined;
+	setDiagnosticsData(fileDiagnostics: string): void {
 		this._fileDiagnostics = fileDiagnostics;
-	}
-
-	private _getDiagnosticsForTrackedFiles(): SerializedDiagnostic[] | undefined {
-		if (!this._fileDiagnostics || !this._nextEditRequest?.documents) {
-			return undefined;
-		}
-
-		const diagnosticsOfTrackedFiles = this._fileDiagnostics.filter(([uri]) =>
-			this._nextEditRequest!.documents.some(doc => doc.id.toString() === uri.toString())
-		);
-
-		return serializeFileDiagnostics(diagnosticsOfTrackedFiles);
 	}
 
 	private _languageContext: LanguageContextResponse | undefined;
@@ -605,7 +593,7 @@ export class InlineEditRequestLogContext {
 			logs: this._logs,
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
-			diagnostics: this._getDiagnosticsForTrackedFiles()
+			diagnostics: this._fileDiagnostics,
 		};
 	}
 }
@@ -650,5 +638,5 @@ export interface ISerializedInlineEditLogContext {
 	logs: string[];
 	isAccepted: boolean | undefined;
 	languageContext: SerializedContextResponse | undefined;
-	diagnostics: SerializedDiagnostic[] | undefined;
+	diagnostics: string | undefined;
 }

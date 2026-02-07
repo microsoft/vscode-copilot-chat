@@ -5,19 +5,13 @@
 
 import sinon from 'sinon';
 import { afterEach, assert, beforeEach, describe, it } from 'vitest';
-import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../claudeCodeModels';
 import { ClaudeSessionStateService, SessionStateChangeEvent } from '../claudeSessionStateService';
 
 describe('ClaudeSessionStateService', () => {
 	let service: ClaudeSessionStateService;
-	let mockClaudeCodeModels: sinon.SinonStubbedInstance<IClaudeCodeModels>;
 
 	beforeEach(() => {
-		mockClaudeCodeModels = {
-			getDefaultModel: sinon.stub().resolves('claude-sonnet-4-20250514'),
-		} as unknown as sinon.SinonStubbedInstance<IClaudeCodeModels>;
-
-		service = new ClaudeSessionStateService(mockClaudeCodeModels);
+		service = new ClaudeSessionStateService();
 	});
 
 	afterEach(() => {
@@ -26,10 +20,9 @@ describe('ClaudeSessionStateService', () => {
 	});
 
 	describe('getModelIdForSession', () => {
-		it('should return the default model when no model is set for a session', async () => {
+		it('should return undefined when no model is set for a session', async () => {
 			const modelId = await service.getModelIdForSession('session-1');
-			assert.strictEqual(modelId, 'claude-sonnet-4-20250514');
-			sinon.assert.calledOnce(mockClaudeCodeModels.getDefaultModel);
+			assert.strictEqual(modelId, undefined);
 		});
 
 		it('should return the set model when one has been set for a session', async () => {
@@ -49,23 +42,12 @@ describe('ClaudeSessionStateService', () => {
 			assert.strictEqual(modelId2, 'claude-haiku-3-5-20250514');
 		});
 
-		it('should return default model when model is explicitly set to undefined', async () => {
+		it('should return undefined when model is explicitly set to undefined', async () => {
 			service.setModelIdForSession('session-1', 'claude-opus-4-20250514');
 			service.setModelIdForSession('session-1', undefined);
 
 			const modelId = await service.getModelIdForSession('session-1');
-			assert.strictEqual(modelId, 'claude-sonnet-4-20250514');
-		});
-
-		it('should propagate NoClaudeModelsAvailableError when getDefaultModel throws', async () => {
-			mockClaudeCodeModels.getDefaultModel.rejects(new NoClaudeModelsAvailableError());
-
-			try {
-				await service.getModelIdForSession('session-new');
-				assert.fail('Expected NoClaudeModelsAvailableError to be thrown');
-			} catch (e) {
-				assert.instanceOf(e, NoClaudeModelsAvailableError);
-			}
+			assert.strictEqual(modelId, undefined);
 		});
 	});
 
@@ -146,9 +128,9 @@ describe('ClaudeSessionStateService', () => {
 
 			// After dispose, getting state should return defaults (though event subscriptions won't work)
 			// We can't really test this fully without internal access, but we can verify it doesn't throw
-			const newService = new ClaudeSessionStateService(mockClaudeCodeModels);
+			const newService = new ClaudeSessionStateService();
 			const modelId = await newService.getModelIdForSession('session-1');
-			assert.strictEqual(modelId, 'claude-sonnet-4-20250514');
+			assert.strictEqual(modelId, undefined);
 			newService.dispose();
 		});
 	});

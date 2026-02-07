@@ -259,7 +259,8 @@ Error: ${error}`);
 					toolReferences: [],
 					tools: new Map(),
 					id: '1',
-					sessionId: ''
+					sessionId: '',
+					hasHooksEnabled: false,
 				},
 				props: {
 					targetSchema: validateArgs.targetConfig,

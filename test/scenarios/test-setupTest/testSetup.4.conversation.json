@@ -1,7 +1,7 @@
 [
   {
     "name": "rubyOnRailsApp",
-    "question": "@workspace /setupTests rspec",
+    "question": "/setupTests rspec",
     "expectations": {
       "filePatterns": ["^spec/.*_spec\\.rb$"],
       "installCommandPattern": "bundle install",

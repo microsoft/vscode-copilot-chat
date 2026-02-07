@@ -17,7 +17,10 @@ Folders of instructions, scripts, and resources that agents load on-demand for s
 | Path | Scope |
 |------|-------|
 | `.github/skills/<name>/` | Project |
+| `.agents/skills/<name>/` | Project |
+| `.claude/skills/<name>/` | Project |
 | `~/.copilot/skills/<name>/` | Personal |
+| `~/.claude/skills/<name>/` | Personal |
 
 ## SKILL.md Format
 

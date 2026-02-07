@@ -22,13 +22,15 @@ import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
+import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
+import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
-import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { buildHooksFromRegistry } from './hooks/index';
+import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -51,10 +53,21 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, modelId?: string, permissionMode?: PermissionMode): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(
+		claudeSessionId: string | undefined,
+		request: vscode.ChatRequest,
+		_context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken,
+		modelId: string,
+		permissionMode: PermissionMode,
+		folderInfo: ClaudeFolderInfo,
+		yieldRequested?: () => boolean
+	): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
-			const serverConfig = (await this.getLangModelServer()).getConfig();
+			const langModelServer = await this.getLangModelServer();
+			const serverConfig = langModelServer.getConfig();
 
 			const sessionIdForLog = claudeSessionId ?? 'new';
 			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
@@ -64,7 +77,7 @@ export class ClaudeAgentManager extends Disposable {
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, modelId, permissionMode);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, folderInfo);
 				if (newSession.sessionId) {
 					this._sessions.set(newSession.sessionId, newSession);
 				}
@@ -77,7 +90,8 @@ export class ClaudeAgentManager extends Disposable {
 				stream,
 				token,
 				modelId,
-				permissionMode
+				permissionMode,
+				yieldRequested
 			);
 
 			// Store the session if sessionId was assigned during invoke
@@ -112,11 +126,12 @@ export class ClaudeAgentManager extends Disposable {
 		}
 	}
 
-	private resolvePrompt(request: vscode.ChatRequest): string {
+	private resolvePrompt(request: vscode.ChatRequest): Anthropic.TextBlockParam[] {
 		if (request.prompt.startsWith('/')) {
-			return request.prompt; // likely a slash command, don't modify
+			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
 		}
 
+		const contentBlocks: Anthropic.TextBlockParam[] = [];
 		const extraRefsTexts: string[] = [];
 		let prompt = request.prompt;
 		request.references.forEach(ref => {
@@ -134,11 +149,18 @@ export class ClaudeAgentManager extends Disposable {
 			}
 		});
 
+		// Add system-reminder as a separate content block so it's not rendered in chat history
 		if (extraRefsTexts.length > 0) {
-			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
+			contentBlocks.push({
+				type: 'text',
+				text: `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>`
+			});
 		}
 
-		return prompt;
+		// Add the actual user prompt as a separate content block
+		contentBlocks.push({ type: 'text', text: prompt });
+
+		return contentBlocks;
 	}
 }
 
@@ -148,10 +170,11 @@ class KnownClaudeError extends Error { }
  * Represents a queued chat request waiting to be processed by the Claude session
  */
 interface QueuedRequest {
-	readonly prompt: string;
+	readonly prompt: Anthropic.TextBlockParam[];
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
+	readonly yieldRequested?: () => boolean;
 	readonly deferred: DeferredPromise<void>;
 }
 
@@ -162,6 +185,7 @@ interface CurrentRequest {
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
+	readonly yieldRequested?: () => boolean;
 }
 
 export class ClaudeCodeSession extends Disposable {
@@ -171,10 +195,12 @@ export class ClaudeCodeSession extends Disposable {
 	private _currentRequest: CurrentRequest | undefined;
 	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
 	private _abortController = new AbortController();
-	private _editTracker = new ExternalEditTracker();
+	private _editTracker: ExternalEditTracker;
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
-	private _currentModelId: string | undefined;
+	private _currentModelId: string;
 	private _currentPermissionMode: PermissionMode;
+	private _yieldInProgress = false;
+	private _sessionStarting: Promise<void> | undefined;
 
 	/**
 	 * Sets the model on the active SDK session.
@@ -202,9 +228,11 @@ export class ClaudeCodeSession extends Disposable {
 
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
+		private readonly langModelServer: ClaudeLanguageModelServer,
 		public sessionId: string | undefined,
-		initialModelId: string | undefined,
-		initialPermissionMode: PermissionMode | undefined,
+		initialModelId: string,
+		initialPermissionMode: PermissionMode,
+		private readonly _folderInfo: ClaudeFolderInfo,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
@@ -215,7 +243,10 @@ export class ClaudeCodeSession extends Disposable {
 	) {
 		super();
 		this._currentModelId = initialModelId;
-		this._currentPermissionMode = initialPermissionMode ?? 'acceptEdits';
+		this._currentPermissionMode = initialPermissionMode;
+		// Initialize edit tracker with plan directory as ignored
+		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
+		this._editTracker = new ExternalEditTracker([planDirUri]);
 		this._settingsChangeTracker = this._createSettingsChangeTracker();
 	}
 
@@ -280,19 +311,22 @@ export class ClaudeCodeSession extends Disposable {
 
 	/**
 	 * Invokes the Claude Code session with a user prompt
-	 * @param prompt The user's prompt text
+	 * @param prompt The user's prompt as an array of content blocks
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
-	 * @param modelId Optional model ID to use for this request
+	 * @param modelId Model ID to use for this request
+	 * @param permissionMode Permission mode for tool execution
+	 * @param yieldRequested Function to check if the user has requested to interrupt
 	 */
 	public async invoke(
-		prompt: string,
+		prompt: Anthropic.TextBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId?: string,
-		permissionMode?: PermissionMode
+		modelId: string,
+		permissionMode: PermissionMode,
+		yieldRequested?: () => boolean
 	): Promise<void> {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
@@ -309,12 +343,8 @@ export class ClaudeCodeSession extends Disposable {
 		}
 
 		// Update model and permission mode on active session if they changed
-		if (modelId !== undefined) {
-			await this._setModel(modelId);
-		}
-		if (permissionMode !== undefined) {
-			await this._setPermissionMode(permissionMode);
-		}
+		await this._setModel(modelId);
+		await this._setPermissionMode(permissionMode);
 
 		// Add this request to the queue and wait for completion
 		const deferred = new DeferredPromise<void>();
@@ -323,6 +353,7 @@ export class ClaudeCodeSession extends Disposable {
 			stream,
 			toolInvocationToken,
 			token,
+			yieldRequested,
 			deferred
 		};
 
@@ -339,28 +370,32 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	/**
-	 * Starts a new Claude Code session with the configured options
+	 * Starts a new Claude Code session with the configured options.
+	 * Guards against concurrent starts (e.g., from yield restart racing with a new invoke).
 	 */
 	private async _startSession(token: vscode.CancellationToken): Promise<void> {
-		const directories = this.workspaceService.getWorkspaceFolders().map(folder => folder.fsPath);
-		let additionalDirectories: string[] | undefined = directories;
-		let cwd: string | undefined;
-		// For single-root workspaces, set cwd to the root and no additional directories
-		// For empty or multi-root workspaces, don't set cwd
-		if (directories.length === 1) {
-			cwd = directories[0];
-			additionalDirectories = [];
+		// If a session start is already in progress, wait for it rather than starting a second
+		if (this._sessionStarting) {
+			await this._sessionStarting;
+			return;
 		}
+
+		const startPromise = this._doStartSession(token);
+		this._sessionStarting = startPromise;
+		try {
+			await startPromise;
+		} finally {
+			this._sessionStarting = undefined;
+		}
+	}
+
+	private async _doStartSession(token: vscode.CancellationToken): Promise<void> {
+		const { cwd, additionalDirectories } = this._folderInfo;
 
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			// cwd being undefined means the SDK will use process.cwd()
-			// we do this for multi-root workspaces or no workspace
-			// ideally there would be a better value for multi-root workspaces
-			// but the SDK currently only supports a single cwd which is used
-			// for history files
 			cwd,
 			additionalDirectories,
 			// We allow this because we handle the visibility of
@@ -381,9 +416,9 @@ export class ClaudeCodeSession extends Disposable {
 			},
 			resume: this.sessionId,
 			// Pass the model selection to the SDK
-			...(this._currentModelId !== undefined ? { model: this._currentModelId } : {}),
+			model: this._currentModelId,
 			// Pass the permission mode to the SDK
-			...(this._currentPermissionMode !== undefined ? { permissionMode: this._currentPermissionMode } : {}),
+			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
@@ -392,7 +427,8 @@ export class ClaudeCodeSession extends Disposable {
 				this.logService.trace(`[ClaudeCodeSession]: canUseTool: ${name}(${JSON.stringify(input)})`);
 				return this.toolPermissionService.canUseTool(name, input, {
 					toolInvocationToken: this._currentRequest.toolInvocationToken,
-					permissionMode: this._currentPermissionMode
+					permissionMode: this._currentPermissionMode,
+					stream: this._currentRequest.stream
 				});
 			},
 			systemPrompt: {
@@ -412,8 +448,11 @@ export class ClaudeCodeSession extends Disposable {
 		// Take a snapshot of settings files so we can detect changes
 		await this._settingsChangeTracker.takeSnapshot();
 
-		// Start the message processing loop
-		this._processMessages();
+		// Start the message processing loop (fire-and-forget, but _processMessages
+		// handles all errors internally via try/catch → _cleanup)
+		void this._processMessages().catch(err => {
+			this.logService.error('[ClaudeCodeSession] Unhandled error in message processing loop', err);
+		});
 	}
 
 	/**
@@ -475,8 +514,13 @@ export class ClaudeCodeSession extends Disposable {
 			this._currentRequest = {
 				stream: request.stream,
 				toolInvocationToken: request.toolInvocationToken,
-				token: request.token
+				token: request.token,
+				yieldRequested: request.yieldRequested
 			};
+
+			// Increment user-initiated message count for this model
+			// This is used by the language model server to track which requests are user-initiated
+			this.langModelServer.incrementUserInitiatedMessageCount(this._currentModelId);
 
 			yield {
 				type: 'user',
@@ -520,21 +564,39 @@ export class ClaudeCodeSession extends Disposable {
 					throw new Error('Request was cancelled');
 				}
 
-				this.logService.trace(`claude-agent-sdk Message: ${JSON.stringify(message, null, 2)}`);
+				// Capture session_id BEFORE yield check so restart uses correct session
 				if (message.session_id) {
 					this.sessionId = message.session_id;
 				}
 
+				// Check yield before processing to avoid streaming partial responses
+				if (await this._checkYieldRequested()) {
+					continue;
+				}
+
+				// Skip if no current request (e.g., after yield cleared it)
+				if (!this._currentRequest) {
+					this.logService.trace('[ClaudeCodeSession] Skipping message - no current request');
+					continue;
+				}
+
+				this.logService.trace(`claude-agent-sdk Message: ${JSON.stringify(message, null, 2)}`);
+
 				if (message.type === 'assistant') {
-					this.handleAssistantMessage(message, this._currentRequest!.stream, unprocessedToolCalls);
+					// Skip synthetic messages (e.g., "No response requested." from abort)
+					if (message.message.model === SYNTHETIC_MODEL_ID) {
+						this.logService.trace('[ClaudeCodeSession] Skipping synthetic message');
+						continue;
+					}
+					this.handleAssistantMessage(message, this._currentRequest.stream, unprocessedToolCalls);
 				} else if (message.type === 'user') {
-					this.handleUserMessage(message, this._currentRequest!.stream, unprocessedToolCalls, this._currentRequest!.toolInvocationToken, this._currentRequest!.token);
+					this.handleUserMessage(message, this._currentRequest.stream, unprocessedToolCalls, this._currentRequest.toolInvocationToken, this._currentRequest.token);
 				} else if (message.type === 'result') {
-					this.handleResultMessage(message, this._currentRequest!.stream);
+					this.handleResultMessage(message, this._currentRequest.stream);
 					// Resolve and remove the completed request
 					if (this._promptQueue.length > 0) {
 						const completedRequest = this._promptQueue.shift()!;
-						completedRequest.deferred.complete();
+						await completedRequest.deferred.complete();
 					}
 					this._currentRequest = undefined;
 				}
@@ -547,12 +609,48 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	private _cleanup(error: Error): void {
-		// Reset session state so the next invoke() can start a fresh session
+		this._resetSessionState();
+
+		const wasYielding = this._yieldInProgress;
+		this._yieldInProgress = false;
+
+		if (wasYielding) {
+			this._restartAfterYield();
+		} else {
+			this._rejectPendingRequests(error);
+		}
+	}
+
+	/**
+	 * Resets session state so the next session start can begin fresh.
+	 * Preserves the sessionId for SDK resume.
+	 */
+	private _resetSessionState(): void {
 		this._queryGenerator = undefined;
-		this._abortController.abort();
 		this._abortController = new AbortController();
 		this._currentRequest = undefined;
-		// Reject all pending requests
+	}
+
+	/**
+	 * After a yield, preserves the queue and restarts the session to process
+	 * any pending requests (e.g., the steering message).
+	 */
+	private _restartAfterYield(): void {
+		this.logService.trace(`[ClaudeCodeSession] Yield cleanup, sessionId=${this.sessionId}, pending requests=${this._promptQueue.length}`);
+
+		if (this._promptQueue.length > 0) {
+			const nextRequest = this._promptQueue[0];
+			void this._startSession(nextRequest.token).catch(err => {
+				this.logService.error('[ClaudeCodeSession] Failed to restart session after yield', err);
+				this._rejectPendingRequests(err);
+			});
+		}
+	}
+
+	/**
+	 * Rejects all pending requests and clears the queue.
+	 */
+	private _rejectPendingRequests(error: Error): void {
 		this._promptQueue.forEach(req => {
 			if (!req.deferred.isSettled) {
 				req.deferred.error(error);
@@ -563,6 +661,32 @@ export class ClaudeCodeSession extends Disposable {
 			this._pendingPrompt.error(error);
 		}
 		this._pendingPrompt = undefined;
+	}
+
+	/**
+	 * Checks if the user has requested to interrupt the current request.
+	 * If so, completes the current request gracefully and aborts the SDK to allow the next message.
+	 * @returns true if a yield was detected and handled, false otherwise
+	 */
+	private async _checkYieldRequested(): Promise<boolean> {
+		if (!this._currentRequest?.yieldRequested?.()) {
+			return false;
+		}
+
+		this.logService.trace('[ClaudeCodeSession] Yield requested - interrupting session to allow user interruption');
+		this._yieldInProgress = true;
+
+		// Complete the current request gracefully
+		if (this._promptQueue.length > 0) {
+			const completedRequest = this._promptQueue.shift()!;
+			await completedRequest.deferred.complete();
+		}
+		this._currentRequest = undefined;
+
+		// Signal the SDK to stop generating
+		this._abortController.abort();
+
+		return true;
 	}
 
 	/**
@@ -640,10 +764,13 @@ export class ClaudeCodeSession extends Disposable {
 		const invocation = createFormattedToolInvocation(toolUse, true);
 		if (invocation) {
 			invocation.enablePartialUpdate = true;
+			invocation.isComplete = true;
 			invocation.isError = toolResult.is_error;
 			if (toolResult.content === ClaudeCodeSession.DenyToolMessage) {
 				invocation.isConfirmed = false;
 			}
+			// Populate tool output for display in chat UI
+			completeToolInvocation(toolUse, toolResult, invocation);
 		}
 
 		if (toolUse.name === ClaudeToolNames.TodoWrite) {

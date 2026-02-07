@@ -33,7 +33,7 @@ interface PlanAgentConfig {
 	tools: string[];
 	model?: string;
 	target?: string;
-	infer?: string;
+	disableModelInvocation?: boolean;
 	agents?: string[];
 	handoffs: PlanAgentHandoff[];
 	body: string;
@@ -48,7 +48,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
-	infer: 'user',
+	disableModelInvocation: true,
 	agents: [],
 	tools: [
 		'agent',
@@ -84,8 +84,8 @@ export function buildAgentMarkdown(config: PlanAgentConfig): string {
 	if (config.target) {
 		lines.push(`target: ${config.target}`);
 	}
-	if (config.infer) {
-		lines.push(`infer: ${config.infer}`);
+	if (config.disableModelInvocation) {
+		lines.push(`disable-model-invocation: true`);
 	}
 
 	// Tools array - flow style for readability
@@ -207,7 +207,7 @@ Your job: research the codebase → clarify with the user → produce a comprehe
 Your SOLE responsibility is planning. NEVER start implementation.
 
 <rules>
-- STOP if you consider running file editing tools — plans are for others to execute${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions` : ''}
+- STOP if you consider running file editing tools — plans are for others to execute${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions freely to clarify requirements — don't make large assumptions` : `\n- Include a "Further Considerations" section in your plan for clarifying questions`}
 - Present a well-researched plan with loose ends tied BEFORE implementation
 </rules>
 
@@ -232,7 +232,7 @@ After the subagent returns, analyze the results.
 
 ## 2. Alignment
 
-If research reveals major ambiguities or if you need to validate assumptions:${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions to clarify intent with the user.` : ''}
+If research reveals major ambiguities or if you need to validate assumptions:${askQuestionsEnabled ? `\n- Use #tool:vscode/askQuestions to clarify intent with the user.` : `\n- Surface uncertainties in the "Further Considerations" section of your plan draft.`}
 - Surface discovered technical constraints or alternative approaches.
 - If answers significantly change the scope, loop back to **Discovery**.
 
@@ -251,7 +251,7 @@ Present the plan as a **DRAFT** for review.
 
 On user input after showing a draft:
 - Changes requested → revise and present updated plan.
-- Questions asked → clarify${askQuestionsEnabled ? ', or use #tool:vscode/askQuestions for follow-ups' : ''}.
+- Questions asked → clarify${askQuestionsEnabled ? ', or use #tool:vscode/askQuestions for follow-ups' : ' and update "Further Considerations" as needed'}.
 - Alternatives wanted → loop back to **Discovery** with new subagent.
 - Approval given → acknowledge, the user can now use handoff buttons.
 
@@ -280,11 +280,15 @@ Keep iterating until explicit approval or handoff.
 
 **Decisions** (if applicable)
 - {Decision: chose X over Y}
-\`\`\`
+${askQuestionsEnabled ? '' : `
+**Further Considerations** (if applicable, 1-3 items)
+1. {Clarifying question with recommendation? Option A / Option B / Option C}
+2. {…}
+`}\`\`\`
 
 Rules:
 - NO code blocks — describe changes, link to files/symbols
-- NO questions at the end${askQuestionsEnabled ? ' — ask during workflow via #tool:vscode/askQuestions' : ''}
+${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #tool:vscode/askQuestions' : '- Include "Further Considerations" section for clarifying questions'}
 - Keep scannable
 </plan_style_guide>`;
 	}

@@ -16,7 +16,7 @@
 	"dependencies": {
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@sinclair/typebox": "^0.34.41",
-		"@vscode/copilot-api": "^0.2.8",
+		"@vscode/copilot-api": "^0.2.12",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
@@ -30,7 +30,7 @@
 		"yaml": "^2.8.0"
 	},
 	"devDependencies": {
-		"@anthropic-ai/sdk": "^0.71.2",
+		"@anthropic-ai/sdk": "^0.72.1",
 		"@octokit/types": "^14.1.0",
 		"@types/node": "^22.16.3",
 		"@types/vscode": "^1.108.1",

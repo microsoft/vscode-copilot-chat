@@ -19,6 +19,7 @@ import { readFileFromTextBufferOrFS } from '../../filesystem/node/fileSystemServ
 import { IGitService, RepoContext, normalizeFetchUrl } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
 import { Response } from '../../networking/common/fetcherService';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 type ContentExclusionRule = {
@@ -61,7 +62,8 @@ export class RemoteContentExclusion implements IDisposable {
 		private readonly _authService: IAuthenticationService,
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _fileSystemService: IFileSystemService,
-		private readonly _workspaceService: IWorkspaceService
+		private readonly _workspaceService: IWorkspaceService,
+		private readonly _requestLogger: IRequestLogger
 	) {
 		// This is a specialized entry to store the global rules that apply to files outside of any git repository
 		// The other option was to maintain a separate cache for non git files but that would be redundant
@@ -299,6 +301,18 @@ export class RemoteContentExclusion implements IDisposable {
 		}
 		this._lastRuleFetch = Date.now();
 		this._logService.info(`Fetched content exclusion rules in ${Date.now() - startTime}ms`);
+
+		// Log the fetched rules to the request logger for debugging visibility
+		const repos = Array.from(this._contentExclusionCache.keys());
+		const rules = repos.map(repo => {
+			const entry = this._contentExclusionCache.get(repo)!;
+			return {
+				patterns: entry.patterns,
+				ifAnyMatch: entry.ifAnyMatch.map(r => r.toString()),
+				ifNoneMatch: entry.ifNoneMatch.map(r => r.toString())
+			};
+		});
+		this._requestLogger.logContentExclusionRules(repos, rules, Date.now() - startTime);
 	}
 
 

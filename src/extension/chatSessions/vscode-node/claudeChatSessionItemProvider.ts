@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 
 /**
  * Chat session item provider for Claude Code.
@@ -43,10 +43,10 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 			label: session.label,
 			tooltip: `Claude Code session: ${session.label}`,
 			timing: {
-				created: session.timestamp.getTime(),
-				startTime: session.timestamp.getTime(),
+				created: session.firstMessageTimestamp.getTime(),
+				lastRequestEnded: session.lastMessageTimestamp.getTime(),
 			},
-			iconPath: new vscode.ThemeIcon('code')
+			iconPath: new vscode.ThemeIcon('claude')
 		} satisfies vscode.ChatSessionItem));
 
 		return diskSessions;

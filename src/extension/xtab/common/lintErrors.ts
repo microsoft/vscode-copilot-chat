@@ -8,6 +8,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { LintOptions, LintOptionShowCode, LintOptionWarning } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
@@ -26,53 +27,55 @@ export class LintErrors {
 	private _previousFormttedDiagnostics: readonly DiagnosticDataWithDistance[] | undefined;
 
 	constructor(
-		private readonly _lintOptions: LintOptions,
 		private readonly _documentId: DocumentId,
 		private readonly _document: CurrentDocument,
 		@ILanguageDiagnosticsService private readonly _langDiagService: ILanguageDiagnosticsService,
 	) { }
 
-	private _diagnostics(): readonly DiagnosticDataWithDistance[] {
-		const resource = this._documentId.toUri();
-		const allDiagnostics = this._langDiagService.getDiagnostics(resource);
+	private _diagnostics(resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
+		const allDiagnostics: [URI, Diagnostic[]][] = resource ? [[resource, this._langDiagService.getDiagnostics(resource)]] : this._langDiagService.getAllDiagnostics();
+		const activeDocumentUri = this._documentId.toUri();
 
-		return allDiagnostics.map(diagnostic => {
-			const range = new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1);
-			const distance = CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition);
-			return new DiagnosticDataWithDistance(
-				resource,
-				diagnostic.message,
-				diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-				distance,
-				range,
-				this._document.transformer.getOffsetRange(range),
-				diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-				diagnostic.source
-			);
-		});
+		return allDiagnostics.map(fileDiagnostics => {
+			const [uri, diagnostics] = fileDiagnostics;
+			return diagnostics.map(diagnostic => {
+				const range = new Range(diagnostic.range.start.line + 1, diagnostic.range.start.character + 1, diagnostic.range.end.line + 1, diagnostic.range.end.character + 1);
+				const distance = isEqual(activeDocumentUri, uri) ? CursorDistance.fromPositions(range.getStartPosition(), this._document.cursorPosition) : undefined;
+				return new DiagnosticDataWithDistance(
+					uri,
+					diagnostic.message,
+					diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
+					distance,
+					range,
+					this._document.transformer.getOffsetRange(range),
+					diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
+					diagnostic.source
+				);
+			});
+		}).flat();
 	}
 
-	private _getRelevantDiagnostics(): readonly DiagnosticDataWithDistance[] {
-		let diagnostics = this._diagnostics();
+	private _getRelevantDiagnostics(options: LintOptions, resource: URI | undefined): readonly DiagnosticDataWithDistance[] {
+		let diagnostics = this._diagnostics(resource);
 
-		diagnostics = filterDiagnosticsByDistance(diagnostics, this._lintOptions.maxLineDistance);
+		diagnostics = filterDiagnosticsByDistance(diagnostics, options.maxLineDistance);
 		diagnostics = sortDiagnosticsByDistance(diagnostics);
-		diagnostics = filterDiagnosticsBySeverity(diagnostics, this._lintOptions.warnings);
+		diagnostics = filterDiagnosticsBySeverity(diagnostics, options.warnings);
 
-		return diagnostics.slice(0, this._lintOptions.maxLints);
+		return diagnostics.slice(0, options.maxLints);
 	}
 
-	public getFormattedLintErrors(): string {
-		const diagnostics = this._getRelevantDiagnostics();
+	public getFormattedLintErrors(options: LintOptions): string {
+		const diagnostics = this._getRelevantDiagnostics(options, this._documentId.toUri());
 		this._previousFormttedDiagnostics = diagnostics;
 
-		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, this._lintOptions)).join('\n');
+		const formattedDiagnostics = diagnostics.map(d => formatSingleDiagnostic(d, this._document.lines, options)).join('\n');
 
-		const lintTag = PromptTags.createLintTag(this._lintOptions.tagName);
+		const lintTag = PromptTags.createLintTag(options.tagName);
 		return `${lintTag.start}\n${formattedDiagnostics}\n${lintTag.end}`;
 	}
 
-	public lineNumberInPreviousFormattedPrompt(lineNumber: number): boolean {
+	public lineNumberInPreviousFormattedPrompt(options: LintOptions, lineNumber: number): boolean {
 		if (!this._previousFormttedDiagnostics) {
 			throw new BugIndicatingError('No previous formatted diagnostics available to check line number against.');
 		}
@@ -83,17 +86,51 @@ export class LintErrors {
 				return true;
 			}
 
-			if (this._lintOptions.showCode === LintOptionShowCode.NO) {
+			if (options.showCode === LintOptionShowCode.NO) {
 				continue;
 			}
 
-			const lineRange = diagnosticsToCodeLineRange(diagnostic.documentRange, this._lintOptions);
+			const lineRange = diagnosticsToCodeLineRange(diagnostic.documentRange, options);
 			if (lineRange.contains(lineNumber)) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	public getData(): string {
+		// Create options with everything enabled for comprehensive telemetry
+		const telemetryOptions: LintOptions = {
+			tagName: 'telemetry',
+			warnings: LintOptionWarning.YES,
+			showCode: LintOptionShowCode.NO,
+			maxLints: Number.MAX_SAFE_INTEGER,
+			maxLineDistance: Number.MAX_SAFE_INTEGER, // Include all diagnostics regardless of distance
+		};
+
+		let diagnostics = this._diagnostics(undefined);
+		diagnostics = filterDiagnosticsBySeverity(diagnostics, LintOptionWarning.YES);
+		diagnostics = sortDiagnosticsByDistance(diagnostics);
+		diagnostics = diagnostics.slice(0, 20);
+
+		const telemetryDiagnostics = diagnostics.map(diagnostic => ({
+			uri: diagnostic.documentUri.toString(),
+			line: diagnostic.documentRange.startLineNumber,
+			column: diagnostic.documentRange.startColumn,
+			endLine: diagnostic.documentRange.endLineNumber,
+			endColumn: diagnostic.documentRange.endColumn,
+			severity: diagnostic.severity,
+			message: diagnostic.message,
+			code: diagnostic.code,
+			source: diagnostic.source,
+			lineDistance: diagnostic.distance?.lineDistance,
+			formatted: formatSingleDiagnostic(diagnostic, this._document.lines, telemetryOptions),
+			formattedCode: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES }),
+			formattedCodeWithSurrounding: formatSingleDiagnostic(diagnostic, this._document.lines, { ...telemetryOptions, showCode: LintOptionShowCode.YES_WITH_SURROUNDING }),
+		}));
+
+		return JSON.stringify(telemetryDiagnostics);
 	}
 }
 
@@ -160,11 +197,22 @@ function formatCodeLine(lineNumber: number, lineContent: string): string {
 }
 
 function filterDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDistance[], distance: number): readonly DiagnosticDataWithDistance[] {
-	return diagnostics.filter(d => d.distance.lineDistance <= distance);
+	return diagnostics.filter(d => d.distance?.lineDistance !== undefined && d.distance.lineDistance <= distance);
 }
 
 function sortDiagnosticsByDistance(diagnostics: readonly DiagnosticDataWithDistance[]): readonly DiagnosticDataWithDistance[] {
-	return diagnostics.slice().sort((a, b) => CursorDistance.compareFn(a.distance, b.distance));
+	return diagnostics.slice().sort((a, b) => {
+		if (a.distance === undefined && b.distance === undefined) {
+			return 0;
+		}
+		if (a.distance === undefined) {
+			return 1;
+		}
+		if (b.distance === undefined) {
+			return -1;
+		}
+		return CursorDistance.compareFn(a.distance, b.distance);
+	});
 }
 
 function filterDiagnosticsBySeverity(diagnostics: readonly DiagnosticDataWithDistance[], warnings: LintOptionWarning): readonly DiagnosticDataWithDistance[] {
@@ -211,7 +259,7 @@ class DiagnosticDataWithDistance extends DiagnosticData {
 		documentUri: URI,
 		message: string,
 		severity: 'error' | 'warning',
-		public distance: CursorDistance,
+		public distance: CursorDistance | undefined,
 		public documentRange: Range,
 		range: OffsetRange,
 		code: string | number | undefined,

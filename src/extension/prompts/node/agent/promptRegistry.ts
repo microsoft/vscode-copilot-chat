@@ -27,7 +27,6 @@ export interface IAgentPrompt {
 	resolveCopilotIdentityRules?(endpoint: IChatEndpoint): CopilotIdentityRulesConstructor | undefined;
 	resolveSafetyRules?(endpoint: IChatEndpoint): SafetyRulesConstructor | undefined;
 	resolveUserQueryTagName?(endpoint: IChatEndpoint): string | undefined;
-	resolveAttachmentHint?(endpoint: IChatEndpoint): string | undefined;
 }
 
 export interface IAgentPromptCtor {
@@ -49,7 +48,6 @@ export interface AgentPromptCustomizations {
 	readonly CopilotIdentityRulesClass: CopilotIdentityRulesConstructor;
 	readonly SafetyRulesClass: SafetyRulesConstructor;
 	readonly userQueryTagName?: string;
-	readonly attachmentHint: string;
 }
 
 export const PromptRegistry = new class {
@@ -107,7 +105,6 @@ export const PromptRegistry = new class {
 			CopilotIdentityRulesClass: agentPrompt?.resolveCopilotIdentityRules?.(endpoint) ?? CopilotIdentityRules,
 			SafetyRulesClass: agentPrompt?.resolveSafetyRules?.(endpoint) ?? SafetyRules,
 			userQueryTagName: agentPrompt?.resolveUserQueryTagName?.(endpoint) ?? 'userRequest',
-			attachmentHint: agentPrompt?.resolveAttachmentHint?.(endpoint) ?? '',
 		};
 	}
 }();

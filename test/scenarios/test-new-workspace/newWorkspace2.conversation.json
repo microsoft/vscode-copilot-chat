@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /new create a PowerShell module product that wraps the Open Exchange Rates API",
+        "question": "/new create a PowerShell module product that wraps the Open Exchange Rates API",
         "stateFile": "./workspaceState.state.json"
     }
 ]

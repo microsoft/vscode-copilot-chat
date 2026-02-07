@@ -124,6 +124,7 @@ export interface ILoggedToolCall {
 	token: CapturingToken | undefined;
 	time: number;
 	thinking?: ThinkingData;
+	toolMetadata?: unknown;
 	toJSON(): Promise<object>;
 }
 
@@ -137,6 +138,8 @@ export interface ILoggedPendingRequest {
 	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
 	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -155,6 +158,8 @@ export interface IRequestLogger {
 	logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
 
 	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
+
+	logContentExclusionRules(repos: string[], rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], durationMs: number): void;
 
 	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
@@ -184,6 +189,8 @@ export interface ILoggedChatMLRequest {
 	startTime: Date;
 	endTime: Date;
 	isConversationRequest?: boolean;
+	/** Custom metadata to be displayed in the log document */
+	customMetadata?: Record<string, string | number | boolean | undefined>;
 }
 
 export interface ILoggedChatMLSuccessRequest extends ILoggedChatMLRequest {
@@ -222,6 +229,54 @@ export type LoggedRequest = (
 
 const requestLogStorage = new AsyncLocalStorage<CapturingToken>();
 
+/**
+ * Correlation map for preserving CapturingToken across IPC boundaries.
+ *
+ * When requests cross the VS Code IPC boundary (e.g., BYOK providers),
+ * AsyncLocalStorage context is lost. This map allows correlating requests
+ * by storing the token before IPC and retrieving it on the other side.
+ */
+const capturingTokenCorrelationMap = new Map<string, CapturingToken>();
+
+/**
+ * Get the current CapturingToken from AsyncLocalStorage.
+ * Returns undefined if not within a captureInvocation context.
+ */
+export function getCurrentCapturingToken(): CapturingToken | undefined {
+	return requestLogStorage.getStore();
+}
+
+/**
+ * Store the current CapturingToken with a correlation ID for cross-IPC retrieval.
+ * Call this before making a request that will cross IPC boundaries.
+ */
+export function storeCapturingTokenForCorrelation(correlationId: string): void {
+	const token = requestLogStorage.getStore();
+	if (token) {
+		capturingTokenCorrelationMap.set(correlationId, token);
+	}
+}
+
+/**
+ * Retrieve and remove a CapturingToken by correlation ID.
+ * Returns undefined if no token was stored for this ID.
+ */
+export function retrieveCapturingTokenByCorrelation(correlationId: string): CapturingToken | undefined {
+	const token = capturingTokenCorrelationMap.get(correlationId);
+	if (token) {
+		capturingTokenCorrelationMap.delete(correlationId);
+	}
+	return token;
+}
+
+/**
+ * Run a function within a CapturingToken context without going through IRequestLogger.
+ * Used to restore context after IPC boundary crossing.
+ */
+export function runWithCapturingToken<T>(token: CapturingToken, fn: () => T): T {
+	return requestLogStorage.run(token, fn);
+}
+
 export abstract class AbstractRequestLogger extends Disposable implements IRequestLogger {
 	declare _serviceBrand: undefined;
 
@@ -236,6 +291,10 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 	public abstract logServerToolCall(id: string, name: string, args: unknown, result: LanguageModelToolResult2): void;
+
+	public logContentExclusionRules(_repos: string[], _rules: { patterns: string[]; ifAnyMatch: string[]; ifNoneMatch: string[] }[], _durationMs: number): void {
+		// no-op by default; concrete implementations can override
+	}
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
@@ -285,7 +344,8 @@ class AbstractPendingLoggedRequest {
 			chatParams: this._chatParams,
 			startTime: this._time,
 			endTime: new Date(),
-			isConversationRequest: this._chatParams.isConversationRequest
+			isConversationRequest: this._chatParams.isConversationRequest,
+			customMetadata: this._chatParams.customMetadata
 		});
 	}
 }
@@ -312,6 +372,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 				deltas
 			});
@@ -325,6 +386,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				isConversationRequest: this._chatParams.isConversationRequest,
+				customMetadata: this._chatParams.customMetadata,
 				result,
 			});
 		}

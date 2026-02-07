@@ -8,7 +8,6 @@ import { CapturingToken } from '../../../../platform/requestLogger/common/captur
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IClaudeCodeModels } from './claudeCodeModels';
 
 export interface SessionState {
 	modelId: string | undefined;
@@ -34,10 +33,9 @@ export interface IClaudeSessionStateService {
 	readonly onDidChangeSessionState: Event<SessionStateChangeEvent>;
 
 	/**
-	 * Gets the model ID for a session. Falls back to default if not set.
-	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
+	 * Gets the stored model ID for a session (does not apply fallback logic).
 	 */
-	getModelIdForSession(sessionId: string): Promise<string>;
+	getModelIdForSession(sessionId: string): Promise<string | undefined>;
 
 	/**
 	 * Sets the model ID for a session.
@@ -77,19 +75,13 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 	// TODO: What about expiration of state for old sessions?
 	private readonly _sessionState = new Map<string, SessionState>();
 
-	constructor(
-		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
-	) {
+	constructor() {
 		super();
 	}
 
-	async getModelIdForSession(sessionId: string): Promise<string> {
+	async getModelIdForSession(sessionId: string): Promise<string | undefined> {
 		const state = this._sessionState.get(sessionId);
-		if (state?.modelId !== undefined) {
-			return state.modelId;
-		}
-		// Fall back to default
-		return this.claudeCodeModels.getDefaultModel();
+		return state?.modelId;
 	}
 
 	setModelIdForSession(sessionId: string, modelId: string | undefined): void {

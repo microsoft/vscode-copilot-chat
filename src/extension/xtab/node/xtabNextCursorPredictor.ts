@@ -105,7 +105,7 @@ export class XtabNextCursorPredictor {
 
 		// Get lint diagnostics if enabled for cursor prediction
 		const lintOptions = this.determineLintOptions();
-		const lintErrors = lintOptions ? new LintErrors(lintOptions, promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService) : undefined;
+		const lintErrors = new LintErrors(promptPieces.activeDoc.id, promptPieces.currentDocument, this.langDiagService);
 
 		const includeLineNumbersInRecentSnippets = backwardCompatSetting<boolean, xtabPromptOptions.IncludeLineNumbersOption>(
 			this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionRecentSnippetsIncludeLineNumbers, this.expService),
@@ -154,6 +154,7 @@ export class XtabNextCursorPredictor {
 			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
 			return Result.fromString('modelNameNotDefined');
 		}
+		telemetryBuilder?.setCursorJumpModelName(modelName);
 
 		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionUrl);
 		const secretKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsNextCursorPredictionApiKey);

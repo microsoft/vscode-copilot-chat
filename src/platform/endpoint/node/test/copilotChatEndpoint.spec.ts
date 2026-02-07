@@ -279,10 +279,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -305,10 +301,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -330,10 +322,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -356,10 +344,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -374,17 +358,14 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			expect(body.thinking_budget).toBe(maxOutputTokens - 1);
 		});
 
-		it('should use default thinking_budget of 4000', () => {
+		it('should use default thinking_budget of 16000 when not configured', () => {
 			mockServices.configurationService.setConfig(ConfigKey.AnthropicThinkingBudget, undefined);
-			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4-5');
+			// Use large maxOutputTokens so default budget isn't capped
+			const modelMetadata = createAnthropicModelMetadata('claude-sonnet-4-5', 50000);
 
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -396,7 +377,8 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const options = { ...createTestOptions([createUserMessage('Hello')]), location: ChatLocation.Agent };
 			const body = endpoint.createRequestBody(options);
 
-			expect(body.thinking_budget).toBe(4000);
+			// Default config is 16000
+			expect(body.thinking_budget).toBe(16000);
 		});
 
 		it('should not set thinking_budget for non-Anthropic models (gpt)', () => {
@@ -406,10 +388,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -431,10 +409,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -457,10 +431,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -485,10 +455,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -510,10 +476,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -535,10 +497,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -560,10 +518,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -585,10 +539,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -610,10 +560,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -638,10 +584,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -666,10 +608,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -726,10 +664,6 @@ describe('ChatEndpoint - Anthropic Thinking Budget', () => {
 			const endpoint = new ChatEndpoint(
 				modelMetadata,
 				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.fetcherService,
-				mockServices.telemetryService,
-				mockServices.authService,
 				mockServices.chatMLFetcher,
 				mockServices.tokenizerProvider,
 				mockServices.instantiationService,
@@ -798,10 +732,6 @@ describe('ChatEndpoint - Image Count Validation', () => {
 		const endpoint = new ChatEndpoint(
 			modelMetadata,
 			mockServices.domainService,
-			mockServices.capiClientService,
-			mockServices.fetcherService,
-			mockServices.telemetryService,
-			mockServices.authService,
 			mockServices.chatMLFetcher,
 			mockServices.tokenizerProvider,
 			mockServices.instantiationService,
@@ -822,10 +752,6 @@ describe('ChatEndpoint - Image Count Validation', () => {
 		const endpoint = new ChatEndpoint(
 			modelMetadata,
 			mockServices.domainService,
-			mockServices.capiClientService,
-			mockServices.fetcherService,
-			mockServices.telemetryService,
-			mockServices.authService,
 			mockServices.chatMLFetcher,
 			mockServices.tokenizerProvider,
 			mockServices.instantiationService,
