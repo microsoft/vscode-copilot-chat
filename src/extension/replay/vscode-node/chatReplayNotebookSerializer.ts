@@ -9,6 +9,15 @@ import { ChatReplayExport, ExportedLogEntry, ExportedPrompt, getChatMLSuccessMes
 /** The notebook type identifier for chat replay notebooks */
 export const CHAT_REPLAY_NOTEBOOK_TYPE = 'copilot-chat-replay';
 
+// IMPORTANT: Use a deterministic number formatter for notebook output.
+// The default `toLocaleString()` depends on the machine locale (e.g. en-IN formats 100000 as 1,00,000),
+// which makes output and tests flaky.
+const enUsIntegerFormatter = new Intl.NumberFormat('en-US');
+
+function formatInteger(value: number): string {
+	return enUsIntegerFormatter.format(value);
+}
+
 /** Cell metadata for collapsible and read-only cells */
 interface CellMetadata {
 	collapsed?: boolean;
@@ -214,15 +223,15 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 				lines.push(`**Model:** ${metadata.model}`);
 			}
 			if (metadata.duration !== undefined) {
-				lines.push(`**Duration:** ${metadata.duration.toLocaleString()}ms`);
+				lines.push(`**Duration:** ${formatInteger(metadata.duration)}ms`);
 			}
 			if (metadata.usage) {
 				const usage = metadata.usage;
 				if (usage.prompt_tokens !== undefined) {
-					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString()}`);
+					lines.push(`**Prompt Tokens:** ${formatInteger(usage.prompt_tokens)}`);
 				}
 				if (usage.completion_tokens !== undefined) {
-					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString()}`);
+					lines.push(`**Completion Tokens:** ${formatInteger(usage.completion_tokens)}`);
 				}
 			}
 		}
@@ -238,7 +247,7 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 
 		if (log.tokens !== undefined && log.maxTokens !== undefined) {
 			const percentage = ((log.tokens / log.maxTokens) * 100).toFixed(1);
-			lines.push(`**Tokens:** ${log.tokens.toLocaleString()} / ${log.maxTokens.toLocaleString()} (${percentage}%)`);
+			lines.push(`**Tokens:** ${formatInteger(log.tokens)} / ${formatInteger(log.maxTokens)} (${percentage}%)`);
 		}
 
 		return lines.join('\n');
@@ -256,15 +265,15 @@ export class ChatReplayNotebookSerializer implements NotebookSerializer {
 				lines.push(`**Model:** ${metadata.model}`);
 			}
 			if (metadata.duration !== undefined) {
-				lines.push(`**Duration:** ${metadata.duration.toLocaleString()}ms`);
+				lines.push(`**Duration:** ${formatInteger(metadata.duration)}ms`);
 			}
 			if (metadata.usage) {
 				const usage = metadata.usage;
 				if (usage.prompt_tokens !== undefined) {
-					lines.push(`**Prompt Tokens:** ${usage.prompt_tokens.toLocaleString()}`);
+					lines.push(`**Prompt Tokens:** ${formatInteger(usage.prompt_tokens)}`);
 				}
 				if (usage.completion_tokens !== undefined) {
-					lines.push(`**Completion Tokens:** ${usage.completion_tokens.toLocaleString()}`);
+					lines.push(`**Completion Tokens:** ${formatInteger(usage.completion_tokens)}`);
 				}
 			}
 			if (metadata.startTime) {
