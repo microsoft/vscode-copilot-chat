@@ -739,7 +739,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				return { type: 'canceled', reason: 'after fetch request' };
 			}
 
-			const choices = LiveOpenAIFetcher.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData);
+			const choices = LiveOpenAIFetcher.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData, cancel);
 
 			return {
 				type: 'success',
@@ -821,7 +821,7 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 	/**
 	 * @remarks exposed only for testing.
 	 */
-	public static async *convertStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp): AsyncIterable<APIChoice> {
+	public static async *convertStreamToApiChoices(resp: ResponseStream, finishedCb: FinishedCallback, baseTelemetryData: TelemetryWithExp, cancel?: CancellationToken): AsyncIterable<APIChoice> {
 
 		const createAPIChoice = (
 			choiceIndex: number,
@@ -843,95 +843,167 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 			meanAlternativeLogProb: undefined,
 		});
 
-		const completions: { accumulator: CompletionAccumulator; isFinished: boolean }[] = [];
+		const completions: { accumulator: CompletionAccumulator; isFinished: boolean; yielded: boolean }[] = [];
 
-		for await (const chunk of resp.stream) {
-			for (let i = 0; i < chunk.choices.length; i++) {
-				const chunkIdx = chunk.choices[i].index;
-				let completion = completions[chunkIdx];
-				if (completion === undefined) {
-					completion = { accumulator: new CompletionAccumulator(), isFinished: false };
-					completions[chunkIdx] = completion;
-				} else if (completion.isFinished) {
-					// already finished, skip
-					continue;
+		try {
+			for await (const chunk of resp.stream) {
+				if (cancel?.isCancellationRequested) {
+					return;
 				}
-				const choice = chunk.choices[i];
-				completion.accumulator.append(choice);
 
-				// finish_reason determines whether the completion is finished by the LLM
-				const hasFinishReason = !!(chunk.choices[i].finish_reason);
+				for (let i = 0; i < chunk.choices.length; i++) {
+					const chunkIdx = chunk.choices[i].index;
+					let completion = completions[chunkIdx];
+					if (completion === undefined) {
+						completion = { accumulator: new CompletionAccumulator(), isFinished: false, yielded: false };
+						completions[chunkIdx] = completion;
+					} else if (completion.isFinished) {
+						// already finished, skip
+						continue;
+					}
+					const choice = chunk.choices[i];
+					completion.accumulator.append(choice);
 
-				// Only call finishedCb when there's a newline or finish_reason, matching SSEProcessor behavior.
-				// This optimization avoids calling finishedCb on every chunk which can be expensive.
-				const chunkText = choice.text ?? '';
-				const hasNewLine = chunkText.indexOf('\n') > -1;
+					// finish_reason determines whether the completion is finished by the LLM
+					const hasFinishReason = !!(chunk.choices[i].finish_reason);
 
-				let solutionDecision: SolutionDecision | number | undefined;
-				if (hasFinishReason || hasNewLine) {
-					// call finishedCb to determine whether the completion is finished by the client
-					solutionDecision = await finishedCb(completion.accumulator.responseSoFar, {
+					// Only call finishedCb when there's a newline or finish_reason, matching SSEProcessor behavior.
+					// This optimization avoids calling finishedCb on every chunk which can be expensive.
+					const chunkText = choice.text ?? '';
+					const hasNewLine = chunkText.indexOf('\n') > -1;
+
+					let solutionDecision: SolutionDecision | number | undefined;
+					if (hasFinishReason || hasNewLine) {
+						// call finishedCb to determine whether the completion is finished by the client
+						solutionDecision = await finishedCb(completion.accumulator.responseSoFar, {
+							index: chunkIdx,
+							text: completion.accumulator.responseSoFar,
+							finished: hasFinishReason,
+							requestId: resp.requestId,
+							telemetryData: baseTelemetryData,
+							annotations: completion.accumulator.annotations,
+							getAPIJsonData: () => ({
+								text: completion.accumulator.responseSoFar,
+								tokens: completion.accumulator.chunks,
+								finish_reason: completion.accumulator.finishReason ?? 'stop', // @ulugbekna: logic to determine if last completion was accepted uses finish reason, so changing this `?? 'stop'` will change behavior of multiline completions
+								copilot_annotations: completion.accumulator.annotations.current,
+							} satisfies APIJsonData),
+						} satisfies RequestDelta);
+
+						if (cancel?.isCancellationRequested) {
+							return;
+						}
+					}
+
+					// Determine whether to yield based on finish_reason or callback decision.
+					// When finish_reason is present, force yield & stop streaming (matching SSEProcessor).
+					if (hasFinishReason) {
+						if (solutionDecision === undefined || typeof solutionDecision !== 'object') {
+							solutionDecision = { yieldSolution: true, continueStreaming: false };
+						} else {
+							solutionDecision.yieldSolution = true;
+							solutionDecision.continueStreaming = false;
+						}
+					}
+
+					if (solutionDecision !== undefined &&
+						(typeof solutionDecision === 'number' || solutionDecision.yieldSolution)
+					) {
+						// mark as finished
+						const isFinished = hasFinishReason || typeof solutionDecision === 'number' || (solutionDecision !== undefined && !solutionDecision.continueStreaming);
+						completion.isFinished = isFinished;
+
+						const finishReason = chunk.choices[i].finish_reason;
+						if (finishReason) {
+							completion.accumulator.finishReason = finishReason;
+						}
+
+						const finishOffset = typeof solutionDecision === 'number'
+							? solutionDecision
+							: (solutionDecision && solutionDecision.finishOffset !== undefined
+								? solutionDecision.finishOffset
+								: undefined);
+						const completionText = finishOffset === undefined
+							? completion.accumulator.responseSoFar
+							: completion.accumulator.responseSoFar.slice(0, finishOffset);
+
+						// Guard against double-yielding the same choice, matching
+						// SSEProcessor's `solution.yielded` flag. Without this,
+						// StreamedCompletionSplitter can yield the first segment
+						// (via yieldSolution+continueStreaming), and then
+						// finish_reason forces a second yield of the full text,
+						// which ends up cached as a spurious ghost text suggestion.
+						if (!completion.yielded) {
+							completion.yielded = true;
+							const apiChoice = createAPIChoice(
+								chunkIdx,
+								completionText,
+								completion.accumulator.finishReason ?? 'stop',
+								completion.accumulator,
+								finishOffset !== undefined,
+							);
+							yield apiChoice;
+						}
+
+						if (cancel?.isCancellationRequested) {
+							return;
+						}
+					}
+				}
+			}
+
+			// When the stream ends, call finishedCb with finished=true for any
+			// completions that weren't individually finished. This matches
+			// SSEProcessor.finishSolutions which gives the callback a final
+			// chance to process / trim the complete text (e.g. StreamedCompletionSplitter.trimAll).
+			for (const [chunkIdx, completion] of completions.entries()) {
+				if (!completion.isFinished) {
+					await finishedCb(completion.accumulator.responseSoFar, {
 						index: chunkIdx,
 						text: completion.accumulator.responseSoFar,
-						finished: hasFinishReason,
+						finished: true,
 						requestId: resp.requestId,
 						telemetryData: baseTelemetryData,
 						annotations: completion.accumulator.annotations,
 						getAPIJsonData: () => ({
 							text: completion.accumulator.responseSoFar,
 							tokens: completion.accumulator.chunks,
-							finish_reason: completion.accumulator.finishReason ?? 'stop', // @ulugbekna: logic to determine if last completion was accepted uses finish reason, so changing this `?? 'stop'` will change behavior of multiline completions
+							finish_reason: completion.accumulator.finishReason ?? 'stop',
 							copilot_annotations: completion.accumulator.annotations.current,
 						} satisfies APIJsonData),
 					} satisfies RequestDelta);
-				}
 
-				// handle all fields of finishedCb
-				if (hasFinishReason ||
-					(solutionDecision !== undefined &&
-						(typeof solutionDecision === 'number' || solutionDecision.yieldSolution))
-				) {
-					// mark as finished
-					const isFinished = hasFinishReason || typeof solutionDecision === 'number' || (solutionDecision !== undefined && !solutionDecision.continueStreaming);
-					completion.isFinished = isFinished;
-
-					const finishReason = chunk.choices[i].finish_reason;
-					if (finishReason) {
-						completion.accumulator.finishReason = finishReason;
+					if (cancel?.isCancellationRequested) {
+						return;
 					}
 
-					const finishOffset = typeof solutionDecision === 'number'
-						? solutionDecision
-						: (solutionDecision && solutionDecision.finishOffset !== undefined
-							? solutionDecision.finishOffset
-							: undefined);
-					const completionText = finishOffset === undefined
-						? completion.accumulator.responseSoFar
-						: completion.accumulator.responseSoFar.slice(0, finishOffset);
+					// Skip if already yielded (matches SSEProcessor.finishSolutions)
+					if (completion.yielded) {
+						continue;
+					}
+					completion.yielded = true;
 
-					const choice = createAPIChoice(
+					const apiChoice = createAPIChoice(
 						chunkIdx,
-						completionText,
-						completion.accumulator.finishReason ?? 'stop',
+						completion.accumulator.responseSoFar,
+						completion.accumulator.finishReason ?? 'stop', // Matches original SSEProcessor behavior: convertToAPIJsonData defaults to 'stop'
 						completion.accumulator,
-						finishOffset !== undefined,
+						false
 					);
-					yield choice;
+					yield apiChoice;
+
+					if (cancel?.isCancellationRequested) {
+						return;
+					}
 				}
 			}
-		}
-
-		// in case stream ends but some completions are not finished yet
-		for (const [chunkIdx, completion] of completions.entries()) {
-			if (!completion.isFinished) {
-				const choice = createAPIChoice(
-					chunkIdx,
-					completion.accumulator.responseSoFar,
-					completion.accumulator.finishReason ?? 'stop', // Matches original SSEProcessor behavior: convertToAPIJsonData defaults to 'stop'
-					completion.accumulator,
-					false
-				);
-				yield choice;
+		} finally {
+			// Destroy the network stream so the server is notified to stop sending data,
+			// matching SSEProcessor's finally block behavior in processSSE.
+			try {
+				await resp.destroy();
+			} catch {
+				// ignore destroy errors
 			}
 		}
 	}

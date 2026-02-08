@@ -47,6 +47,12 @@ export type StreamedEdit = {
 	readonly edit: LineReplacement;
 	readonly isFromCursorJump: boolean;
 	readonly window?: OffsetRange;
+	/**
+	 * For cursor jump edits, this is the edit window around the original cursor position
+	 * (before the jump). This allows the cached edit to be served when the cursor is
+	 * in either the original location or the jump target location.
+	 */
+	readonly originalWindow?: OffsetRange;
 	readonly targetDocument?: DocumentId;
 }
 
@@ -381,6 +387,9 @@ export interface IStatelessNextEditTelemetry {
 	readonly cursorJumpModelName: string | undefined;
 	readonly cursorJumpPrompt: string | undefined;
 	readonly cursorJumpResponse: string | undefined;
+
+	/* lint errors info */
+	readonly lintErrors: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -459,6 +468,7 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpModelName: this._cursorJumpModelName,
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
+			lintErrors: this._lintErrors,
 		};
 	}
 
@@ -625,6 +635,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _editIntentParseError: string | undefined;
 	public setEditIntentParseError(error: string): this {
 		this._editIntentParseError = error;
+		return this;
+	}
+
+	private _lintErrors: string | undefined;
+	public setLintErrors(lintErrors: string): this {
+		this._lintErrors = lintErrors;
 		return this;
 	}
 }

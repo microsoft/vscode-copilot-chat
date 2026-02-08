@@ -26,6 +26,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -41,6 +42,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -56,6 +58,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -89,6 +92,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -104,6 +108,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -119,6 +124,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -195,6 +201,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -210,6 +217,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -225,6 +233,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -240,6 +249,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -296,6 +306,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -311,6 +322,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -326,6 +338,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -341,6 +354,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2454,6 +2468,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2778,6 +2793,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2793,6 +2809,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },

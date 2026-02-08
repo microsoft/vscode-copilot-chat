@@ -2,13 +2,13 @@
 	{
 		"name": "variables [panel] [typescript] - Summarize #file:functions.ts",
 		"requests": [
-			"54fd6f137e73f9a594cc0b1e9fe8814eae4a5e7418c2d3232dd42e56208426de"
+			"6db3f262da132d31eba8da8b59c849f42a7eacfd15877ed1ec25d6232d17b1de"
 		]
 	},
 	{
 		"name": "variables [panel] [typescript] - Summarize #terminalSelection",
 		"requests": [
-			"b77bb3528a85ad16c81efbb0db0313563fbc67b0da0905f8cc43392b8a7bdf30"
+			"238aaa3c5ba4c4eff413f0a8418156d7b562496a2e4e4870cb6676a49951647b"
 		]
 	}
 ]

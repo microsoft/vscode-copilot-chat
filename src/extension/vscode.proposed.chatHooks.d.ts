@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 1
+// version: 3
 
 declare module 'vscode' {
 
 	/**
 	 * The type of hook to execute.
 	 */
-	export type ChatHookType = 'sessionStart' | 'userPromptSubmitted' | 'preToolUse' | 'postToolUse' | 'postToolUseFailure' | 'subagentStart' | 'subagentStop' | 'stop';
+	export type ChatHookType = 'SessionStart' | 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse' | 'SubagentStart' | 'SubagentStop' | 'Stop' | 'PreCompact';
 
 	/**
 	 * Options for executing a hook command.
@@ -28,32 +28,36 @@ declare module 'vscode' {
 	}
 
 	/**
-	 * The kind of result from a hook execution.
+	 * The kind of result from executing a hook command.
+	 * - 'success': Hook executed successfully (exit code 0)
+	 * - 'error': Blocking error shown to model (exit code 2)
+	 * - 'warning': Non-blocking warning shown to user only (other exit codes)
 	 */
-	export enum ChatHookResultKind {
-		/**
-		 * Hook executed successfully (exit code 0).
-		 */
-		Success = 1,
-		/**
-		 * Hook returned an error (any non-zero exit code).
-		 */
-		Error = 2
-	}
+	export type ChatHookResultKind = 'success' | 'error' | 'warning';
 
 	/**
 	 * Result of executing a hook command.
+	 * Contains common flow control fields and the hook's output.
 	 */
 	export interface ChatHookResult {
 		/**
-		 * The kind of result.
+		 * The kind of result from executing the hook.
 		 */
-		readonly kind: ChatHookResultKind;
+		readonly resultKind: ChatHookResultKind;
 		/**
-		 * The result from the hook. For success, this is stdout parsed as JSON.
-		 * For errors, this is stderr.
+		 * If set, the agent should stop processing entirely after this hook.
+		 * The message is shown to the user but not to the agent.
 		 */
-		readonly result: string | object;
+		readonly stopReason?: string;
+		/**
+		 * Warning message shown to the user.
+		 */
+		readonly warningMessage?: string;
+		/**
+		 * The hook's output (hook-specific fields only).
+		 * For errors, this is the error message string.
+		 */
+		readonly output: unknown;
 	}
 
 	export namespace chat {

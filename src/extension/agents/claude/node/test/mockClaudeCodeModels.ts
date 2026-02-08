@@ -3,31 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClaudeCodeModelInfo, IClaudeCodeModels, NoClaudeModelsAvailableError } from '../claudeCodeModels';
+import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
+import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
+import { ILogService } from '../../../../../platform/log/common/logService';
+import { ClaudeCodeModelInfo, ClaudeCodeModels } from '../claudeCodeModels';
 
-export class MockClaudeCodeModels implements IClaudeCodeModels {
-	declare _serviceBrand: undefined;
-
-	private _defaultModel: string = 'claude-sonnet-4-20250514';
-
-	async resolveModel(modelId: string): Promise<string | undefined> {
-		const models = await this.getModels();
-		const normalizedId = modelId.trim().toLowerCase();
-		return models.find(m => m.id.toLowerCase() === normalizedId || m.name.toLowerCase() === normalizedId)?.id;
+export class MockClaudeCodeModels extends ClaudeCodeModels {
+	constructor(
+		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
+		@ILogService logService: ILogService,
+	) {
+		super(endpointProvider, extensionContext, logService);
 	}
 
-	async getDefaultModel(): Promise<string> {
-		if (!this._defaultModel) {
-			throw new NoClaudeModelsAvailableError();
-		}
-		return this._defaultModel;
-	}
-
-	async setDefaultModel(modelId: string | undefined): Promise<void> {
-		this._defaultModel = modelId ?? 'claude-sonnet-4-20250514';
-	}
-
-	async getModels(): Promise<ClaudeCodeModelInfo[]> {
+	override async getModels(): Promise<ClaudeCodeModelInfo[]> {
 		return [
 			{ id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
 			{ id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },

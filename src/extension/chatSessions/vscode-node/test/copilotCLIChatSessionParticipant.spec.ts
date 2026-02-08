@@ -39,7 +39,7 @@ import { IChatSessionWorkspaceFolderService } from '../../common/chatSessionWork
 import { IChatSessionWorktreeService, type ChatSessionWorktreeProperties } from '../../common/chatSessionWorktreeService';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant } from '../copilotCLIChatSessionsContribution';
 import { CopilotCloudSessionsProvider } from '../copilotCloudSessionsProvider';
-import { FolderRepositoryManager } from '../folderRepositoryManagerImpl';
+import { CopilotCLIFolderRepositoryManager } from '../folderRepositoryManagerImpl';
 
 // Mock terminal integration to avoid importing PowerShell asset (.ps1) which Vite cannot parse during tests
 vi.mock('../copilotCLITerminalIntegration', () => {
@@ -186,8 +186,9 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
-	let folderRepositoryManager: FolderRepositoryManager;
+	let folderRepositoryManager: CopilotCLIFolderRepositoryManager;
 	let cliSessionServiceForFolderManager: FakeCopilotCLISessionService;
+	let contentProvider: CopilotCLIChatSessionContentProvider;
 	const cliSessions: TestCopilotCLISession[] = [];
 
 	beforeEach(async () => {
@@ -254,12 +255,12 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		sessionService = disposables.add(new CopilotCLISessionService(logService, sdk, instantiationService, new NullNativeEnvService(), new MockFileSystemService(), mcpHandler, new NullCopilotCLIAgents(), workspaceService));
 
 		manager = await sessionService.getSessionManager() as unknown as MockCliSdkSessionManager;
-		const contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
-			override notifySessionOptionsChange(_resource: vscode.Uri, _updates: ReadonlyArray<{ optionId: string; value: string }>): void {
-				// no-op
-			}
+		contentProvider = new class extends mock<CopilotCLIChatSessionContentProvider>() {
+			override notifySessionOptionsChange = vi.fn((_resource: vscode.Uri, _updates: ReadonlyArray<{ optionId: string; value: string | vscode.ChatSessionProviderOptionItem }>): void => {
+				// tracked by vi.fn
+			});
 		}();
-		folderRepositoryManager = new FolderRepositoryManager(
+		folderRepositoryManager = new CopilotCLIFolderRepositoryManager(
 			worktree,
 			workspaceFolderService,
 			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,
@@ -815,5 +816,373 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].sessionId).toBe(firstSessionId);
 		expect(cliSessions[0].requests.length).toBe(2);
 		expect(cliSessions[0].requests[1].prompt).toBe('Third request');
+	});
+
+	describe('Repository option locking behavior', () => {
+		it('locks repository option on request start for untitled sessions', async () => {
+			// Setup folder repository manager to return valid folder data
+			const sessionId = 'untitled:temp-lock';
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: Uri.file(`${sep}workspace`),
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify lock was called with locked: true before other operations
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+		});
+
+		it('does not lock repository option for existing (non-untitled) sessions', async () => {
+			const sessionId = 'existing-lock-123';
+			const sdkSession = new MockCliSdkSession(sessionId, new Date());
+			manager.sessions.set(sessionId, sdkSession);
+
+			const request = new TestChatRequest('Continue work');
+			const context = createChatContext(sessionId, false);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify lock was NOT called (no calls with locked flag)
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBe(0);
+		});
+
+		it('unlocks repository option when user rejects trust check', async () => {
+			const sessionId = 'untitled:temp-trust-fail';
+			// Mock folderRepositoryManager to simulate trust rejection
+			const mockGetFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`)
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify lock was called
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+
+			// Verify unlock was called (value is string with no locked flag)
+			const unlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
+			);
+			expect(unlockCalls.length).toBeGreaterThan(0);
+
+			// Verify no session was created due to trust rejection
+			expect(cliSessions.length).toBe(0);
+		});
+
+		it('does not unlock repository option when user cancels confirmation', async () => {
+			const sessionId = 'untitled:temp-cancel';
+			git.activeRepository = {
+				get: () => ({
+					rootUri: Uri.file(`${sep}repo`),
+					changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] }
+				})
+			} as unknown as IGitService['activeRepository'];
+			git.setRepo({
+				rootUri: Uri.file(`${sep}repo`),
+				changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] }
+			} as unknown as RepoContext);
+
+			const mockGetFolderRepository = vi.fn(async () => ({
+				repository: { rootUri: Uri.file(`${sep}repo`), kind: 'repository' } as unknown as RepoContext,
+				folder: Uri.file(`${sep}repo`),
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			// First request: shows confirmation
+			const request1 = new TestChatRequest('Fix bug');
+			const context1 = createChatContext(sessionId, true);
+			const stream1 = new MockChatResponseStream();
+			const token1 = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request1, context1, stream1, token1);
+			(contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mockClear();
+
+			// Second request: user cancels
+			const request2 = new TestChatRequest('Cancel');
+			(request2 as any).acceptedConfirmationData = [{
+				step: 'uncommitted-changes',
+				metadata: {
+					prompt: 'Fix bug',
+					references: [],
+					chatContext: context1
+				}
+			}];
+			const stream2 = new MockChatResponseStream();
+			const token2 = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request2, context1, stream2, token2);
+
+			// Verify lock was called
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+
+			// After cancel, there should be no unlock calls (repository option remains locked)
+			const unlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
+			);
+			expect(unlockCalls.length).toBe(0);
+
+			// No session created due to cancellation
+			expect(cliSessions.length).toBe(0);
+		});
+
+		it('does not unlock repository option when session creation fails', async () => {
+			const sessionId = 'untitled:temp-fail';
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: Uri.file(`${sep}workspace`),
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			// Mock sessionService.createSession to return null
+			const originalCreateSession = sessionService.createSession;
+			(sessionService.createSession as any) = vi.fn(async () => undefined);
+
+			try {
+				await participant.createHandler()(request, context, stream, token);
+			} finally {
+				(sessionService.createSession as any) = originalCreateSession;
+			}
+
+			// Verify lock was called
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+
+			// Verify unlock was called on failure
+			const unlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
+			);
+			expect(unlockCalls.length).toBe(0);
+
+			// No session created due to failure
+			expect(cliSessions.length).toBe(0);
+		});
+
+		it('keeps repository option locked throughout successful request flow', async () => {
+			const sessionId = 'untitled:temp-success';
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: Uri.file(`${sep}workspace`),
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify lock was called
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+
+			// Verify unlock was NOT called on successful completion
+			const unlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && typeof update.value === 'string')
+			);
+			expect(unlockCalls.length).toBe(0);
+
+			// Verify session was created
+			expect(cliSessions.length).toBe(1);
+		});
+
+		it('displays repo directory name (not parent workspace folder name) for sub-directory git repos in multi-root workspaces', async () => {
+			// Bug scenario: multi-root workspace with folders A, B where B has sub-directories repo1, repo2.
+			// When user selects repo2, the locked dropdown should display "repo2", not "B".
+			const sessionId = 'untitled:temp-multiroot';
+			const repoUri = Uri.file(`${sep}workspaces${sep}B${sep}repo2`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify the locked option uses the repo name "repo2", not the parent workspace folder "B"
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+			// When repository is available, toRepositoryOptionItem derives name from the repo URI path
+			const repoLockUpdate = lockCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'repository' && update.value?.locked === true
+			);
+			expect(repoLockUpdate.value.name).toBe('repo2');
+			expect(repoLockUpdate.value.id).toBe(repoUri.fsPath);
+		});
+
+		it('displays folder basename (not workspace folder name) when locking a non-repo sub-directory folder', async () => {
+			// When the selected folder is NOT a git repo but is a sub-directory of a workspace folder,
+			// the locked dropdown should display the folder's basename, not the workspace folder name.
+			const sessionId = 'untitled:temp-subfolder';
+			const folderUri = Uri.file(`${sep}workspaces${sep}B${sep}subfolder`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: folderUri,
+				repository: undefined,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// Verify the locked option uses basename "subfolder", not workspace folder name "B"
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			expect(lockCalls.length).toBeGreaterThan(0);
+			const folderLockUpdate = lockCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'repository' && update.value?.locked === true
+			);
+			expect(folderLockUpdate.value.name).toBe('subfolder');
+			expect(folderLockUpdate.value.id).toBe(folderUri.fsPath);
+			// Non-repo folder should use folder icon
+			expect(folderLockUpdate.value.icon.id).toBe('folder');
+		});
+
+		it('uses repo icon for repository and folder icon for plain folder when locking', async () => {
+			// Verify icon differentiation: repo gets 'repo' icon, plain folder gets 'folder' icon
+			const sessionId = 'untitled:temp-icon';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const repoLockUpdate = allCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'repository' && update.value?.locked === true
+			);
+			// Repository should use 'repo' icon
+			expect(repoLockUpdate.value.icon.id).toBe('repo');
+		});
+
+		it('eagerly re-locks repo option with accurate info after session creation for untitled sessions', async () => {
+			// The new code at line ~735 fires `void this.lockRepoOptionForSession(context, token)`
+			// after session creation to update the locked dropdown with more accurate info.
+			const sessionId = 'untitled:temp-eager-lock';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			// There should be multiple lock calls: one initial lock and one eager re-lock after session creation.
+			// The eager lock should contain the updated repo information.
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const lockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'repository' && update.value?.locked === true)
+			);
+			// Expect at least 2 lock calls (initial lock + eager re-lock after session creation)
+			expect(lockCalls.length).toBeGreaterThanOrEqual(2);
+
+			// The last lock call should have the accurate repo information
+			const lastLockCall = lockCalls[lockCalls.length - 1];
+			const lastLockUpdate = lastLockCall[1].find(
+				(update: any) => update.optionId === 'repository' && update.value?.locked === true
+			);
+			expect(lastLockUpdate.value.name).toBe('myrepo');
+			expect(lastLockUpdate.value.id).toBe(repoUri.fsPath);
+		});
+
+		it('locks with submodule/archive icon for submodule repositories', async () => {
+			const sessionId = 'untitled:temp-submodule';
+			const repoUri = Uri.file(`${sep}workspace${sep}submodule-repo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'submodule' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const repoLockUpdate = allCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'repository' && update.value?.locked === true
+			);
+			// Submodule repositories should use 'archive' icon (not 'repo')
+			expect(repoLockUpdate.value.icon.id).toBe('archive');
+			expect(repoLockUpdate.value.name).toBe('submodule-repo');
+		});
 	});
 });

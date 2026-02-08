@@ -28,7 +28,6 @@ import { TerminalIntent } from './terminalIntent';
 import { TestsIntent } from './testIntent/testIntent';
 import { UnknownIntent } from './unknownIntent';
 import { VscodeIntent } from './vscodeIntent';
-import { WorkspaceIntent } from './workspaceIntent';
 
 IntentRegistry.setIntents([
 	new SyncDescriptor(InlineDocIntent),
@@ -36,7 +35,6 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(EditCode2Intent),
 	new SyncDescriptor(AgentIntent),
 	new SyncDescriptor(SearchIntent),
-	new SyncDescriptor(WorkspaceIntent),
 	new SyncDescriptor(TestsIntent),
 	new SyncDescriptor(FixIntent),
 	new SyncDescriptor(ExplainIntent),

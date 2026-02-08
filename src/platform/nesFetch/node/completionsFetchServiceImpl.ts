@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -12,7 +13,7 @@ import { getRequestId, RequestId } from '../../networking/common/fetch';
 import { FetchOptions, IFetcherService, IHeaders, Response } from '../../networking/common/fetcherService';
 import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
-import { jsonlStreamToCompletions, streamToLines } from './streamTransformer';
+import { jsonlStreamToCompletions } from './streamTransformer';
 
 export type FetchResponse = {
 	status: number;
@@ -68,7 +69,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		if (fetchResponse.val.status === 200) {
 
-			const jsonlStream = streamToLines(fetchResponse.val.body);
+			const jsonlStream = AsyncIterUtilsExt.splitLines(fetchResponse.val.body);
 			const completionsStream = jsonlStreamToCompletions(jsonlStream);
 
 			const response = new ResponseStream(fetchResponse.val.response, completionsStream, fetchResponse.val.requestId, fetchResponse.val.headers);

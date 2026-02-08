@@ -637,20 +637,28 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				"copilotcli.chat.invoke" : {
 					"owner": "joshspicer",
 					"comment": "Event sent when a CopilotCLI chat request is made.",
+					"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique chat request ID." },
 					"hasChatSessionItem": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Invoked with a chat session item." },
 					"isUntitled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the chat session is untitled." },
 					"hasDelegatePrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates if the prompt is a /delegate command." }
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent('copilotcli.chat.invoke', {
+				chatRequestId: request.id,
 				hasChatSessionItem: String(!!chatSessionContext?.chatSessionItem),
 				isUntitled: String(chatSessionContext?.isUntitled),
 				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
 			});
 
+			await this.lockRepoOptionForSession(context, token);
+
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
-			const { hasUncommittedChanges, cancelled } = await this.hasUncommittedChangesToHandleInRequest(request, context, stream, token);
+			const { hasUncommittedChanges, cancelled, trusted } = await this.hasUncommittedChangesToHandleInRequest(request, context, stream, token);
 			if (cancelled) {
+				// If user didn't trust, then reset the session options to make it read-write.
+				if (!trusted) {
+					await this.unlockRepoOptionForSession(context, token);
+				}
 				return {};
 			}
 
@@ -696,8 +704,13 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			const session = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommittedChangesAction !== 'cancel' ? uncommittedChangesAction : undefined, stream, disposables, token);
+			const sessionResult = await this.getOrCreateSession(request, chatSessionContext, modelId, agent, uncommittedChangesAction !== 'cancel' ? uncommittedChangesAction : undefined, stream, disposables, token);
+			const session = sessionResult.session;
 			if (!session || token.isCancellationRequested) {
+				// If user didn't trust, then reset the session options to make it read-write.
+				if (!sessionResult.trusted) {
+					await this.unlockRepoOptionForSession(context, token);
+				}
 				return {};
 			}
 
@@ -717,6 +730,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				return await this.handleDelegationToCloudConfirmation(request, session.object, request.prompt, confirmationResults, context, stream, token);
 			}
 
+			// Lock the repo option with more accurate information.
+			// Previously we just updated it with details of the folder.
+			// If user has selected a repo, then update with repo information (right icons, etc).
+			if (isUntitled) {
+				void this.lockRepoOptionForSession(context, token);
+			}
 			// Check if we have context stored for this request (created in createCLISessionAndSubmitRequest, work around)
 			const contextForRequest = this.contextForRequest.get(session.object.sessionId);
 			this.contextForRequest.delete(session.object.sessionId);
@@ -764,7 +783,42 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async hasUncommittedChangesToHandleInRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{ hasUncommittedChanges: boolean; cancelled: boolean }> {
+	private async lockRepoOptionForSession(context: vscode.ChatContext, token: vscode.CancellationToken) {
+		const { chatSessionContext } = context;
+		if (!chatSessionContext?.isUntitled) {
+			return;
+		}
+		const { resource } = chatSessionContext.chatSessionItem;
+		// If we have a real session id that was mapped to this untitled session, then use that.
+		// This way we can get the latest information associated with the real session.
+		const parsedId = SessionIdForCLI.parse(resource);
+		const id = _untitledSessionIdMap.get(parsedId) ?? parsedId;
+		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
+		if (folderInfo.folder) {
+			const folderName = basename(folderInfo.folder);
+			const option = folderInfo.repository ? toRepositoryOptionItem(folderInfo.repository) : toWorkspaceFolderOptionItem(folderInfo.folder, folderName);
+			const change = { optionId: REPOSITORY_OPTION_ID, value: { ...option, locked: true } };
+			this.contentProvider.notifySessionOptionsChange(resource, [change]);
+		}
+	}
+
+	private async unlockRepoOptionForSession(context: vscode.ChatContext, token: vscode.CancellationToken) {
+		const { chatSessionContext } = context;
+		if (!chatSessionContext?.isUntitled) {
+			return;
+		}
+		const { resource } = chatSessionContext.chatSessionItem;
+		const id = SessionIdForCLI.parse(resource);
+		const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, undefined, token);
+		if (folderInfo.folder) {
+			const option = folderInfo.repository?.fsPath ?? folderInfo.folder.fsPath;
+			const change = { optionId: REPOSITORY_OPTION_ID, value: option };
+			this.contentProvider.notifySessionOptionsChange(resource, [change]);
+		}
+	}
+
+
+	private async hasUncommittedChangesToHandleInRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{ hasUncommittedChanges: boolean; cancelled: boolean; trusted: boolean }> {
 		const { chatSessionContext } = context;
 		let selectedRepository: RepoContext | undefined;
 		if (chatSessionContext?.chatSessionItem) {
@@ -777,7 +831,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 					token
 				);
 				if (folderInfo.trusted === false) {
-					return { hasUncommittedChanges: false, cancelled: true };
+					return { hasUncommittedChanges: false, cancelled: true, trusted: false };
 				}
 				if (folderInfo.repository) {
 					selectedRepository = await this.gitService.getRepository(folderInfo.repository, false);
@@ -792,7 +846,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			? (selectedRepository.changes.indexChanges.length > 0 || selectedRepository.changes.workingTree.length > 0)
 			: false;
 
-		return { hasUncommittedChanges, cancelled: false };
+		return { hasUncommittedChanges, cancelled: false, trusted: true };
 	}
 
 
@@ -848,15 +902,15 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 	}
 
-	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<IReference<ICopilotCLISession> | undefined> {
+	private async getOrCreateSession(request: vscode.ChatRequest, chatSessionContext: vscode.ChatSessionContext, model: string | undefined, agent: SweCustomAgent | undefined, uncommitedChangesAction: 'copy' | 'move' | 'skip' | undefined, stream: vscode.ChatResponseStream, disposables: DisposableStore, token: vscode.CancellationToken): Promise<{ session: IReference<ICopilotCLISession> | undefined; trusted: boolean }> {
 		const { resource } = chatSessionContext.chatSessionItem;
 		const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(resource));
 		const id = existingSessionId ?? SessionIdForCLI.parse(resource);
 		const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
 
-		const { isolationEnabled, workingDirectory, worktreeProperties, cancelled } = await this.getOrInitializeWorkingDirectory(chatSessionContext, uncommitedChangesAction, stream, token);
+		const { isolationEnabled, workingDirectory, worktreeProperties, cancelled, trusted } = await this.getOrInitializeWorkingDirectory(chatSessionContext, uncommitedChangesAction, stream, token);
 		if (cancelled || token.isCancellationRequested) {
-			return undefined;
+			return { session: undefined, trusted };
 		}
 
 		const session = isNewSession ?
@@ -866,7 +920,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 		if (!session) {
 			stream.warning(l10n.t('Chat session not found.'));
-			return undefined;
+			return { session: undefined, trusted };
 		}
 		this.logService.info(`Using Copilot CLI session: ${session.object.sessionId} (isNewSession: ${isNewSession}, isolationEnabled: ${isolationEnabled}, workingDirectory: ${workingDirectory}, worktreePath: ${worktreeProperties?.worktreePath}, changesAction: ${uncommitedChangesAction})`);
 		if (isNewSession) {
@@ -882,7 +936,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		disposables.add(session.object.attachPermissionHandler(async (permissionRequest: PermissionRequest, toolCall: ToolCall | undefined, token: vscode.CancellationToken) => requestPermission(this.instantiationService, permissionRequest, toolCall, this.toolsService, request.toolInvocationToken, token)));
 
 
-		return session;
+		return { session, trusted };
 	}
 
 	/**
@@ -1067,6 +1121,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		workingDirectory: Uri | undefined;
 		worktreeProperties: ChatSessionWorktreeProperties | undefined;
 		cancelled: boolean;
+		trusted: boolean;
 	}> {
 		let workingDirectory: Uri | undefined;
 		let worktreeProperties: ChatSessionWorktreeProperties | undefined;
@@ -1081,7 +1136,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, uncommittedChangesAction }, token);
 
 				if (folderInfo.trusted === false) {
-					return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true };
+					return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true, trusted: false };
 				}
 
 				workingDirectory = folderInfo.worktree ?? folderInfo.folder;
@@ -1091,7 +1146,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				const folderInfo = await this.folderRepositoryManager.getFolderRepository(id, { promptForTrust: true, stream }, token);
 
 				if (folderInfo.trusted === false) {
-					return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true };
+					return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true, trusted: false };
 				}
 
 				workingDirectory = folderInfo.worktree ?? folderInfo.folder;
@@ -1102,7 +1157,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const folderInfo = await this.folderRepositoryManager.initializeFolderRepository(undefined, { stream, uncommittedChangesAction }, token);
 
 			if (folderInfo.trusted === false) {
-				return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true };
+				return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true, trusted: false };
 			}
 
 			workingDirectory = folderInfo.worktree ?? folderInfo.folder;
@@ -1110,7 +1165,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		}
 
 		const isolationEnabled = !!worktreeProperties;
-		return { isolationEnabled, workingDirectory, worktreeProperties, cancelled: false };
+		return { isolationEnabled, workingDirectory, worktreeProperties, cancelled: false, trusted: true };
 	}
 
 	private async createCLISessionAndSubmitRequest(

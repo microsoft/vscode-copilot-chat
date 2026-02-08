@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-
 import * as l10n from '@vscode/l10n';
 import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
@@ -24,18 +23,24 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { AnthropicTokenUsageMetadata, RenderedUserMessageMetadata } from '../../prompt/common/conversation';
+import { AnthropicTokenUsageMetadata, Conversation, normalizeSummariesOnRounds, RenderedUserMessageMetadata, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from '../../prompt/common/specialRequestTypes';
+import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
+import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { AgentPromptCustomizations, PromptRegistry } from '../../prompts/node/agent/promptRegistry';
+import { SummarizedConversationHistory, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../../prompts/node/agent/summarizedConversationHistory';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
@@ -155,6 +160,123 @@ export class AgentIntent extends EditCodeIntent {
 			overrideRequestLocation: ChatLocation.Agent,
 			hideRateLimitTimeEstimate: true
 		};
+	}
+
+	override async handleRequest(
+		conversation: Conversation,
+		request: vscode.ChatRequest,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken,
+		documentContext: IDocumentContext | undefined,
+		agentName: string,
+		location: ChatLocation,
+		chatTelemetry: ChatTelemetryBuilder,
+		yieldRequested: () => boolean
+	): Promise<vscode.ChatResult> {
+		if (request.command === 'summarize') {
+			return this.handleSummarizeCommand(conversation, request, stream, token);
+		}
+
+		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, yieldRequested);
+	}
+
+	private async handleSummarizeCommand(
+		conversation: Conversation,
+		request: vscode.ChatRequest,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult> {
+		const enabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory);
+		if (!enabled) {
+			stream.markdown(l10n.t('Conversation history summarization is disabled. Enable it via `github.copilot.chat.summarizeAgentConversationHistory.enabled` setting.'));
+			return {};
+		}
+
+		normalizeSummariesOnRounds(conversation.turns);
+
+		// Exclude the current /summarize turn.
+		const history = conversation.turns.slice(0, -1);
+		if (history.length === 0) {
+			stream.markdown(l10n.t('Nothing to summarize. Start a conversation first.'));
+			return {};
+		}
+
+		// The summarization metadata needs to be associated with a tool call round.
+		const lastRoundId = history.at(-1)?.rounds.at(-1)?.id;
+		if (!lastRoundId) {
+			stream.markdown(l10n.t('Nothing to summarize. Start a conversation with tool calls first.'));
+			return {};
+		}
+
+		const endpoint = await this.endpointProvider.getChatEndpoint(request);
+
+		const promptContext: IBuildPromptContext = {
+			history,
+			chatVariables: new ChatVariablesCollection([]),
+			query: '',
+			toolCallRounds: [],
+			conversation,
+		};
+
+		try {
+			const propsBuilder = this.instantiationService.createInstance(SummarizedConversationHistoryPropsBuilder);
+			const propsInfo = propsBuilder.getProps({
+				priority: 1,
+				endpoint,
+				location: ChatLocation.Agent,
+				promptContext,
+				maxToolResultLength: Infinity,
+			});
+
+			stream.progress(l10n.t('Summarizing conversation history...'));
+
+			const progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
+				report: () => { }
+			};
+			const renderer = PromptRenderer.create(this.instantiationService, endpoint, SummarizedConversationHistory, {
+				...propsInfo.props,
+				triggerSummarize: true,
+			});
+			const result = await renderer.render(progress, token);
+			const summaryMetadata = result.metadata.get(SummarizedConversationHistoryMetadata);
+			if (!summaryMetadata) {
+				stream.markdown(l10n.t('Unable to summarize conversation history.'));
+				return {};
+			}
+
+			stream.markdown(l10n.t('Summarized conversation history.'));
+			const lastTurn = conversation.getLatestTurn();
+
+			const chatResult: vscode.ChatResult = {
+				metadata: {
+					summary: {
+						toolCallRoundId: summaryMetadata.toolCallRoundId,
+						text: summaryMetadata.text,
+					}
+				}
+			};
+
+			// setResponse must be called so that turn.resultMetadata?.summary
+			// is available for normalizeSummariesOnRounds on subsequent turns.
+			lastTurn.setResponse(
+				TurnStatus.Success,
+				{ type: 'model', message: '' },
+				undefined,
+				chatResult,
+			);
+
+			lastTurn.setMetadata(summaryMetadata);
+
+			return chatResult;
+		} catch (e) {
+			if (isCancellationError(e)) {
+				return {};
+			}
+
+			const message = e instanceof Error ? e.message : String(e);
+			stream.markdown(l10n.t('Failed to summarize conversation history: {0}', message));
+			return {};
+		}
 	}
 }
 

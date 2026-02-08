@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import type { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
+import { equals } from '../../../util/vs/base/common/arrays';
 import { IntervalTimer } from '../../../util/vs/base/common/async';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -19,6 +20,7 @@ export class UserInfoStore extends Disposable {
 	private _sku: string | undefined;
 	private _isFcv1: boolean | undefined;
 	private _isVscodeTeamMember: boolean | undefined;
+	private _organizationList: string[] | undefined;
 
 	private _onDidChangeUserInfo = this._register(new Emitter<void>());
 	readonly onDidChangeUserInfo = this._onDidChangeUserInfo.event;
@@ -27,6 +29,7 @@ export class UserInfoStore extends Disposable {
 	static SKU_STORAGE_KEY = 'exp.github.copilot.sku';
 	static IS_FCV1_STORAGE_KEY = 'exp.github.copilot.isFcv1';
 	static IS_VSCODE_TEAM_MEMBER_STORAGE_KEY = 'exp.github.copilot.isVscodeTeamMember';
+	static ORGANIZATION_LIST_STORAGE_KEY = 'exp.github.copilot.organizationList';
 	constructor(private readonly context: IVSCodeExtensionContext, copilotTokenStore: ICopilotTokenStore) {
 		super();
 
@@ -43,17 +46,18 @@ export class UserInfoStore extends Disposable {
 			};
 
 			copilotTokenStore.onDidStoreUpdate(() => {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1(), copilotTokenStore.copilotToken?.isVscodeTeamMember);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken?.sku, copilotTokenStore.copilotToken?.isFcv1(), copilotTokenStore.copilotToken?.isVscodeTeamMember, copilotTokenStore.copilotToken?.organizationList);
 			});
 
 			if (copilotTokenStore.copilotToken) {
-				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1(), copilotTokenStore.copilotToken.isVscodeTeamMember);
+				this.updateUserInfo(getInternalOrg(), copilotTokenStore.copilotToken.sku, copilotTokenStore.copilotToken.isFcv1(), copilotTokenStore.copilotToken.isVscodeTeamMember, copilotTokenStore.copilotToken.organizationList);
 			} else {
 				const cachedInternalValue = this.context.globalState.get<string>(UserInfoStore.INTERNAL_ORG_STORAGE_KEY);
 				const cachedSkuValue = this.context.globalState.get<string>(UserInfoStore.SKU_STORAGE_KEY);
 				const cachedIsFcv1Value = this.context.globalState.get<boolean>(UserInfoStore.IS_FCV1_STORAGE_KEY);
 				const cachedIsVscodeTeamMemberValue = this.context.globalState.get<boolean>(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY);
-				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value, cachedIsVscodeTeamMemberValue);
+				const cachedOrganizationListValue = this.context.globalState.get<string[]>(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY);
+				this.updateUserInfo(cachedInternalValue, cachedSkuValue, cachedIsFcv1Value, cachedIsVscodeTeamMemberValue, cachedOrganizationListValue);
 			}
 		}
 	}
@@ -74,8 +78,16 @@ export class UserInfoStore extends Disposable {
 		return this._isVscodeTeamMember;
 	}
 
-	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isVscodeTeamMember?: boolean): void {
-		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember) {
+	/**
+	 * The list of organization IDs the user belongs to.
+	 * This can be used in ExP to target specific organizations via the X-GitHub-Copilot-OrganizationList filter.
+	 */
+	get organizationList(): string[] | undefined {
+		return this._organizationList;
+	}
+
+	private updateUserInfo(internalOrg?: string, sku?: string, isFcv1?: boolean, isVscodeTeamMember?: boolean, organizationList?: string[]): void {
+		if (this._internalOrg === internalOrg && this._sku === sku && this._isFcv1 === isFcv1 && this._isVscodeTeamMember === isVscodeTeamMember && equals(this._organizationList, organizationList)) {
 			// no change
 			return;
 		}
@@ -84,10 +96,12 @@ export class UserInfoStore extends Disposable {
 		this._sku = sku;
 		this._isFcv1 = isFcv1;
 		this._isVscodeTeamMember = isVscodeTeamMember;
+		this._organizationList = organizationList;
 		void this.context.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, this._internalOrg);
 		void this.context.globalState.update(UserInfoStore.SKU_STORAGE_KEY, this._sku);
 		void this.context.globalState.update(UserInfoStore.IS_FCV1_STORAGE_KEY, this._isFcv1);
 		void this.context.globalState.update(UserInfoStore.IS_VSCODE_TEAM_MEMBER_STORAGE_KEY, this._isVscodeTeamMember);
+		void this.context.globalState.update(UserInfoStore.ORGANIZATION_LIST_STORAGE_KEY, this._organizationList);
 
 		this._onDidChangeUserInfo.fire();
 	}

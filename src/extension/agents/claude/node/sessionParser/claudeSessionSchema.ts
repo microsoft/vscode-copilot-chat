@@ -211,7 +211,7 @@ export type CacheCreation = ValidatorType<typeof vCacheCreation>;
  * Token usage information for API calls.
  */
 export const vUsage = vObj({
-	cache_creation: vCacheCreation,
+	cache_creation: vNullable(vCacheCreation),
 	cache_creation_input_tokens: vNumber(),
 	cache_read_input_tokens: vNumber(),
 	input_tokens: vNumber(),
@@ -244,8 +244,15 @@ export const vAssistantMessageContent = vObj({
 	stop_reason: vNullable(vString()),
 	stop_sequence: vNullable(vString()),
 	usage: vUsage,
+	parent_tool_use_id: vNullable(vString()),
 });
 export type AssistantMessageContent = ValidatorType<typeof vAssistantMessageContent>;
+
+/**
+ * Model ID used by the SDK for synthetic messages (e.g., "No response requested." from abort).
+ * These messages should be filtered out from display and processing.
+ */
+export const SYNTHETIC_MODEL_ID = '<synthetic>';
 
 // #endregion
 
@@ -415,6 +422,8 @@ export interface StoredMessage {
 	readonly gitBranch?: string;
 	readonly slug?: string;
 	readonly agentId?: string;
+	/** The agentId of the subagent spawned by a Task tool_use, extracted from toolUseResult. */
+	readonly toolUseResultAgentId?: string;
 }
 
 /**
@@ -447,6 +456,10 @@ export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
 	readonly timestamp: Date;
+	/** Timestamp of the first message in the session (for timing.created) */
+	readonly firstMessageTimestamp: Date;
+	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
+	readonly lastMessageTimestamp: Date;
 }
 
 // #endregion

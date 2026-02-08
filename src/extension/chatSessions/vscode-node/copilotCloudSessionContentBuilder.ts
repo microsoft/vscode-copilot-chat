@@ -126,7 +126,8 @@ export class ChatSessionContentBuilder {
 					references, // references
 					this.type,
 					[], // toolReferences
-					[]
+					[],
+					undefined
 				));
 
 				// Create the PR card right after problem statement for first session

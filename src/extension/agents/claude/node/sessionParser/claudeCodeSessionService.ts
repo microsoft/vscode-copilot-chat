@@ -35,16 +35,16 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
-import { cwd } from '../../../../../util/vs/base/common/process';
 import { isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
 import {
 	buildSessions,
 	buildSubagentSession,
 	extractSessionMetadata,
 	extractSessionMetadataStreaming,
-	parseSessionFileContent,
 	ParseError,
+	parseSessionFileContent,
 	ParseStats,
 } from './claudeSessionParser';
 import {
@@ -105,6 +105,18 @@ export interface IClaudeCodeSessionService {
 	 * Get parse statistics from the last session load (for debugging).
 	 */
 	getLastParseStats(): ParseStats | undefined;
+
+	/**
+	 * Polls until the session's JSONL file contains a complete session
+	 * (i.e., the last message is from the assistant). This is necessary because
+	 * the CLI child process may not have flushed the JSONL to disk by the time
+	 * the parent process receives the result message via stdout.
+	 *
+	 * TODO: Is there a better way to do this? There seems to be a race condition
+	 * between Claude returning to us and it writing to disk. This could be removed
+	 * if Claude SDK gives us a way to list sessions.
+	 */
+	waitForSessionReady(resource: URI, token: CancellationToken): Promise<void>;
 }
 
 // #endregion
@@ -119,10 +131,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	private _metadataFileMtimes = new ResourceMap<number>();
 
 	// Full session cache for getSession (keyed by session resource URI)
-	private _fullSessionCache = new ResourceMap<IClaudeCodeSession>();
-
-	// Track session directories for subagent detection
-	private _sessionDirs = new ResourceMap<Set<string>>();
+	// Stores the session along with the source file URI and mtime for freshness checking
+	private _fullSessionCache = new ResourceMap<{ session: IClaudeCodeSession; fileUri: URI; mtime: number }>();
 
 	// Debugging information
 	private _lastParseErrors: ParseError[] = [];
@@ -132,7 +142,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
-		@INativeEnvService private readonly _nativeEnvService: INativeEnvService
+		@INativeEnvService private readonly _nativeEnvService: INativeEnvService,
+		@IFolderRepositoryManager private readonly _folderRepositoryManager: IFolderRepositoryManager
 	) { }
 
 	/**
@@ -169,10 +180,18 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 * Get a specific session with full content by its resource URI.
 	 */
 	async getSession(resource: URI, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
-		// Check full session cache first
+		// Check full session cache with mtime-based freshness
 		const cached = this._fullSessionCache.get(resource);
 		if (cached !== undefined) {
-			return cached;
+			try {
+				const stat = await this._fileSystem.stat(cached.fileUri);
+				if (stat.mtime <= cached.mtime) {
+					return cached.session;
+				}
+			} catch {
+				// File gone or error — fall through to reload
+			}
+			this._fullSessionCache.delete(resource);
 		}
 
 		const targetId = resource.path.slice(1); // Remove leading '/' from path
@@ -186,9 +205,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
 			const sessionFileUri = URI.joinPath(projectDirUri, `${targetId}.jsonl`);
 
-			// Check if this file exists
+			// Check if this file exists and capture mtime for cache freshness
+			let fileMtime: number;
 			try {
-				await this._fileSystem.stat(sessionFileUri);
+				const stat = await this._fileSystem.stat(sessionFileUri);
+				fileMtime = stat.mtime;
 			} catch {
 				continue; // File doesn't exist in this project dir
 			}
@@ -196,7 +217,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			// Load and parse the full session
 			const session = await this._loadFullSession(targetId, projectDirUri, token);
 			if (session !== undefined) {
-				this._fullSessionCache.set(resource, session);
+				this._fullSessionCache.set(resource, { session, fileUri: sessionFileUri, mtime: fileMtime });
 				return session;
 			}
 		}
@@ -216,6 +237,23 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	getLastParseStats(): ParseStats | undefined {
 		return this._lastParseStats;
+	}
+
+	async waitForSessionReady(resource: URI, token: CancellationToken): Promise<void> {
+		const maxAttempts = 20; // 20 × 100ms = 2s max wait
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			if (token.isCancellationRequested) {
+				return;
+			}
+			const session = await this.getSession(resource, token);
+			if (session && session.messages.length > 0) {
+				const lastMsg = session.messages[session.messages.length - 1];
+				if (lastMsg.type === 'assistant') {
+					return;
+				}
+			}
+			await new Promise<void>(resolve => setTimeout(resolve, 100));
+		}
 	}
 
 	// #region Directory Discovery
@@ -260,27 +298,22 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 	/**
 	 * Get the project directory slugs to scan for sessions.
-	 * Handles single vs multi-folder workspaces and provides error handling for cwd resolution.
+	 *
+	 * - Single-root: slug for that one folder
+	 * - Multi-root: slug for every workspace folder
+	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
 	private _getProjectSlugs(): string[] {
 		const folders = this._workspace.getWorkspaceFolders();
 
-		if (folders.length === 1) {
-			return [this._computeFolderSlug(folders[0])];
+		if (folders.length > 0) {
+			return folders.map(folder => this._computeFolderSlug(folder));
 		}
 
-		let cwdUri: URI | undefined;
-		try {
-			cwdUri = URI.file(cwd());
-		} catch (error) {
-			this._logService.error('[ClaudeCodeSessionService] Failed to resolve current working directory for session discovery', error);
-			if (folders.length > 0) {
-				cwdUri = folders[0];
-			}
-		}
-
-		if (cwdUri) {
-			return [this._computeFolderSlug(cwdUri)];
+		// Empty workspace: use all known folders from the folder repository manager
+		const mruEntries = this._folderRepositoryManager.getFolderMRU();
+		if (mruEntries.length > 0) {
+			return mruEntries.map(entry => this._computeFolderSlug(entry.folder));
 		}
 
 		return [];
@@ -368,16 +401,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			return [];
 		}
 
-		// Track session directories for later use in getSession
-		const sessionDirs = new Set<string>();
 		const metadataTasks: Promise<{ metadata: IClaudeCodeSessionInfo | null; fileUri: URI } | null>[] = [];
 
 		for (const [name, type] of entries) {
-			if (type === FileType.Directory) {
-				sessionDirs.add(name);
-				continue;
-			}
-
 			if (type !== FileType.File || !name.endsWith('.jsonl')) {
 				continue;
 			}
@@ -390,8 +416,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const fileUri = URI.joinPath(projectDirUri, name);
 			metadataTasks.push(this._extractSessionMetadata(sessionId, fileUri, token));
 		}
-
-		this._sessionDirs.set(projectDirUri, sessionDirs);
 
 		const results = await Promise.allSettled(metadataTasks);
 		if (token.isCancellationRequested) {
@@ -528,10 +552,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			// Load subagents if available
-			const sessionDirs = this._sessionDirs.get(projectDirUri);
-			if (sessionDirs?.has(sessionId)) {
-				const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
-				const { subagents } = await this._loadSubagentsForSession(sessionId, subagentsDirUri, token);
+			const subagentsDirUri = URI.joinPath(projectDirUri, sessionId, 'subagents');
+			const subagentEntries = await this._tryReadDirectory(subagentsDirUri);
+			if (subagentEntries.length > 0) {
+				const { subagents } = await this._loadSubagentsFromEntries(sessionId, subagentsDirUri, subagentEntries, token);
 				if (subagents.length > 0) {
 					session = { ...session, subagents };
 				}
@@ -552,17 +576,14 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	// #region Subagent Loading
 
 	/**
-	 * Load all subagents for a specific session.
+	 * Load all subagents for a specific session from pre-read directory entries.
 	 */
-	private async _loadSubagentsForSession(
+	private async _loadSubagentsFromEntries(
 		sessionId: string,
 		subagentsDirUri: URI,
+		entries: [string, FileType][],
 		token: CancellationToken
 	): Promise<{ sessionId: string; subagents: ISubagentSession[] }> {
-		const entries = await this._tryReadDirectory(subagentsDirUri);
-		if (entries.length === 0) {
-			return { sessionId, subagents: [] };
-		}
 
 		const subagentTasks: Promise<ISubagentSession | null>[] = [];
 

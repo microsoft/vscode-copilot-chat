@@ -12,6 +12,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatLocation } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
@@ -39,10 +40,17 @@ class AutoModeTokenBank extends Disposable {
 		private readonly _capiClientService: ICAPIClientService,
 		private readonly _authService: IAuthenticationService,
 		private readonly _logService: ILogService,
-		private readonly _expService: IExperimentationService
+		private readonly _expService: IExperimentationService,
+		private readonly _envService: IEnvService
 	) {
 		super();
 		this._refreshTimer = this._register(new TimeoutTimer());
+		this._register(this._envService.onDidChangeWindowState((state) => {
+			if (state.active && (!this._token || this._token.expires_at * 1000 - Date.now() < 5 * 60 * 1000)) {
+				// Window is active again, fetch a new token if it's expiring soon or we don't have one
+				this._fetchTokenPromise = this._fetchToken();
+			}
+		}));
 		this._fetchTokenPromise = this._fetchToken();
 	}
 
@@ -50,8 +58,10 @@ class AutoModeTokenBank extends Disposable {
 		if (!this._token) {
 			if (this._fetchTokenPromise) {
 				await this._fetchTokenPromise;
-			} else {
-				this._fetchTokenPromise = this._fetchToken();
+			}
+			// If we still don't have a token (e.g., the awaited promise returned nothing), force a new fetch
+			if (!this._token) {
+				this._fetchTokenPromise = this._fetchToken(true);
 				await this._fetchTokenPromise;
 			}
 		}
@@ -61,7 +71,13 @@ class AutoModeTokenBank extends Disposable {
 		return this._token;
 	}
 
-	private async _fetchToken(): Promise<void> {
+
+	private async _fetchToken(force?: boolean): Promise<void> {
+		// If the window isn't active we will skip fetching to save network calls
+		// We will fetch again when the window becomes active
+		if (!this._envService.isActive && !force) {
+			return;
+		}
 		const startTime = Date.now();
 
 		const authToken = (await this._authService.getCopilotToken()).token;
@@ -118,7 +134,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 		this._register(this._authService.onDidAuthenticationChange(() => {
@@ -129,7 +146,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			const keys = Array.from(this._reserveTokens.keys());
 			this._reserveTokens.clearAndDisposeAll();
 			for (const location of keys) {
-				this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+				this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 			}
 		}));
 		this._serviceBrand = undefined;
@@ -170,8 +187,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const conversationId = getConversationId(chatRequest);
 		const entry = this._autoModelCache.get(conversationId);
 		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 
 		// Update the debug name so logs are properly associating this token with the right conversation id now
 		reserveTokenBank.debugName = conversationId;
@@ -212,6 +229,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				throw new Error(errorMsg);
 			}
 		}
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
+
 		const existingEndpoints = entry?.endpoints || [];
 		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
 		if (!autoEndpoint) {
@@ -242,26 +261,54 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 				}
 				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
 			}
-			return entry.endpoints[0];
+			// Apply vision fallback even on cached entries, since the cached model may not support images
+			const cachedEndpoint = entry.endpoints[0];
+			const fallbackEndpoint = this._applyVisionFallback(chatRequest, cachedEndpoint, entryToken.available_models, knownEndpoints);
+			if (fallbackEndpoint !== cachedEndpoint) {
+				const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, fallbackEndpoint, entryToken.session_token, entryToken.discounted_costs?.[fallbackEndpoint.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs));
+				entry.endpoints[0] = autoEndpoint;
+				return autoEndpoint;
+			}
+			return cachedEndpoint;
 		}
 
 		// No cached entry, use the reserve token
 		const location = chatRequest?.location ?? ChatLocation.Panel;
-		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService);
-		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService));
+		const reserveTokenBank = this._reserveTokens.get(location) || new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService);
+		this._reserveTokens.set(location, new AutoModeTokenBank('reserve', location, this._capiClientService, this._authService, this._logService, this._expService, this._envService));
 		reserveTokenBank.debugName = conversationId;
 
 		const reserveToken = await reserveTokenBank.getToken();
-		const selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
+		let selectedModel = knownEndpoints.find(e => e.model === reserveToken.selected_model);
 		if (!selectedModel) {
 			const errorMsg = `Auto mode failed: selected model '${reserveToken.selected_model}' not found in known endpoints.`;
 			this._logService.error(errorMsg);
 			throw new Error(errorMsg);
 		}
+		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 
 		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank });
 		return autoEndpoint;
+	}
+
+	/**
+	 * If the request contains an image and the selected model doesn't support vision,
+	 * fall back to the first vision-capable model from the available models.
+	 */
+	private _applyVisionFallback(chatRequest: ChatRequest | undefined, selectedModel: IChatEndpoint, availableModels: string[], knownEndpoints: IChatEndpoint[]): IChatEndpoint {
+		if (!hasImage(chatRequest) || selectedModel.supportsVision) {
+			return selectedModel;
+		}
+		const visionModel = availableModels
+			.map(model => knownEndpoints.find(e => e.model === model))
+			.find(endpoint => endpoint?.supportsVision);
+		if (visionModel) {
+			this._logService.trace(`Selected model '${selectedModel.model}' does not support vision, falling back to '${visionModel.model}'.`);
+			return visionModel;
+		}
+		this._logService.warn(`Request contains an image but no vision-capable model is available.`);
+		return selectedModel;
 	}
 
 	private _calculateDiscountRange(discounts: Record<string, number> | undefined): { low: number; high: number } {
@@ -294,5 +341,19 @@ function getConversationId(chatRequest: ChatRequest | undefined): string {
 	if (!chatRequest) {
 		return 'unknown';
 	}
-	return (chatRequest?.toolInvocationToken as { sessionId: string })?.sessionId || 'unknown';
+	return chatRequest?.sessionId || 'unknown';
+}
+
+function hasImage(chatRequest: ChatRequest | undefined): boolean {
+	if (!chatRequest || !chatRequest.references) {
+		return false;
+	}
+	return chatRequest.references.some(ref => {
+		const value = ref.value;
+		return typeof value === 'object' &&
+			value !== null &&
+			'mimeType' in value &&
+			typeof value.mimeType === 'string'
+			&& value.mimeType.startsWith('image/');
+	});
 }

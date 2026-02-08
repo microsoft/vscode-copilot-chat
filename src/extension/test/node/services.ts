@@ -5,8 +5,9 @@
 
 import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
-import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
@@ -56,6 +57,7 @@ import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageMode
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
+import { IPowerService, NullPowerService } from '../../power/common/powerService';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
@@ -138,8 +140,10 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
 	testingServiceCollection.define(IGitCommitMessageService, new SyncDescriptor(NoopGitCommitMessageService));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
+	testingServiceCollection.define(IPowerService, new SyncDescriptor(NullPowerService));
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
+	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
 	return testingServiceCollection;
 }
 
