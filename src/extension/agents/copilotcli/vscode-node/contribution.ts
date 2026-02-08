@@ -19,19 +19,32 @@ import { registerDiagnosticsChangedNotification, registerSelectionChangedNotific
 
 export class CopilotCLIContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'copilotCLI';
-
+	private initialized: boolean = false;
 	constructor(
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@ILogService logService: ILogService,
-		@IConfigurationService configurationService: IConfigurationService,
+		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 
-		if (!configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
+		this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Advanced.CLIIntegrationEnabled.id)) {
+				this.initialize();
+			}
+		});
+		this.initialize();
+	}
+
+	private initialize() {
+		if (this.initialized) {
+			return;
+		}
+		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIntegrationEnabled)) {
 			return;
 		}
 
-		const logger = logService.createSubLogger('CopilotCLI');
+		this.initialized = true;
+		const logger = this.logService.createSubLogger('CopilotCLI');
 
 		// Create shared instances
 		const diffState = new DiffStateManager(logger);
@@ -58,7 +71,6 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 		// Start the MCP server
 		this._startMcpServer(logger, httpServer, diffState, selectionState, contentProvider);
 	}
-
 	private async _startMcpServer(logger: ILogger, httpServer: InProcHttpServer, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): Promise<void> {
 		try {
 			const { disposable, serverUri, headers } = await httpServer.start({
