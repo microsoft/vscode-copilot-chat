@@ -37,6 +37,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
+import { isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -168,6 +169,9 @@ export class DefaultIntentRequestHandler {
 			} else if (isCancellationError(err)) {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
+				return {};
+			} else if (isHookAbortError(err)) {
+				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
 
@@ -342,16 +346,17 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
-			try {
-				await loop.runStartHooks(this.token);
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing start hooks', error);
-			}
-			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput }, this.conversation.sessionId);
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
-			}
+			await loop.runStartHooks(this.stream, this.token);
+
+			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput }, this.conversation.sessionId, this.token);
+			processHookResults({
+				hookType: 'UserPromptSubmit',
+				results: userPromptSubmitResults,
+				outputStream: this.stream,
+				logService: this._logService,
+				onSuccess: () => { /* UserPromptSubmit has no output to process */ },
+			});
+
 			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);

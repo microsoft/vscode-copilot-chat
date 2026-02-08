@@ -90,7 +90,9 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 		}
 
 		return <Tag name='repoMemory'>
-			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the {ToolName.Memory} tool to store it. Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
+			If you come across an important fact about the codebase that could help in future code review or generation tasks, beyond the current task, use the {ToolName.Memory} tool to store it. Use the `create` command with a path under `/memories/repo/` to store repository-scoped facts. The file content should be a JSON object with these fields: `subject`, `fact`, `citations`, `reason`, and `category`.<br />
+			<br />
+			Facts may be gleaned from the codebase itself or learned from user input or feedback. Such facts might include:<br />
 			- Conventions, preferences, or best practices specific to this codebase that might be overlooked when inspecting only a limited code sample<br />
 			- Important information about the structure or logic of the codebase<br />
 			- Commands for linting, building, or running tests that have been verified through a successful run<br />
@@ -116,7 +118,29 @@ export class RepoMemoryInstructionsPrompt extends PromptElement<BasePromptElemen
 			Always include the reason and citations fields.<br />
 			Before storing, ask yourself: Will this help with future coding or code review tasks across the repository? If unsure, skip storing it.<br />
 			<br />
-			If the user asks how to view or manage their memories, refer them to https://docs.github.com/en/copilot/how-tos/use-copilot-agents/copilot-memory.<br />
+			Note: Only `create` is supported for `/memories/repo/` paths.<br />
+			If the user asks how to view or manage their repo memories refer them to https://docs.github.com/en/copilot/how-tos/use-copilot-agents/copilot-memory.<br />
+		</Tag>;
+	}
+}
+
+export class MemoryToolProtocolPrompt extends PromptElement<BasePromptElementProps> {
+	constructor(
+		props: PromptElementProps<BasePromptElementProps>,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render() {
+		const enableMemoryTool = this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService);
+		if (!enableMemoryTool) {
+			return null;
+		}
+
+		return <Tag name='memoryToolProtocol'>
+			Note: when editing your memory folder, always try to keep its content up-to-date, coherent and organized. You can rename or delete files that are no longer relevant. Do not create new files unless necessary.<br />
 		</Tag>;
 	}
 }

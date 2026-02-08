@@ -485,6 +485,143 @@ describe('claudeSessionParser', () => {
 			// Session should contain at least some messages (stops at cycle)
 			expect(result.sessions[0].messages.length).toBeGreaterThan(0);
 		});
+
+		it('should include parallel tool result siblings in session', () => {
+			// Simulates parallel tool calls: assistant sends 4 Task tool_use messages
+			// as a linear chain, then tool results come back pointing to their respective
+			// tool_use assistant messages. Only the last tool result is in the "main" chain;
+			// the others branch off as siblings.
+			//
+			// Structure:
+			//   user-1 -> asst-thinking -> asst-tool-1 -> asst-tool-2 -> asst-tool-3 -> asst-tool-4
+			//                                 |               |               |               |
+			//                              result-1        result-2        result-3        result-4
+			//                                                                                 |
+			//                                                                          asst-final -> asst-text
+			const messages = new Map<string, StoredMessage>([
+				['user-1', createTestMessage({
+					uuid: 'user-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: 'Run 4 tasks in parallel' },
+				})],
+				['asst-thinking', createTestMessage({
+					uuid: 'asst-thinking',
+					sessionId: 'session-1',
+					parentUuid: 'user-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+				// 4 tool_use messages chained linearly
+				['asst-tool-1', createTestMessage({
+					uuid: 'asst-tool-1',
+					sessionId: 'session-1',
+					parentUuid: 'asst-thinking',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:00Z'),
+				})],
+				['asst-tool-2', createTestMessage({
+					uuid: 'asst-tool-2',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:01Z'),
+				})],
+				['asst-tool-3', createTestMessage({
+					uuid: 'asst-tool-3',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-2',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:02Z'),
+				})],
+				['asst-tool-4', createTestMessage({
+					uuid: 'asst-tool-4',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-3',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:03Z'),
+				})],
+				// Tool results - each points back to its tool_use assistant message
+				['result-1', createTestMessage({
+					uuid: 'result-1',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-1',
+					timestamp: new Date('2026-01-31T00:04:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'Done 1' }] },
+					toolUseResultAgentId: 'agent-1',
+				})],
+				['result-2', createTestMessage({
+					uuid: 'result-2',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-2',
+					timestamp: new Date('2026-01-31T00:04:01Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-2', content: 'Done 2' }] },
+					toolUseResultAgentId: 'agent-2',
+				})],
+				['result-3', createTestMessage({
+					uuid: 'result-3',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-3',
+					timestamp: new Date('2026-01-31T00:04:02Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-3', content: 'Done 3' }] },
+					toolUseResultAgentId: 'agent-3',
+				})],
+				['result-4', createTestMessage({
+					uuid: 'result-4',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-4',
+					timestamp: new Date('2026-01-31T00:04:03Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-4', content: 'Done 4' }] },
+					toolUseResultAgentId: 'agent-4',
+				})],
+				// Continuation after all tools complete - connected to last result
+				['asst-final', createTestMessage({
+					uuid: 'asst-final',
+					sessionId: 'session-1',
+					parentUuid: 'result-4',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:05:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions.length).toBe(1);
+			const session = result.sessions[0];
+
+			// The session should include ALL tool results, not just the last one
+			const toolResultMessages = session.messages.filter(
+				m => m.toolUseResultAgentId !== undefined
+			);
+			expect(toolResultMessages).toHaveLength(4);
+			expect(toolResultMessages.map(m => m.toolUseResultAgentId).sort())
+				.toEqual(['agent-1', 'agent-2', 'agent-3', 'agent-4']);
+
+			// All 11 messages should be present (user + thinking + 4 tool_use + 4 results + final)
+			expect(session.messages.length).toBe(11);
+		});
+
+		it('should parse parallel subagent fixture correctly', () => {
+			const fixturePath = path.resolve(__dirname, '../../test/fixtures', 'b3a7bd3c-5a10-4e7b-8ff0-7fc0cd6d1093.jsonl');
+			const content = fs.readFileSync(fixturePath, 'utf8');
+			const parseResult = parseSessionFileContent(content);
+
+			const buildResult = buildSessions(parseResult.messages, parseResult.summaries, parseResult.chainLinks);
+
+			expect(buildResult.sessions.length).toBe(1);
+			const session = buildResult.sessions[0];
+
+			// The fixture has 4 parallel tool calls (subagents a775a67, ae52dab, aa9d784, ac47f8c)
+			// Each tool_result user message has a toolUseResultAgentId
+			const toolResultMessages = session.messages.filter(
+				m => m.toolUseResultAgentId !== undefined
+			);
+			expect(toolResultMessages).toHaveLength(4);
+
+			const agentIds = toolResultMessages.map(m => m.toolUseResultAgentId).sort();
+			expect(agentIds).toEqual(['a775a67', 'aa9d784', 'ac47f8c', 'ae52dab']);
+		});
 	});
 
 	// #region buildSubagentSession

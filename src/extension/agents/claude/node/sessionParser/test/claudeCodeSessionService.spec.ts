@@ -805,6 +805,37 @@ describe('ClaudeCodeSessionService', () => {
 			expect(session?.subagents).toHaveLength(0);
 		});
 
+		it('loads subagents from real fixture files', async () => {
+			const sessionId = '50a7220d-7250-46f3-b38e-b716ce25032e';
+			const fileName = `${sessionId}.jsonl`;
+			const fixturePath = path.resolve(__dirname, '../../test/fixtures', fileName);
+			const fileContents = await readFile(fixturePath, 'utf8');
+
+			const subagentFixturePath = path.resolve(__dirname, '../../test/fixtures', sessionId, 'subagents', 'agent-a21e2f5.jsonl');
+			const subagentContents = await readFile(subagentFixturePath, 'utf8');
+
+			const subagentsDirUri = URI.joinPath(dirUri, sessionId, 'subagents');
+
+			// Mock the directory structure with real fixture data
+			mockFs.mockDirectory(dirUri, [
+				[fileName, FileType.File],
+				[sessionId, FileType.Directory]
+			]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+			mockFs.mockDirectory(subagentsDirUri, [['agent-a21e2f5.jsonl', FileType.File]]);
+			mockFs.mockFile(URI.joinPath(subagentsDirUri, 'agent-a21e2f5.jsonl'), subagentContents, 1000);
+
+			const sessionResource = URI.from({ scheme: 'claude-code', path: '/' + sessionId });
+			const session = await service.getSession(sessionResource, CancellationToken.None);
+
+			expect(session).toBeDefined();
+			expect(session?.id).toBe(sessionId);
+			expect(session?.messages.length).toBeGreaterThan(0);
+			expect(session?.subagents).toHaveLength(1);
+			expect(session?.subagents[0].agentId).toBe('a21e2f5');
+			expect(session?.subagents[0].messages.length).toBeGreaterThan(0);
+		});
+
 		it('filters non-agent files in subagents directory', async () => {
 			const sessionId = 'test-session';
 			const fileName = `${sessionId}.jsonl`;

@@ -162,6 +162,11 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 			<>
 				<SystemMessage priority={this.props.priority}>
 					{SummaryPrompt}
+					{this.props.summarizationInstructions && <>
+						<br /><br />
+						## Additional instructions from the user:<br />
+						{this.props.summarizationInstructions}
+					</>}
 				</SystemMessage>
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
@@ -357,6 +362,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly maxToolResultLength: number;
 	/** Optional hard cap on summary tokens; effective budget = min(prompt sizing tokenBudget, this value) */
 	readonly maxSummaryTokens?: number;
+	/** Optional custom instructions to include in the summarization prompt */
+	readonly summarizationInstructions?: string;
 }
 
 /**
@@ -442,11 +449,11 @@ class ConversationHistorySummarizer {
 		const propsInfo = this.instantiationService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(this.props);
 
 		const summaryPromise = this.getSummaryWithFallback(propsInfo);
-		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Summarizing conversation history...'), async () => {
+		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => {
 			try {
 				await summaryPromise;
 			} catch { }
-			return l10n.t('Summarized conversation history');
+			return l10n.t('Compacted conversation');
 		}));
 
 		const summary = await summaryPromise;
@@ -498,7 +505,7 @@ class ConversationHistorySummarizer {
 			}, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
-				if (result.success === false) {
+				if (result.resultKind === 'error') {
 					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
 					this.logService.error(`[ConversationHistorySummarizer] PreCompact hook error: ${errorMessage}`);
 				}

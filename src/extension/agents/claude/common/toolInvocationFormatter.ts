@@ -8,7 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ChatSimpleToolResultData, ChatTerminalToolInvocationData } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatSubagentToolInvocationData, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
 import { ClaudeToolNames, ExitPlanModeInput, LSInput } from './claudeTools';
 
 // #region Tool Result Content Extraction
@@ -63,6 +63,9 @@ export function completeToolInvocation(
 		case ClaudeToolNames.Write:
 		case ClaudeToolNames.TodoWrite:
 			// These tools have their own UI handling (edit diffs, todo list)
+			break;
+		case ClaudeToolNames.Task:
+			completeTaskInvocation(invocation, resultContent);
 			break;
 		default:
 			completeGenericInvocation(invocation, toolUse, resultContent);
@@ -150,6 +153,20 @@ function completeSearchInvocation(
 }
 
 /**
+ * Completes a Task tool invocation by setting the result on its ChatSubagentToolInvocationData.
+ * The toolSpecificData was already populated by formatTaskInvocation with description/agentName/prompt;
+ * this adds the result text from the subagent's execution.
+ */
+function completeTaskInvocation(
+	invocation: ChatToolInvocationPart,
+	resultContent: string
+): void {
+	if (invocation.toolSpecificData instanceof ChatSubagentToolInvocationData) {
+		invocation.toolSpecificData.result = resultContent;
+	}
+}
+
+/**
  * Generic completion handler for tools without specific formatting.
  * Displays input arguments and output as plain text.
  */
@@ -178,9 +195,13 @@ function completeGenericInvocation(
  */
 export function createFormattedToolInvocation(
 	toolUse: Anthropic.ToolUseBlock,
+	complete?: boolean
 ): ChatToolInvocationPart | undefined {
 	const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false);
-	invocation.isConfirmed = true;
+	if (complete !== undefined) {
+		invocation.isConfirmed = complete;
+		invocation.isComplete = complete;
+	}
 
 	switch (toolUse.name as ClaudeToolNames) {
 		case ClaudeToolNames.Bash:
@@ -258,6 +279,12 @@ function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolUs
 function formatTaskInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const description = (toolUse.input as AgentInput)?.description ?? '';
 	invocation.invocationMessage = new MarkdownString(l10n.t("Completed Task: \"{0}\"", description));
+
+	const input = toolUse.input as AgentInput;
+	invocation.toolSpecificData = new ChatSubagentToolInvocationData(
+		input.description,
+		input.subagent_type,
+		input.prompt);
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {

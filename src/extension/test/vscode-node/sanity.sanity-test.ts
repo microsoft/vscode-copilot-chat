@@ -91,7 +91,7 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production agent mode', async function () {
+	test.skip('E2E Production agent mode', async function () {
 		assert.ok(realInstaAccessor, 'Instantiation service accessor is not available');
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {

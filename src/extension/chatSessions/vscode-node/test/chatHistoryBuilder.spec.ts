@@ -9,7 +9,7 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { IClaudeCodeSession, StoredMessage } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeCodeSession, ISubagentSession, StoredMessage } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { buildChatHistory } from '../chatHistoryBuilder';
 
 // #region Test Helpers
@@ -53,13 +53,26 @@ function toolResult(toolUseId: string, content: string, isError = false): Stored
 	return userMsg([{ type: 'tool_result', tool_use_id: toolUseId, content, is_error: isError }]);
 }
 
-function session(messages: StoredMessage[]): IClaudeCodeSession {
+function taskToolResult(toolUseId: string, agentId: string, content: string): StoredMessage {
+	const uuid = `user-${++_msgCounter}`;
+	return {
+		uuid,
+		sessionId: 'test-session',
+		timestamp: new Date(),
+		parentUuid: null,
+		type: 'user',
+		message: { role: 'user' as const, content: [{ type: 'tool_result' as const, tool_use_id: toolUseId, content, is_error: false }] },
+		toolUseResultAgentId: agentId,
+	} as StoredMessage;
+}
+
+function session(messages: StoredMessage[], subagents: ISubagentSession[] = []): IClaudeCodeSession {
 	return {
 		id: 'test-session',
 		label: 'Test',
 		messages,
 		timestamp: new Date(),
-		subagents: [],
+		subagents,
 	};
 }
 
@@ -690,6 +703,198 @@ describe('buildChatHistory', () => {
 					expect(result[i + 1]).toBeInstanceOf(ChatResponseTurn2);
 				}
 			}
+		});
+	});
+
+	// #endregion
+
+	// #region Subagent Tool Calls
+
+	describe('subagent tool calls', () => {
+		function subagentSession(agentId: string, messages: StoredMessage[]): ISubagentSession {
+			return {
+				agentId,
+				messages,
+				timestamp: new Date(),
+			};
+		}
+
+		it('injects subagent tool calls after Task tool result', () => {
+			const taskToolUseId = 'toolu_task_001';
+			const subagentBashId = 'toolu_bash_sub_001';
+
+			const subagent = subagentSession('agent-abc', [
+				assistantMsg([{ type: 'tool_use', id: subagentBashId, name: 'Bash', input: { command: 'sleep 10' } }]),
+				toolResult(subagentBashId, 'command completed'),
+			]);
+
+			const result = buildChatHistory(session([
+				userMsg('run a task'),
+				assistantMsg([{ type: 'tool_use', id: taskToolUseId, name: 'Task', input: { description: 'Run sleep', prompt: 'sleep 10' } }]),
+				taskToolResult(taskToolUseId, 'agent-abc', 'Task completed'),
+				assistantMsg([{ type: 'text', text: 'Done!' }]),
+			], [subagent]));
+
+			// Should have: request, response
+			expect(result).toHaveLength(2);
+
+			const response = result[1] as vscode.ChatResponseTurn2;
+			const toolParts = response.response.filter((p): p is vscode.ChatToolInvocationPart => p instanceof ChatToolInvocationPart);
+
+			// Should have Task tool + subagent Bash tool
+			expect(toolParts).toHaveLength(2);
+
+			// First tool is the Task itself
+			expect(toolParts[0].toolName).toBe('Task');
+			expect(toolParts[0].toolCallId).toBe(taskToolUseId);
+			expect(toolParts[0].isComplete).toBe(true);
+
+			// Second tool is the subagent's Bash call
+			expect(toolParts[1].toolName).toBe('Bash');
+			expect(toolParts[1].toolCallId).toBe(subagentBashId);
+			expect(toolParts[1].subAgentInvocationId).toBe(taskToolUseId);
+			expect(toolParts[1].isComplete).toBe(true);
+		});
+
+		it('sets subAgentInvocationId on all subagent tool calls', () => {
+			const taskToolUseId = 'toolu_task_002';
+
+			const subagent = subagentSession('agent-xyz', [
+				assistantMsg([{ type: 'tool_use', id: 'toolu_read_001', name: 'Read', input: { file_path: '/tmp/test.txt' } }]),
+				toolResult('toolu_read_001', 'file contents'),
+				assistantMsg([{ type: 'tool_use', id: 'toolu_edit_001', name: 'Edit', input: { file_path: '/tmp/test.txt', old_string: 'a', new_string: 'b' } }]),
+				toolResult('toolu_edit_001', 'edit applied'),
+			]);
+
+			const result = buildChatHistory(session([
+				userMsg('edit a file'),
+				assistantMsg([{ type: 'tool_use', id: taskToolUseId, name: 'Task', input: { description: 'Edit file', prompt: 'edit the file' } }]),
+				taskToolResult(taskToolUseId, 'agent-xyz', 'Edits done'),
+				assistantMsg([{ type: 'text', text: 'All done.' }]),
+			], [subagent]));
+
+			const response = result[1] as vscode.ChatResponseTurn2;
+			const toolParts = response.response.filter((p): p is vscode.ChatToolInvocationPart => p instanceof ChatToolInvocationPart);
+
+			// Task + 2 subagent tools (Read returns undefined from createFormattedToolInvocation for Edit/Write)
+			// Read should produce an invocation, Edit/Write return undefined
+			// Let's just check all subagent tools have the correct subAgentInvocationId
+			const subagentTools = toolParts.filter(t => t.subAgentInvocationId === taskToolUseId);
+			expect(subagentTools.length).toBeGreaterThan(0);
+
+			for (const tool of subagentTools) {
+				expect(tool.subAgentInvocationId).toBe(taskToolUseId);
+			}
+		});
+
+		it('handles session with no subagents (backward compatible)', () => {
+			const result = buildChatHistory(session([
+				userMsg('hello'),
+				assistantMsg([{ type: 'text', text: 'hi' }]),
+			]));
+
+			expect(result).toHaveLength(2);
+		});
+
+		it('handles Task tool with no matching subagent', () => {
+			const taskToolUseId = 'toolu_task_003';
+
+			const result = buildChatHistory(session([
+				userMsg('run a task'),
+				assistantMsg([{ type: 'tool_use', id: taskToolUseId, name: 'Task', input: { description: 'Do something', prompt: 'do it' } }]),
+				taskToolResult(taskToolUseId, 'nonexistent-agent', 'Task completed'),
+				assistantMsg([{ type: 'text', text: 'Done!' }]),
+			]));
+
+			const response = result[1] as vscode.ChatResponseTurn2;
+			const toolParts = response.response.filter((p): p is vscode.ChatToolInvocationPart => p instanceof ChatToolInvocationPart);
+
+			// Only the Task tool itself, no subagent tools
+			expect(toolParts).toHaveLength(1);
+			expect(toolParts[0].toolName).toBe('Task');
+		});
+
+		it('handles multiple Task tools with different subagents', () => {
+			const task1Id = 'toolu_task_multi_1';
+			const task2Id = 'toolu_task_multi_2';
+
+			const subagent1 = subagentSession('agent-1', [
+				assistantMsg([{ type: 'tool_use', id: 'toolu_bash_1', name: 'Bash', input: { command: 'echo hello' } }]),
+				toolResult('toolu_bash_1', 'hello'),
+			]);
+
+			const subagent2 = subagentSession('agent-2', [
+				assistantMsg([{ type: 'tool_use', id: 'toolu_bash_2', name: 'Bash', input: { command: 'echo world' } }]),
+				toolResult('toolu_bash_2', 'world'),
+			]);
+
+			const result = buildChatHistory(session([
+				userMsg('run two tasks'),
+				assistantMsg([
+					{ type: 'tool_use', id: task1Id, name: 'Task', input: { description: 'Task 1', prompt: 'echo hello' } },
+					{ type: 'tool_use', id: task2Id, name: 'Task', input: { description: 'Task 2', prompt: 'echo world' } },
+				]),
+				taskToolResult(task1Id, 'agent-1', 'Task 1 done'),
+				taskToolResult(task2Id, 'agent-2', 'Task 2 done'),
+				assistantMsg([{ type: 'text', text: 'Both done!' }]),
+			], [subagent1, subagent2]));
+
+			const response = result[1] as vscode.ChatResponseTurn2;
+			const toolParts = response.response.filter((p): p is vscode.ChatToolInvocationPart => p instanceof ChatToolInvocationPart);
+
+			// 2 Task tools + 2 subagent Bash tools
+			expect(toolParts).toHaveLength(4);
+
+			// First two are the Task tools
+			expect(toolParts[0].toolName).toBe('Task');
+			expect(toolParts[1].toolName).toBe('Task');
+
+			// Subagent tools follow their respective Task results
+			const subagent1Tools = toolParts.filter(t => t.subAgentInvocationId === task1Id);
+			expect(subagent1Tools).toHaveLength(1);
+			expect(subagent1Tools[0].toolName).toBe('Bash');
+
+			const subagent2Tools = toolParts.filter(t => t.subAgentInvocationId === task2Id);
+			expect(subagent2Tools).toHaveLength(1);
+			expect(subagent2Tools[0].toolName).toBe('Bash');
+		});
+
+		it('correctly associates subagents when Task results are interleaved with non-Task results', () => {
+			const taskId = 'toolu_task_interleave';
+			const bashId = 'toolu_bash_main';
+
+			const subagent = subagentSession('agent-interleave', [
+				assistantMsg([{ type: 'tool_use', id: 'toolu_sub_glob', name: 'Glob', input: { pattern: '*.ts' } }]),
+				toolResult('toolu_sub_glob', 'found files'),
+			]);
+
+			const result = buildChatHistory(session([
+				userMsg('do stuff'),
+				assistantMsg([
+					{ type: 'tool_use', id: bashId, name: 'Bash', input: { command: 'echo hi' } },
+					{ type: 'tool_use', id: taskId, name: 'Task', input: { description: 'Sub task', prompt: 'find files' } },
+				]),
+				// Non-Task tool result first, then Task result — separate StoredMessages
+				toolResult(bashId, 'hi'),
+				taskToolResult(taskId, 'agent-interleave', 'Sub task done'),
+				assistantMsg([{ type: 'text', text: 'All done.' }]),
+			], [subagent]));
+
+			const response = result[1] as vscode.ChatResponseTurn2;
+			const toolParts = response.response.filter((p): p is vscode.ChatToolInvocationPart => p instanceof ChatToolInvocationPart);
+
+			// Bash (main) + Task + subagent Glob = 3 tools
+			expect(toolParts).toHaveLength(3);
+			expect(toolParts[0].toolName).toBe('Bash');
+			expect(toolParts[0].subAgentInvocationId).toBeUndefined();
+
+			expect(toolParts[1].toolName).toBe('Task');
+			expect(toolParts[1].subAgentInvocationId).toBeUndefined();
+
+			// Subagent tool is correctly linked to the Task, not the Bash tool
+			const subagentTools = toolParts.filter(t => t.subAgentInvocationId === taskId);
+			expect(subagentTools).toHaveLength(1);
+			expect(subagentTools[0].toolName).toBe('Glob');
 		});
 	});
 

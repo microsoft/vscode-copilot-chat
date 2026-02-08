@@ -36,6 +36,7 @@ interface MockClaudeSession {
 		type: 'user' | 'assistant';
 		message: Record<string, unknown>;
 	}>;
+	subagents: Array<unknown>;
 }
 
 class MockFolderRepositoryManager implements IFolderRepositoryManager {
@@ -250,6 +251,7 @@ describe('ChatSessionContentProvider', () => {
 						model: 'claude-opus-4-5-20251101',
 					},
 				}],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -274,6 +276,7 @@ describe('ChatSessionContentProvider', () => {
 						model: 'claude-opus-4-5-20251101',
 					},
 				}],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -296,6 +299,7 @@ describe('ChatSessionContentProvider', () => {
 						content: 'Hello',
 					},
 				}],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -319,6 +323,7 @@ describe('ChatSessionContentProvider', () => {
 						model: 'claude-unknown-1-0-20251101',
 					},
 				}],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -343,6 +348,7 @@ describe('ChatSessionContentProvider', () => {
 						model: 'claude-opus-4-5-20251101',
 					},
 				}],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -385,6 +391,7 @@ describe('ChatSessionContentProvider', () => {
 						},
 					},
 				],
+				subagents: [],
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
@@ -535,6 +542,7 @@ describe('ChatSessionContentProvider', () => {
 					type: 'user',
 					message: { role: 'user', content: 'Hello' },
 				}],
+				subagents: [],
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 
@@ -567,6 +575,7 @@ describe('ChatSessionContentProvider', () => {
 					type: 'user',
 					message: { role: 'user', content: 'Hello' },
 				}],
+				subagents: [],
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 
