@@ -328,6 +328,7 @@
 	"github.copilot.config.organizationInstructions.enabled": "When enabled, Copilot will load custom instructions defined by your GitHub Organization.",
 	"github.copilot.config.planAgent.additionalTools": "Additional tools to enable for the Plan agent, on top of built-in tools. Use fully-qualified tool names (e.g., `github/issue_read`, `mcp_server/tool_name`).",
 	"github.copilot.config.planAgent.model": "Override the language model used by the Plan agent. Leave empty to use the default model.",
+	"github.copilot.config.planAgent.model.deprecated": "This setting is deprecated. Use `chat.planAgent.defaultModel` in VS Code settings instead.",
 	"github.copilot.config.implementAgent.model": "Override the language model used when starting implementation from the Plan agent's handoff. Use the format `Model Name (vendor)` (e.g., `GPT-5 (copilot)`). Leave empty to use the default model.",
 	"copilot.toolSet.editing.description": "Edit files in your workspace",
 	"copilot.toolSet.read.description": "Read files in your workspace",

@@ -295,7 +295,11 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 
 	private buildCustomizedConfig(): PlanAgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+
+		// Prefer VS Code core setting, fallback to extension setting for migration
+		const coreModelSetting = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel') ?? '';
+		const extensionModelSetting = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+		const modelOverride = coreModelSetting || extensionModelSetting;
 
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
