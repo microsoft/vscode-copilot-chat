@@ -69,6 +69,15 @@ function validatePath(path: string): string | undefined {
 	if (path.includes('..')) {
 		return 'Error: Path traversal is not allowed';
 	}
+	// Reject paths with empty segments (e.g. /memories//etc) or that resolve outside the base
+	const segments = path.split('/').filter(s => s.length > 0);
+	if (segments.some(s => s === '.')) {
+		return 'Error: Path traversal is not allowed';
+	}
+	// After splitting, first segment must be "memories"
+	if (segments[0] !== 'memories') {
+		return 'Error: All memory paths must start with /memories/';
+	}
 	return undefined;
 }
 
@@ -227,13 +236,22 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		if (!storageUri) {
 			throw new Error('No workspace storage available. Memory operations require an active workspace.');
 		}
-		// memoryPath is like /memories/foo.md → strip /memories/ prefix, join with base dir
-		const relativePath = memoryPath.replace(/^\/memories\/?/, '');
+		// memoryPath is like /memories/foo.md → strip /memories/ prefix, normalize to a safe relative path
+		const relativePath = memoryPath.replace(/^\/memories\/?/, '').replace(/^\/+/, '');
+		const baseUri = URI.from(storageUri);
+		let resolved: URI;
 		if (sessionResource) {
 			const sessionId = extractSessionId(sessionResource);
-			return URI.joinPath(URI.from(storageUri), MEMORY_BASE_DIR, sessionId, relativePath);
+			resolved = URI.joinPath(baseUri, MEMORY_BASE_DIR, sessionId, relativePath);
+		} else {
+			resolved = URI.joinPath(baseUri, MEMORY_BASE_DIR, relativePath);
 		}
-		return URI.joinPath(URI.from(storageUri), MEMORY_BASE_DIR, relativePath);
+		// Verify the resolved URI is still under the base storage directory
+		const basePath = URI.joinPath(baseUri, MEMORY_BASE_DIR).path;
+		if (!resolved.path.startsWith(basePath + '/') && resolved.path !== basePath) {
+			throw new Error('Resolved path escapes the memory storage directory.');
+		}
+		return resolved;
 	}
 
 	private async _dispatchLocal(params: MemoryToolParams, sessionResource?: string): Promise<string> {
@@ -427,7 +445,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 		const newContent = lines.join('\n');
 		await this.fileSystemService.writeFile(uri, new TextEncoder().encode(newContent));
-		return `The file ${params.path} has been edited. Here's the result of running \`cat -n\` on a snippet of ${params.path}:\n${formatFileContent(params.path, newContent)}`;
+		return makeSnippet(newContent, params.insert_line + 1, params.path);
 	}
 
 	private async _localDelete(path: string, sessionResource?: string): Promise<string> {
