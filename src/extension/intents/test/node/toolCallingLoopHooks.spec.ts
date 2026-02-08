@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Raw } from '@vscode/prompt-tsx';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CancellationToken, ChatHookResult, ChatHookType, ChatRequest, LanguageModelToolInformation } from 'vscode';
+import type { CancellationToken, ChatHookResult, ChatHookType, ChatRequest, ChatResponseStream, LanguageModelToolInformation } from 'vscode';
 import { IChatHookService, SessionStartHookInput, SubagentStartHookInput } from '../../../../platform/chat/common/chatHookService';
+import { ChatFetchResponseType } from '../../../../platform/chat/common/commonTypes';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
@@ -14,7 +16,7 @@ import { Conversation, Turn } from '../../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { IBuildPromptResult, nullRenderPromptResult } from '../../../prompt/node/intents';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { IToolCallingLoopOptions, ToolCallingLoop } from '../../node/toolCallingLoop';
+import { IToolCallingLoopOptions, IToolCallSingleResult, ToolCallingLoop } from '../../node/toolCallingLoop';
 
 /**
  * Configurable mock implementation of IChatHookService for testing.
@@ -124,6 +126,32 @@ class TestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptions> {
 	}
 }
 
+class TestToolCallingLoopForRun extends TestToolCallingLoop {
+	public override async runOne(_outputStream: ChatResponseStream | undefined, iterationNumber: number, _token: CancellationToken): Promise<IToolCallSingleResult> {
+		const lastRequestMessages: Raw.ChatMessage[] = [];
+		return {
+			response: {
+				type: ChatFetchResponseType.Success,
+				value: '',
+				requestId: `test-request-${iterationNumber}`,
+				serverRequestId: undefined,
+				usage: undefined,
+				resolvedModel: 'test-model'
+			},
+			round: {
+				id: String(iterationNumber),
+				response: '',
+				toolInputRetry: 0,
+				toolCalls: [],
+				timestamp: Date.now(),
+			},
+			hadIgnoredFiles: false,
+			lastRequestMessages,
+			availableTools: [],
+		};
+	}
+}
+
 function createMockChatRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
 	return {
 		prompt: 'test prompt',
@@ -206,6 +234,27 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			expect((sessionStartCalls[0].input as SessionStartHookInput).source).toBe('new');
 		});
 
+		it('should NOT execute SessionStart hook twice when runStartHooks is called before run', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest();
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoopForRun,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			await loop.testRunStartHooks(tokenSource.token);
+			await loop.run(undefined, tokenSource.token);
+
+			const sessionStartCalls = mockChatHookService.getCallsForHook('SessionStart');
+			expect(sessionStartCalls).toHaveLength(1);
+		});
+
 		it('should NOT execute SessionStart hook on subsequent turns', async () => {
 			const conversation = createTestConversation(3); // Third turn
 			const request = createMockChatRequest();
@@ -231,7 +280,7 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-123',
 				subAgentName: 'TestSubagent',
-			} as Partial<ChatRequest>);
+			});
 
 			const loop = instantiationService.createInstance(
 				TestToolCallingLoop,
@@ -567,7 +616,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-456',
 				subAgentName: 'PlanAgent',
-			} as Partial<ChatRequest>);
+			});
 
 			const loop = instantiationService.createInstance(
 				TestToolCallingLoop,
@@ -589,12 +638,36 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			expect(input.agent_type).toBe('PlanAgent');
 		});
 
+		it('should NOT execute SubagentStart hook twice when runStartHooks is called before run', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest({
+				subAgentInvocationId: 'subagent-double',
+				subAgentName: 'DoubleAgent',
+			});
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoopForRun,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			await loop.testRunStartHooks(tokenSource.token);
+			await loop.run(undefined, tokenSource.token);
+
+			const subagentStartCalls = mockChatHookService.getCallsForHook('SubagentStart');
+			expect(subagentStartCalls).toHaveLength(1);
+		});
+
 		it('should use default agent_type when subAgentName is not provided', async () => {
 			const conversation = createTestConversation(1);
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-789',
 				// subAgentName not provided
-			} as Partial<ChatRequest>);
+			});
 
 			const loop = instantiationService.createInstance(
 				TestToolCallingLoop,
@@ -622,7 +695,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-test',
 				subAgentName: 'TestAgent',
-			} as Partial<ChatRequest>);
+			});
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
@@ -652,7 +725,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-multi',
 				subAgentName: 'MultiHookAgent',
-			} as Partial<ChatRequest>);
+			});
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
@@ -688,7 +761,7 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 			const request = createMockChatRequest({
 				subAgentInvocationId: 'subagent-error',
 				subAgentName: 'ErrorAgent',
-			} as Partial<ChatRequest>);
+			});
 
 			mockChatHookService.setHookError('SubagentStart', new Error('Subagent hook failed'));
 
