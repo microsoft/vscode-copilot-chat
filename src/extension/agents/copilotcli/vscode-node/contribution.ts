@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ILogService, ILogger } from '../../../../platform/log/common/logService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../../common/contributions';
@@ -14,7 +15,7 @@ import { InProcHttpServer } from './inProcHttpServer';
 import { cleanupStaleLockFiles, createLockFile } from './lockFile';
 import { ReadonlyContentProvider } from './readonlyContentProvider';
 import { registerTools, SelectionState } from './tools';
-import { registerSelectionChangedNotification, registerDiagnosticsChangedNotification } from './tools/push';
+import { registerDiagnosticsChangedNotification, registerSelectionChangedNotification } from './tools/push';
 
 export class CopilotCLIContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'copilotCLI';
@@ -22,8 +23,13 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 	constructor(
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
+
+		if (!configurationService.getConfig(ConfigKey.Advanced.CLICustomAgentsEnabled)) {
+			return;
+		}
 
 		const logger = logService.createSubLogger('CopilotCLI');
 

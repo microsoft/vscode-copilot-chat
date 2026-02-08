@@ -2802,18 +2802,18 @@
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
-				"title": "Add File Reference to Prompt",
+				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.acceptDiff",
-				"title": "Accept Changes",
+				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
 				"icon": "$(check)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.rejectDiff",
-				"title": "Reject Changes",
+				"title": "%github.copilot.command.chat.copilotCLI.rejectDiff%",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
@@ -4362,6 +4362,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.integration.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.cli.integration.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4486,7 +4495,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "!inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"explorer/context": [
@@ -4498,7 +4507,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "!explorerResourceIsFolder"
+					"when": "config.github.copilot.chat.cli.integration.enabled && !explorerResourceIsFolder"
 				}
 			],
 			"editor/context": [
