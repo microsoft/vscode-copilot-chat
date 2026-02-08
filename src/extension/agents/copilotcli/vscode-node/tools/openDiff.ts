@@ -30,7 +30,6 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffSta
 		'open_diff',
 		'Opens a diff view comparing original file content with new content. Blocks until user accepts, rejects, or closes the diff.',
 		schema,
-		// @ts-expect-error - zod type instantiation too deep for server.tool() generics
 		async (args: { original_file_path: string; new_file_contents: string; tab_name: string }) => {
 			const { original_file_path, new_file_contents, tab_name } = args;
 			logger.info(`[DIFF] ===== OPEN_DIFF START ===== file=${original_file_path}, tab=${tab_name}`);

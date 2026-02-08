@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import type { InProcHttpServer } from '../inProcHttpServer';
-import { MockHttpServer, createMockUri, createMockDiagnostic } from './testHelpers';
+import { MockHttpServer, createMockDiagnostic, createMockUri } from './testHelpers';
 
 const { mockOnDidChangeDiagnostics, mockGetDiagnostics } = vi.hoisted(() => ({
 	mockOnDidChangeDiagnostics: vi.fn(),
@@ -80,7 +80,7 @@ describe('diagnosticsChanged push notification', () => {
 		expect(disposables.length).toBeGreaterThan(0);
 	});
 
-	it('should broadcast diagnostics_changed notification when diagnostics change', () => {
+	it('should broadcast diagnostics_changed notification when diagnostics change', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri = createMockUri('/test/file.ts');
@@ -89,7 +89,7 @@ describe('diagnosticsChanged push notification', () => {
 		mockGetDiagnostics.mockReturnValue([diag]);
 
 		registeredCallback!({ uris: [uri] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(httpServer.broadcastNotification).toHaveBeenCalledWith(
 			'diagnostics_changed',
@@ -109,7 +109,7 @@ describe('diagnosticsChanged push notification', () => {
 		);
 	});
 
-	it('should debounce rapid diagnostic changes', () => {
+	it('should debounce rapid diagnostic changes', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri1 = createMockUri('/file1.ts');
@@ -118,22 +118,22 @@ describe('diagnosticsChanged push notification', () => {
 		mockGetDiagnostics.mockReturnValue([]);
 
 		registeredCallback!({ uris: [uri1] });
-		vi.advanceTimersByTime(100);
+		await vi.advanceTimersByTimeAsync(100);
 		registeredCallback!({ uris: [uri2] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		// Only the last event fires (debounced)
 		expect(httpServer.broadcastNotification).toHaveBeenCalledTimes(1);
 	});
 
-	it('should broadcast notification when diagnostics are cleared', () => {
+	it('should broadcast notification when diagnostics are cleared', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri = createMockUri('/test/file.ts');
 		mockGetDiagnostics.mockReturnValue([]);
 
 		registeredCallback!({ uris: [uri] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(httpServer.broadcastNotification).toHaveBeenCalledWith(
 			'diagnostics_changed',
@@ -148,7 +148,7 @@ describe('diagnosticsChanged push notification', () => {
 		);
 	});
 
-	it('should map severity levels correctly', () => {
+	it('should map severity levels correctly', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri = createMockUri('/test/file.ts');
@@ -162,7 +162,7 @@ describe('diagnosticsChanged push notification', () => {
 		mockGetDiagnostics.mockReturnValue(diagnostics);
 
 		registeredCallback!({ uris: [uri] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		const params = httpServer.broadcastNotification.mock.calls[0][1] as unknown as DiagnosticNotificationParams;
 		const severities = params.uris[0].diagnostics.map(d => d.severity);
@@ -173,7 +173,7 @@ describe('diagnosticsChanged push notification', () => {
 		expect(severities).toContain('hint');
 	});
 
-	it('should include diagnostic range, source, and code in notification', () => {
+	it('should include diagnostic range, source, and code in notification', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri = createMockUri('/test/file.ts');
@@ -182,7 +182,7 @@ describe('diagnosticsChanged push notification', () => {
 		mockGetDiagnostics.mockReturnValue([diag]);
 
 		registeredCallback!({ uris: [uri] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		const params = httpServer.broadcastNotification.mock.calls[0][1] as unknown as DiagnosticNotificationParams;
 		const notifiedDiag = params.uris[0].diagnostics[0];
@@ -197,7 +197,7 @@ describe('diagnosticsChanged push notification', () => {
 		expect(notifiedDiag.range.end.character).toBe(20);
 	});
 
-	it('should handle multiple URIs in a single change event', () => {
+	it('should handle multiple URIs in a single change event', async () => {
 		registerDiagnosticsChangedNotification(logger, httpServer as unknown as InProcHttpServer);
 
 		const uri1 = createMockUri('/file1.ts');
@@ -217,7 +217,7 @@ describe('diagnosticsChanged push notification', () => {
 		});
 
 		registeredCallback!({ uris: [uri1, uri2] });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		const params = httpServer.broadcastNotification.mock.calls[0][1] as unknown as DiagnosticNotificationParams;
 

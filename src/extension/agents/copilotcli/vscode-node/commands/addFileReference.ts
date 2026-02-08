@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import * as l10n from '@vscode/l10n';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { InProcHttpServer } from '../inProcHttpServer';
 import { getSelectionInfo } from '../tools';
-import { ILogger } from '../../../../../platform/log/common/logService';
 
 export interface FileReferenceInfo {
 	filePath: string;
@@ -46,7 +47,7 @@ export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InP
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			logger.debug('No active editor for file reference');
-			vscode.window.showWarningMessage('No active editor. Open a file to add a reference.');
+			vscode.window.showWarningMessage(l10n.t('No active editor. Open a file to add a reference.'));
 			return;
 		}
 

@@ -24,8 +24,8 @@ vi.mock('vscode', () => ({
 	},
 }));
 
-import { registerSelectionChangedNotification } from '../tools/push/selectionChanged';
 import { SelectionState } from '../tools/getSelection';
+import { registerSelectionChangedNotification } from '../tools/push/selectionChanged';
 
 describe('selectionChanged push notification', () => {
 	const logger = new TestLogService();
@@ -58,13 +58,13 @@ describe('selectionChanged push notification', () => {
 		expect(disposables.length).toBeGreaterThan(0);
 	});
 
-	it('should broadcast selection_changed notification on selection change', () => {
+	it('should broadcast selection_changed notification on selection change', async () => {
 		registerSelectionChangedNotification(logger, httpServer as unknown as InProcHttpServer, selectionState);
 
 		const mockEditor = createMockEditor('/test/file.ts', 'Hello World', 0, 0, 0, 5);
 		registeredCallback!({ textEditor: mockEditor });
 
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(httpServer.broadcastNotification).toHaveBeenCalledWith(
 			'selection_changed',
@@ -75,16 +75,16 @@ describe('selectionChanged push notification', () => {
 		);
 	});
 
-	it('should debounce rapid selection changes', () => {
+	it('should debounce rapid selection changes', async () => {
 		registerSelectionChangedNotification(logger, httpServer as unknown as InProcHttpServer, selectionState);
 
 		const editor1 = createMockEditor('/test/file.ts', 'Hello World', 0, 0, 0, 3);
 		const editor2 = createMockEditor('/test/file.ts', 'Hello World', 0, 0, 0, 5);
 
 		registeredCallback!({ textEditor: editor1 });
-		vi.advanceTimersByTime(100);
+		await vi.advanceTimersByTimeAsync(100);
 		registeredCallback!({ textEditor: editor2 });
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		// Only the last change should be broadcast
 		expect(httpServer.broadcastNotification).toHaveBeenCalledTimes(1);
@@ -94,26 +94,26 @@ describe('selectionChanged push notification', () => {
 		);
 	});
 
-	it('should update selection state on change', () => {
+	it('should update selection state on change', async () => {
 		registerSelectionChangedNotification(logger, httpServer as unknown as InProcHttpServer, selectionState);
 
 		const mockEditor = createMockEditor('/test/file.ts', 'Hello World', 0, 6, 0, 11);
 		registeredCallback!({ textEditor: mockEditor });
 
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(selectionState.latest).not.toBe(null);
 		expect(selectionState.latest!.text).toBe('World');
 		expect(selectionState.latest!.filePath).toBe('/test/file.ts');
 	});
 
-	it('should handle empty selection (cursor position)', () => {
+	it('should handle empty selection (cursor position)', async () => {
 		registerSelectionChangedNotification(logger, httpServer as unknown as InProcHttpServer, selectionState);
 
 		const mockEditor = createMockEditor('/test/file.ts', 'Hello World', 0, 5, 0, 5);
 		registeredCallback!({ textEditor: mockEditor });
 
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(httpServer.broadcastNotification).toHaveBeenCalledWith(
 			'selection_changed',
@@ -124,13 +124,13 @@ describe('selectionChanged push notification', () => {
 		);
 	});
 
-	it('should include file path information in notification', () => {
+	it('should include file path information in notification', async () => {
 		registerSelectionChangedNotification(logger, httpServer as unknown as InProcHttpServer, selectionState);
 
 		const mockEditor = createMockEditor('/src/main.ts', 'const x = 1;', 0, 0, 0, 5);
 		registeredCallback!({ textEditor: mockEditor });
 
-		vi.advanceTimersByTime(250);
+		await vi.advanceTimersByTimeAsync(250);
 
 		expect(httpServer.broadcastNotification).toHaveBeenCalledWith(
 			'selection_changed',

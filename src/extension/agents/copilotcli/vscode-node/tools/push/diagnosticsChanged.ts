@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { InProcHttpServer } from '../../inProcHttpServer';
 import { ILogger } from '../../../../../../platform/log/common/logService';
+import { Delayer } from '../../../../../../util/vs/base/common/async';
+import { InProcHttpServer } from '../../inProcHttpServer';
 
 interface DiagnosticInfo {
 	uri: string;
@@ -56,27 +57,19 @@ function getDiagnosticsForUri(uri: vscode.Uri): DiagnosticInfo {
 export function registerDiagnosticsChangedNotification(logger: ILogger, httpServer: InProcHttpServer): vscode.Disposable[] {
 	const disposables: vscode.Disposable[] = [];
 
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+	const diagnosticsDelayer = new Delayer<void>(200);
 	const handleDiagnosticsChange = (event: vscode.DiagnosticChangeEvent) => {
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-		}
-		debounceTimer = setTimeout(() => {
+		diagnosticsDelayer.trigger(() => {
 			const changedDiagnostics: DiagnosticInfo[] = event.uris.map(uri => getDiagnosticsForUri(uri));
 			logger.trace(`Diagnostics changed for ${event.uris.length} file(s)`);
 			httpServer.broadcastNotification('diagnostics_changed', {
 				uris: changedDiagnostics,
 			} as unknown as Record<string, unknown>);
-		}, 200);
+		});
 	};
 
 	disposables.push(vscode.languages.onDidChangeDiagnostics(handleDiagnosticsChange));
-	disposables.push(new vscode.Disposable(() => {
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-			debounceTimer = undefined;
-		}
-	}));
+	disposables.push(diagnosticsDelayer);
 
 	logger.debug('Registered diagnostics change notification');
 	return disposables;

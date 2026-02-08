@@ -4,33 +4,26 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ILogger } from '../../../../../../platform/log/common/logService';
+import { Delayer } from '../../../../../../util/vs/base/common/async';
 import { InProcHttpServer } from '../../inProcHttpServer';
 import { getSelectionInfo, SelectionState } from '../getSelection';
-import { ILogger } from '../../../../../../platform/log/common/logService';
 
 export function registerSelectionChangedNotification(logger: ILogger, httpServer: InProcHttpServer, selectionState: SelectionState): vscode.Disposable[] {
 	const disposables: vscode.Disposable[] = [];
 
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+	const selectionDelayer = new Delayer<void>(200);
 	const handleSelectionChange = (event: vscode.TextEditorSelectionChangeEvent) => {
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-		}
-		debounceTimer = setTimeout(() => {
+		selectionDelayer.trigger(() => {
 			const selectionInfo = getSelectionInfo(event.textEditor);
 			selectionState.update(selectionInfo);
 			logger.trace(`Selection changed in: ${selectionInfo.filePath}`);
 			httpServer.broadcastNotification('selection_changed', selectionInfo as unknown as Record<string, unknown>);
-		}, 200);
+		});
 	};
 
 	disposables.push(vscode.window.onDidChangeTextEditorSelection(handleSelectionChange));
-	disposables.push(new vscode.Disposable(() => {
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-			debounceTimer = undefined;
-		}
-	}));
+	disposables.push(selectionDelayer);
 
 	// Initialize with current selection if there's an active editor
 	if (vscode.window.activeTextEditor) {
