@@ -372,6 +372,37 @@ function buildSessionFromLeaf(
 		};
 	}
 
+	// Collect parallel tool result siblings that branched off the main chain.
+	// When parallel tool calls occur, each tool_use assistant message is chained
+	// linearly, but results come back pointing to their respective tool_use message.
+	// Only the last result is in the main chain; the others are orphaned siblings.
+	// We identify these as user messages whose parent is an assistant message already
+	// in the chain — this distinguishes tool results from edit sidechains (where
+	// both parent and child are the same role).
+	const chainUuids = new Set(messageChain.map(m => m.uuid));
+	const siblings: StoredMessage[] = [];
+	for (const msg of messages.values()) {
+		if (chainUuids.has(msg.uuid)) {
+			continue; // Already in chain
+		}
+		if (msg.parentUuid !== null && chainUuids.has(msg.parentUuid)) {
+			// Only collect user messages whose parent is an assistant message
+			const parent = messages.get(msg.parentUuid);
+			if (msg.type === 'user' && parent !== undefined && parent.type === 'assistant') {
+				siblings.push(msg);
+			}
+		}
+	}
+
+	// Insert siblings into the chain right after their parent
+	for (const sibling of siblings) {
+		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
+		if (parentIndex !== -1) {
+			messageChain.splice(parentIndex + 1, 0, sibling);
+			chainUuids.add(sibling.uuid);
+		}
+	}
+
 	const session: IClaudeCodeSession = {
 		id: leafMessage.sessionId,
 		label: generateSessionLabel(summaryEntry, messageChain),
