@@ -514,48 +514,6 @@
 				]
 			},
 			{
-				"name": "copilot_memory",
-				"toolReferenceName": "memory",
-				"displayName": "%copilot.tools.memory.name%",
-				"userDescription": "%copilot.tools.memory.description%",
-				"modelDescription": "Store a fact about the codebase in memory, so that it can be used in future code generation or review tasks. The fact should be a clear and concise statement about the codebase conventions, structure, logic, or usage. It may be based on the code itself, or on information provided by the user.",
-				"canBeReferencedInPrompt": true,
-				"when": "config.github.copilot.chat.copilotMemory.enabled",
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"subject": {
-							"type": "string",
-							"description": "The topic to which this memory relates. 1-2 words. Examples: naming conventions, testing practices, documentation, logging, authentication, sanitization, error handling."
-						},
-						"fact": {
-							"type": "string",
-							"description": "A clear and short description of a fact about the codebase or a convention used in the codebase. Must be less than 200 characters. Examples: Use JWT for authentication. Follow PEP 257 docstring conventions. Use single quotes for strings in Python. Use Winston for logging."
-						},
-						"citations": {
-							"type": "string",
-							"description": "The source of this fact, such as a file and line number in the codebase (e.g., path/file.go:123). If the convention is not explicitly stated in the codebase, you can point at several examples that illustrate it, selecting the most diverse set of examples you can find (e.g. from multiple files or contexts). If the fact is based on user input, the citations should be User input: followed by the contents of the input."
-						},
-						"reason": {
-							"type": "string",
-							"description": "A clear and detailed explanation of the reason behind storing this fact. Must be at least 2-3 sentences long, and include which future tasks this fact will be useful for and why it is important to remember this fact."
-						},
-						"category": {
-							"type": "string",
-							"description": "The type of memory being stored. This can be bootstrap_and_build (info about how to bootstrap and build the project), user_preferences (preferences of the user, such as coding style, tabs vs. spaces, favorite libraries, etc.), general (file independent facts), or file_specific (information about a specific file in the codebase)."
-						}
-					},
-					"required": [
-						"subject",
-						"fact",
-						"citations",
-						"reason",
-						"category"
-					]
-				}
-			},
-			{
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
@@ -1264,6 +1222,76 @@
 				}
 			},
 			{
+				"name": "copilot_memory",
+				"displayName": "Memory",
+				"toolReferenceName": "memory",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "Manage persistent memory across conversations",
+				"when": "config.github.copilot.chat.tools.memory.enabled",
+				"modelDescription": "Manage a persistent memory directory for storing notes, ideas, and information across conversations. The memory is organized as files in a directory structure under /memories/.\n\nIMPORTANT: Before creating new memory files, first view the /memories/ directory to understand what already exists. This helps avoid duplicates and maintain organized notes.\n\nCommands:\n- `view`: View contents of a file or list directory contents. Can be used on files or directories (e.g., \"/memories/\" to see all top-level items).\n- `create`: Create a new file at the specified path with the given content. Fails if the file already exists.\n- `str_replace`: Replace an exact string in a file with a new string. The old_str must appear exactly once in the file.\n- `insert`: Insert text at a specific line number in a file. Line 0 inserts at the beginning.\n- `delete`: Delete a file or directory (and all its contents).\n- `rename`: Rename or move a file or directory from path to new_path.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"command": {
+							"type": "string",
+							"enum": [
+								"view",
+								"create",
+								"str_replace",
+								"insert",
+								"delete",
+								"rename"
+							],
+							"description": "The operation to perform on the memory file system."
+						},
+						"path": {
+							"type": "string",
+							"description": "The absolute path to the file or directory inside /memories/, e.g. \"/memories/notes.md\". Used by all commands except `rename`."
+						},
+						"file_text": {
+							"type": "string",
+							"description": "Required for `create`. The content of the file to create."
+						},
+						"old_str": {
+							"type": "string",
+							"description": "Required for `str_replace`. The exact string in the file to replace. Must appear exactly once."
+						},
+						"new_str": {
+							"type": "string",
+							"description": "Required for `str_replace`. The new string to replace old_str with."
+						},
+						"insert_line": {
+							"type": "number",
+							"description": "Required for `insert`. The 0-based line number to insert text at. 0 inserts before the first line."
+						},
+						"insert_text": {
+							"type": "string",
+							"description": "Required for `insert`. The text to insert at the specified line."
+						},
+						"view_range": {
+							"type": "array",
+							"items": {
+								"type": "number"
+							},
+							"minItems": 2,
+							"maxItems": 2,
+							"description": "Optional for `view`. A two-element array [start_line, end_line] (1-indexed) to view a specific range of lines."
+						},
+						"old_path": {
+							"type": "string",
+							"description": "Required for `rename`. The current path of the file or directory to rename."
+						},
+						"new_path": {
+							"type": "string",
+							"description": "Required for `rename`. The new path for the file or directory."
+						}
+					},
+					"required": [
+						"command"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
@@ -1328,6 +1356,7 @@
 				"tools": [
 					"getProjectSetupInfo",
 					"installExtension",
+					"memory",
 					"newWorkspace",
 					"openSimpleBrowser",
 					"runCommand",
@@ -3135,6 +3164,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.copilotMemory.enabled%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.tools.memory.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.tools.memory.enabled%",
 						"tags": [
 							"preview"
 						]

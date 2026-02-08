@@ -976,6 +976,7 @@ export namespace ConfigKey {
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
 
 	export const CopilotMemoryEnabled = defineSetting<boolean>('chat.copilotMemory.enabled', ConfigType.ExperimentBased, false);
+	export const MemoryToolEnabled = defineSetting<boolean>('chat.tools.memory.enabled', ConfigType.ExperimentBased, false);
 }
 
 export function getAllConfigKeys(): string[] {
