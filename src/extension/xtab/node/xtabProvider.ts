@@ -71,7 +71,7 @@ namespace RetryState {
 		| Retrying;
 }
 
-interface ModelConfig extends xtabPromptOptions.PromptOptions {
+export interface ModelConfig extends xtabPromptOptions.PromptOptions {
 	modelName: string | undefined;
 }
 
@@ -235,7 +235,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			tracer.trace('No extra debounce applied');
 		}
 
-		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
+		const areaAroundEditWindowLinesRange = computeAreaAroundEditWindowLinesRange(currentDocument);
 
 		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, tracer, telemetryBuilder);
 
@@ -326,7 +326,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const prediction = this.getPredictedOutput(activeDocument, editWindowLines, responseFormat);
 
 		const messages = constructMessages({
-			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
+			systemMsg: pickSystemPrompt(promptOptions.promptingStrategy),
 			userMsg: userPrompt,
 		});
 
@@ -667,7 +667,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				this.forceUseDefaultModel = true;
 				return yield* this.doGetNextEdit(request, delaySession, tracer, logContext, cancellationToken, telemetryBuilder, opts.retryState); // use the same retry state
 			}
-			return XtabProvider.mapChatFetcherErrorToNoNextEditReason(fetchRes);
+			return mapChatFetcherErrorToNoNextEditReason(fetchRes);
 		}
 
 		fetchResultPromise
@@ -892,7 +892,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 
 			if (chatResponseFailure) {
-				return XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
+				return mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
 			}
 
 			return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
@@ -984,14 +984,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
-		const cursorLine = currentDocument.cursorLineOffset;
-		const areaAroundStart = Math.max(0, cursorLine - N_LINES_AS_CONTEXT);
-		const areaAroundEndExcl = Math.min(currentDocument.lines.length, cursorLine + N_LINES_AS_CONTEXT + 1);
-
-		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
-	}
-
 	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, tracer: ILogger, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		const currentDocLines = currentDocument.lines;
 		const cursorLineOffset = currentDocument.cursorLineOffset;
@@ -1059,30 +1051,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(codeToEditStart, codeToEditEndExcl);
 	}
 
-	private static mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError): NoNextEditReason {
-		switch (fetchError.type) {
-			case ChatFetchResponseType.Canceled:
-				return new NoNextEditReason.GotCancelled('afterFetchCall');
-			case ChatFetchResponseType.OffTopic:
-			case ChatFetchResponseType.Filtered:
-			case ChatFetchResponseType.PromptFiltered:
-			case ChatFetchResponseType.Length:
-			case ChatFetchResponseType.RateLimited:
-			case ChatFetchResponseType.QuotaExceeded:
-			case ChatFetchResponseType.ExtensionBlocked:
-			case ChatFetchResponseType.AgentUnauthorized:
-			case ChatFetchResponseType.AgentFailedDependency:
-			case ChatFetchResponseType.InvalidStatefulMarker:
-				return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
-			case ChatFetchResponseType.BadRequest:
-			case ChatFetchResponseType.NotFound:
-			case ChatFetchResponseType.Failed:
-			case ChatFetchResponseType.NetworkError:
-			case ChatFetchResponseType.Unknown:
-				return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
-		}
-	}
-
 	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
 			const defaultOptions = {
@@ -1090,7 +1058,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
 			const defaultModelConfig = this.modelService.defaultModelConfiguration();
-			return XtabProvider.overrideModelConfig(defaultOptions, defaultModelConfig);
+			return overrideModelConfig(defaultOptions, defaultModelConfig);
 		}
 
 		const sourcedModelConfig: ModelConfig = {
@@ -1112,7 +1080,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabIncludeViewedFiles, this.expService),
 				includeLineNumbers: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabRecentlyViewedIncludeLineNumbers, this.expService),
 			},
-			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
+			languageContext: determineLanguageContextOptions(activeDocument.languageId, {
 				enabled: this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabled, this.expService),
 				enabledLanguages: this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabLanguageContextEnabledLanguages),
 				enableAllContextProviders: this.configService.getExperimentBasedConfig<boolean>(ConfigKey.Advanced.DiagnosticsContextProvider, this.expService)
@@ -1135,9 +1103,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const modelConfig: xtabPromptOptions.ModelConfiguration = selectedModelConfig.promptingStrategy === xtabPromptOptions.PromptingStrategy.CopilotNesXtab
 			? { ...selectedModelConfig, includeTagsInCurrentFile: true }
 			: selectedModelConfig;
-		return XtabProvider.overrideModelConfig(sourcedModelConfig, modelConfig);
+		return overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
+<<<<<<< HEAD
 	private static overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
 		return {
 			...modelConfig,
@@ -1187,6 +1156,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		return { enabled, maxTokens, traitPosition };
 	}
+=======
+>>>>>>> 4a994061 (nes: xtab: extract methods into functions)
 
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
 		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUrl);
@@ -1204,31 +1175,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
 			? {
 				type: 'content',
-				content: this.getPredictionContents(doc, editWindowLines, responseFormat)
+				content: getPredictionContents(doc, editWindowLines, responseFormat)
 			}
 			: undefined;
-	}
-
-	private getPredictionContents(doc: StatelessNextEditDocument, editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
-		if (responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
-			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
-		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			return editWindowLines.join('\n');
-		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
-			// For EditWindowWithIntent, we predict the edit intent as high (most likely case) followed by the code
-			return ['<|edit_intent|>high<|/edit_intent|>', ...editWindowLines].join('\n');
-		} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
-			// For EditWindowWithIntentShort, we predict 'H' (high) followed by the code
-			return ['H', ...editWindowLines].join('\n');
-		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
-			return ['```', ...editWindowLines, '```'].join('\n');
-		} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
-			const workspacePath = doc.workspaceRoot?.path;
-			const workspaceRelativeDocPath = toUniquePath(doc.id, workspacePath);
-			return `${workspaceRelativeDocPath}:`;
-		} else {
-			assertNever(responseFormat);
-		}
 	}
 
 	private async debounce(delaySession: DelaySession, retryState: RetryState.t, logger: ILogger, telemetry: StatelessNextEditTelemetryBuilder) {
@@ -1296,6 +1245,109 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 
+}
+
+export function computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
+	const cursorLine = currentDocument.cursorLineOffset;
+	const areaAroundStart = Math.max(0, cursorLine - N_LINES_AS_CONTEXT);
+	const areaAroundEndExcl = Math.min(currentDocument.lines.length, cursorLine + N_LINES_AS_CONTEXT + 1);
+
+	return new OffsetRange(areaAroundStart, areaAroundEndExcl);
+}
+
+export function mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError): NoNextEditReason {
+	switch (fetchError.type) {
+		case ChatFetchResponseType.Canceled:
+			return new NoNextEditReason.GotCancelled('afterFetchCall');
+		case ChatFetchResponseType.OffTopic:
+		case ChatFetchResponseType.Filtered:
+		case ChatFetchResponseType.PromptFiltered:
+		case ChatFetchResponseType.Length:
+		case ChatFetchResponseType.RateLimited:
+		case ChatFetchResponseType.QuotaExceeded:
+		case ChatFetchResponseType.ExtensionBlocked:
+		case ChatFetchResponseType.AgentUnauthorized:
+		case ChatFetchResponseType.AgentFailedDependency:
+		case ChatFetchResponseType.InvalidStatefulMarker:
+			return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
+		case ChatFetchResponseType.BadRequest:
+		case ChatFetchResponseType.NotFound:
+		case ChatFetchResponseType.Failed:
+		case ChatFetchResponseType.NetworkError:
+		case ChatFetchResponseType.Unknown:
+			return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
+	}
+}
+
+export function overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
+	return {
+		...modelConfig,
+		modelName: overridingConfig.modelName,
+		promptingStrategy: overridingConfig.promptingStrategy,
+		currentFile: {
+			...modelConfig.currentFile,
+			includeTags: overridingConfig.includeTagsInCurrentFile,
+		},
+		lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
+	};
+}
+
+export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
+	switch (promptingStrategy) {
+		case xtabPromptOptions.PromptingStrategy.UnifiedModel:
+			return unifiedModelSystemPrompt;
+		case xtabPromptOptions.PromptingStrategy.Codexv21NesUnified:
+		case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
+			return simplifiedPrompt;
+		case xtabPromptOptions.PromptingStrategy.PatchBased:
+		case xtabPromptOptions.PromptingStrategy.PatchBased01:
+		case xtabPromptOptions.PromptingStrategy.Xtab275:
+		case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
+		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
+		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
+			return xtab275SystemPrompt;
+		case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
+			return nes41Miniv3SystemPrompt;
+		case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
+		case undefined:
+			return systemPromptTemplate;
+		default:
+			assertNever(promptingStrategy);
+	}
+}
+
+export function determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enableAllContextProviders, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enableAllContextProviders: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
+	if (languageId in enabledLanguages) {
+		return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
+	}
+
+	if (enableAllContextProviders) {
+		return { enabled: true, maxTokens, traitPosition };
+	}
+
+	return { enabled, maxTokens, traitPosition };
+}
+
+export function getPredictionContents(doc: StatelessNextEditDocument, editWindowLines: readonly string[], responseFormat: xtabPromptOptions.ResponseFormat): string {
+	if (responseFormat === xtabPromptOptions.ResponseFormat.UnifiedWithXml) {
+		return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
+	} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
+		return editWindowLines.join('\n');
+	} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent) {
+		// For EditWindowWithIntent, we predict the edit intent as high (most likely case) followed by the code
+		return ['<|edit_intent|>high<|/edit_intent|>', ...editWindowLines].join('\n');
+	} else if (responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
+		// For EditWindowWithIntentShort, we predict 'H' (high) followed by the code
+		return ['H', ...editWindowLines].join('\n');
+	} else if (responseFormat === xtabPromptOptions.ResponseFormat.CodeBlock) {
+		return ['```', ...editWindowLines, '```'].join('\n');
+	} else if (responseFormat === xtabPromptOptions.ResponseFormat.CustomDiffPatch) {
+		const workspacePath = doc.workspaceRoot?.path;
+		const workspaceRelativeDocPath = toUniquePath(doc.id, workspacePath);
+		return `${workspaceRelativeDocPath}:`;
+	} else {
+		assertNever(responseFormat);
+	}
 }
 
 export interface ParseEditIntentResult {
