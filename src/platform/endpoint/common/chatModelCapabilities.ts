@@ -104,11 +104,6 @@ export function isGpt52CodexFamily(model: LanguageModelChat | IChatEndpoint | st
 	return family === 'gpt-5.2-codex';
 }
 
-export function isGpt53CodexFamily(model: LanguageModelChat | IChatEndpoint | string): boolean {
-	const family = typeof model === 'string' ? model : model.family;
-	return family === 'gpt-5.3-codex' || isHiddenModelH(model);
-}
-
 export function isGpt52Family(model: LanguageModelChat | IChatEndpoint | string): boolean {
 	const family = typeof model === 'string' ? model : model.family;
 	return family === 'gpt-5.2';
@@ -138,14 +133,14 @@ export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint
 	if (isVSCModelC(model)) {
 		return false;
 	}
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53CodexFamily(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isHiddenModelH(model.family) || isVSCModelA(model) || isVSCModelB(model) || isGpt52Family(model.family);
 }
 
 /**
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isGpt53CodexFamily(model.family) || isGpt52Family(model.family);
+	return (model.family.startsWith('gpt') && !model.family.includes('gpt-4o')) || model.family === 'o4-mini' || isGpt52CodexFamily(model.family) || isHiddenModelH(model.family) || isGpt52Family(model.family);
 }
 
 /**
