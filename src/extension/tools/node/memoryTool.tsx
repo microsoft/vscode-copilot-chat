@@ -62,8 +62,16 @@ interface IRenameParams {
 
 type MemoryToolParams = IViewParams | ICreateParams | IStrReplaceParams | IInsertParams | IDeleteParams | IRenameParams;
 
+function normalizePath(path: string): string {
+	return path.endsWith('/') ? path : path + '/';
+}
+
+function isMemoriesRoot(path: string): boolean {
+	return normalizePath(path) === '/memories/';
+}
+
 function validatePath(path: string): string | undefined {
-	if (path !== '/memories' && !path.startsWith('/memories/')) {
+	if (!normalizePath(path).startsWith('/memories/')) {
 		return 'Error: All memory paths must start with /memories/';
 	}
 	if (path.includes('..')) {
@@ -285,7 +293,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		try {
 			fileStat = await this.fileSystemService.stat(uri);
 		} catch {
-			if (path === '/memories' || path === '/memories/') {
+			if (isMemoriesRoot(path)) {
 				return 'No memories found.';
 			}
 			return `No memories found in ${path}.`;
