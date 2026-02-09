@@ -172,6 +172,20 @@ assertValidatorAssignable<ValidatorType<typeof vToolResultBlock>, Anthropic.Tool
 export type ToolResultBlock = Anthropic.ToolResultBlockParam;
 
 /**
+ * Image content block in user messages.
+ * Matches Anthropic.ImageBlockParam from the SDK.
+ *
+ * Note: source uses vUnchecked because it can be Base64ImageSource or URLImageSource,
+ * and the data originates from Claude's API (trusted source).
+ */
+export const vImageBlock = vObj({
+	type: vRequired(vLiteral('image')),
+	source: vRequired(vUnchecked<Anthropic.Base64ImageSource | Anthropic.URLImageSource>()),
+});
+assertValidatorAssignable<ValidatorType<typeof vImageBlock>, Anthropic.ImageBlockParam>();
+export type ImageBlock = Anthropic.ImageBlockParam;
+
+/**
  * Unknown content block type for forward compatibility.
  * Allows parsing of new block types the SDK may introduce.
  */
@@ -190,9 +204,10 @@ export const vContentBlock = vUnion(
 	vThinkingBlock,
 	vToolUseBlock,
 	vToolResultBlock,
+	vImageBlock,
 	vUnknownContentBlock
 );
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownContentBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock | UnknownContentBlock;
 
 // #endregion
 
@@ -364,6 +379,30 @@ export type MessageEntry = ValidatorType<typeof vMessageEntry>;
 // #endregion
 
 // #region Type Guards
+
+export type ImageMediaType = Anthropic.Messages.Base64ImageSource['media_type'];
+
+// Record ensures a compile error if the SDK adds a new media type we haven't covered.
+const SUPPORTED_IMAGE_MEDIA_TYPES: Record<ImageMediaType, true> = {
+	'image/jpeg': true,
+	'image/png': true,
+	'image/gif': true,
+	'image/webp': true,
+};
+
+function isImageMediaType(value: string): value is ImageMediaType {
+	return value in SUPPORTED_IMAGE_MEDIA_TYPES;
+}
+
+/**
+ * Normalizes a MIME type string to a supported Anthropic image media type.
+ * Handles variations like 'image/jpg' → 'image/jpeg'.
+ * Returns undefined for unsupported types.
+ */
+export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | undefined {
+	const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
+	return isImageMediaType(normalized) ? normalized : undefined;
+}
 
 /**
  * Type guard for user message entries.

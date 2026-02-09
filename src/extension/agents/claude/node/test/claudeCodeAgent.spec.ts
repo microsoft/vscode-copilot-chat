@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatReferenceBinaryData } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../../test/node/testHelpers';
 import type { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
@@ -78,6 +80,100 @@ describe('ClaudeAgentManager', () => {
 
 		// Verify that the service's query method was called only once (proving session reuse)
 		expect(mockService.queryCallCount).toBe(1);
+	});
+
+	it('resolves image references as ImageBlockParam content blocks', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+		const stream = new MockChatResponseStream();
+
+		const imageData = new Uint8Array([0x89, 0x50, 0x4E, 0x47]); // PNG magic bytes
+		const imageRef: vscode.ChatPromptReference = {
+			id: 'image-1',
+			name: 'image-1',
+			value: new ChatReferenceBinaryData('image/png', () => Promise.resolve(imageData)),
+		};
+		const req = new TestChatRequest('What is in this image?', [imageRef]);
+		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+
+		expect(mockService.receivedMessages).toHaveLength(1);
+		const content = mockService.receivedMessages[0].message.content;
+		expect(Array.isArray(content)).toBe(true);
+
+		const blocks = content as Anthropic.ContentBlockParam[];
+		const imageBlocks = blocks.filter(b => b.type === 'image');
+		expect(imageBlocks).toHaveLength(1);
+
+		const imageBlock = imageBlocks[0] as Anthropic.ImageBlockParam;
+		expect(imageBlock.source.type).toBe('base64');
+		const source = imageBlock.source as Anthropic.Base64ImageSource;
+		expect(source.media_type).toBe('image/png');
+		expect(source.data).toBe(Buffer.from(imageData).toString('base64'));
+
+		// The text prompt should still be present
+		const textBlocks = blocks.filter(b => b.type === 'text') as Anthropic.TextBlockParam[];
+		expect(textBlocks.some(b => b.text === 'What is in this image?')).toBe(true);
+	});
+
+	it('normalizes image/jpg to image/jpeg', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+		const stream = new MockChatResponseStream();
+
+		const imageRef: vscode.ChatPromptReference = {
+			id: 'image-1',
+			name: 'image-1',
+			value: new ChatReferenceBinaryData('image/jpg', () => Promise.resolve(new Uint8Array([0xFF, 0xD8]))),
+		};
+		const req = new TestChatRequest('Describe this', [imageRef]);
+		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+
+		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
+		const imageBlock = blocks.find(b => b.type === 'image') as Anthropic.ImageBlockParam;
+		expect(imageBlock).toBeDefined();
+		expect((imageBlock.source as Anthropic.Base64ImageSource).media_type).toBe('image/jpeg');
+	});
+
+	it('skips unsupported image MIME types', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+		const stream = new MockChatResponseStream();
+
+		const imageRef: vscode.ChatPromptReference = {
+			id: 'image-1',
+			name: 'image-1',
+			value: new ChatReferenceBinaryData('image/bmp', () => Promise.resolve(new Uint8Array([0x42, 0x4D]))),
+		};
+		const req = new TestChatRequest('Describe this', [imageRef]);
+		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+
+		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
+		const imageBlocks = blocks.filter(b => b.type === 'image');
+		expect(imageBlocks).toHaveLength(0);
+	});
+
+	it('handles mixed image and file references', async () => {
+		const manager = instantiationService.createInstance(ClaudeAgentManager);
+		const stream = new MockChatResponseStream();
+
+		const imageRef: vscode.ChatPromptReference = {
+			id: 'image-1',
+			name: 'image-1',
+			value: new ChatReferenceBinaryData('image/png', () => Promise.resolve(new Uint8Array([0x89]))),
+		};
+		const fileRef: vscode.ChatPromptReference = {
+			id: 'file-1',
+			name: 'file-1',
+			value: URI.file('/test/file.ts'),
+		};
+		const req = new TestChatRequest('Explain both', [imageRef, fileRef]);
+		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+
+		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
+		const imageBlocks = blocks.filter(b => b.type === 'image');
+		const textBlocks = blocks.filter(b => b.type === 'text') as Anthropic.TextBlockParam[];
+		expect(imageBlocks).toHaveLength(1);
+		// File reference should appear in system-reminder text block
+		expect(textBlocks.some(b => b.text.includes('/test/file.ts'))).toBe(true);
+		// User prompt should still be present
+		expect(textBlocks.some(b => b.text === 'Explain both')).toBe(true);
 	});
 });
 

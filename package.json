@@ -5594,7 +5594,8 @@
 				"when": "config.github.copilot.chat.claudeAgent.enabled",
 				"canDelegate": true,
 				"capabilities": {
-					"supportsFileAttachments": true
+					"supportsFileAttachments": true,
+					"supportsImageAttachments": true
 				},
 				"commands": [
 					{

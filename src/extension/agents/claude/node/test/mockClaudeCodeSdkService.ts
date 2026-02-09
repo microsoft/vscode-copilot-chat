@@ -14,6 +14,7 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public queryCallCount = 0;
 	public setModelCallCount = 0;
 	public lastSetModel: string | undefined;
+	public readonly receivedMessages: SDKUserMessage[] = [];
 
 	public async query(options: {
 		prompt: AsyncIterable<SDKUserMessage>;
@@ -38,7 +39,8 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 
 	private async* createMockGenerator(prompt: AsyncIterable<SDKUserMessage>): AsyncGenerator<SDKAssistantMessage | SDKResultMessage, void, unknown> {
 		// For every user message yielded, emit an assistant text and then a result
-		for await (const _ of prompt) {
+		for await (const msg of prompt) {
+			this.receivedMessages.push(msg);
 			yield {
 				type: 'assistant',
 				session_id: 'sess-1',

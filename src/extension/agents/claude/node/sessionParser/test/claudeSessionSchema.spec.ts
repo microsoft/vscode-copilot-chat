@@ -11,8 +11,10 @@ import {
 	isUserMessageEntry,
 	parseSessionEntry,
 	SessionEntry,
+	toAnthropicImageMediaType,
 	vAssistantMessageEntry,
 	vChainLinkEntry,
+	vImageBlock,
 	vIsoTimestamp,
 	vQueueOperationEntry,
 	vSummaryEntry,
@@ -198,6 +200,52 @@ describe('claudeSessionSchema', () => {
 			const result = validator.validate(invalid);
 			expect(result.error).toBeDefined();
 		});
+
+		it('should validate user message with image content block and preserve source data', () => {
+			const entry = {
+				parentUuid: null,
+				isSidechain: false,
+				userType: 'external',
+				cwd: '/Users/test/project',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+				version: '2.1.5',
+				type: 'user',
+				message: {
+					role: 'user',
+					content: [
+						{
+							type: 'image',
+							source: {
+								type: 'base64',
+								media_type: 'image/png',
+								data: 'iVBORw0KGgo=',
+							},
+						},
+						{
+							type: 'text',
+							text: 'What is in this image?',
+						},
+					],
+				},
+				uuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				timestamp: '2026-01-31T00:34:50.049Z',
+			};
+
+			const result = validator.validate(entry);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.uuid).toBe(entry.uuid);
+
+			// Verify image source data is preserved through validation
+			const content = result.content?.message.content;
+			expect(Array.isArray(content)).toBe(true);
+			const imageBlock = (content as ContentBlock[]).find(b => b.type === 'image');
+			expect(imageBlock).toBeDefined();
+			expect((imageBlock as any).source).toEqual({
+				type: 'base64',
+				media_type: 'image/png',
+				data: 'iVBORw0KGgo=',
+			});
+		});
 	});
 
 	describe('vAssistantMessageEntry', () => {
@@ -318,6 +366,68 @@ describe('claudeSessionSchema', () => {
 
 			const result = validator.validate(entry);
 			expect(result.error).toBeUndefined();
+		});
+	});
+
+	describe('vImageBlock', () => {
+		const validator = vImageBlock;
+
+		it('should validate base64 image blocks and preserve source', () => {
+			const block = {
+				type: 'image',
+				source: {
+					type: 'base64',
+					media_type: 'image/png',
+					data: 'iVBORw0KGgo=',
+				},
+			};
+
+			const result = validator.validate(block);
+			expect(result.error).toBeUndefined();
+			expect(result.content).toEqual(block);
+		});
+
+		it('should validate URL image blocks', () => {
+			const block = {
+				type: 'image',
+				source: {
+					type: 'url',
+					url: 'https://example.com/image.png',
+				},
+			};
+
+			const result = validator.validate(block);
+			expect(result.error).toBeUndefined();
+			expect(result.content?.source).toEqual(block.source);
+		});
+
+		it('should reject non-image blocks', () => {
+			const result = validator.validate({ type: 'text', text: 'hello' });
+			expect(result.error).toBeDefined();
+		});
+	});
+
+	describe('toAnthropicImageMediaType', () => {
+		it('should return the media type for supported MIME types', () => {
+			expect(toAnthropicImageMediaType('image/jpeg')).toBe('image/jpeg');
+			expect(toAnthropicImageMediaType('image/png')).toBe('image/png');
+			expect(toAnthropicImageMediaType('image/gif')).toBe('image/gif');
+			expect(toAnthropicImageMediaType('image/webp')).toBe('image/webp');
+		});
+
+		it('should normalize image/jpg to image/jpeg', () => {
+			expect(toAnthropicImageMediaType('image/jpg')).toBe('image/jpeg');
+		});
+
+		it('should be case-insensitive', () => {
+			expect(toAnthropicImageMediaType('IMAGE/PNG')).toBe('image/png');
+			expect(toAnthropicImageMediaType('Image/Jpeg')).toBe('image/jpeg');
+		});
+
+		it('should return undefined for unsupported MIME types', () => {
+			expect(toAnthropicImageMediaType('image/bmp')).toBeUndefined();
+			expect(toAnthropicImageMediaType('image/svg+xml')).toBeUndefined();
+			expect(toAnthropicImageMediaType('text/plain')).toBeUndefined();
 		});
 	});
 
