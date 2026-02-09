@@ -322,6 +322,36 @@ Tool permission handlers control what actions Claude can take without user confi
 - All other tools show a confirmation dialog via VS Code's chat API
 - User denials send appropriate messages back to Claude
 
+### MCP Server Registry
+
+**Location:** `common/claudeMcpServerRegistry.ts`
+
+The MCP server registry allows contributing MCP (Model Context Protocol) server configurations to the Claude SDK Options. Contributors provide server configurations that are merged and passed to the SDK at session start.
+
+**Key Features:**
+- Register contributors using `registerClaudeMcpServerContributor(ctor)`
+- Contributors are constructed via dependency injection using `IInstantiationService`
+- Contributors implement `IClaudeMcpServerContributor` with an async `getMcpServers()` method
+- Server configurations are merged into a single `Record<string, McpServerConfig>` for the SDK
+
+**Contributor Interface:**
+```typescript
+interface IClaudeMcpServerContributor {
+	getMcpServers(): Promise<Record<string, McpServerConfig>>;
+}
+```
+
+**Supported Server Types:**
+- `McpStdioServerConfig` - Standard input/output process transport (`{ command, args?, env? }`)
+- `McpSSEServerConfig` - Server-Sent Events (`{ type: 'sse', url, headers? }`)
+- `McpHttpServerConfig` - HTTP transport (`{ type: 'http', url, headers? }`)
+- `McpSdkServerConfigWithInstance` - In-process SDK servers
+
+**Index Chain:**
+- `common/mcpServers/index.ts` → Platform-agnostic contributors
+- `node/mcpServers/index.ts` → Node-specific contributors (imports common first)
+- `vscode-node/mcpServers/index.ts` → VS Code-specific contributors (imports node first)
+
 **Extending the Registries:**
 
 To add new functionality:
@@ -348,6 +378,11 @@ To add new functionality:
    - Create handler in appropriate directory (common/node/vscode-node)
    - Implement tool approval logic
    - Import your handler module in `index.ts` to trigger registration
+
+4. **New MCP Server Contributor:**
+   - Create a class implementing `IClaudeMcpServerContributor`
+   - Call `registerClaudeMcpServerContributor(YourContributor)` at module load time
+   - Import your contributor module in the appropriate `mcpServers/index.ts` (common/node/vscode-node)
 
 ## Configuration
 
