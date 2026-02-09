@@ -112,7 +112,7 @@ describe('createLockFile', () => {
 		const handle = await createLockFile(mockServerUri, mockHeaders, logger);
 		createdLockFile = handle.path;
 
-		expect(handle.path).toMatch(/\.copilot.*\.lock$/);
+		expect(handle.path).toMatch(/\.copilot[/\\]ide.*\.lock$/);
 		expect(fs.existsSync(handle.path)).toBe(true);
 
 		const content = JSON.parse(fs.readFileSync(handle.path, 'utf-8'));
@@ -162,8 +162,8 @@ describe('cleanupStaleLockFiles', () => {
 	beforeEach(() => {
 		originalEnv = process.env.XDG_STATE_HOME;
 		process.env.XDG_STATE_HOME = testDir;
-		if (!fs.existsSync(path.join(testDir, '.copilot'))) {
-			fs.mkdirSync(path.join(testDir, '.copilot'), { recursive: true });
+		if (!fs.existsSync(path.join(testDir, '.copilot', 'ide'))) {
+			fs.mkdirSync(path.join(testDir, '.copilot', 'ide'), { recursive: true });
 		}
 	});
 
@@ -179,7 +179,7 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should remove lockfiles for non-running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot');
+		const copilotDir = path.join(testDir, '.copilot', 'ide');
 
 		const staleLockFile = path.join(copilotDir, 'stale.lock');
 		const staleLockInfo = {
@@ -200,7 +200,7 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should keep lockfiles for running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot');
+		const copilotDir = path.join(testDir, '.copilot', 'ide');
 
 		const activeLockFile = path.join(copilotDir, 'active.lock');
 		const activeLockInfo = {
@@ -221,7 +221,7 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should return 0 when copilot directory does not exist', () => {
-		fs.rmSync(path.join(testDir, '.copilot'), { recursive: true, force: true });
+		fs.rmSync(path.join(testDir, '.copilot', 'ide'), { recursive: true, force: true });
 
 		const cleaned = cleanupStaleLockFiles(logger);
 		expect(cleaned).toBe(0);
