@@ -27,11 +27,7 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 	) {
 		super();
 
-		this.configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Advanced.CLIIntegrationEnabled.id)) {
-				this.initialize();
-			}
-		});
+		this.configurationService.onDidChangeConfiguration(() => this.initialize());
 		this.initialize();
 	}
 

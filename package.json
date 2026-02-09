@@ -4405,7 +4405,7 @@
 					},
 					"github.copilot.chat.cli.integration.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"markdownDescription": "%github.copilot.config.cli.integration.enabled%",
 						"tags": [
 							"advanced",
