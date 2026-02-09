@@ -150,4 +150,30 @@ describe('getDiagnosticsHandler', () => {
 		expect(result[0].diagnostics).toHaveLength(3);
 		expect(result[0].diagnostics.map(d => d.message)).toEqual(['first', 'second', 'third']);
 	});
+
+	it('treats empty string uri as no filter', () => {
+		diagnosticsService.setDiagnostics(fileA, [
+			{ message: 'err', range: new Range(0, 0, 0, 1), severity: DiagnosticSeverity.Error },
+		]);
+
+		const result = getDiagnosticsHandler(diagnosticsService, { uri: '' });
+
+		expect(result).toHaveLength(1);
+		expect(result[0].diagnostics[0].message).toBe('err');
+	});
+
+	it('accepts a non-file scheme URI', () => {
+		const result = getDiagnosticsHandler(diagnosticsService, { uri: 'untitled:Untitled-1' });
+		expect(result).toHaveLength(0);
+	});
+
+	it('accepts an absolute unix path', () => {
+		const result = getDiagnosticsHandler(diagnosticsService, { uri: '/workspace/src/fileA.ts' });
+		expect(result).toHaveLength(0);
+	});
+
+	it('accepts a file:// URI', () => {
+		const result = getDiagnosticsHandler(diagnosticsService, { uri: 'file:///workspace/src/fileA.ts' });
+		expect(result).toHaveLength(0);
+	});
 });

@@ -43,7 +43,12 @@ export function getDiagnosticsHandler(
 	let entries: [URI, readonly { message: string; severity: DiagnosticSeverity; range: { start: { line: number; character: number }; end: { line: number; character: number } }; source?: string; code?: string | number | { value: string | number; target: URI } }[]][];
 
 	if (args.uri) {
-		const fileUri = URI.parse(args.uri);
+		let fileUri: URI;
+		try {
+			fileUri = URI.parse(args.uri);
+		} catch {
+			throw new Error(`Invalid URI: "${args.uri}". Expected an absolute path (e.g., /path/to/file.ts) or a URI with a scheme (e.g., file:///path/to/file.ts, untitled:Untitled-1).`);
+		}
 		entries = [[fileUri, diagnosticsService.getDiagnostics(fileUri)]];
 	} else {
 		entries = diagnosticsService.getAllDiagnostics();
