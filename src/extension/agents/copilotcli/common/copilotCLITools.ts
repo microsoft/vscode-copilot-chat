@@ -728,7 +728,7 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
 		invocation.invocationMessage = new MarkdownString(localizedMessage);
-		invocation.invocationMessage = new MarkdownString(localizedPastTenseMessage);
+		invocation.pastTenseMessage = new MarkdownString(localizedPastTenseMessage);
 	} else {
 		const display = formatUriForFileWidget(Uri.file(args.path));
 		invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
