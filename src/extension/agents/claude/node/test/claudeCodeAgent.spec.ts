@@ -158,10 +158,11 @@ describe('ClaudeAgentManager', () => {
 			name: 'image-1',
 			value: new ChatReferenceBinaryData('image/png', () => Promise.resolve(new Uint8Array([0x89]))),
 		};
+		const fileUri = URI.file('/test/file.ts');
 		const fileRef: vscode.ChatPromptReference = {
 			id: 'file-1',
 			name: 'file-1',
-			value: URI.file('/test/file.ts'),
+			value: fileUri,
 		};
 		const req = new TestChatRequest('Explain both', [imageRef, fileRef]);
 		await manager.handleRequest(undefined, req, new TestChatContext(), stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
@@ -170,8 +171,8 @@ describe('ClaudeAgentManager', () => {
 		const imageBlocks = blocks.filter(b => b.type === 'image');
 		const textBlocks = blocks.filter(b => b.type === 'text') as Anthropic.TextBlockParam[];
 		expect(imageBlocks).toHaveLength(1);
-		// File reference should appear in system-reminder text block
-		expect(textBlocks.some(b => b.text.includes('/test/file.ts'))).toBe(true);
+		// File reference should appear in system-reminder text block (use fsPath for cross-platform)
+		expect(textBlocks.some(b => b.text.includes(fileUri.fsPath))).toBe(true);
 		// User prompt should still be present
 		expect(textBlocks.some(b => b.text === 'Explain both')).toBe(true);
 	});
