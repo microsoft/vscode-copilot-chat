@@ -979,7 +979,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolInputRetry,
 					statefulMarker,
 					thinking: thinkingItem,
-					phase
+					phase,
+					phaseModelId: phase ? endpoint.model : undefined,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
