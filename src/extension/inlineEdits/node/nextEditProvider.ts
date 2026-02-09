@@ -157,9 +157,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		super();
 
 		// Register the stateless provider for disposal if it's disposable
-		const provider = this._statelessNextEditProvider as IStatelessNextEditProvider & Partial<IDisposable>;
-		if (provider.dispose) {
-			this._register(provider as IDisposable);
+		if ('dispose' in this._statelessNextEditProvider && typeof this._statelessNextEditProvider.dispose === 'function') {
+			this._register(this._statelessNextEditProvider as IDisposable);
 		}
 
 		this._logger = this._logService.createSubLogger(['NES', 'NextEditProvider']);
