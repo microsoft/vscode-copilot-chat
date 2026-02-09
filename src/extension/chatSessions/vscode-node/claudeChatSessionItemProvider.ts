@@ -30,6 +30,12 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService
 	) {
 		super();
+
+		// Refresh session items when repositories change so badge state stays correct.
+		// shouldShowBadge() reads gitService.repositories synchronously, which may be
+		// incomplete while the git extension is still initializing.
+		this._register(gitService.onDidOpenRepository(() => this._onDidChangeChatSessionItems.fire()));
+		this._register(gitService.onDidCloseRepository(() => this._onDidChangeChatSessionItems.fire()));
 	}
 
 	public refresh(): void {

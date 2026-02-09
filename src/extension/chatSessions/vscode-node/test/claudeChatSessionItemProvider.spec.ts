@@ -10,6 +10,7 @@ import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspa
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -22,6 +23,18 @@ import { ClaudeChatSessionItemProvider } from '../claudeChatSessionItemProvider'
 
 class FakeGitService extends mock<IGitService>() {
 	override repositories: RepoContext[] = [];
+	private readonly _onDidOpenRepository = new Emitter<RepoContext>();
+	override readonly onDidOpenRepository = this._onDidOpenRepository.event;
+	private readonly _onDidCloseRepository = new Emitter<RepoContext>();
+	override readonly onDidCloseRepository = this._onDidCloseRepository.event;
+
+	fireOpenRepository(repo: RepoContext): void {
+		this._onDidOpenRepository.fire(repo);
+	}
+
+	fireCloseRepository(repo: RepoContext): void {
+		this._onDidCloseRepository.fire(repo);
+	}
 }
 
 function createMockSessionService(sessions: IClaudeCodeSessionInfo[]): IClaudeCodeSessionService {
@@ -229,6 +242,37 @@ describe('ClaudeChatSessionItemProvider', () => {
 			expect(items[0].timing?.lastRequestEnded).toBe(now.getTime());
 			expect(items[0].resource.scheme).toBe('claude-code');
 			expect(items[0].resource.path).toBe('/test-id');
+		});
+	});
+
+	// #endregion
+
+	// #region Git Event Refresh
+
+	describe('git event refresh', () => {
+		it('fires onDidChangeChatSessionItems when a repository opens', async () => {
+			const sessions = [createSession({ id: 'session-1', folderName: 'project' })];
+			const provider = createProvider([URI.file('/project')], sessions);
+
+			const fired = new Promise<void>(resolve => {
+				provider.onDidChangeChatSessionItems(() => resolve());
+			});
+
+			gitService.fireOpenRepository({ rootUri: URI.file('/project'), kind: 'repository' } as RepoContext);
+			await fired;
+		});
+
+		it('fires onDidChangeChatSessionItems when a repository closes', async () => {
+			const repo = { rootUri: URI.file('/project'), kind: 'repository' } as RepoContext;
+			const sessions = [createSession({ id: 'session-1', folderName: 'project' })];
+			const provider = createProvider([URI.file('/project')], sessions, [repo]);
+
+			const fired = new Promise<void>(resolve => {
+				provider.onDidChangeChatSessionItems(() => resolve());
+			});
+
+			gitService.fireCloseRepository(repo);
+			await fired;
 		});
 	});
 
