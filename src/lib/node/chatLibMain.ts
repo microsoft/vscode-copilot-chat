@@ -107,6 +107,7 @@ import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/t
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
+import { ITerminalService, NullTerminalService } from '../../platform/terminal/common/terminalService';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -118,7 +119,6 @@ import { URI } from '../../util/vs/base/common/uri';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
-import { ITerminalService } from '../../platform/terminal/common/terminalService';
 export {
 	IAuthenticationService, ICAPIClientService, IEndpointProvider, IExperimentationService, IIgnoreService, ILanguageContextProviderService
 };
@@ -382,6 +382,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
+	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	return builder.seal();
 }
 
