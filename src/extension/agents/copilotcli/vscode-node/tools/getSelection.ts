@@ -49,7 +49,7 @@ export class SelectionState {
 }
 
 export function registerGetSelectionTool(server: McpServer, logger: ILogger, selectionState: SelectionState): void {
-	server.tool('get_selection', 'Get text selection. Returns current selection if an editor is active, otherwise returns the latest cached selection. The "current" field indicates if this is from the active editor (true) or cached (false).', async () => {
+	server.registerTool('get_selection', { description: 'Get text selection. Returns current selection if an editor is active, otherwise returns the latest cached selection. The "current" field indicates if this is from the active editor (true) or cached (false).' }, async () => {
 		logger.debug('Getting text selection');
 		const editor = vscode.window.activeTextEditor;
 		if (editor) {
