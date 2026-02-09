@@ -64,7 +64,7 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 				logger.info(`Cleaned up ${cleanedCount} stale lock file(s).`);
 			}
 		}).catch(err => {
-			logger.error(`Error during lock file cleanup: ${err instanceof Error ? err.message : String(err)}`);
+			logger.error(err, 'Failed to clean up stale lock files');
 		});
 
 		// Start the MCP server
