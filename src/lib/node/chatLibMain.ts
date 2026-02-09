@@ -237,7 +237,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
-		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
+		this._nextEditProvider = this._register(instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder));
 		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender));
 	}
 

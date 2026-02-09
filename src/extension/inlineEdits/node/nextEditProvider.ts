@@ -27,7 +27,7 @@ import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/co
 import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
-import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable, isDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/common/observable';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -155,6 +155,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 	) {
 		super();
+
+		// Register the stateless provider for disposal if it's disposable
+		if (isDisposable(this._statelessNextEditProvider)) {
+			this._register(this._statelessNextEditProvider);
+		}
 
 		this._logger = this._logService.createSubLogger(['NES', 'NextEditProvider']);
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService, this._configService, this._expService);
