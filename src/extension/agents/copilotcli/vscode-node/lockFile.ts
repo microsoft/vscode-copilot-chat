@@ -5,9 +5,9 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { getCopilotCliStateDir } from './cliHelpers';
 
 export interface LockFileInfo {
@@ -78,7 +78,7 @@ export async function createLockFile(serverUri: vscode.Uri, headers: Record<stri
 
 	await fs.mkdir(copilotDir, { recursive: true, mode: 0o700 });
 
-	const uuid = crypto.randomUUID();
+	const uuid = generateUuid();
 	const lockFilePath = path.join(copilotDir, `${uuid}.lock`);
 
 	const workspaceFolders = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
@@ -128,25 +128,24 @@ export async function cleanupStaleLockFiles(logger: ILogger): Promise<number> {
 		return 0;
 	}
 
-	let cleanedCount = 0;
+	const lockFiles = files.filter(file => file.endsWith('.lock'));
 
-	for (const file of files) {
-		if (file.endsWith('.lock')) {
-			const filePath = path.join(copilotDir, file);
-			try {
-				const content = await fs.readFile(filePath, 'utf-8');
-				const info = JSON.parse(content) as LockFileInfo;
+	const results = await Promise.all(lockFiles.map(async (file) => {
+		const filePath = path.join(copilotDir, file);
+		try {
+			const content = await fs.readFile(filePath, 'utf-8');
+			const info = JSON.parse(content) as LockFileInfo;
 
-				if (!isProcessRunning(info.pid)) {
-					await fs.unlink(filePath);
-					cleanedCount++;
-					logger.debug(`Removed stale lock file for PID ${info.pid}: ${filePath}`);
-				}
-			} catch {
-				// Skip files that can't be read or parsed
+			if (!isProcessRunning(info.pid)) {
+				await fs.unlink(filePath);
+				logger.debug(`Removed stale lock file for PID ${info.pid}: ${filePath}`);
+				return true;
 			}
+		} catch {
+			// Skip files that can't be read or parsed
 		}
-	}
+		return false;
+	}));
 
-	return cleanedCount;
+	return results.filter(Boolean).length;
 }
