@@ -53,9 +53,9 @@ describe('LockFileHandle', () => {
 	});
 
 	describe('update', () => {
-		it('should write lock file with correct content', () => {
+		it('should write lock file with correct content', async () => {
 			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
-			handle.update();
+			await handle.update();
 
 			expect(fs.existsSync(testLockFilePath)).toBe(true);
 
@@ -67,9 +67,9 @@ describe('LockFileHandle', () => {
 			expect(content.timestamp).toBe(testTimestamp);
 		});
 
-		it.skipIf(process.platform === 'win32')('should set restrictive file permissions (0o600)', () => {
+		it.skipIf(process.platform === 'win32')('should set restrictive file permissions (0o600)', async () => {
 			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
-			handle.update();
+			await handle.update();
 
 			const stats = fs.statSync(testLockFilePath);
 			const mode = stats.mode & 0o777;
@@ -78,19 +78,19 @@ describe('LockFileHandle', () => {
 	});
 
 	describe('remove', () => {
-		it('should delete the lock file if it exists', () => {
+		it('should delete the lock file if it exists', async () => {
 			fs.writeFileSync(testLockFilePath, '{}');
 			expect(fs.existsSync(testLockFilePath)).toBe(true);
 
 			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
-			handle.remove();
+			await handle.remove();
 
 			expect(fs.existsSync(testLockFilePath)).toBe(false);
 		});
 
-		it('should not throw if lock file does not exist', () => {
+		it('should not throw if lock file does not exist', async () => {
 			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
-			expect(() => handle.remove()).not.toThrow();
+			await expect(handle.remove()).resolves.not.toThrow();
 		});
 	});
 });
@@ -112,7 +112,7 @@ describe('createLockFile', () => {
 		const handle = await createLockFile(mockServerUri, mockHeaders, logger);
 		createdLockFile = handle.path;
 
-		expect(handle.path).toMatch(/\.copilot.*\.lock$/);
+		expect(handle.path).toMatch(/\.copilot[/\\]ide.*\.lock$/);
 		expect(fs.existsSync(handle.path)).toBe(true);
 
 		const content = JSON.parse(fs.readFileSync(handle.path, 'utf-8'));
@@ -140,8 +140,8 @@ describe('createLockFile', () => {
 
 		expect(handle1.path).not.toBe(handle2.path);
 
-		handle1.remove();
-		handle2.remove();
+		await handle1.remove();
+		await handle2.remove();
 	});
 });
 
@@ -157,13 +157,14 @@ describe('isProcessRunning', () => {
 
 describe('cleanupStaleLockFiles', () => {
 	const testDir = path.join(os.tmpdir(), 'lockfile-cleanup-test-' + Date.now());
+	const copilotDir = path.join(testDir, '.copilot', 'ide');
 	let originalEnv: string | undefined;
 
 	beforeEach(() => {
 		originalEnv = process.env.XDG_STATE_HOME;
 		process.env.XDG_STATE_HOME = testDir;
-		if (!fs.existsSync(path.join(testDir, '.copilot'))) {
-			fs.mkdirSync(path.join(testDir, '.copilot'), { recursive: true });
+		if (!fs.existsSync(copilotDir)) {
+			fs.mkdirSync(copilotDir, { recursive: true });
 		}
 	});
 
@@ -178,9 +179,7 @@ describe('cleanupStaleLockFiles', () => {
 		}
 	});
 
-	it('should remove lockfiles for non-running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot');
-
+	it('should remove lockfiles for non-running processes', async () => {
 		const staleLockFile = path.join(copilotDir, 'stale.lock');
 		const staleLockInfo = {
 			socketPath: '/tmp/test.sock',
@@ -194,14 +193,12 @@ describe('cleanupStaleLockFiles', () => {
 		fs.writeFileSync(staleLockFile, JSON.stringify(staleLockInfo));
 
 		expect(fs.existsSync(staleLockFile)).toBe(true);
-		const cleaned = cleanupStaleLockFiles(logger);
+		const cleaned = await cleanupStaleLockFiles(logger);
 		expect(cleaned).toBe(1);
 		expect(fs.existsSync(staleLockFile)).toBe(false);
 	});
 
-	it('should keep lockfiles for running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot');
-
+	it('should keep lockfiles for running processes', async () => {
 		const activeLockFile = path.join(copilotDir, 'active.lock');
 		const activeLockInfo = {
 			socketPath: '/tmp/test.sock',
@@ -215,15 +212,15 @@ describe('cleanupStaleLockFiles', () => {
 		fs.writeFileSync(activeLockFile, JSON.stringify(activeLockInfo));
 
 		expect(fs.existsSync(activeLockFile)).toBe(true);
-		const cleaned = cleanupStaleLockFiles(logger);
+		const cleaned = await cleanupStaleLockFiles(logger);
 		expect(cleaned).toBe(0);
 		expect(fs.existsSync(activeLockFile)).toBe(true);
 	});
 
-	it('should return 0 when copilot directory does not exist', () => {
-		fs.rmSync(path.join(testDir, '.copilot'), { recursive: true, force: true });
+	it('should return 0 when copilot directory does not exist', async () => {
+		fs.rmSync(copilotDir, { recursive: true, force: true });
 
-		const cleaned = cleanupStaleLockFiles(logger);
+		const cleaned = await cleanupStaleLockFiles(logger);
 		expect(cleaned).toBe(0);
 	});
 });
