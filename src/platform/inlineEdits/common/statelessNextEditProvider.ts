@@ -375,7 +375,7 @@ export interface IStatelessNextEditTelemetry {
 		nextCursorLineDistance: number | undefined;
 	};
 
-	/* xtab aggressiveness telemetry (only set when promptingStrategy is XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort) */
+	/* xtab aggressiveness telemetry (only set when promptingStrategy is aggressiveness-based) */
 	readonly xtabAggressivenessLevel: string | undefined;
 	readonly xtabUserHappinessScore: number | undefined;
 
@@ -390,6 +390,9 @@ export interface IStatelessNextEditTelemetry {
 
 	/* lint errors info */
 	readonly lintErrors: string | undefined;
+
+	/* terminal output info */
+	readonly terminalOutput: string | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -469,6 +472,7 @@ export class StatelessNextEditTelemetryBuilder {
 			cursorJumpPrompt: this._cursorJumpPrompt ? JSON.stringify(this._cursorJumpPrompt.map(({ role, content }) => ({ role, content }))) : undefined,
 			cursorJumpResponse: this._cursorJumpResponse,
 			lintErrors: this._lintErrors,
+			terminalOutput: this._terminalOutput,
 		};
 	}
 
@@ -641,6 +645,12 @@ export class StatelessNextEditTelemetryBuilder {
 	private _lintErrors: string | undefined;
 	public setLintErrors(lintErrors: string): this {
 		this._lintErrors = lintErrors;
+		return this;
+	}
+
+	private _terminalOutput: string | undefined;
+	public setTerminalOutput(terminalOutput: string): this {
+		this._terminalOutput = terminalOutput;
 		return this;
 	}
 }

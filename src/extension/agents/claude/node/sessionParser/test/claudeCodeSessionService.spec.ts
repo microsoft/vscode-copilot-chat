@@ -134,6 +134,11 @@ describe('ClaudeCodeSessionService', () => {
 				'553dd2b5-8a53-4fbf-9db2-240632522fe5',
 				'b02ed4d8-1f00-45cc-949f-3ea63b2dbde2'
 			]);
+
+			// All sessions should have the workspace folder name
+			for (const session of sessions) {
+				expect(session.folderName).toBe('project');
+			}
 		});
 
 		it('skips files that fail to read', async () => {
@@ -572,6 +577,12 @@ describe('ClaudeCodeSessionService', () => {
 			const ids = sessions.map(s => s.id);
 			expect(ids).toContain('session-mru1');
 			expect(ids).toContain('session-mru2');
+
+			// Each session should have its respective MRU folder name
+			const session1 = sessions.find(s => s.id === 'session-mru1')!;
+			const session2 = sessions.find(s => s.id === 'session-mru2')!;
+			expect(session1.folderName).toBe('project');
+			expect(session2.folderName).toBe('project');
 		});
 	});
 
@@ -668,6 +679,12 @@ describe('ClaudeCodeSessionService', () => {
 			const ids = sessions.map(s => s.id);
 			expect(ids).toContain('session-from-folder1');
 			expect(ids).toContain('session-from-folder2');
+
+			// Each session should have its respective folder name
+			const session1 = sessions.find(s => s.id === 'session-from-folder1')!;
+			const session2 = sessions.find(s => s.id === 'session-from-folder2')!;
+			expect(session1.folderName).toBe('project1');
+			expect(session2.folderName).toBe('project2');
 		});
 	});
 

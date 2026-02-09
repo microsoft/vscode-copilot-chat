@@ -24,6 +24,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
+import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -395,6 +396,7 @@ export class ClaudeCodeSession extends Disposable {
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
+		const mcpServers = await buildMcpServersFromRegistry(this.instantiationService);
 		const options: Options = {
 			cwd,
 			additionalDirectories,
@@ -420,6 +422,7 @@ export class ClaudeCodeSession extends Disposable {
 			// Pass the permission mode to the SDK
 			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
+			mcpServers,
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
 					return { behavior: 'deny', message: 'No active request' };

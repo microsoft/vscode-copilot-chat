@@ -248,7 +248,7 @@ export class CopilotCLISessionService extends Disposable implements ICopilotCLIS
 			return allSessions;
 		} catch (error) {
 			this.logService.error(`Failed to get all sessions: ${error}`);
-			return [];
+			throw error;
 		}
 	}
 
