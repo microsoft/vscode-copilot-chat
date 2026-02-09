@@ -39,7 +39,7 @@ import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../c
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 import { convertReferenceToVariable } from './copilotCLIPromptReferences';
-import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { ICopilotCLITerminalIntegration, TerminalOpenLocation } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 
 const AGENTS_OPTION_ID = 'agent';
@@ -220,10 +220,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		} satisfies vscode.ChatSessionItem;
 	}
 
-	public async createCopilotCLITerminal(): Promise<void> {
+	public async createCopilotCLITerminal(location: TerminalOpenLocation = 'editor', name?: string): Promise<void> {
 		// TODO@rebornix should be set by CLI
-		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || l10n.t('Background Agent');
-		await this.terminalIntegration.openTerminal(terminalName);
+		const terminalName = name || process.env.COPILOTCLI_TERMINAL_TITLE || l10n.t('Background Agent');
+		await this.terminalIntegration.openTerminal(terminalName, [], undefined, location);
 	}
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
@@ -1319,6 +1319,12 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		if (sessionItem?.resource) {
 			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
 		}
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.newSession', async () => {
+		await copilotcliSessionItemProvider.createCopilotCLITerminal('editor', l10n.t('Copilot CLI'));
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.newSessionToSide', async () => {
+		await copilotcliSessionItemProvider.createCopilotCLITerminal('editorBeside', l10n.t('Copilot CLI'));
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.openWorktreeInNewWindow', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (!sessionItem?.resource) {

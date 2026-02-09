@@ -2293,6 +2293,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.newSession",
+				"title": "%github.copilot.command.cli.newSession%",
+				"icon": "$(terminal)",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.cli.newSessionToSide",
+				"title": "%github.copilot.command.cli.newSessionToSide%",
+				"icon": "$(terminal)",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
