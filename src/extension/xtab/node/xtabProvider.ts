@@ -37,6 +37,7 @@ import { Result } from '../../../util/common/result';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { Position } from '../../../util/vs/editor/common/core/position';
@@ -74,7 +75,7 @@ interface ModelConfig extends xtabPromptOptions.PromptOptions {
 	modelName: string | undefined;
 }
 
-export class XtabProvider implements IStatelessNextEditProvider {
+export class XtabProvider extends Disposable implements IStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
 
@@ -104,8 +105,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
+		super();
 		this.userInteractionMonitor = this.instaService.createInstance(UserInteractionMonitor);
-		this.terminalMonitor = this.instaService.createInstance(TerminalMonitor);
+		this.terminalMonitor = this._register(this.instaService.createInstance(TerminalMonitor));
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
