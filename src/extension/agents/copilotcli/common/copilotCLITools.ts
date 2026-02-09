@@ -636,7 +636,8 @@ export function createCopilotCLIToolInvocation(data: {
 		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
-		invocation.invocationMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
+		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
+		invocation.pastTenseMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
 		return invocation;
 	}
 

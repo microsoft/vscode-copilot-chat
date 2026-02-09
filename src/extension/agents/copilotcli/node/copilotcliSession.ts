@@ -301,6 +301,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					} else if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+						this._stream?.push(responsePart);
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -319,10 +322,8 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
-					this._stream?.push(responsePart);
-				}
+				// Just complete the tool invocation - the part was already pushed with partial updates enabled
+				processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory);
 
 				const success = `success: ${event.data.success}`;
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
