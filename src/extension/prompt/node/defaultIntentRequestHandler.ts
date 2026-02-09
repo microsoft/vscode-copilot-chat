@@ -432,7 +432,7 @@ export class DefaultIntentRequestHandler {
 	}
 
 	private getModeName(): string {
-		return this.request.modeInstructions2 ? 'custom' :
+		return this.request.modeInstructions2 ? (this.request.modeInstructions2.name.toLowerCase() === 'plan' ? 'plan' : 'custom') :
 			this.intent.id === 'editAgent' ? 'agent' :
 				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
 					'ask';

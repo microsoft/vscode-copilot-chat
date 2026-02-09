@@ -428,7 +428,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	}
 
 	protected _getModeName(): string {
-		return this._request.modeInstructions2 ? 'custom' :
+		return this._request.modeInstructions2 ? (this._request.modeInstructions2.name.toLowerCase() === 'plan' ? 'plan' : 'custom') :
 			this._intent.id === AgentIntent.ID ? 'agent' :
 				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
 					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
