@@ -3221,7 +3221,7 @@
 					},
 					"github.copilot.chat.alternateAnthropicPrompt.enabled": {
 						"type": "boolean",
-						"default": true,
+						"default": false,
 						"tags": [
 							"preview",
 							"onExp"
