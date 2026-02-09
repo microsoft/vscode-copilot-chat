@@ -6,8 +6,8 @@
 import { createSdkMcpServer, McpServerConfig, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { ILanguageDiagnosticsService } from '../../../../../platform/languages/common/languageDiagnosticsService';
-import { DiagnosticSeverity } from '../../../../../vscodeTypes';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { DiagnosticSeverity } from '../../../../../vscodeTypes';
 import { IClaudeMcpServerContributor, registerClaudeMcpServerContributor } from '../claudeMcpServerRegistry';
 
 const severityToString: Record<DiagnosticSeverity, string> = {

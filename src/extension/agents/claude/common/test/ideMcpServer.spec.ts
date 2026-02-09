@@ -5,8 +5,8 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TestLanguageDiagnosticsService } from '../../../../../platform/languages/common/testLanguageDiagnosticsService';
-import { DiagnosticSeverity, Range } from '../../../../../vscodeTypes';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { DiagnosticSeverity, Range } from '../../../../../vscodeTypes';
 import { getDiagnosticsHandler } from '../mcpServers/ideMcpServer';
 
 describe('getDiagnosticsHandler', () => {
