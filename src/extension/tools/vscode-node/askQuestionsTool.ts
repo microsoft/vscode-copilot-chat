@@ -77,7 +77,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		}
 
 		// Convert IQuestion array to ChatQuestion array
-		const chatQuestions = questions.map(q => this._convertToChatQuestion(q));
+		const chatQuestions = questions.map((q, index) => this._convertToChatQuestion(q, index));
 		this._logService.trace(`[AskQuestionsTool] ChatQuestions: ${JSON.stringify(chatQuestions.map(q => ({ id: q.id, title: q.title, type: q.type })))}`);
 
 		// Show the question carousel and wait for answers
@@ -127,7 +127,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		return input;
 	}
 
-	private _convertToChatQuestion(question: IQuestion): ChatQuestion {
+	private _convertToChatQuestion(question: IQuestion, index: number): ChatQuestion {
 		// Determine question type based on options and multiSelect
 		let type: ChatQuestionType;
 		if (!question.options || question.options.length === 0) {
@@ -154,12 +154,12 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		return new ChatQuestion(
 			question.header,
 			type,
-			question.header,
+			`${index + 1}. ${question.header}`,
 			{
 				message: question.question,
 				options: question.options?.map(opt => ({
 					id: opt.label,
-					label: `${opt.label}${opt.description ? ' - ' + opt.description : ''}`,
+					label: `${opt.label}${opt.description ? ` - ${opt.description}` : ''}`,
 					value: opt.label
 				})),
 				defaultValue,
@@ -188,7 +188,7 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 				continue;
 			}
 
-			const answer = carouselAnswers[question.header];
+			const answer = carouselAnswers[question.header] ?? this._findAnswerByIndexedTitle(carouselAnswers, question.header);
 			this._logService.trace(`[AskQuestionsTool] Processing question "${question.header}", raw answer: ${JSON.stringify(answer)}, type: ${typeof answer}`);
 
 			if (answer === undefined) {
@@ -310,6 +310,15 @@ export class AskQuestionsTool implements ICopilotTool<IAskQuestionsParams> {
 		}
 
 		return result;
+	}
+
+	private _findAnswerByIndexedTitle(answers: Record<string, unknown>, header: string): unknown {
+		for (const [key, value] of Object.entries(answers)) {
+			if (key.replace(/^\d+\.\s+/, '') === header) {
+				return value;
+			}
+		}
+		return undefined;
 	}
 
 	private _sendTelemetry(
