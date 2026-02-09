@@ -722,9 +722,13 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
+			? l10n.t("Reading {0}, line {1}", display, start)
+			: l10n.t("Reading {0}, lines {1} to {2}", display, start, end);
+		const localizedPastTenseMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
 		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		invocation.invocationMessage = new MarkdownString(localizedPastTenseMessage);
 	} else {
 		const display = formatUriForFileWidget(Uri.file(args.path));
 		invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
@@ -768,7 +772,8 @@ function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall
 function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
 	const args = toolCall.arguments;
 	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Undoing edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
@@ -777,6 +782,9 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Editing {0}", display))
+		: new MarkdownString(l10n.t("Editing file"));
+	invocation.pastTenseMessage = display
 		? new MarkdownString(l10n.t("Edited {0}", display))
 		: new MarkdownString(l10n.t("Edited file"));
 }
@@ -787,9 +795,11 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	if (display) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created {0}", display));
 	} else {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating file"));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 
@@ -815,7 +825,7 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: She
 	// 	}
 	// }
 
-	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
+	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : new MarkdownString(l10n.t('Running command: \`{0}\`', command));
 	invocation.toolSpecificData = {
 		commandLine: {
 			original: command,
@@ -843,7 +853,7 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		}
 	};
 	invocation.toolSpecificData = toolSpecificData;
-
+	invocation.pastTenseMessage = new MarkdownString(l10n.t('Ran command: \`{0}\`', toolCall.arguments.command));
 }
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
@@ -898,7 +908,8 @@ function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall
 }
 
 function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommentTool): void {
-	invocation.invocationMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.invocationMessage = `Replying to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.pastTenseMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.originMessage = toolCall.arguments.reply;
 }
 
@@ -988,7 +999,8 @@ function formatUpdateTodoInvocation(invocation: ChatToolInvocationPart, toolCall
 	const args = toolCall.arguments;
 	const parsed = args.todos ? parseTodoMarkdown(args.todos) : { title: '', todoList: [] };
 	if (!args.todos || !parsed) {
-		invocation.invocationMessage = 'Updated todo list';
+		invocation.invocationMessage = 'Updating todo list';
+		invocation.pastTenseMessage = 'Updated todo list';
 		return;
 	}
 
