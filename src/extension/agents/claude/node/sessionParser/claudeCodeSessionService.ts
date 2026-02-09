@@ -35,7 +35,7 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
-import { isEqualOrParent, basename } from '../../../../../util/vs/base/common/resources';
+import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
 import {

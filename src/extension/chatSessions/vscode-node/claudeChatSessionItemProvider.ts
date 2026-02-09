@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
@@ -25,7 +26,8 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 
 	constructor(
 		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService,
-		@IGitService private readonly gitService: IGitService
+		@IGitService private readonly gitService: IGitService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService
 	) {
 		super();
 	}
@@ -39,8 +41,8 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 	}
 
 	private shouldShowBadge(): boolean {
-		const workspaceFolders = vscode.workspace.workspaceFolders;
-		if (workspaceFolders === undefined) {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
 			return true; // Empty window
 		}
 		if (workspaceFolders.length > 1) {
