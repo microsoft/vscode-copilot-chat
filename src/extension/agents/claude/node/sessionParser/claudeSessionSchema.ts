@@ -460,6 +460,8 @@ export interface IClaudeCodeSessionInfo {
 	readonly firstMessageTimestamp: Date;
 	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
 	readonly lastMessageTimestamp: Date;
+	/** Basename of the workspace folder this session belongs to (for badge display) */
+	readonly folderName?: string;
 }
 
 // #endregion

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
@@ -23,7 +24,8 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	constructor(
-		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService
+		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService,
+		@IGitService private readonly gitService: IGitService
 	) {
 		super();
 	}
@@ -36,18 +38,43 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		this._onDidCommitChatSessionItem.fire({ original, modified });
 	}
 
+	private shouldShowBadge(): boolean {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (workspaceFolders === undefined) {
+			return true; // Empty window
+		}
+		if (workspaceFolders.length > 1) {
+			return true; // Multi-root workspace
+		}
+
+		// Single-root workspace with multiple git repositories
+		const repositories = this.gitService.repositories
+			.filter(repository => repository.kind !== 'worktree');
+		return repositories.length > 1;
+	}
+
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
-		const diskSessions = sessions.map(session => ({
-			resource: ClaudeSessionUri.forSessionId(session.id),
-			label: session.label,
-			tooltip: `Claude Code session: ${session.label}`,
-			timing: {
-				created: session.firstMessageTimestamp.getTime(),
-				lastRequestEnded: session.lastMessageTimestamp.getTime(),
-			},
-			iconPath: new vscode.ThemeIcon('claude')
-		} satisfies vscode.ChatSessionItem));
+		const showBadge = this.shouldShowBadge();
+		const diskSessions = sessions.map(session => {
+			let badge: vscode.MarkdownString | undefined;
+			if (session.folderName && showBadge) {
+				badge = new vscode.MarkdownString(`$(folder) ${session.folderName}`);
+				badge.supportThemeIcons = true;
+			}
+
+			return {
+				resource: ClaudeSessionUri.forSessionId(session.id),
+				label: session.label,
+				badge,
+				tooltip: `Claude Code session: ${session.label}`,
+				timing: {
+					created: session.firstMessageTimestamp.getTime(),
+					lastRequestEnded: session.lastMessageTimestamp.getTime(),
+				},
+				iconPath: new vscode.ThemeIcon('claude')
+			};
+		});
 
 		return diskSessions;
 	}
