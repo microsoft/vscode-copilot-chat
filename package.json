@@ -5660,7 +5660,7 @@
 		"@vscode/copilot-api": "^0.2.12",
 		"@vscode/extension-telemetry": "^1.2.0",
 		"@vscode/l10n": "^0.0.18",
-		"@vscode/prompt-tsx": "^0.4.0-alpha.7",
+		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@vscode/webview-ui-toolkit": "^1.3.1",
 		"@xterm/headless": "^5.5.0",
