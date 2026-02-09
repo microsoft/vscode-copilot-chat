@@ -134,6 +134,7 @@ export class ClaudeAgentManager extends Disposable {
 
 		const contentBlocks: Anthropic.ContentBlockParam[] = [];
 		const extraRefsTexts: string[] = [];
+		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
 		let prompt = request.prompt;
 		for (const ref of request.references) {
 			let refValue = ref.value;
@@ -159,9 +160,9 @@ export class ClaudeAgentManager extends Disposable {
 			}
 
 			const valueText = URI.isUri(refValue) ?
-				refValue.fsPath :
+				uriToString(refValue) :
 				isLocation(refValue) ?
-					`${refValue.uri.fsPath}:${refValue.range.start.line + 1}` :
+					`${uriToString(refValue.uri)}:${refValue.range.start.line + 1}` :
 					undefined;
 			if (valueText) {
 				if (ref.range) {

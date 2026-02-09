@@ -172,15 +172,34 @@ assertValidatorAssignable<ValidatorType<typeof vToolResultBlock>, Anthropic.Tool
 export type ToolResultBlock = Anthropic.ToolResultBlockParam;
 
 /**
+ * Base64 image source with inline data.
+ * Matches Anthropic.Base64ImageSource from the SDK.
+ */
+const vBase64ImageSource = vObj({
+	type: vRequired(vLiteral('base64')),
+	media_type: vRequired(vEnum('image/jpeg', 'image/png', 'image/gif', 'image/webp')),
+	data: vRequired(vString()),
+});
+
+/**
+ * URL image source with a remote URL.
+ * Matches Anthropic.URLImageSource from the SDK.
+ */
+const vURLImageSource = vObj({
+	type: vRequired(vLiteral('url')),
+	url: vRequired(vString()),
+});
+
+/**
  * Image content block in user messages.
  * Matches Anthropic.ImageBlockParam from the SDK.
  *
- * Note: source uses vUnchecked because it can be Base64ImageSource or URLImageSource,
- * and the data originates from Claude's API (trusted source).
+ * Source is validated as a discriminated union of base64 and url shapes,
+ * ensuring required fields (type, media_type/data or url) are present.
  */
 export const vImageBlock = vObj({
 	type: vRequired(vLiteral('image')),
-	source: vRequired(vUnchecked<Anthropic.Base64ImageSource | Anthropic.URLImageSource>()),
+	source: vRequired(vUnion(vBase64ImageSource, vURLImageSource)),
 });
 assertValidatorAssignable<ValidatorType<typeof vImageBlock>, Anthropic.ImageBlockParam>();
 export type ImageBlock = Anthropic.ImageBlockParam;
@@ -391,7 +410,7 @@ const SUPPORTED_IMAGE_MEDIA_TYPES: Record<ImageMediaType, true> = {
 };
 
 function isImageMediaType(value: string): value is ImageMediaType {
-	return value in SUPPORTED_IMAGE_MEDIA_TYPES;
+	return Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, value);
 }
 
 /**

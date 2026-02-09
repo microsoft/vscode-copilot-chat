@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	ContentBlock,
+	ImageBlock,
 	isAssistantMessageEntry,
 	isSummaryEntry,
 	isUserMessageEntry,
@@ -238,9 +239,9 @@ describe('claudeSessionSchema', () => {
 			// Verify image source data is preserved through validation
 			const content = result.content?.message.content;
 			expect(Array.isArray(content)).toBe(true);
-			const imageBlock = (content as ContentBlock[]).find(b => b.type === 'image');
+			const imageBlock = (content as ContentBlock[]).find((b): b is ImageBlock => b.type === 'image');
 			expect(imageBlock).toBeDefined();
-			expect((imageBlock as any).source).toEqual({
+			expect(imageBlock!.source).toEqual({
 				type: 'base64',
 				media_type: 'image/png',
 				data: 'iVBORw0KGgo=',
@@ -403,6 +404,61 @@ describe('claudeSessionSchema', () => {
 
 		it('should reject non-image blocks', () => {
 			const result = validator.validate({ type: 'text', text: 'hello' });
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject image block with null source', () => {
+			const result = validator.validate({ type: 'image', source: null });
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject image block with non-object source', () => {
+			const result = validator.validate({ type: 'image', source: 'not-an-object' });
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject image block with missing source', () => {
+			const result = validator.validate({ type: 'image' });
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject base64 source missing data field', () => {
+			const result = validator.validate({
+				type: 'image',
+				source: { type: 'base64', media_type: 'image/png' },
+			});
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject base64 source missing media_type field', () => {
+			const result = validator.validate({
+				type: 'image',
+				source: { type: 'base64', data: 'iVBORw0KGgo=' },
+			});
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject base64 source with unsupported media_type', () => {
+			const result = validator.validate({
+				type: 'image',
+				source: { type: 'base64', media_type: 'image/bmp', data: 'abc=' },
+			});
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject url source missing url field', () => {
+			const result = validator.validate({
+				type: 'image',
+				source: { type: 'url' },
+			});
+			expect(result.error).toBeDefined();
+		});
+
+		it('should reject source with unknown type', () => {
+			const result = validator.validate({
+				type: 'image',
+				source: { type: 'file', path: '/tmp/img.png' },
+			});
 			expect(result.error).toBeDefined();
 		});
 	});

@@ -12,7 +12,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { MockChatResponseStream, TestChatRequest } from '../../../../test/node/testHelpers';
+import { MockChatResponseStream, TestChatContext, TestChatRequest } from '../../../../test/node/testHelpers';
 import type { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 import { ClaudeAgentManager, ClaudeCodeSession } from '../claudeCodeAgent';
 import { IClaudeCodeSdkService } from '../claudeCodeSdkService';
@@ -61,7 +61,7 @@ describe('ClaudeAgentManager', () => {
 		const stream1 = new MockChatResponseStream();
 
 		const req1 = new TestChatRequest('Hi');
-		const res1 = await manager.handleRequest(undefined, req1, { history: [] } as any, stream1, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		const res1 = await manager.handleRequest(undefined, req1, new TestChatContext(), stream1, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		expect(stream1.output.join('\n')).toContain('Hello from mock!');
 		expect(res1.claudeSessionId).toBe('sess-1');
@@ -70,7 +70,7 @@ describe('ClaudeAgentManager', () => {
 		const stream2 = new MockChatResponseStream();
 
 		const req2 = new TestChatRequest('Again');
-		const res2 = await manager.handleRequest(res1.claudeSessionId, req2, { history: [] } as any, stream2, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		const res2 = await manager.handleRequest(res1.claudeSessionId, req2, new TestChatContext(), stream2, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		expect(stream2.output.join('\n')).toContain('Hello from mock!');
 		expect(res2.claudeSessionId).toBe('sess-1');
@@ -93,7 +93,7 @@ describe('ClaudeAgentManager', () => {
 			value: new ChatReferenceBinaryData('image/png', () => Promise.resolve(imageData)),
 		};
 		const req = new TestChatRequest('What is in this image?', [imageRef]);
-		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		await manager.handleRequest(undefined, req, new TestChatContext(), stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		expect(mockService.receivedMessages).toHaveLength(1);
 		const content = mockService.receivedMessages[0].message.content;
@@ -124,7 +124,7 @@ describe('ClaudeAgentManager', () => {
 			value: new ChatReferenceBinaryData('image/jpg', () => Promise.resolve(new Uint8Array([0xFF, 0xD8]))),
 		};
 		const req = new TestChatRequest('Describe this', [imageRef]);
-		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		await manager.handleRequest(undefined, req, new TestChatContext(), stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
 		const imageBlock = blocks.find(b => b.type === 'image') as Anthropic.ImageBlockParam;
@@ -142,7 +142,7 @@ describe('ClaudeAgentManager', () => {
 			value: new ChatReferenceBinaryData('image/bmp', () => Promise.resolve(new Uint8Array([0x42, 0x4D]))),
 		};
 		const req = new TestChatRequest('Describe this', [imageRef]);
-		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		await manager.handleRequest(undefined, req, new TestChatContext(), stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
 		const imageBlocks = blocks.filter(b => b.type === 'image');
@@ -164,7 +164,7 @@ describe('ClaudeAgentManager', () => {
 			value: URI.file('/test/file.ts'),
 		};
 		const req = new TestChatRequest('Explain both', [imageRef, fileRef]);
-		await manager.handleRequest(undefined, req, { history: [] } as any, stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
+		await manager.handleRequest(undefined, req, new TestChatContext(), stream, CancellationToken.None, TEST_MODEL_ID, TEST_PERMISSION_MODE, TEST_FOLDER_INFO);
 
 		const blocks = mockService.receivedMessages[0].message.content as Anthropic.ContentBlockParam[];
 		const imageBlocks = blocks.filter(b => b.type === 'image');
