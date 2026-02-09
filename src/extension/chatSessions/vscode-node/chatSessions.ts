@@ -44,6 +44,9 @@ import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
+import { GrowthChatSessionContentProvider } from './growthChatSessionContentProvider';
+import { GrowthChatSessionItemProvider, GrowthSessionUri } from './growthChatSessionItemProvider';
+import { GrowthChatSessionParticipant } from './growthChatSessionParticipant';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -115,7 +118,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IChatDelegationSummaryService, delegationSummary],
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
-		const cloudSessionProvider = this.registerCopilotCloudAgent();
+		const cloudSessionProvider = undefined; // temporarily disabled — network-heavy // this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
@@ -157,8 +160,28 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService));
+
+		// #region Growth Chat Sessions
+		// Register growth chat sessions provider for product growth and user education
+		const growthSessionItemProvider = this._register(instantiationService.createInstance(GrowthChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionItemProvider.sessionType, growthSessionItemProvider));
+
+		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider, growthSessionItemProvider));
+		const growthChatSessionParticipant = instantiationService.createInstance(GrowthChatSessionParticipant);
+		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
+		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
+		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
+
+		this._register(vscode.commands.registerCommand('github.copilot.growth.sendMessage', async () => {
+			await vscode.commands.executeCommand(`workbench.action.chat.openSessionWithPrompt.${GrowthChatSessionItemProvider.sessionType}`, {
+				resource: GrowthSessionUri.forSessionId(`growth-${Date.now()}`),
+				prompt: vscode.l10n.t('How can I get the most out of Copilot?'),
+			});
+		}));
+		// #endregion
 	}
 
+	// @ts-expect-error temporarily disabled — network-heavy
 	private registerCopilotCloudAgent() {
 		if (!this.copilotAgentInstaService) {
 			return;

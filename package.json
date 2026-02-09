@@ -2874,6 +2874,11 @@
 				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
 				"icon": "$(repo)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.growth.sendMessage",
+				"title": "Send Growth Chat Session Message",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -3074,6 +3079,11 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
+					},
+					"github.copilot.chat.growthMessages.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "Enable educational growth messages to help learn Copilot features. This is an experimental feature."
 					}
 				}
 			},
@@ -5689,6 +5699,20 @@
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
+			},
+			{
+				"type": "copilot-growth",
+				"name": "growth",
+				"displayName": "Growth",
+				"icon": "$(lightbulb)",
+				"welcomeTitle": "Learn Copilot",
+				"welcomeMessage": "Get tips and learn how to use Copilot effectively",
+				"canDelegate": true,
+				"inputPlaceholder": "Ask about Copilot features...",
+				"order": 99,
+				"description": "Educational messages to help you learn Copilot",
+				"when": "config.github.copilot.chat.growthMessages.enabled",
+				"capabilities": {}
 			}
 		],
 		"debuggers": [
