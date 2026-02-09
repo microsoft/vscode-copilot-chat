@@ -52,7 +52,7 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nextEditConstructPrompt, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { TerminalMonitor } from '../common/terminalOutput';
@@ -321,7 +321,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = getUserPrompt(promptPieces);
+		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? nextEditConstructPrompt(promptPieces) : getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -715,7 +715,56 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let cleanedLinesStream: AsyncIterable<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			cleanedLinesStream = linesStream;
+			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
+				// Smart extraction for Sweep: diff full response against full document
+				// and yield only the actual changes
+				const responseLines: string[] = [];
+				for await (const line of linesStream) {
+					responseLines.push(line);
+				}
+
+				if (chatResponseFailure) {
+					return XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
+				}
+
+				// Strip leading/trailing empty lines
+				while (responseLines.length > 0 && responseLines[0].trim() === '') {
+					responseLines.shift();
+				}
+				while (responseLines.length > 0 && responseLines[responseLines.length - 1].trim() === '') {
+					responseLines.pop();
+				}
+
+				if (responseLines.length === 0) {
+					return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+				}
+
+				// Get full current document content
+				const currentLines = promptPieces.currentDocument.lines;
+
+				// Compute diff between current document and model response
+				const diffResult = await this.diffService.computeDiff(
+					currentLines.join('\n'),
+					responseLines.join('\n'),
+					{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }
+				);
+
+				tracer.trace(`Sweep smart extraction: found ${diffResult.changes.length} changes`);
+
+				// Yield only the actual changes
+				for (const change of diffResult.changes) {
+					const singleLineEdit = new LineReplacement(
+						new LineRange(change.original.startLineNumber, change.original.endLineNumberExclusive),
+						responseLines.slice(change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1)
+					);
+					tracer.trace(`Sweep edit: ${singleLineEdit.toString()}`);
+					yield { edit: singleLineEdit, isFromCursorJump, window: editWindow };
+				}
+
+				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+			} else {
+				cleanedLinesStream = linesStream;
+			}
 		} else if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntent ||
 			opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowWithEditIntentShort) {
 			// Determine parse mode based on response format
@@ -1169,6 +1218,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
+			case xtabPromptOptions.PromptingStrategy.nextEdit:
+				return ''; // Sweep next-edit model doesn't use a system prompt
 			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
 			case undefined:
 				return systemPromptTemplate;
