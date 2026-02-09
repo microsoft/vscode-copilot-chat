@@ -257,6 +257,18 @@ export function isAnthropicContextEditingEnabled(
 	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
 }
 
+export function isAnthropicMemoryToolEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
+}
+
 export interface ContextEditingConfig {
 	triggerType: 'input_tokens' | 'tool_uses';
 	triggerValue: number;

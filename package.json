@@ -2834,6 +2834,23 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.copilotCLI.addFileReference",
+				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.chat.copilotCLI.acceptDiff",
+				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
+				"icon": "$(check)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.chat.copilotCLI.rejectDiff",
+				"title": "%github.copilot.command.chat.copilotCLI.rejectDiff%",
+				"icon": "$(close)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.checkoutPullRequestReroute",
 				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
 				"icon": "$(git-pull-request)",
@@ -3034,6 +3051,16 @@
 						"type": "string",
 						"default": "",
 						"markdownDescription": "The currently selected completion model ID. To select from a list of available models, use the __\"Change Completions Model\"__ command or open the model picker (from the Copilot menu in the VS Code title bar, select __\"Configure Code Completions\"__ then __\"Change Completions Model\"__. The value must be a valid model ID. An empty value indicates that the default model will be used."
+					},
+					"github.copilot.chat.claudeAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%"
+					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
 					}
 				}
 			},
@@ -3142,22 +3169,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.claudeAgent.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%",
-						"tags": [
-							"preview"
-						]
-					},
-					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
-						"tags": [
-							"preview"
-						]
 					},
 					"github.copilot.chat.copilotMemory.enabled": {
 						"type": "boolean",
@@ -4386,6 +4397,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.integration.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.integration.enabled%",
+						"tags": [
+							"advanced",
+							"experimental"
+						]
+					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4494,6 +4514,23 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.acceptDiff",
+					"group": "navigation@1",
+					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.rejectDiff",
+					"group": "navigation@2",
+					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"explorer/context": [
@@ -4501,6 +4538,11 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
 					"group": "2_copilot@1"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "config.github.copilot.chat.cli.integration.enabled && !explorerResourceIsFolder"
 				}
 			],
 			"editor/context": [
@@ -4508,6 +4550,11 @@
 					"command": "github.copilot.chat.explain",
 					"when": "!github.copilot.interactiveSession.disabled",
 					"group": "1_chat@4"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "!inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [
@@ -5323,6 +5370,12 @@
 		},
 		"keybindings": [
 			{
+				"command": "github.copilot.chat.copilotCLI.addFileReference",
+				"key": "ctrl+shift+.",
+				"mac": "cmd+shift+.",
+				"when": "editorTextFocus"
+			},
+			{
 				"command": "github.copilot.chat.rerunWithCopilotDebug",
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
@@ -5529,7 +5582,7 @@
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
 				"description": "%github.copilot.session.providerDescription.claude%",
-				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
+				"when": "config.github.copilot.chat.claudeAgent.enabled",
 				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true
@@ -5729,6 +5782,7 @@
 		"@types/google-protobuf": "^3.15.12",
 		"@types/js-yaml": "^4.0.9",
 		"@types/markdown-it": "^14.0.0",
+		"@types/express": "^5.0.6",
 		"@types/minimist": "^1.2.5",
 		"@types/mocha": "^10.0.10",
 		"@types/node": "^22.16.3",
@@ -5838,7 +5892,9 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.18.2",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
+		"web-tree-sitter": "^0.23.0",
+		"express": "^5.2.1",
+		"@modelcontextprotocol/sdk": "^1.25.2"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
