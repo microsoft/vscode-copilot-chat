@@ -825,7 +825,6 @@ function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: She
 	// 	}
 	// }
 
-	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : new MarkdownString(l10n.t('Running command: \`{0}\`', command));
 	invocation.toolSpecificData = {
 		commandLine: {
 			original: command,
@@ -853,7 +852,6 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		}
 	};
 	invocation.toolSpecificData = toolSpecificData;
-	invocation.pastTenseMessage = new MarkdownString(l10n.t('Ran command: \`{0}\`', toolCall.arguments.command));
 }
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
