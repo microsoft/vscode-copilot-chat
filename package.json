@@ -5632,7 +5632,7 @@
 				"icon": "$(lightbulb)",
 				"welcomeTitle": "Learn Copilot",
 				"welcomeMessage": "Get tips and learn how to use Copilot effectively",
-				"canDelegate": true,
+				"isReadOnly": true,
 				"inputPlaceholder": "Ask about Copilot features...",
 				"order": 99,
 				"description": "Educational messages to help you learn Copilot",
