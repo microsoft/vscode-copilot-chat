@@ -26,6 +26,10 @@ import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
+type ResponseOutputMessageWithPhase = OpenAI.Responses.ResponseOutputMessage & {
+	phase?: string;
+};
+
 export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, endpoint: IChatEndpoint): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
@@ -87,14 +91,16 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 					input.push(...extractThinkingData(message.content));
 					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
 					if (asstContent.length) {
-						input.push({
+						const assistantMessage: ResponseOutputMessageWithPhase = {
 							role: 'assistant',
 							content: asstContent,
 							// I don't think this needs to be round-tripped.
 							id: 'msg_123',
 							status: 'completed',
 							type: 'message',
-						} satisfies OpenAI.Responses.ResponseOutputMessage);
+							phase: message.phase
+						};
+						input.push(assistantMessage);
 					}
 				}
 				if (message.toolCalls) {
