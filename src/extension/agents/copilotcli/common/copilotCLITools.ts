@@ -806,25 +806,7 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
 	const args = toolCall.arguments;
 	const command = args.command ?? '';
-	// TODO @DonJayamanne This is the code in copilot cloud, discuss and decide if we want to use it.
-	// Not for Cli as we want users to see the exact command being run so they can review and approve it.
-	// const MAX_CONTENT_LENGTH = 200;
-	// if (command.length > MAX_CONTENT_LENGTH) {
-	// 	// Check if content contains EOF marker (heredoc pattern)
-	// 	const hasEOF = (command && /<<\s*['"]?EOF['"]?/.test(command));
-	// 	if (hasEOF) {
-	// 		// show the command line up to EOL
-	// 		const firstLineEnd = command.indexOf('\n');
-	// 		if (firstLineEnd > 0) {
-	// 			const firstLine = command.substring(0, firstLineEnd);
-	// 			const remainingChars = command.length - firstLineEnd - 1;
-	// 			command = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
-	// 		}
-	// 	} else {
-	// 		command = command.substring(0, MAX_CONTENT_LENGTH) + `\n... [${command.length - MAX_CONTENT_LENGTH} more characters]`;
-	// 	}
-	// }
-
+	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
 			original: command,
