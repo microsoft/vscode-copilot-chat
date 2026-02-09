@@ -323,11 +323,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				}
 
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
-				const completePart = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory);
-				if (completePart && (completePart instanceof ChatToolInvocationPart)) {
-					completePart.enablePartialUpdate = true;
-					this._stream?.push(completePart);
-				}
+				processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory);
 
 				const success = `success: ${event.data.success}`;
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
