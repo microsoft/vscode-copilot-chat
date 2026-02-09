@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
@@ -130,7 +130,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					},
 				});
 
-			let hasMemoryTool = false;
+			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
 			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
 
@@ -145,10 +145,11 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					defer_loading: false
 				} as Anthropic.Beta.BetaToolUnion);
 			}
-
+			let hasMemoryTool = false;
 			for (const tool of (options.tools ?? [])) {
-				// Handle native Anthropic memory tool
-				if (tool.name === 'memory') {
+				// Handle native Anthropic memory tool (only for models that support it)
+				if (tool.name === 'memory' && memoryToolEnabled) {
+
 					hasMemoryTool = true;
 					tools.push({
 						name: 'memory',

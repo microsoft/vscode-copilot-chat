@@ -13,7 +13,7 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, ServerToolUse, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult } from '../../networking/common/anthropic';
 import { FinishedCallback, IIPCodeCitation, IResponseDelta } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, rawMessageToCAPI } from '../../networking/common/openai';
@@ -91,8 +91,14 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 	// TODO: Use a dedicated flag on options instead of relying on telemetry subType
 	const isSubagent = options.telemetryProperties?.subType?.startsWith('subagent') ?? false;
 
+	// Check if memory tool is present and model supports built-in memory
+	const memoryToolEnabled = isAnthropicMemoryToolEnabled(endpoint, configurationService, experimentationService);
+	const hasMemoryTool = memoryToolEnabled && (options.requestOptions?.tools?.some(tool => tool.function.name === 'memory') ?? false);
+
 	const anthropicTools = options.requestOptions?.tools
 		?.filter(tool => tool.function.name && tool.function.name.length > 0)
+		// Filter out memory tool when it will be added as a built-in Anthropic tool
+		.filter(tool => !(hasMemoryTool && tool.function.name === 'memory'))
 		.map((tool): AnthropicMessagesTool => ({
 			name: tool.function.name,
 			description: tool.function.description || '',
@@ -104,10 +110,15 @@ export function createMessagesRequestBody(accessor: ServicesAccessor, options: I
 			// Mark tools for deferred loading when tool search is enabled for allowed conversation agents, except for frequently used tools
 			...(toolSearchEnabled && isAllowedConversationAgent && !isSubagent && !nonDeferredToolNames.has(tool.function.name) ? { defer_loading: true } : {}),
 		}));
-	// Build final tools array, adding tool search tool if enabled
+	// Build final tools array, adding tool search tool and built-in memory tool if enabled
 	const finalTools: AnthropicMessagesTool[] = [];
 	if (isAllowedConversationAgent && !isSubagent && toolSearchEnabled) {
 		finalTools.push({ name: TOOL_SEARCH_TOOL_NAME, type: TOOL_SEARCH_TOOL_TYPE, defer_loading: false });
+	}
+
+	// Add built-in Anthropic memory tool if present in the tools set
+	if (hasMemoryTool) {
+		finalTools.push({ name: 'memory', type: 'memory_20250818' });
 	}
 
 	if (anthropicTools) {
