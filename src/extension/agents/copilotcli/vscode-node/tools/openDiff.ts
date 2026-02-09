@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
-import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { DiffStateManager } from '../diffState';
-import { makeTextResult } from './utils';
-import { ReadonlyContentProvider, createReadonlyUri } from '../readonlyContentProvider';
+import * as fs from 'fs/promises';
+import * as vscode from 'vscode';
+import { z } from 'zod';
 import { ILogger } from '../../../../../platform/log/common/logService';
+import { DiffStateManager } from '../diffState';
+import { ReadonlyContentProvider, createReadonlyUri } from '../readonlyContentProvider';
+import { makeTextResult } from './utils';
 
 function makeErrorResult(message: string): { content: [{ type: 'text'; text: string }]; isError: true } {
 	return {
@@ -26,11 +26,12 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffSta
 		new_file_contents: z.string().describe('The new file contents to compare against'),
 		tab_name: z.string().describe('Name for the diff tab'),
 	};
-	server.tool(
+	server.registerTool(
 		'open_diff',
-		'Opens a diff view comparing original file content with new content. Blocks until user accepts, rejects, or closes the diff.',
-		schema,
-		// @ts-expect-error - zod type instantiation too deep for server.tool() generics
+		{
+			description: 'Opens a diff view comparing original file content with new content. Blocks until user accepts, rejects, or closes the diff.',
+			inputSchema: schema,
+		},
 		async (args: { original_file_path: string; new_file_contents: string; tab_name: string }) => {
 			const { original_file_path, new_file_contents, tab_name } = args;
 			logger.info(`[DIFF] ===== OPEN_DIFF START ===== file=${original_file_path}, tab=${tab_name}`);
