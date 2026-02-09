@@ -17,7 +17,7 @@ export class PromptCompletionContribution extends Disposable {
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) {
 		super();
-		const endPointPromise = this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endPointPromise = this.endpointProvider.getChatEndpoint('gpt-5-mini');
 		endPointPromise.then((endpoint) => {
 			this._register(vscode.languages.registerInlineCompletionItemProvider({ scheme: 'chatSessionInput' }, {
 				async provideInlineCompletionItems(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext, token: vscode.CancellationToken): Promise<vscode.InlineCompletionItem[] | vscode.InlineCompletionList> {
