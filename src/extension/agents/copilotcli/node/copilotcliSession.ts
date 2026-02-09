@@ -325,7 +325,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
 				if (responsePart) {
-					if ((responsePart instanceof ChatToolInvocationPart)) {
+					if (responsePart instanceof ChatToolInvocationPart) {
 						responsePart.enablePartialUpdate = true;
 					}
 					this._stream?.push(responsePart);
