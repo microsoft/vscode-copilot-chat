@@ -4,15 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
+import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { StaticChatMLFetcher } from '../../../../platform/chat/test/common/staticChatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { NullWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/nullWorkspaceFileIndex';
 import { IWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
-import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
@@ -20,8 +20,8 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { Conversation, ICopilotChatResultIn, Turn, TurnStatus } from '../../../prompt/common/conversation';
 import { IToolCall } from '../../../prompt/common/intents';
-import { ChatTelemetryBuilder } from '../../../prompt/node/chatParticipantTelemetry';
 import { ToolCallRound } from '../../../prompt/common/toolCallRound';
+import { ChatTelemetryBuilder } from '../../../prompt/node/chatParticipantTelemetry';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { MockChatResponseStream, TestChatRequest } from '../../../test/node/testHelpers';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -68,8 +68,8 @@ describe('AgentIntent /summarize command', () => {
 
 	async function runSummarize(conversation: Conversation) {
 		const intent = instantiationService.createInstance(AgentIntent);
-		const request = new TestChatRequest('/summarize');
-		request.command = 'summarize';
+		const request = new TestChatRequest('');
+		request.command = 'compact';
 		const stream = new MockChatResponseStream();
 
 		const chatTelemetry = instantiationService.createInstance(
@@ -151,17 +151,17 @@ describe('AgentIntent /summarize command', () => {
 		expect(result.metadata?.summary?.text).toBeTruthy();
 	});
 
-	test('does not summarize when setting is disabled', async () => {
-		// Disable summarization
+	test('summarizes even when auto-summarize setting is disabled', async () => {
+		// Disable auto-summarization - /compact should still work since it's an explicit user action
 		configService.setConfig(ConfigKey.SummarizeAgentConversationHistory, false);
 		const conversation = createConversationWithHistory();
-		const { result, stream } = await runSummarize(conversation);
+		const { result } = await runSummarize(conversation);
 
-		// Should not have summary metadata
-		expect(result.metadata?.summary).toBeUndefined();
-
-		// Should have output message about disabled setting
-		expect(stream.output.some(msg => msg.includes('disabled'))).toBe(true);
+		// Should still have summary metadata since /compact is explicit
+		expect(result.metadata).toBeDefined();
+		expect(result.metadata?.summary).toBeDefined();
+		expect(result.metadata?.summary?.toolCallRoundId).toBe('toolCallRoundId1');
+		expect(result.metadata?.summary?.text).toBeTruthy();
 	});
 
 	test('returns friendly message when no history exists', async () => {
@@ -171,7 +171,7 @@ describe('AgentIntent /summarize command', () => {
 		// Should not have summary metadata
 		expect(result.metadata?.summary).toBeUndefined();
 
-		// Should have output with "Nothing to summarize" message
-		expect(stream.output.some(msg => msg.toLowerCase().includes('nothing to summarize'))).toBe(true);
+		// Should have output with "Nothing to compact" message
+		expect(stream.output.some(msg => msg.toLowerCase().includes('nothing to compact'))).toBe(true);
 	});
 });
