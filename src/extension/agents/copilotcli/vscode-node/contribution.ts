@@ -59,10 +59,13 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 		this._register(contentProvider.register());
 
 		// Clean up any stale lockfiles from previous sessions
-		const cleanedCount = cleanupStaleLockFiles(logger);
-		if (cleanedCount > 0) {
-			logger.info(`Cleaned up ${cleanedCount} stale lock file(s).`);
-		}
+		cleanupStaleLockFiles(logger).then(cleanedCount => {
+			if (cleanedCount > 0) {
+				logger.info(`Cleaned up ${cleanedCount} stale lock file(s).`);
+			}
+		}).catch(err => {
+			logger.error(`Error during lock file cleanup: ${err instanceof Error ? err.message : String(err)}`);
+		});
 
 		// Start the MCP server
 		this._startMcpServer(logger, httpServer, diffState, selectionState, contentProvider);
@@ -92,12 +95,12 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 
 			// Update lock file when workspace folders change
 			this._register(vscode.workspace.onDidChangeWorkspaceFolders(() => {
-				lockFile.update();
+				void lockFile.update();
 				logger.info('Workspace folders changed, lock file updated.');
 			}));
 
 			this._register(disposable);
-			this._register({ dispose: () => lockFile.remove() });
+			this._register({ dispose: () => { void lockFile.remove(); } });
 		} catch (err) {
 			const errMsg = err instanceof Error ? err.message : String(err);
 			logger.error(`Failed to start MCP server: ${errMsg}`);
