@@ -66,13 +66,16 @@ export class MockExtensionContext implements BrandedService {
 	extension = { id: 'GitHub.copilot-chat' } as any;
 	extensionMode = ExtensionMode.Test;
 	subscriptions = [];
-	globalStorageUri: Uri;
+	globalStorageUri: Uri | undefined;
+	storageUri: Uri | undefined;
 	workspaceState = createInMemoryMemento();
 
 	constructor(
 		globalStoragePath?: string,
 		readonly globalState: Memento = createInMemoryMemento() as any,
+		storagePath?: string,
 	) {
 		this.globalStorageUri = globalStoragePath ? constructGlobalStoragePath(globalStoragePath) : undefined as any;
+		this.storageUri = storagePath ? URI.file(storagePath) : globalStoragePath ? constructGlobalStoragePath(globalStoragePath) : undefined;
 	}
 }

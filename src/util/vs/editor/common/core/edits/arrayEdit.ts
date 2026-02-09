@@ -86,7 +86,7 @@ export class ArrayReplacement<T> extends BaseReplacement<ArrayReplacement<T>> {
 		return new ArrayReplacement(this.replaceRange.joinRightTouching(other.replaceRange), this.newValue.concat(other.newValue));
 	}
 
-	slice(range: OffsetRange, rangeInReplacement?: OffsetRange): ArrayReplacement<T> {
-		return new ArrayReplacement(range, rangeInReplacement ? rangeInReplacement.slice(this.newValue) : this.newValue);
+	slice(range: OffsetRange, rangeInReplacement: OffsetRange): ArrayReplacement<T> {
+		return new ArrayReplacement(range, rangeInReplacement.slice(this.newValue));
 	}
 }

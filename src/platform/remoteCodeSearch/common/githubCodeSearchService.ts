@@ -14,12 +14,12 @@ import { env } from '../../../util/vs/base/common/process';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { GithubRepoId, toGithubNwo } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
@@ -27,7 +27,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
+import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
 
 interface ResponseShape {
@@ -70,20 +70,20 @@ export interface IGithubCodeSearchService {
 	 * Gets the state of the remote index for a given repo.
 	 */
 	getRemoteIndexState(
-		authToken: string,
+		authOptions: { readonly silent: boolean },
 		githubRepoId: GithubRepoId,
 		token: CancellationToken,
-	): Promise<Result<RemoteCodeSearchIndexState, Error>>;
+	): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
 
 	/**
 	 * Requests that a given repo be indexed.
 	 */
 	triggerIndexing(
-		authToken: string,
+		authOptions: { readonly silent: boolean },
 		triggerReason: 'auto' | 'manual' | 'tool',
 		githubRepoId: GithubRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean>;
+	): Promise<Result<true, RemoteCodeSearchError>>;
 
 	/**
 	 * Semantic searches a given github repo for relevant code snippets
@@ -91,7 +91,7 @@ export interface IGithubCodeSearchService {
 	 * The repo must have been indexed first. Make sure to check {@link getRemoteIndexState} or call {@link triggerIndexing}.
 	 */
 	searchRepo(
-		authToken: string,
+		authOptions: { readonly silent: boolean },
 		embeddingType: EmbeddingType,
 		repo: GithubCodeSearchRepoInfo,
 		query: string,
@@ -107,7 +107,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IDomainService private readonly _domainService: IDomainService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -116,11 +116,17 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
-	async getRemoteIndexState(authToken: string, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, Error>> {
+	async getRemoteIndexState(auth: { readonly silent: boolean }, githubRepoId: GithubRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const repoNwo = toGithubNwo(githubRepoId);
 
 		if (repoNwo.startsWith('microsoft/simuluation-test-')) {
 			return Result.ok({ status: RemoteCodeSearchIndexStatus.NotYetIndexed });
+		}
+
+		const authToken = await this.getGithubAccessToken(auth.silent);
+		if (!authToken) {
+			this._logService.error(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Failed to fetch indexing status. No valid github auth token.`);
+			return Result.error<RemoteCodeSearchError>({ type: 'not-authorized' });
 		}
 
 		try {
@@ -142,14 +148,14 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 					statusCode: statusRequest.status,
 				});
 
-				this._logService.logger.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Failed to fetch indexing status. Response: ${statusRequest.status}. ${await statusRequest.text()}`);
-				return Result.error(new Error(`Failed to fetch indexing status. Response: ${statusRequest.status}.`));
+				this._logService.error(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Failed to fetch indexing status. Response: ${statusRequest.status}. ${await statusRequest.text()}`);
+				return Result.error<RemoteCodeSearchError>({ type: 'generic-error', error: new Error(`Failed to fetch indexing status. Response: ${statusRequest.status}.`) });
 			}
 
 			const preCheckResult = await raceCancellationError(statusRequest.json(), token);
 			if (preCheckResult.semantic_code_search_ok && preCheckResult.semantic_commit_sha) {
 				const indexedCommit = preCheckResult.semantic_commit_sha;
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Found indexed commit: ${indexedCommit}.`);
+				this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Found indexed commit: ${indexedCommit}.`);
 				return Result.ok({
 					status: RemoteCodeSearchIndexStatus.Ready,
 					indexedCommit,
@@ -158,36 +164,41 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 
 			if (preCheckResult.semantic_indexing_enabled) {
 				if (await raceCancellationError(this.isEmptyRepo(authToken, githubRepoId, token), token)) {
-					this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but repo is empty.`);
+					this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Semantic indexing enabled but repo is empty.`);
 					return Result.ok({
 						status: RemoteCodeSearchIndexStatus.Ready,
 						indexedCommit: undefined
 					});
 				}
 
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but not yet indexed.`);
+				this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Semantic indexing enabled but not yet indexed.`);
 
 				return Result.ok({ status: RemoteCodeSearchIndexStatus.BuildingIndex });
 			} else {
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). semantic_indexing_enabled was false. Repo not yet indexed but possibly can be.`);
+				this._logService.trace(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). semantic_indexing_enabled was false. Repo not yet indexed but possibly can be.`);
 				return Result.ok({ status: RemoteCodeSearchIndexStatus.NotYetIndexed });
 			}
-		} catch (e) {
+		} catch (e: unknown) {
 			if (isCancellationError(e)) {
 				throw e;
 			}
 
-			this._logService.logger.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Error: ${e}`);
-			return Result.error(e);
+			this._logService.error(`GithubCodeSearchService::getRemoteIndexState(${repoNwo}). Error: ${e}`);
+			return Result.error<RemoteCodeSearchError>({ type: 'generic-error', error: e instanceof Error ? e : new Error(String(e)) });
 		}
 	}
 
 	public async triggerIndexing(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		triggerReason: 'auto' | 'manual' | 'tool',
 		githubRepoId: GithubRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean> {
+	): Promise<Result<true, RemoteCodeSearchError>> {
+		const authToken = await this.getGithubAccessToken(auth.silent);
+		if (!authToken) {
+			return Result.error({ type: 'not-authorized' });
+		}
+
 		const response = await this._capiClientService.makeRequest<Response>({
 			method: 'POST',
 			headers: {
@@ -199,7 +210,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		}, { type: RequestType.EmbeddingsIndex, repoWithOwner: toGithubNwo(githubRepoId) });
 
 		if (!response.ok) {
-			this._logService.logger.error(`GithubCodeSearchService.triggerIndexing(${triggerReason}). Failed to request indexing for '${githubRepoId}'. Response: ${response.status}. ${await response.text()}`);
+			this._logService.error(`GithubCodeSearchService.triggerIndexing(${triggerReason}). Failed to request indexing for '${githubRepoId}'. Response: ${response.status}. ${await response.text()}`);
 
 			/* __GDPR__
 				"githubCodeSearch.triggerIndexing.error" : {
@@ -219,7 +230,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 				statusCode: response.status,
 			});
 
-			return false;
+			return Result.error({ type: 'generic-error', error: new Error(`Failed to request indexing for '${githubRepoId}'. Response: ${response.status}.`) });
 		}
 
 		/* __GDPR__
@@ -237,11 +248,11 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 			triggerReason,
 		}, {});
 
-		return true;
+		return Result.ok(true);
 	}
 
 	async searchRepo(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		embeddingType: EmbeddingType,
 		repo: GithubCodeSearchRepoInfo,
 		searchQuery: string,
@@ -250,12 +261,15 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
+		const authToken = await this.getGithubAccessToken(auth.silent);
+		if (!authToken) {
+			throw new Error('No valid auth token');
+		}
+
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				{ type: RequestType.EmbeddingsCodeSearch },
 				authToken,
@@ -330,6 +344,12 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		return result;
 	}
 
+	private async getGithubAccessToken(silent: boolean) {
+		return (await this._authenticationService.getGitHubSession('permissive', { silent }))?.accessToken
+			?? (await this._authenticationService.getGitHubSession('any', { silent }))?.accessToken;
+	}
+
+
 	private async isEmptyRepo(authToken: string, githubRepoId: GithubRepoId, token: CancellationToken): Promise<boolean> {
 		const response = await raceCancellationError(fetch(this._capiClientService.dotcomAPIURL + `/repos/${toGithubNwo(githubRepoId)}`, {
 			headers: {
@@ -339,7 +359,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		}), token);
 
 		if (!response.ok) {
-			this._logService.logger.error(`GithubCodeSearchService.isEmptyRepo(${toGithubNwo(githubRepoId)}). Failed to fetch repo info. Response: ${response.status}. ${await response.text()}`);
+			this._logService.error(`GithubCodeSearchService.isEmptyRepo(${toGithubNwo(githubRepoId)}). Failed to fetch repo info. Response: ${response.status}. ${await response.text()}`);
 			return false;
 		}
 

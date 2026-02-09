@@ -46,7 +46,7 @@ export class FeedbackGenerator {
 		const ignored = await Promise.all(input.map(i => ignoreService.isCopilotIgnored(i.document.uri)));
 		const filteredInput = input.filter((_, i) => !ignored[i]);
 		if (filteredInput.length === 0) {
-			this.logService.logger.info('All input documents are ignored. Skipping feedback generation.');
+			this.logService.info('All input documents are ignored. Skipping feedback generation.');
 			return {
 				type: 'error',
 				severity: 'info',
@@ -66,13 +66,13 @@ export class FeedbackGenerator {
 					logService: this.logService,
 				});
 				const prompt = await promptRenderer.render();
-				this.logService.logger.debug(`[FeedbackGenerator] Rendered batch of ${batch.length} inputs.`);
+				this.logService.debug(`[FeedbackGenerator] Rendered batch of ${batch.length} inputs.`);
 				prompts.push(prompt);
 			} catch (err) {
 				if (err.code === 'split_input') {
 					const i = Math.floor(batch.length / 2);
 					batches.unshift(batch.slice(0, i), batch.slice(i));
-					this.logService.logger.debug(`[FeedbackGenerator] Splitting in batches of ${batches[0].length} and ${batches[1].length} inputs due to token limit.`);
+					this.logService.debug(`[FeedbackGenerator] Splitting in batches of ${batches[0].length} and ${batches[1].length} inputs due to token limit.`);
 				} else {
 					throw err;
 				}
@@ -287,11 +287,11 @@ export function parseFeedbackResponse(response: string, dropPartial = false) {
 }
 
 export function sendReviewActionTelemetry(reviewCommentOrComments: ReviewComment | ReviewComment[], totalComments: number, userAction: 'helpful' | 'unhelpful' | string, logService: ILogService, telemetryService: ITelemetryService, instantiationService: IInstantiationService): void {
-	logService.logger.debug('[FeedbackGenerator] user feedback received');
+	logService.debug('[FeedbackGenerator] user feedback received');
 	const reviewComments = Array.isArray(reviewCommentOrComments) ? reviewCommentOrComments : [reviewCommentOrComments];
 	const reviewComment = reviewComments[0];
 	if (!reviewComment) {
-		logService.logger.warn('[FeedbackGenerator] No review comment found for user feedback');
+		logService.warn('[FeedbackGenerator] No review comment found for user feedback');
 		return;
 	}
 

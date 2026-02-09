@@ -9,7 +9,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { basename } from '../../../util/vs/base/common/path';
+import * as path from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import * as resources from '../../../util/vs/base/common/resources';
 import { isUriComponents } from '../../../util/vs/base/common/uri';
@@ -20,9 +20,6 @@ import { IContributedLinkifier, LinkifierContext } from './linkifyService';
 // Create a single regex which runs different regexp parts in a big `|` expression.
 const pathMatchRe = new RegExp(
 	[
-		// [path/to/file.md](path/to/file.md) or [`path/to/file.md`](path/to/file.md)
-		/\[(`?)(?<mdLinkText>[^`\]\)\n]+)\1\]\((?<mdLinkPath>[^`\s]+)\)/.source,
-
 		// Inline code paths
 		/(?<!\[)`(?<inlineCodePath>[^`\s]+)`(?!\])/.source,
 
@@ -35,8 +32,8 @@ const pathMatchRe = new RegExp(
  * Linkifies file paths in responses. This includes:
  *
  * ```
- * [file.md](file.md)
  * `file.md`
+ * foo.ts
  * ```
  */
 export class FilePathLinkifier implements IContributedLinkifier {
@@ -58,28 +55,15 @@ export class FilePathLinkifier implements IContributedLinkifier {
 
 			const matched = match[0];
 
-			let pathText: string | undefined;
-
-			// For a md style link, require that the text and path are the same
-			// However we have to have extra logic since the path may be encoded: `[file name](file%20name)`
-			if (match.groups?.['mdLinkPath']) {
-				let mdLinkPath = match.groups?.['mdLinkPath'];
-				try {
-					mdLinkPath = decodeURIComponent(mdLinkPath);
-				} catch {
-					// noop
-				}
-
-				if (mdLinkPath !== match.groups?.['mdLinkText']) {
-					pathText = undefined;
-				} else {
-					pathText = mdLinkPath;
-				}
-			}
-			pathText ??= match.groups?.['inlineCodePath'] ?? match.groups?.['plainTextPath'] ?? '';
+			const pathText = match.groups?.['inlineCodePath'] ?? match.groups?.['plainTextPath'] ?? '';
 
 			parts.push(this.resolvePathText(pathText, context)
-				.then(uri => uri ? new LinkifyLocationAnchor(uri) : matched));
+				.then(uri => {
+					if (uri) {
+						return new LinkifyLocationAnchor(uri);
+					}
+					return matched;
+				}));
 
 			endLastMatch = match.index + matched.length;
 		}
@@ -93,17 +77,22 @@ export class FilePathLinkifier implements IContributedLinkifier {
 	}
 
 	private async resolvePathText(pathText: string, context: LinkifierContext): Promise<Uri | undefined> {
+		const includeDirectorySlash = pathText.endsWith('/');
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		// Don't linkify very short paths such as '/' or special paths such as '../'
-		if (pathText.length < 2 || ['../', '..\\', '/.', '\\.', '..'].includes(pathText)) {
+		if (pathText.length < 2 || ['../', '..\\', '/.', './', '\\.', '..'].includes(pathText)) {
 			return;
 		}
 
-		if (pathText.startsWith('/') || (isWindows && hasDriveLetter(pathText))) {
+		if (pathText.startsWith('/') || (isWindows && (pathText.startsWith('\\') || hasDriveLetter(pathText)))) {
 			try {
-				const uri = await this.statAndNormalizeUri(Uri.file(pathText));
+				const uri = await this.statAndNormalizeUri(Uri.file(pathText.startsWith('/') ? path.posix.normalize(pathText) : path.normalize(pathText)), includeDirectorySlash);
 				if (uri) {
+					if (path.posix.normalize(uri.path) === '/') {
+						return undefined;
+					}
+
 					return uri;
 				}
 			} catch {
@@ -117,7 +106,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			try {
 				const uri = Uri.parse(pathText);
 				if (uri.scheme === Schemas.file || workspaceFolders.some(folder => folder.scheme === uri.scheme && folder.authority === uri.authority)) {
-					const statedUri = await this.statAndNormalizeUri(uri);
+					const statedUri = await this.statAndNormalizeUri(uri, includeDirectorySlash);
 					if (statedUri) {
 						return statedUri;
 					}
@@ -129,14 +118,14 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		}
 
 		for (const workspaceFolder of workspaceFolders) {
-			const uri = await this.statAndNormalizeUri(Uri.joinPath(workspaceFolder, pathText));
+			const uri = await this.statAndNormalizeUri(Uri.joinPath(workspaceFolder, pathText), includeDirectorySlash);
 			if (uri) {
 				return uri;
 			}
 		}
 
 		// Then fallback to checking references based on filename
-		const name = basename(pathText);
+		const name = path.basename(pathText);
 		const refUri = context.references
 			.map(ref => {
 				if ('variableName' in ref.anchor) {
@@ -150,12 +139,18 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		return refUri;
 	}
 
-	private async statAndNormalizeUri(uri: Uri): Promise<Uri | undefined> {
+	private async statAndNormalizeUri(uri: Uri, includeDirectorySlash: boolean): Promise<Uri | undefined> {
 		try {
 			const stat = await this.fileSystem.stat(uri);
 			if (stat.type === FileType.Directory) {
-				// Ensure all dir paths have a trailing slash for icon rendering
-				return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });
+				if (includeDirectorySlash) {
+					return uri.path.endsWith('/') ? uri : uri.with({ path: `${uri.path}/` });
+				}
+
+				if (uri.path.endsWith('/') && uri.path !== '/') {
+					return uri.with({ path: uri.path.slice(0, -1) });
+				}
+				return uri;
 			}
 
 			return uri;

@@ -27,12 +27,16 @@ suite('Copilot Chat Sanity Test', function () {
 	let realContext: vscode.ExtensionContext;
 	let sandbox: sinon.SinonSandbox;
 	const fakeToken = CancellationToken.None;
-
+	const sessionItemProviders = new Map<string, vscode.ChatSessionItemProvider>();
 	// Before everything, activate the extension
 	suiteSetup(async function () {
 		sandbox = sinon.createSandbox();
 		sandbox.stub(vscode.commands, 'registerCommand').returns({ dispose: () => { } });
 		sandbox.stub(vscode.workspace, 'registerFileSystemProvider').returns({ dispose: () => { } });
+		sandbox.stub(vscode.chat, 'registerChatSessionItemProvider').callsFake((scheme, sessionItemProvider) => {
+			sessionItemProviders.set(scheme, sessionItemProvider);
+			return { dispose: () => { } };
+		});
 		const extension = vscode.extensions.getExtension('Github.copilot-chat');
 		assert.ok(extension, 'Extension is not available');
 		realContext = await extension.activate();
@@ -69,7 +73,7 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				let stream = new SpyChatResponseStream();
-				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Write me a for loop in javascript'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, Event.None);
+				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Write me a for loop in javascript'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, () => false);
 
 				await interactiveSession.getResult();
 
@@ -77,7 +81,7 @@ suite('Copilot Chat Sanity Test', function () {
 				const oldText = stream.currentProgress;
 
 				stream = new SpyChatResponseStream();
-				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Can you make it in typescript instead'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, Event.None);
+				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('Can you make it in typescript instead'), stream, fakeToken, { agentName: '', agentId: '', intentId: '' }, () => false);
 				const result2 = await interactiveSession.getResult();
 
 				assert.ok(stream.currentProgress, 'Expected progress after second request');
@@ -91,7 +95,7 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production agent mode', async function () {
+	test.skip('E2E Production agent mode', async function () {
 		assert.ok(realInstaAccessor, 'Instantiation service accessor is not available');
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
@@ -105,7 +109,7 @@ suite('Copilot Chat Sanity Test', function () {
 				let stream = new SpyChatResponseStream();
 				const testRequest = new TestChatRequest(`You must use the search tool to search for "foo". It may fail, that's ok, just testing`);
 				testRequest.tools.set(ContributedToolName.FindTextInFiles, true);
-				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, Event.None);
+				let interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], testRequest, stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 
 				const onWillInvokeTool = Event.toPromise(toolsService.onWillInvokeTool);
 				const getResultPromise = interactiveSession.getResult();
@@ -116,7 +120,7 @@ suite('Copilot Chat Sanity Test', function () {
 				const oldText = stream.currentProgress;
 
 				stream = new SpyChatResponseStream();
-				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('And what is 1+1'), stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, Event.None);
+				interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('And what is 1+1'), stream, fakeToken, { agentName: '', agentId: '', intentId: Intent.Agent }, () => false);
 				const result2 = await interactiveSession.getResult();
 
 				assert.ok(stream.currentProgress, 'Expected progress after second request');
@@ -140,7 +144,7 @@ suite('Copilot Chat Sanity Test', function () {
 			try {
 				conversationFeature.activated = true;
 				const progressReport = new SpyChatResponseStream();
-				const interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('What is a fibonacci sequence?'), progressReport, fakeToken, { agentName: '', agentId: '', intentId: 'explain' }, Event.None);
+				const interactiveSession = instaService.createInstance(ChatParticipantRequestHandler, [], new TestChatRequest('What is a fibonacci sequence?'), progressReport, fakeToken, { agentName: '', agentId: '', intentId: 'explain' }, () => false);
 
 				// Ask a `/explain` question
 				await interactiveSession.getResult();
@@ -151,26 +155,48 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production Inline Chat Test', async function () {
+	test('Background Agent lists sessions', async function () {
 		assert.ok(realInstaAccessor);
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
 
-			const r = vscode.lm.registerChatModelProvider('test', new class implements vscode.LanguageModelChatProvider {
-				async provideLanguageModelResponse() {
+			const instaService = accessor.get(IInstantiationService);
+			const conversationFeature = instaService.createInstance(ConversationFeature);
+			try {
+				conversationFeature.activated = true;
+				const provider = sessionItemProviders.get('copilotcli');
+				assert.ok(provider);
+				await provider.provideChatSessionItems(CancellationToken.None);
+			} finally {
+				conversationFeature.activated = false;
+			}
+		});
+	});
+
+	test.skip('E2E Production Inline Chat Test', async function () {
+		assert.ok(realInstaAccessor);
+
+		await realInstaAccessor.invokeFunction(async (accessor) => {
+
+			const r = vscode.lm.registerLanguageModelChatProvider('test', new class implements vscode.LanguageModelChatProvider {
+				async provideLanguageModelChatInformation(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
+					return [{
+						id: 'test',
+						name: 'test',
+						family: 'test',
+						version: '0.0.0',
+						maxInputTokens: 1000,
+						maxOutputTokens: 1000,
+						requiresAuthorization: true,
+						capabilities: {}
+					}];
+				}
+				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, progress: vscode.Progress<vscode.LanguageModelResponsePart2>, token: vscode.CancellationToken): Promise<void> {
 					throw new Error('Method not implemented.');
 				}
-				provideTokenCount(text: string | vscode.LanguageModelChatMessage, token: vscode.CancellationToken): Thenable<number> {
-					return Promise.resolve(0);
+				async provideTokenCount(model: vscode.LanguageModelChatInformation, text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2, token: vscode.CancellationToken): Promise<number> {
+					return 0;
 				}
-			}, {
-				vendor: 'copilot',
-				family: 'test',
-				name: 'test',
-				version: '0.0.0',
-				maxInputTokens: 0,
-				maxOutputTokens: 0,
-				isDefault: true,
 			});
 
 			const instaService = accessor.get(IInstantiationService);

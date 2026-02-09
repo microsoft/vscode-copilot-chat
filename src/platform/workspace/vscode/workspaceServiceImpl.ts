@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { FileSystem, NotebookData, NotebookDocument, TextDocument, Uri, window, workspace, WorkspaceFolder, type WorkspaceEdit } from 'vscode';
+import { FileSystem, NotebookData, NotebookDocument, ResourceTrustRequestOptions, TextDocument, Uri, window, workspace, WorkspaceFolder, WorkspaceTrustRequestOptions, type WorkspaceEdit } from 'vscode';
 import { findNotebook } from '../../../util/common/notebooks';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
@@ -32,6 +32,7 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 	readonly onDidCloseTextDocument = workspace.onDidCloseTextDocument;
 	readonly onDidChangeWorkspaceFolders = workspace.onDidChangeWorkspaceFolders;
 	readonly onDidChangeNotebookDocument = workspace.onDidChangeNotebookDocument;
+	readonly onDidChangeTextEditorSelection = window.onDidChangeTextEditorSelection;
 
 	override async openTextDocument(uri: Uri): Promise<TextDocument> {
 		return await workspace.openTextDocument(uri);
@@ -89,12 +90,12 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 		this._fullyLoadedPromise ??= (async () => {
 			for (const uri of this.getWorkspaceFolders()) {
 				if (isGitHubRemoteRepository(uri)) {
-					this._logService.logger.debug(`Preloading virtual workspace contents for ${uri}`);
+					this._logService.debug(`Preloading virtual workspace contents for ${uri}`);
 					try {
 						const result = await this._remoteRepositoriesService.loadWorkspaceContents(uri);
-						this._logService.logger.info(`loading virtual workspace contents resulted in ${result} for: ${uri}`);
+						this._logService.info(`loading virtual workspace contents resulted in ${result} for: ${uri}`);
 					} catch (e) {
-						this._logService.logger.error(`Error loading virtual workspace contents for ${uri}: ${e}`);
+						this._logService.error(`Error loading virtual workspace contents for ${uri}: ${e}`);
 					}
 				}
 			}
@@ -107,5 +108,14 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 			return window.showWorkspaceFolderPick();
 		}
 		return;
+	}
+
+
+	override requestResourceTrust(options: ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+		return workspace.requestResourceTrust(options);
+	}
+
+	override requestWorkspaceTrust(options?: WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+		return workspace.requestWorkspaceTrust(options);
 	}
 }

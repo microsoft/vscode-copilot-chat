@@ -38,7 +38,7 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, history, chatVariables, } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsChat, this.experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const operatingSystem = this.envService.OS;
 
 		return (

@@ -55,14 +55,14 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 
 	prepareInvocation(_options: LanguageModelToolInvocationPrepareOptions<IFetchWebPageParams>, _token: CancellationToken): ProviderResult<PreparedToolInvocation> {
 		// The Core version of this tool handles the confirmation message & other messages
-		this._logService.logger.trace('FetchWebPageTool: prepareInvocation');
+		this._logService.trace('FetchWebPageTool: prepareInvocation');
 		return {
 			presentation: 'hidden'
 		};
 	}
 
 	async invoke(options: LanguageModelToolInvocationOptions<IFetchWebPageParams>, token: CancellationToken): Promise<LanguageModelToolResult> {
-		this._logService.logger.trace('FetchWebPageTool: invoke');
+		this._logService.trace('FetchWebPageTool: invoke');
 		const tool = lm.tools.find(t => t.name === internalToolName);
 		if (!tool) {
 			throw new Error('Tool not found');
@@ -70,7 +70,7 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		const { urls } = options.input;
 		const { content } = await lm.invokeTool(internalToolName, options, token);
 		if (urls.length !== content.length) {
-			this._logService.logger.error(`Expected ${urls.length} responses but got ${content.length}`);
+			this._logService.error(`Expected ${urls.length} responses but got ${content.length}`);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart('Error: I did not receive the expected number of responses from the tool.')
 			]);
@@ -97,12 +97,12 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 					if (typeof textValue === 'string') {
 						validTextContent.push({ uri, content: textValue });
 					} else {
-						this._logService.logger.warn(`Unsupported content type at index ${i}: ${urls[i]}`);
+						this._logService.warn(`Unsupported content type at index ${i}: ${urls[i]}`);
 						invalidUrls.push(urls[i]);
 					}
 				}
 			} catch (error) {
-				this._logService.logger.error(`Invalid URL at index ${i}: ${urls[i]}`, error);
+				this._logService.error(`Invalid URL at index ${i}: ${urls[i]}`, error);
 				invalidUrls.push(urls[i]);
 			}
 		}

@@ -30,16 +30,16 @@ suite('Chat tokens', function () {
 				role: Raw.ChatRole.System,
 				name: 'example_user',
 				content: toTextParts(
-					"Let's circle back when we have more bandwidth to touch base on opportunities for increased leverage."),
+					`Let's circle back when we have more bandwidth to touch base on opportunities for increased leverage.`),
 			},
 			{
 				role: Raw.ChatRole.System,
 				name: 'example_assistant',
-				content: toTextParts("Let's talk later when we're less busy about how to do better."),
+				content: toTextParts(`Let's talk later when we're less busy about how to do better.`),
 			},
 			{
 				role: Raw.ChatRole.User,
-				content: toTextParts("This late pivot means we don't have time to boil the ocean for the client deliverable."),
+				content: toTextParts(`This late pivot means we don't have time to boil the ocean for the client deliverable.`),
 			},
 		];
 

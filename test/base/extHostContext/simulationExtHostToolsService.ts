@@ -9,16 +9,18 @@ import type { CancellationToken, ChatRequest, LanguageModelTool, LanguageModelTo
 import { getToolName, ToolName } from '../../../src/extension/tools/common/toolNames';
 import { ICopilotTool } from '../../../src/extension/tools/common/toolsRegistry';
 import { BaseToolsService, IToolsService } from '../../../src/extension/tools/common/toolsService';
+import { getPackagejsonToolsForTest } from '../../../src/extension/tools/node/test/testToolsService';
 import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tools';
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
 import { packageJson } from '../../../src/platform/env/common/packagejson';
 import { ILogService } from '../../../src/platform/log/common/logService';
+import { IChatEndpoint } from '../../../src/platform/networking/common/networking';
+import { raceTimeout } from '../../../src/util/vs/base/common/async';
 import { CancellationError } from '../../../src/util/vs/base/common/errors';
 import { Iterable } from '../../../src/util/vs/base/common/iterator';
+import { observableValue } from '../../../src/util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../src/util/vs/platform/instantiation/common/instantiation';
 import { logger } from '../../simulationLogger';
-import { raceTimeout } from '../../../src/util/vs/base/common/async';
-import { getPackagejsonToolsForTest } from '../../../src/extension/tools/node/test/testToolsService';
 
 export class SimulationExtHostToolsService extends BaseToolsService implements IToolsService {
 	declare readonly _serviceBrand: undefined;
@@ -63,7 +65,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	}
 
 	private ensureToolsRegistered() {
-		this._lmToolRegistration ??= new ToolsContribution(this);
+		this._lmToolRegistration ??= new ToolsContribution(this, {} as any, { threshold: observableValue(this, 128) } as any, {} as any);
 	}
 
 	getCopilotTool(name: string): ICopilotTool<any> | undefined {
@@ -77,14 +79,19 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		try {
 			const toolName = getToolName(name) as ToolName;
 			const tool = this._overrides.get(toolName)?.tool;
-			if (tool) {
+			const invoke = tool?.invoke;
+			if (invoke) {
 				this._onWillInvokeTool.fire({ toolName });
-				const result = await tool.invoke(options, token);
+				const result = await invoke.call(tool, options, token);
 				if (!result) {
 					throw new CancellationError();
 				}
 
 				return result;
+			}
+
+			if (tool) {
+				throw new Error(`tool ${toolName} does not implement invoke`);
 			}
 
 			const r = await raceTimeout(Promise.resolve(this._inner.invokeTool(name, options, token)), 60_000);
@@ -111,6 +118,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 				name: contributedTool.name,
 				description: contributedTool.modelDescription,
 				inputSchema: contributedTool.inputSchema,
+				source: undefined,
 				tags: []
 			};
 		}
@@ -118,9 +126,21 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		return undefined;
 	}
 
-	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
+	getEnabledTools(request: ChatRequest, endpoint: IChatEndpoint, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
-		return this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
+		return this.tools
+			.map(tool => {
+				// Apply model-specific alternative if available via alternativeDefinition
+				const owned = this.copilotTools.get(getToolName(tool.name) as ToolName);
+				if (owned?.alternativeDefinition) {
+					const alternative = owned.alternativeDefinition(tool, endpoint);
+					if (alternative) {
+						return alternative;
+					}
+				}
+				return tool;
+			})
+			.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
 	}
 
 	addTestToolOverride(info: LanguageModelToolInformation, tool: LanguageModelTool<unknown>): void {

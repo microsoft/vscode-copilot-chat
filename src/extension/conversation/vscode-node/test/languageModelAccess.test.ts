@@ -9,9 +9,9 @@ import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../../platform/chat/test/common/mockChatMLFetcher';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { ITokenizerProvider } from '../../../../platform/tokenizer/node/tokenizer';
-import { TokenizerType } from '../../../../util/common/tokenizer';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionTestingServices } from '../../../test/vscode-node/services';
 import { CopilotLanguageModelWrapper } from '../languageModelAccess';
@@ -31,19 +31,16 @@ suite('CopilotLanguageModelWrapper', () => {
 
 	suite('validateRequest - invalid', async () => {
 		let wrapper: CopilotLanguageModelWrapper;
-		setup(() => {
+		let endpoint: IChatEndpoint;
+		setup(async () => {
 			createAccessor();
-			wrapper = instaService.createInstance(CopilotLanguageModelWrapper, {
-				tokenizer: TokenizerType.CL100K,
-				acquireTokenizer: () => {
-					return accessor.get(ITokenizerProvider).acquireTokenizer({ tokenizer: TokenizerType.CL100K });
-				}
-			} as any, {} as any);
+			endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+			wrapper = instaService.createInstance(CopilotLanguageModelWrapper);
 		});
 
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[], errMsg?: string) => {
 			await assert.rejects(
-				() => wrapper.provideLanguageModelResponse(messages, { tools }, vscode.extensions.all[0].id, null!, null!),
+				() => wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, { report: () => { } }, CancellationToken.None),
 				err => {
 					errMsg ??= 'Invalid request';
 					assert.ok(err instanceof Error, 'expected an Error');
@@ -62,14 +59,16 @@ suite('CopilotLanguageModelWrapper', () => {
 		});
 	});
 
-	suite.skip('validateRequest - valid', async () => {
+	suite('validateRequest - valid', async () => {
 		let wrapper: CopilotLanguageModelWrapper;
+		let endpoint: IChatEndpoint;
 		setup(async () => {
-			const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
-			wrapper = instaService.createInstance(CopilotLanguageModelWrapper, endpoint, {} as any);
+			createAccessor();
+			endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
+			wrapper = instaService.createInstance(CopilotLanguageModelWrapper);
 		});
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[]) => {
-			await wrapper.provideLanguageModelResponse(messages, { tools }, vscode.extensions.all[0].id, null!, null!);
+			await wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown', toolMode: vscode.LanguageModelChatToolMode.Auto }, vscode.extensions.all[0].id, { report: () => { } }, CancellationToken.None);
 		};
 
 		test('simple', async () => {

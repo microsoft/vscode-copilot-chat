@@ -28,15 +28,39 @@ export class ReleaseNotesService implements IReleaseNotesService {
 		return releaseNotesText;
 	}
 
+	async fetchReleaseNotesForVersion(version: string): Promise<string | undefined> {
+		const url = this.getUrl(version);
+		if (!url) {
+			return;
+		}
+		const releaseNotes = await this.fetcherService.fetch(url, {
+			method: 'GET',
+		});
+		const releaseNotesText = await releaseNotes.text();
+		return releaseNotesText;
+	}
 
-	private getUrl(): string | undefined {
-		const vscodeVer = sanitizeVSCodeVersion(this.envService.getEditorInfo().version);
-		const match = /^(\d+\.\d+)$/.exec(vscodeVer);
-		if (!match) {
+	private getUrl(version?: string): string | undefined {
+		// Build URL using MAJOR and MINOR only (no patch). VS Code does not have separate URLs per patch.
+		const sourceVersion = (version && version.trim().length > 0)
+			? version.trim()
+			: this.envService.getEditorInfo().version;
+
+		let major: string | undefined;
+		let minor: string | undefined;
+
+		if (/^\d+\.\d+(?:\.\d+)?$/.test(sourceVersion)) {
+			const sanitized = sanitizeVSCodeVersion(sourceVersion);
+			const mm = /^(\d+)\.(\d+)$/.exec(sanitized);
+			if (!mm) {
+				return;
+			}
+			major = mm[1];
+			minor = mm[2];
+		} else {
 			return;
 		}
 
-		const versionLabel = match[1].replace(/\./g, '_');
-		return `${ReleaseNotesService.BASE_URL}/v${versionLabel}.md`;
+		return `${ReleaseNotesService.BASE_URL}/v${major}_${minor}.md`;
 	}
 }

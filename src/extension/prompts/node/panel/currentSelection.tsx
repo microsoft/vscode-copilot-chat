@@ -65,7 +65,7 @@ export class CurrentSelection extends PromptElement<CurrentSelectionProps, Curre
 			return <ignoredFiles value={urisUsed} />;
 		}
 		if (state.exceedsTokenBudget) {
-			this.logger.logger.info(`Dropped current selection (${sizing.tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens} tokens)`);
+			this.logger.info(`Dropped current selection (${sizing.tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens} tokens)`);
 			return (<>
 				<AssistantMessage priority={this.props.priority} name='selection-too-large'>
 					Your active selection ({selection.fileName && <>{selection.selectedText.split('\n').length} lines from {path.basename(selection.fileName)}</>}) exceeded my maximum context size and was dropped. Please reduce the selection to the most relevant part.

@@ -6,7 +6,7 @@
 import { TSESTree } from '@typescript-eslint/typescript-estree';
 import * as eslint from 'eslint';
 
-export = new class NoGDPREventNameMismatch implements eslint.Rule.RuleModule {
+export default new class NoGDPREventNameMismatch implements eslint.Rule.RuleModule {
 
 	readonly meta: eslint.Rule.RuleMetaData = {
 		type: "problem",
@@ -56,7 +56,7 @@ export = new class NoGDPREventNameMismatch implements eslint.Rule.RuleModule {
 
 		return {
 			['ExpressionStatement MemberExpression Identifier[name=/^send.*TelemetryEvent$/]'](node: any) {
-				const esNode = <TSESTree.Identifier>node;
+				const esNode = node as TSESTree.Identifier;
 				const gdprCommentEventName = getEventNameFromLeadingGdprComment(esNode);
 				if (!gdprCommentEventName) {
 					return;

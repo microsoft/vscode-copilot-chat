@@ -20,7 +20,7 @@ import type { TextDocument } from 'vscode';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
-import { isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
+import { count, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { Lines } from '../../../prompt/node/editGeneration';
 import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
@@ -33,7 +33,7 @@ import {
 	PATCH_PREFIX,
 	PATCH_SUFFIX,
 	UPDATE_FILE_PREFIX,
-} from "./parseApplyPatch";
+} from './parseApplyPatch';
 
 const CHUNK_DELIMITER = '@@';
 
@@ -42,14 +42,22 @@ const CHUNK_DELIMITER = '@@';
 // match in conservative cases.
 const EDIT_DISTANCE_ALLOWANCE_PER_LINE = 0.34;
 
+
+// GPT models have some tendency to forget to escape \t, \r, \n, and such in
+// their edits. Generally we're somewhat aggressive about normalizing these
+// when they lead a line. The following are a list of language/file extensions
+// where we don't do this because they are common operators,
+// such as `\textbf{}` in LaTeX.
+const AVOID_EXPLICIT_TABS_REGEX = /\.(tex|latex|sty|cls|bib|bst|ins)$/i;
+
 // -----------------------------------------------------------------------------
 // Types & Models
 // -----------------------------------------------------------------------------
 
 export enum ActionType {
-	ADD = "add",
-	DELETE = "delete",
-	UPDATE = "update",
+	ADD = 'add',
+	DELETE = 'delete',
+	UPDATE = 'update',
 }
 
 export interface FileChange {
@@ -80,6 +88,8 @@ export const enum Fuzz {
 	IgnoredEofSignal = 1 << 5,
 	/** Surrounding operations were removed in patch context (see docs on peek_next_section) */
 	MergedOperatorSection = 1 << 6,
+	/** Explicit \\n characters were fixed in the context patch */
+	NormalizedExplicitNL = 1 << 7,
 }
 
 interface FuzzMatch {
@@ -114,7 +124,7 @@ export function assemble_changes(
 				oldContent,
 			};
 		} else {
-			throw new Error("Unexpected state in assemble_changes");
+			throw new Error('Unexpected state in assemble_changes');
 		}
 	}
 	return commit;
@@ -167,7 +177,7 @@ export class Parser {
 	patch: Patch = { actions: {} };
 	fuzz = 0;
 
-	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>, private readonly fixIndentationDuringMatch: boolean) {
+	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>) {
 		this.current_files = currentFiles;
 		this.lines = lines;
 		for (const [path, doc] of Object.entries(currentFiles)) {
@@ -193,7 +203,7 @@ export class Parser {
 		return prefixes.some((p) => this.lines[this.index]!.startsWith(p));
 	}
 
-	private read_str(prefix = "", returnEverything = false): string {
+	private read_str(prefix = '', returnEverything = false): string {
 		if (this.index >= this.lines.length) {
 			throw new DiffError(`Index: ${this.index} >= ${this.lines.length}`);
 		}
@@ -202,9 +212,9 @@ export class Parser {
 				? this.lines[this.index]
 				: this.lines[this.index]!.slice(prefix.length);
 			this.index += 1;
-			return text ?? "";
+			return text ?? '';
 		}
-		return "";
+		return '';
 	}
 
 	parse(): void {
@@ -221,7 +231,7 @@ export class Parser {
 				const textDocument = this.current_files[path];
 				const indentStyle = this.indent_styles[path];
 				const text = textDocument.getText();
-				const action = this.parse_update_file(getFilepathComment(textDocument.languageId, path), text ?? "", indentStyle);
+				const action = this.parse_update_file(getFilepathComment(textDocument.languageId, path), text ?? '', indentStyle);
 				action.movePath = moveTo || undefined;
 				this.patch.actions[path] = action;
 				continue;
@@ -251,14 +261,15 @@ export class Parser {
 			throw new DiffError(`Unknown Line: ${this.lines[this.index]}`);
 		}
 		if (!this.startswith(PATCH_SUFFIX.trim())) {
-			throw new InvalidPatchFormatError("Missing End Patch", 'missingEndPatch');
+			throw new InvalidPatchFormatError('Missing End Patch', 'missingEndPatch');
 		}
 		this.index += 1;
 	}
 
 	private parse_update_file(path: string, text: string, targetIndentStyle: IGuessedIndentation): PatchAction {
 		const action: PatchAction = { type: ActionType.UPDATE, chunks: [] };
-		const fileLines = text.split("\n");
+		const fileLines = text.split('\n');
+		const replaceExplicitTabsByDefault = !AVOID_EXPLICIT_TABS_REGEX.test(path.trimEnd());
 		let index = 0;
 
 		while (
@@ -282,30 +293,30 @@ export class Parser {
 				// (We duplicate a minimal version here because the scope is local.)
 				// ------------------------------------------------------------------
 				const canonLocal = (s: string): string =>
-					s.normalize("NFC").replace(
+					s.normalize('NFC').replace(
 						/./gu,
 						(c) =>
 							(
 								({
-									"-": "-",
-									"\u2010": "-",
-									"\u2011": "-",
-									"\u2012": "-",
-									"\u2013": "-",
-									"\u2014": "-",
-									"\u2212": "-",
-									"\u0022": '"',
-									"\u201C": '"',
-									"\u201D": '"',
-									"\u201E": '"',
-									"\u00AB": '"',
-									"\u00BB": '"',
-									"\u0027": "'",
-									"\u2018": "'",
-									"\u2019": "'",
-									"\u201B": "'",
-									"\u00A0": " ",
-									"\u202F": " ",
+									'-': '-',
+									'\u2010': '-',
+									'\u2011': '-',
+									'\u2012': '-',
+									'\u2013': '-',
+									'\u2014': '-',
+									'\u2212': '-',
+									'\u0022': '"',
+									'\u201C': '"',
+									'\u201D': '"',
+									'\u201E': '"',
+									'\u00AB': '"',
+									'\u00BB': '"',
+									'\u0027': `'`,
+									'\u2018': `'`,
+									'\u2019': `'`,
+									'\u201B': `'`,
+									'\u00A0': ' ',
+									'\u202F': ' ',
 								}) as Record<string, string>
 							)[c] ?? c,
 					);
@@ -377,7 +388,7 @@ export class Parser {
 			}
 
 			if (!match) {
-				const ctxText = nextSection.nextChunkContext.join("\n");
+				const ctxText = nextSection.nextChunkContext.join('\n');
 				if (nextSection.eof) {
 					throw new InvalidContextError(`Invalid EOF context at character ${index}:\n${ctxText}`, text, 'invalidContext-eof');
 				} else {
@@ -390,37 +401,40 @@ export class Parser {
 				}
 			}
 			this.fuzz += match.fuzz;
-
 			const srcIndentStyle = guessIndentation(
-				nextSection.chunks.flatMap(c => c.insLines),
+				nextSection.chunks.flatMap(c => c.insLines).concat(nextSection.nextChunkContext),
 				targetIndentStyle.tabSize,
 				targetIndentStyle.insertSpaces
 			);
 
-			let additionalIndentation = '';
-			if (match.fuzz & Fuzz.IgnoredWhitespace) {
-				const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
-				const contextLineIndent = computeIndentLevel2(nextSection.nextChunkContext[0], targetIndentStyle.tabSize);
-				if (matchedLineIndent > contextLineIndent) {
-					additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - contextLineIndent);
-				}
-			}
+			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
+			const normalizedNextChunkContext = (match.fuzz & Fuzz.NormalizedExplicitTab)
+				? replace_explicit_tabs(nextSection.nextChunkContext[0])
+				: (match.fuzz & Fuzz.NormalizedExplicitNL)
+					? replace_explicit_nl(nextSection.nextChunkContext[0])
+					: nextSection.nextChunkContext[0];
+			const srcLineIndent = nextSection.nextChunkContext && nextSection.nextChunkContext.length > 0 ?
+				computeIndentLevel2(normalizedNextChunkContext, srcIndentStyle.tabSize) : 0;
+			const additionalIndentation = getIndentationChar(targetIndentStyle).repeat(Math.max(0, matchedLineIndent - srcLineIndent));
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;
-				if (this.fixIndentationDuringMatch) {
-					ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+				if (match.fuzz & Fuzz.NormalizedExplicitNL) {
+					ch.insLines = ch.insLines.map(replace_explicit_nl);
+					ch.delLines = ch.delLines.map(replace_explicit_nl);
 				}
 
-				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
-					action.chunks.push({
-						delLines: ch.delLines.map(replace_explicit_tabs),
-						insLines: ch.insLines.map(replace_explicit_tabs),
-						origIndex: ch.origIndex,
-					});
-				} else {
-					action.chunks.push(ch);
+				if (replaceExplicitTabsByDefault || (match.fuzz & Fuzz.NormalizedExplicitTab)) {
+					ch.insLines = ch.insLines.map(replace_explicit_tabs);
 				}
+
+				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+
+				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
+					ch.delLines = ch.delLines.map(replace_explicit_tabs);
+				}
+
+				action.chunks.push(ch);
 			}
 			index = match.line + nextSection.nextChunkContext.length;
 			this.index = nextSection.endPatchIndex;
@@ -446,7 +460,7 @@ export class Parser {
 		}
 		return {
 			type: ActionType.ADD,
-			newFile: lines.join("\n"),
+			newFile: lines.join('\n'),
 			chunks: [],
 		};
 	}
@@ -454,6 +468,10 @@ export class Parser {
 
 export function replace_explicit_tabs(s: string) {
 	return s.replace(/^(?:\s|\\t|\/|#)*/gm, r => r.replaceAll('\\t', '\t'));
+}
+
+export function replace_explicit_nl(s: string) {
+	return replace_explicit_tabs(s.replaceAll('\\n', '\n'));
 }
 
 function find_context_core(
@@ -481,36 +499,36 @@ function find_context_core(
 
 	const PUNCT_EQUIV: Record<string, string> = {
 		// Hyphen / dash variants --------------------------------------------------
-		/* U+002D HYPHEN-MINUS */ "-": "-",
-		/* U+2010 HYPHEN */ "\u2010": "-",
-		/* U+2011 NO-BREAK HYPHEN */ "\u2011": "-",
-		/* U+2012 FIGURE DASH */ "\u2012": "-",
-		/* U+2013 EN DASH */ "\u2013": "-",
-		/* U+2014 EM DASH */ "\u2014": "-",
-		/* U+2212 MINUS SIGN */ "\u2212": "-",
+		/* U+002D HYPHEN-MINUS */ '-': '-',
+		/* U+2010 HYPHEN */ '\u2010': '-',
+		/* U+2011 NO-BREAK HYPHEN */ '\u2011': '-',
+		/* U+2012 FIGURE DASH */ '\u2012': '-',
+		/* U+2013 EN DASH */ '\u2013': '-',
+		/* U+2014 EM DASH */ '\u2014': '-',
+		/* U+2212 MINUS SIGN */ '\u2212': '-',
 
 		// Double quotes -----------------------------------------------------------
-		/* U+0022 QUOTATION MARK */ "\u0022": '"',
-		/* U+201C LEFT DOUBLE QUOTATION MARK */ "\u201C": '"',
-		/* U+201D RIGHT DOUBLE QUOTATION MARK */ "\u201D": '"',
-		/* U+201E DOUBLE LOW-9 QUOTATION MARK */ "\u201E": '"',
-		/* U+00AB LEFT-POINTING DOUBLE ANGLE QUOTATION MARK */ "\u00AB": '"',
-		/* U+00BB RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK */ "\u00BB": '"',
+		/* U+0022 QUOTATION MARK */ '\u0022': '"',
+		/* U+201C LEFT DOUBLE QUOTATION MARK */ '\u201C': '"',
+		/* U+201D RIGHT DOUBLE QUOTATION MARK */ '\u201D': '"',
+		/* U+201E DOUBLE LOW-9 QUOTATION MARK */ '\u201E': '"',
+		/* U+00AB LEFT-POINTING DOUBLE ANGLE QUOTATION MARK */ '\u00AB': '"',
+		/* U+00BB RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK */ '\u00BB': '"',
 
 		// Single quotes -----------------------------------------------------------
-		/* U+0027 APOSTROPHE */ "\u0027": "'",
-		/* U+2018 LEFT SINGLE QUOTATION MARK */ "\u2018": "'",
-		/* U+2019 RIGHT SINGLE QUOTATION MARK */ "\u2019": "'",
-		/* U+201B SINGLE HIGH-REVERSED-9 QUOTATION MARK */ "\u201B": "'",
+		/* U+0027 APOSTROPHE */ '\u0027': `'`,
+		/* U+2018 LEFT SINGLE QUOTATION MARK */ '\u2018': `'`,
+		/* U+2019 RIGHT SINGLE QUOTATION MARK */ '\u2019': `'`,
+		/* U+201B SINGLE HIGH-REVERSED-9 QUOTATION MARK */ '\u201B': `'`,
 		// Spaces ------------------------------------------------------------------
-		/* U+00A0 NO-BREAK SPACE */ "\u00A0": " ",
-		/* U+202F NARROW NO-BREAK SPACE */ "\u202F": " ",
+		/* U+00A0 NO-BREAK SPACE */ '\u00A0': ' ',
+		/* U+202F NARROW NO-BREAK SPACE */ '\u202F': ' ',
 	};
 
 	const canon = (s: string): string =>
 		s
 			// Canonical Unicode composition first
-			.normalize("NFC")
+			.normalize('NFC')
 			// Replace punctuation look-alikes
 			.replace(/./gu, (c) => PUNCT_EQUIV[c] ?? c);
 	if (context.length === 0) {
@@ -519,10 +537,10 @@ function find_context_core(
 
 
 	// Pass 1 – exact equality after canonicalisation ---------------------------
-	const ctxPass1 = canon(context.join("\n"));
+	const ctxPass1 = canon(context.join('\n'));
 	const workingLines = lines.map(canon);
 	for (let i = start; i < workingLines.length; i++) {
-		const segment = workingLines.slice(i, i + context.length).join("\n");
+		const segment = workingLines.slice(i, i + context.length).join('\n');
 		if (segment === ctxPass1) {
 			return { line: i, fuzz: Fuzz.None };
 		}
@@ -546,19 +564,32 @@ function find_context_core(
 		fuzz |= Fuzz.NormalizedExplicitTab;
 		for (let i = start; i < lines.length; i++) {
 			if (workingLines.slice(i, i + context.length).join('\n') === ctxPass3) {
-				return { line: i, fuzz: Fuzz.NormalizedExplicitTab };
+				return { line: i, fuzz };
 			}
 		}
 	}
 
-	// Pass 4 – ignore all surrounding whitespace ------------------------------
-	const ctxPass4 = ctxPass3.split('\n').map(l => l.trim()).join('\n');
+	// Pass 4 normalize explicit \\t and \\n tab chars -------------------------
+	if (context.length === 1) { // https://github.com/microsoft/vscode/issues/253960
+		const ctxPass4 = replace_explicit_nl(ctxPass3);
+		if (ctxPass4 !== ctxPass3) {
+			const newContextLines = count(ctxPass4, '\n') + 1;
+			for (let i = start; i < lines.length; i++) {
+				if (workingLines.slice(i, i + newContextLines).join('\n') === ctxPass4) {
+					return { line: i, fuzz: fuzz | Fuzz.NormalizedExplicitNL | Fuzz.NormalizedExplicitTab };
+				}
+			}
+		}
+	}
+
+	// Pass 5 – ignore all surrounding whitespace ------------------------------
+	const ctxPass5 = ctxPass3.split('\n').map(l => l.trim()).join('\n');
 	fuzz |= Fuzz.IgnoredWhitespace;
 	for (let i = start; i < workingLines.length; i++) {
 		workingLines[i] = workingLines[i].trimStart();
 	}
 	for (let i = start; i < lines.length; i++) {
-		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass4) {
+		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass5) {
 			return { line: i, fuzz, indent: workingLines[i] };
 		}
 	}
@@ -567,11 +598,11 @@ function find_context_core(
 	const maxDistance = Math.floor(context.length * EDIT_DISTANCE_ALLOWANCE_PER_LINE);
 	fuzz |= Fuzz.EditDistanceMatch;
 	if (maxDistance > 0) {
-		const ctxPass5 = ctxPass4.split('\n');
+		const ctxPass6 = ctxPass5.split('\n');
 		for (let i = start; i < lines.length; i++) {
 			let totalDistance = 0;
-			for (let j = 0; j < ctxPass5.length && totalDistance < maxDistance; j++) {
-				totalDistance += computeLevenshteinDistance(workingLines[i + j], ctxPass5[j]);
+			for (let j = 0; j < ctxPass6.length && totalDistance < maxDistance; j++) {
+				totalDistance += computeLevenshteinDistance(workingLines[i + j], ctxPass6[j]);
 			}
 			if (totalDistance <= maxDistance) {
 				return { line: i, fuzz };
@@ -661,10 +692,10 @@ function peek_next_section(
 			}
 			break;
 		}
-		if (s === "***") {
+		if (s === '***') {
 			break;
 		}
-		if (s.startsWith("***")) {
+		if (s.startsWith('***')) {
 			throw new InvalidPatchFormatError(`Invalid Line: ${s}`, 'invalidLine');
 		}
 		index += 1;
@@ -674,7 +705,7 @@ function peek_next_section(
 			mode = Mode.Add;
 		} else if (line[0] === HUNK_DELETE_LINE_PREFIX) {
 			mode = Mode.Delete;
-		} else if (line[0] === " ") {
+		} else if (line[0] === ' ') {
 			mode = Mode.Keep;
 		} else {
 			// Tolerate invalid lines where the leading whitespace is missing. This is necessary as
@@ -685,7 +716,7 @@ function peek_next_section(
 			const canFuzz = mode !== Mode.Keep && nextOp === mode;
 
 			mode = Mode.Keep;
-			line = " " + line;
+			line = ' ' + line;
 
 			if (canFuzz) {
 				fuzzMergeNo++;
@@ -741,28 +772,27 @@ function peek_next_section(
 export function text_to_patch(
 	text: string,
 	orig: Record<string, AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch = true,
 ): [Patch, number] {
-	const lines = text.trim().split("\n");
+	const lines = text.trim().split('\n');
 	if (lines.length < 2) {
-		throw new InvalidPatchFormatError("Invalid patch text", 'invalidPatchText');
+		throw new InvalidPatchFormatError('Invalid patch text', 'invalidPatchText');
 	}
 	const patchPrefix = PATCH_PREFIX.trim();
-	if (!(lines[0] ?? "").startsWith(patchPrefix)) {
+	if (!(lines[0] ?? '').startsWith(patchPrefix)) {
 		throw new InvalidPatchFormatError(`Invalid patch text. Patch must start with ${patchPrefix}.`, 'invalidPatchTextPrefix');
 	}
 	const patchSuffix = PATCH_SUFFIX.trim();
 	if (lines[lines.length - 1] !== patchSuffix) {
 		lines.push(patchSuffix);
 	}
-	const parser = new Parser(orig, lines, fixIndentationDuringMatch);
+	const parser = new Parser(orig, lines);
 	parser.index = 1;
 	parser.parse();
 	return [parser.patch, parser.fuzz];
 }
 
 export function identify_files_needed(text: string): Array<string> {
-	const lines = text.trim().split("\n");
+	const lines = text.trim().split('\n');
 	const result = new Set<string>();
 	for (const line of lines) {
 		if (line.startsWith(UPDATE_FILE_PREFIX)) {
@@ -776,7 +806,7 @@ export function identify_files_needed(text: string): Array<string> {
 }
 
 export function identify_files_added(text: string): Array<string> {
-	const lines = text.trim().split("\n");
+	const lines = text.trim().split('\n');
 	const result = new Set<string>();
 	for (const line of lines) {
 		if (line.startsWith(ADD_FILE_PREFIX)) {
@@ -792,9 +822,9 @@ function _get_updated_file(
 	path: string,
 ): string {
 	if (action.type !== ActionType.UPDATE) {
-		throw new Error("Expected UPDATE action");
+		throw new Error('Expected UPDATE action');
 	}
-	const origLines = text.split("\n");
+	const origLines = text.split('\n');
 	const destLines: Array<string> = [];
 	let origIndex = 0;
 	for (const chunk of action.chunks) {
@@ -821,7 +851,7 @@ function _get_updated_file(
 		origIndex += chunk.delLines.length;
 	}
 	destLines.push(...origLines.slice(origIndex));
-	return destLines.join("\n");
+	return destLines.join('\n');
 }
 
 export function patch_to_commit(
@@ -838,7 +868,7 @@ export function patch_to_commit(
 		} else if (action.type === ActionType.ADD) {
 			commit.changes[pathKey] = {
 				type: ActionType.ADD,
-				newContent: action.newFile ?? "",
+				newContent: action.newFile ?? '',
 			};
 		} else if (action.type === ActionType.UPDATE) {
 			const text = orig[pathKey]?.getText();
@@ -884,13 +914,13 @@ export function apply_commit(
 		if (change.type === ActionType.DELETE) {
 			removeFn(p);
 		} else if (change.type === ActionType.ADD) {
-			writeFn(p, change.newContent ?? "");
+			writeFn(p, change.newContent ?? '');
 		} else if (change.type === ActionType.UPDATE) {
 			if (change.movePath) {
-				writeFn(change.movePath, change.newContent ?? "");
+				writeFn(change.movePath, change.newContent ?? '');
 				removeFn(p);
 			} else {
-				writeFn(p, change.newContent ?? "");
+				writeFn(p, change.newContent ?? '');
 			}
 		}
 	}
@@ -899,13 +929,12 @@ export function apply_commit(
 export async function processPatch(
 	text: string,
 	openFn: (p: string) => Promise<AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch: boolean,
 ): Promise<Commit> {
 	if (!text.startsWith(PATCH_PREFIX)) {
-		throw new InvalidPatchFormatError("Patch must start with *** Begin Patch\\n", 'patchMustStartWithBeginPatch');
+		throw new InvalidPatchFormatError('Patch must start with *** Begin Patch\\n', 'patchMustStartWithBeginPatch');
 	}
 	const paths = identify_files_needed(text);
 	const orig = await load_files(paths, openFn);
-	const [patch, _fuzz] = text_to_patch(text, orig, fixIndentationDuringMatch);
+	const [patch, _fuzz] = text_to_patch(text, orig);
 	return patch_to_commit(patch, orig);
 }

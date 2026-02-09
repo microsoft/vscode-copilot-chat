@@ -57,16 +57,16 @@ export const RequestView = mobxlite.observer(({ request, title, baselineRequest,
 	);
 
 	return (
-		<div className="request-container">
-			<div className="title" onClick={() => setExpanded(!expanded)}>
+		<div className='request-container'>
+			<div className='title' onClick={() => setExpanded(!expanded)}>
 				{expanded ? '▼' : '▶'} {isToolCall(request) ? 'Tool Call' : 'Chat Request'} #{idx + 1} {title ? `- ${title}` : ``} - {getRequestStats(request)} {requestChangeInfo}
-				{request.model && <Badge title="Chat model used for request" color="informative" size="small">{request.model}</Badge>}
+				{request.model && <Badge title='Chat model used for request' color='informative' size='small'>{request.model}</Badge>}
 			</div>
 			{
 				!expanded
 					? null
 					: (
-						<div className="request-details" style={{ borderLeft: '1px solid #ccc', marginLeft: '7px', paddingLeft: '5px' }}>
+						<div className='request-details' style={{ borderLeft: '1px solid #ccc', marginLeft: '7px', paddingLeft: '5px' }}>
 							<h3>Request to Model</h3>
 							{baselineRequest && <Text size={300}>Left editor - request from "Compare against" run, Right editor - request from "Current run"</Text>}
 							<div style={{ marginLeft: '-10px' }}>

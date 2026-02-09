@@ -5,6 +5,7 @@
 import type { CancellationToken, NotebookCell, NotebookDocument, Uri } from 'vscode';
 import { getLanguage } from '../../../util/common/languages';
 import { isUri } from '../../../util/common/types';
+import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { EndOfLine, NotebookCellKind, Position } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
@@ -28,8 +29,11 @@ export function isXmlContent(text: string): boolean {
 
 
 class AlternativeXmlDocument extends AlternativeNotebookDocument {
-	override fromCellPosition(cellIndex: number, position: Position): Position {
-		const cell = this.notebook.cellAt(cellIndex);
+	constructor(text: string, private readonly cellOffsetMap: { offset: number; cell: NotebookCell }[], notebook: NotebookDocument) {
+		super(text, notebook);
+	}
+
+	override fromCellPosition(cell: NotebookCell, position: Position): Position {
 		const cellSummary = summarize(cell);
 		const cellMarker = generateCellMarker(cellSummary);
 
@@ -40,18 +44,22 @@ class AlternativeXmlDocument extends AlternativeNotebookDocument {
 		const offset = alternativeContentText.indexOf(cellMarker) + cellMarker.length + eolLength + offsetInCell;
 		return this.positionAt(offset);
 	}
+
+	override toCellPosition(position: Position): { cell: NotebookCell; position: Position } | undefined {
+		const offset = this.offsetAt(position);
+		const cell = findLast(this.cellOffsetMap, (cell) => cell.offset <= offset);
+		if (!cell) {
+			return undefined;
+		}
+		const cellPosition = cell.cell.document.positionAt(offset - cell.offset);
+		return { cell: cell.cell, position: cellPosition };
+	}
 }
 
 export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebookContentProvider {
 	constructor() {
 		super('xml');
 	}
-	public getAlternativeContent(notebook: NotebookDocument): string {
-		const cells = notebook.getCells().map(cell => summarize(cell));
-
-		return cells.map(cell => `${generateCellMarker(cell)}${EOL}${cell.source.join(EOL)}${EOL}${EndDelimter}`).join(EOL);
-	}
-
 	public stripCellMarkers(text: string): string {
 		const lines = text.split(EOL);
 		if (lines.length && (lines[0].startsWith(StartDelimter) || lines[0].startsWith(StartEmptyCellDelimter))) {
@@ -164,9 +172,52 @@ export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebo
 		}
 	}
 
-	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
-		const text = this.getAlternativeContent(notebook);
-		return new AlternativeXmlDocument(text, notebook);
+
+	public override getAlternativeDocumentFromText(text: string, notebook: NotebookDocument): AlternativeNotebookDocument {
+		const cellIdMap = getCellIdMap(notebook);
+		const cellOffsetMap: { offset: number; cell: NotebookCell }[] = [];
+
+		// Parse the text to find cell markers and build the offset map
+		const lines = text.split(EOL);
+		let currentOffset = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+
+			if (line.startsWith(StartDelimter) || line.startsWith(StartEmptyCellDelimter)) {
+				const cellParts = extractCellParts(line, undefined);
+				const cell = cellIdMap.get(cellParts.id) || notebook.getCells().find(c =>
+					c.document.languageId === cellParts.language &&
+					!cellOffsetMap.some(entry => entry.cell === c)
+				);
+
+				if (cell) {
+					// Calculate offset: skip the cell marker line
+					const eolLength = EOL.length;
+					const offset = currentOffset + line.length + eolLength;
+
+					cellOffsetMap.push({ offset, cell });
+				}
+			}
+
+			currentOffset += line.length + EOL.length;
+		}
+
+		return new AlternativeXmlDocument(text, cellOffsetMap, notebook);
+	}
+
+	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {
+		const cells = notebook.getCells().filter(cell => excludeMarkdownCells ? cell.kind !== NotebookCellKind.Markup : true).map(cell => summarize(cell));
+
+		const cellContent = cells.map(cell => {
+			const cellMarker = generateCellMarker(cell);
+			const prefix = `${cellMarker}${EOL}`;
+			return { content: `${prefix}${cell.source.join(EOL)}${EOL}${EndDelimter}`, prefix, cell: notebook.cellAt(cell.index) };
+		});
+		const content = cellContent.map(cell => cell.content).join(EOL);
+		const cellOffsetMap = cellContent.map(cellContent => ({ offset: content.indexOf(cellContent.content) + cellContent.prefix.length, cell: cellContent.cell }));
+
+		return new AlternativeXmlDocument(content, cellOffsetMap, notebook);
 	}
 
 }

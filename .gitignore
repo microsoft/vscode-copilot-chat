@@ -3,6 +3,7 @@
 .vscode-test-web/
 node_modules/
 dist/
+dist-sourcemaps/
 
 # created by simulation
 .simulation
@@ -33,3 +34,9 @@ coverage/
 test/simulation/cache/_base.sqlite
 
 test/aml/out
+
+# Ignore files in huksy (else we always end up with files when creating worktrees)
+.husky/_/
+
+# claude
+.claude/settings.local.json

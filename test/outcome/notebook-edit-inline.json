@@ -2,56 +2,56 @@
 	{
 		"name": "notebook (edit) [inline] [python] - /fix notebook exection ImportError",
 		"requests": [
-			"00e15bfdad02601c1ee9b42044c4931c40bec8066d5a40d73a3bcedf4165d11b"
+			"ab4a78f48523d1f7757d31a76eab00f3af3e0ad61efe21107cae4181ddabd58b"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - data cleansing",
 		"requests": [
-			"b96a3f56e51862ea2eac308132249337760cb17c0ac007d2ce677d84c4a32852",
-			"c1d8ef21ae62b1d070bd4e7bcf1e5eb4e22eef18bed8e1b3c5e2dda60a47dbca"
+			"ba6a1a6415d8288cf26f71980758b7512e3b2450a54e738f3527ead4ec9db062",
+			"dfd64d883c6f395e34e3e753009b89bc809f505e3dfc5e6f1d259d70686fa8c9"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - dataframe",
 		"requests": [
-			"3e6863b88922a8d98a6b0f3f56144df1fb7b9cecf905e4ddbc7ea9bb215cc5d4",
-			"83bd1ba23b801866dc358b60e802ce8e0c7080f23961ebb1740005325c5818e7"
+			"54046d1a1a96503fbbc07ec10acfb3349792b4401675da83ef010ca7769a96e7",
+			"cfd3a6a4a14592b666620b51bb14c6cf78af64ffc9a5a31bcfbc37024e288ba0"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - edit notebook code should not duplicate the content",
 		"requests": [
-			"aa0a45348850804a0439f398237621c7ab306bf64551b1f863f76071e2e9e612",
-			"ab3ec48ceef57382af3d2969ae1b23422bb0bafd152567fae5669699f45c1042"
+			"4261199378538f819fc4846c4e658aa8922ef869f8df2200b614caafbd652ecb",
+			"893f68492434371050a2e52a4ba26c25d33d26efbf5d608a62ff763ae6a379fb"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - group by",
 		"requests": [
-			"21ca64a62131f9cbff11d6318e1f1bb0c9bb6d175777dcd2d3435db7be3e79a7",
-			"26e0e1c41bebfa02b93dfa296b7536148fa6082ed462fd8798b8f16f379ad7d7"
+			"136dd7f4fec07b57a6fa0e7f2561e0184466c95cd44d7b324eb20b78f8985672",
+			"25958373c651286d78639f33f3170ee0e3d628e4379ee40f940f06eacd33c03a"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - plot",
 		"requests": [
-			"2249d9676f8aa309bd69b96df93cbb529b0e84409901116987ee11daac93e8b9",
-			"906eb9200b35e0f757c598a0e2ba9fb7b3afdb7be756041d96a89d7c4d649e39"
+			"664b718bf31a3bc4b79c18e403aca839ce5e193ef2ec7225bc72aef99b948deb",
+			"7bba30f1853445ee7ed039efabe95918da9599378d4c4d14a1da66032e02fa74"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - set index",
 		"requests": [
-			"80e4548aada6fc98ca739f618ebbf946a30f40347adf7cd24450e55a2c254a34",
-			"837e50515408e3f5530e4c28445fca5b9062bc625c4826f0b11d9cb21f693b9b"
+			"4c7d39fb25e82b02692c6c995c1cd3e81de2d6d9b6713ebe6869a5c2cf48b622",
+			"b368c7e9b4d8bb1a7012dc5aa50863793d1e872efe28653667e7f7518672783c"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - variables",
 		"requests": [
-			"23a6e014ca707f8f2360a02fd79fa6d8630c4121819736f0129c1c5c4bfe79dc",
-			"641cd0cb448d80d3e6afa0a48744fd50eca65aa3ef1a1206e36486105caa1f82"
+			"5c57fbd89e7d7547a1406729974d199d80e705bc64db800bcc2bc6f7a43fb5cb",
+			"ffd3d66063d37357608143ee22775d3c2b3d4b46cd9612cfaed5e7b59c554707"
 		]
 	}
 ]

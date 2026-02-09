@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { DiagnosticData } from '../../../../../platform/inlineEdits/common/dataTypes/diagnosticData';
 import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { RootedLineEdit } from '../../../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
+import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { min } from '../../../../../util/common/arrays';
 import * as errors from '../../../../../util/common/errors';
-import { ITracer } from '../../../../../util/common/tracing';
-import { asPromise, raceCancellation, raceTimeout } from '../../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { LineEdit } from '../../../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
@@ -20,6 +21,7 @@ import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
+import { toExternalRange, toInternalRange } from '../../utils/translations';
 
 export interface IDiagnosticCodeAction {
 	edit: TextReplacement;
@@ -52,8 +54,16 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	get insertText(): string {
 		return this._edit.text;
 	}
+	get nextEditDisplayLocation(): INextEditDisplayLocation | undefined {
+		return this._getDisplayLocation();
+	}
 	get displayLocation(): vscode.InlineCompletionDisplayLocation | undefined {
-		return this.nextEditDisplayLocation ? { range: toExternalRange(this.nextEditDisplayLocation.range), label: this.nextEditDisplayLocation.label } : undefined;
+		const displayLocation = this.nextEditDisplayLocation;
+		return displayLocation ? {
+			range: toExternalRange(displayLocation.range),
+			label: displayLocation.label,
+			kind: vscode.InlineCompletionDisplayLocationKind.Code
+		} : undefined;
 	}
 	get documentId(): DocumentId {
 		return this._workspaceDocument.id;
@@ -63,7 +73,6 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		public readonly type: string,
 		public readonly diagnostic: Diagnostic,
 		private readonly _edit: TextReplacement,
-		public readonly nextEditDisplayLocation: INextEditDisplayLocation | undefined,
 		protected readonly _workspaceDocument: IVSCodeObservableDocument,
 	) { }
 
@@ -80,7 +89,7 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	}
 
 	getDiagnosticOffsetRange() {
-		return this._toOffsetRange(this.diagnostic.range);
+		return this.diagnostic.range;
 	}
 
 	getRootedLineEdit() {
@@ -91,6 +100,15 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		const transformer = this._workspaceDocument.value.get().getTransformer();
 		return transformer.getOffsetRange(range);
 	}
+
+	// TODO: rethink if this needs to be updatable
+	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		return undefined;
+	}
+
+	toString(): string {
+		return `DiagnosticCompletionItem(type=${this.type}, diagnostic=${this.diagnostic.toString()}, edit=${this._edit.toString()})`;
+	}
 }
 
 function displayLocationEquals(a: INextEditDisplayLocation | undefined, b: INextEditDisplayLocation | undefined): boolean {
@@ -99,10 +117,10 @@ function displayLocationEquals(a: INextEditDisplayLocation | undefined, b: INext
 
 export interface IDiagnosticCompletionProvider<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	readonly providerName: string;
-	providesCompletionsForDiagnostic(diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean;
+	providesCompletionsForDiagnostic(workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean;
 	provideDiagnosticCompletionItem(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<T | null>;
 	completionItemRejected?(item: T): void;
-	isCompletionItemStillValid?(item: T): boolean;
+	isCompletionItemStillValid?(item: T, workspaceDocument: IObservableDocument): boolean;
 }
 
 // TODO: Better incorporate diagnostics logging
@@ -117,9 +135,9 @@ export class DiagnosticInlineEditRequestLogContext {
 
 		if (this._error) {
 			lines.push(`## Diagnostics Error`);
-			lines.push("```");
+			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this._error)));
-			lines.push("```");
+			lines.push('```');
 		}
 
 		if (this._logs.length > 0) {
@@ -148,202 +166,80 @@ export class DiagnosticInlineEditRequestLogContext {
 
 }
 
-export async function getCodeActionsForDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableDocument, token: CancellationToken): Promise<CodeAction[] | undefined> {
-	const executeCodeActionProviderPromise = asPromise(
-		() => vscode.commands.executeCommand<vscode.CodeAction[]>(
-			'vscode.executeCodeActionProvider',
-			workspaceDocument.id.toUri(),
-			toExternalRange(diagnostic.range),
-			vscode.CodeActionKind.QuickFix.value,
-			3
-		)
-	);
-
-	const codeActions = await raceTimeout(
-		raceCancellation(
-			executeCodeActionProviderPromise,
-			token
-		),
-		1000
-	);
-
-	if (codeActions === undefined) {
-		return undefined;
-	}
-
-	return codeActions.map(action => CodeAction.fromVSCodeCodeAction(action));
-}
-
-export enum DiagnosticSeverity {
-	Error = 0,
-	Warning = 1,
-	Information = 2,
-	Hint = 3
-}
-
-export namespace DiagnosticSeverity {
-	export function fromVSCode(severity: vscode.DiagnosticSeverity): DiagnosticSeverity {
-		switch (severity) {
-			case vscode.DiagnosticSeverity.Error: return DiagnosticSeverity.Error;
-			case vscode.DiagnosticSeverity.Warning: return DiagnosticSeverity.Warning;
-			case vscode.DiagnosticSeverity.Information: return DiagnosticSeverity.Information;
-			case vscode.DiagnosticSeverity.Hint: return DiagnosticSeverity.Hint;
-		}
-	}
-}
-
 export class Diagnostic {
-
-	static fromVSCodeDiagnostic(diagnostic: vscode.Diagnostic): Diagnostic {
-		return new Diagnostic(
-			diagnostic.message,
-			DiagnosticSeverity.fromVSCode(diagnostic.severity),
-			diagnostic.source,
-			toInternalRange(diagnostic.range),
-			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-			diagnostic,
-		);
-	}
 
 	static equals(a: Diagnostic, b: Diagnostic): boolean {
 		return a.equals(b);
 	}
 
-	private constructor(
-		public readonly message: string,
-		public readonly severity: DiagnosticSeverity,
-		public readonly source: string | undefined,
-		public readonly range: Range,
-		public readonly code: string | number | undefined,
-		public readonly reference: vscode.Diagnostic
-	) { }
+	private _updatedRange: OffsetRange;
+	get range(): OffsetRange {
+		return this._updatedRange;
+	}
+
+	private _isValid: boolean = true;
+	isValid(): boolean {
+		return this._isValid;
+	}
+
+	get message(): string {
+		return this.data.message;
+	}
+
+	constructor(
+		public readonly data: DiagnosticData
+	) {
+		this._updatedRange = data.range;
+	}
 
 	equals(other: Diagnostic): boolean {
-		return this.code === other.code
-			&& this.severity === other.severity
-			&& this.source === other.source
-			&& this.message === other.message
-			&& Range.equalsRange(this.range, other.range);
+		return this.data.equals(other.data)
+			&& this._updatedRange.equals(other.range)
+			&& this._isValid === other._isValid;
 	}
 
 	toString(): string {
-		return `\`${this.message}\` at \`${this.range.toString()}\``;
+		if (this.data.range !== this._updatedRange) {
+			return `\`${this.data.toString()}\` (currently at \`${this._updatedRange.toString()}\`)`;
+		}
+		return `\`${this.data.toString()}\``;
+	}
+
+	updateRange(range: OffsetRange): void {
+		this._updatedRange = range;
+	}
+
+	invalidate(): void {
+		this._isValid = false;
 	}
 }
 
-export class CodeAction {
-
-	static fromVSCodeCodeAction(action: vscode.CodeAction): CodeAction {
-		return new CodeAction(
-			action.title,
-			action.diagnostics?.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic)) ?? [],
-			action.edit,
-			action.command,
-			action.kind,
-			action.isPreferred,
-			action.disabled
-		);
-	}
-
-	private constructor(
-		public readonly title: string,
-		public readonly diagnostics: Diagnostic[],
-		private readonly edit?: vscode.WorkspaceEdit,
-		public readonly command?: vscode.Command,
-		protected readonly kind?: vscode.CodeActionKind,
-		public readonly isPreferred?: boolean,
-		public readonly disabled?: { readonly reason: string }
-	) { }
-
-	toString(): string {
-		return this.title;
-	}
-
-	hasEdit(): boolean {
-		return this.edit !== undefined;
-	}
-
-	getEditForWorkspaceDocument(workspaceDocument: IVSCodeObservableDocument): TextReplacement[] | undefined {
-		if (!this.edit) {
-			return undefined;
-		}
-		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
-	}
-
-	getDiagnosticsReferencedInCommand(): Diagnostic[] {
-		if (!this.command) {
-			return [];
-		}
-
-		const commandArgs = this.command.arguments;
-		if (!commandArgs || commandArgs.length === 0) {
-			return [];
-		}
-
-		const referencedDiagnostics: Diagnostic[] = [];
-		for (const arg of commandArgs) {
-			if (arg && typeof arg === 'object' && 'diagnostic' in arg) {
-				const diagnostic = arg.diagnostic;
-				if (diagnostic && typeof diagnostic === 'object' && 'range' in diagnostic && 'message' in diagnostic && 'severity' in diagnostic) {
-					referencedDiagnostics.push(Diagnostic.fromVSCodeDiagnostic(diagnostic));
-				}
-			}
-		}
-
-		return referencedDiagnostics;
-	}
-
-}
-
-export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function log(message: string, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	if (logContext) {
 		const lines = message.split('\n');
 		lines.forEach(line => logContext.addLog(line));
 	}
 
-	if (tracer) {
-		tracer.trace(message);
+	if (logger) {
+		logger.trace(message);
 	}
 }
 
-export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, tracer?: ITracer) {
+export function logList(title: string, list: Array<string | { toString(): string }>, logContext?: DiagnosticInlineEditRequestLogContext, logger?: ILogger) {
 	const content = `${title}${list.map(item => `\n- ${typeof item === 'string' ? item : item.toString()}`).join('')}`;
-	log(content, logContext, tracer);
+	log(content, logContext, logger);
 }
 
 // TODO: there must be a utility for this somewhere? Otherwise make them available
 
-export function toInternalRange(range: vscode.Range): Range {
-	return new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
-}
-
-export function toExternalRange(range: Range): vscode.Range {
-	return new vscode.Range(toExternalPosition(range.getStartPosition()), toExternalPosition(range.getEndPosition()));
-}
-
-export function toInternalPosition(position: vscode.Position): Position {
-	return new Position(position.line + 1, position.character + 1);
-}
-
-export function toExternalPosition(position: Position): vscode.Position {
-	return new vscode.Position(position.lineNumber - 1, position.column - 1);
-}
-
-export function toInternalTextEdit(edit: vscode.TextEdit): TextReplacement {
-	return new TextReplacement(toInternalRange(edit.range), edit.newText);
-}
-
-export function toExternalTextEdit(edit: TextReplacement): vscode.TextEdit {
-	return new vscode.TextEdit(toExternalRange(edit.range), edit.text);
-}
-
-function diagnosticDistanceToPosition(diagnostic: Diagnostic, position: Position) {
+function diagnosticDistanceToPosition(workspaceDocument: IObservableDocument, diagnostic: Diagnostic, position: Position) {
 	function positionDistance(a: Position, b: Position) {
 		return { lineDelta: Math.abs(a.lineNumber - b.lineNumber), characterDelta: Math.abs(a.column - b.column) };
 	}
 
-	const a = positionDistance(diagnostic.range.getStartPosition(), position);
-	const b = positionDistance(diagnostic.range.getEndPosition(), position);
+	const range = workspaceDocument.value.get().getTransformer().getRange(diagnostic.range);
+	const a = positionDistance(range.getStartPosition(), position);
+	const b = positionDistance(range.getEndPosition(), position);
 
 	if (a.lineDelta === b.lineDelta) {
 		return a.characterDelta < b.characterDelta ? a : b;
@@ -352,27 +248,43 @@ function diagnosticDistanceToPosition(diagnostic: Diagnostic, position: Position
 	return a.lineDelta < b.lineDelta ? a : b;
 }
 
-export function isDiagnosticWithinDistance(diagnostic: Diagnostic, position: Position, maxLineDistance: number): boolean {
-	return diagnosticDistanceToPosition(diagnostic, position).lineDelta <= maxLineDistance;
+export function isDiagnosticWithinDistance(workspaceDocument: IObservableDocument, diagnostic: Diagnostic, position: Position, maxLineDistance: number): boolean {
+	return diagnosticDistanceToPosition(workspaceDocument, diagnostic, position).lineDelta <= maxLineDistance;
 }
 
-export function sortDiagnosticsByDistance(diagnostics: Diagnostic[], position: Position): Diagnostic[] {
+export function sortDiagnosticsByDistance(workspaceDocument: IObservableDocument, diagnostics: Diagnostic[], position: Position): Diagnostic[] {
+	const transformer = workspaceDocument.value.get().getTransformer();
 	return diagnostics.sort((a, b) => {
-		const aDistance = diagnosticDistanceToPosition(a, position);
-		const bDistance = diagnosticDistanceToPosition(b, position);
-		if (aDistance.lineDelta === bDistance.lineDelta) {
+		const aDistance = diagnosticDistanceToPosition(workspaceDocument, a, position);
+		const bDistance = diagnosticDistanceToPosition(workspaceDocument, b, position);
+
+		if (aDistance.lineDelta !== bDistance.lineDelta) {
+			return aDistance.lineDelta - bDistance.lineDelta;
+		}
+
+		const aPosition = transformer.getPosition(a.range.start);
+		const bPosition = transformer.getPosition(b.range.start);
+
+		if (aPosition.lineNumber !== bPosition.lineNumber) {
 			return aDistance.characterDelta - bDistance.characterDelta;
 		}
-		return aDistance.lineDelta - bDistance.lineDelta;
+
+		if (aDistance.lineDelta < 2) {
+			return aDistance.characterDelta - bDistance.characterDelta;
+		}
+
+		// If both diagnostics are on the same line and are more than 1 line away from the cursor
+		// always prefer the first diagnostic to minimize recomputation and flickering on cursor move
+		return -1;
 	});
 }
 
-export function distanceToClosestDiagnostic(diagnostics: Diagnostic[], position: Position): number | undefined {
+export function distanceToClosestDiagnostic(workspaceDocument: IObservableDocument, diagnostics: Diagnostic[], position: Position): number | undefined {
 	if (diagnostics.length === 0) {
 		return undefined;
 	}
 
-	const distances = diagnostics.map(diagnostic => diagnosticDistanceToPosition(diagnostic, position).lineDelta);
+	const distances = diagnostics.map(diagnostic => diagnosticDistanceToPosition(workspaceDocument, diagnostic, position).lineDelta);
 
 	return min(distances);
 }

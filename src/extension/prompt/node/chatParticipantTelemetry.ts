@@ -6,21 +6,30 @@
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { roleToString } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isAutoModel } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { isBYOKModel } from '../../byok/node/openAIEndpoint';
+import { Intent } from '../../common/constants';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
-import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
+import { AgentIntent } from '../../intents/node/agentIntent';
+import { EditCodeIntent } from '../../intents/node/editCodeIntent';
+import { EditCode2Intent } from '../../intents/node/editCodeIntent2';
+import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
 import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
 import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
 import { IIntent, TelemetryData } from './intents';
-import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserMessageTelemetry } from './telemetry';
+import { RepoInfoTelemetry } from './repoInfoTelemetry';
+import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
 
 // #region: internal telemetry for responses
 
@@ -30,11 +39,13 @@ type ResponseInternalTelemetryProperties = {
 	request: string;
 	response: string;
 	baseModel: string;
+	apiType: string | undefined;
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetryProperties & {
+type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetryProperties & {
 	chatLocation: 'panel';
+	requestId: string;
 
 	// shareable but NOT
 	isParticipantDetected: string;
@@ -42,12 +53,12 @@ export type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetry
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalPanelTelemetryMeasurements = {
+type ResponseInternalPanelTelemetryMeasurements = {
 	turnNumber: number;
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetryProperties & {
+type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetryProperties & {
 	chatLocation: 'inline';
 
 	// shareable but NOT
@@ -65,8 +76,9 @@ export type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetr
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalInlineTelemetryMeasurements = {
+type ResponseInternalInlineTelemetryMeasurements = {
 	isNotebook: number;
+	turnNumber: number;
 };
 
 // #endregion
@@ -75,7 +87,12 @@ export type ResponseInternalInlineTelemetryMeasurements = {
 
 // EVENT: interactiveSessionMessage
 
-export type RequestInternalPanelTelemetryProperties = {
+type RequestInternalPanelTelemetryProperties = {
+	chatLocation: 'panel';
+	sessionId: string;
+	requestId: string;
+	baseModel: string;
+	apiType: string | undefined;
 	intent: string;
 	isParticipantDetected: string;
 	detectedIntent: string;
@@ -85,7 +102,7 @@ export type RequestInternalPanelTelemetryProperties = {
 
 // EVENT: interactiveSessionRequest
 
-export type RequestInternalInlineTelemetryProperties = {
+type RequestInternalInlineTelemetryProperties = {
 	chatLocation: 'inline';
 	conversationId: string;
 	requestId: string;
@@ -93,10 +110,12 @@ export type RequestInternalInlineTelemetryProperties = {
 	language: string;
 	prompt: string;
 	model: string;
+	apiType: string | undefined;
 };
 
-export type RequestInternalInlineTelemetryMeasurements = {
+type RequestInternalInlineTelemetryMeasurements = {
 	isNotebook: number;
+	turnNumber: number;
 };
 
 // #endregion
@@ -116,39 +135,45 @@ type RequestTelemetryProperties = {
 	responseType: string;
 	languageId: string | undefined;
 	model: string;
-};
-
-export type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
-	responseId: string;
-	codeBlocks: string;
-	isParticipantDetected: string;
+	apiType: string | undefined;
 	toolCounts: string;
 };
 
-export type RequestTelemetryMeasurements = {
+type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
+	responseId: string;
+	codeBlocks: string;
+	isParticipantDetected: string;
+	mode: string;
+	parentRequestId: string | undefined;
+};
+
+type RequestTelemetryMeasurements = {
 	promptTokenCount: number;
 	timeToRequest: number;
 	timeToFirstToken: number;
 	timeToComplete: number;
 	responseTokenCount: number;
 	messageTokenCount: number;
+	numToolCalls: number;
+	availableToolCount: number;
+	toolTokenCount: number;
+	isBYOK: number;
+	isAuto: number;
 };
 
-export type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
+type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	turn: number;
+	round: number;
 	textBlocks: number;
 	links: number;
 	maybeOffTopic: number;
 	userPromptCount: number;
-	numToolCalls: number;
-	availableToolCount: number;
-	temporalCtxFileCount: number;
-	temporalCtxTotalCharCount: number;
+	summarizationEnabled: number;
 };
 
 // EVENT: inline.request
 
-export type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
+type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
 	languageId: string;
 	replyType: string;
 	diagnosticsProvider: string;
@@ -157,7 +182,7 @@ export type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
 	outcomeAnnotations: string;
 };
 
-export type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
+type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 	firstTurn: number;
 	isNotebook: number;
 	withIntentDetection: number;
@@ -172,8 +197,8 @@ export type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & 
 	selectionProblemsCount: number;
 	diagnosticsCount: number;
 	selectionDiagnosticsCount: number;
-	temporalCtxFileCount: number;
-	temporalCtxTotalCharCount: number;
+	userSelectionLength: number;
+	adjustedSelectionLength: number;
 };
 
 //#endregion
@@ -181,6 +206,8 @@ export type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & 
 export class ChatTelemetryBuilder {
 
 	public readonly baseUserTelemetry: ConversationalBaseTelemetryData = createTelemetryWithId();
+
+	private readonly _repoInfoTelemetry: RepoInfoTelemetry;
 
 	public get telemetryMessageId() {
 		return this.baseUserTelemetry.properties.messageId;
@@ -192,35 +219,56 @@ export class ChatTelemetryBuilder {
 		private readonly _documentContext: IDocumentContext | undefined,
 		private readonly _firstTurn: boolean,
 		private readonly _request: vscode.ChatRequest,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
-	) { }
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
+		// Repo info telemetry is held here as the begin event should be sent only by the first PanelChatTelemetry instance created for a user request.
+		// and a new PanelChatTelemetry instance is created per step in the request.
+		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
+	}
 
-	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, message: string, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
+	public makeRequest(intent: IIntent, location: ChatLocation.Editor, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): InlineChatTelemetry;
+	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): PanelChatTelemetry;
+	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number, toolTokenCount: number): InlineChatTelemetry | PanelChatTelemetry {
 
-		const Ctor = location === ChatLocation.Editor
-			? InlineChatTelemetry
-			: PanelChatTelemetry;
-
-		return new Ctor(
-			this._sessionId,
-			this._documentContext!,
-			this._firstTurn,
-			this._request,
-			this._startTime,
-			this.baseUserTelemetry,
-			conversation,
-			message,
-			intent,
-			messages,
-			references,
-			endpoint,
-			promptTokenLength,
-			telemetryData,
-			availableToolCount,
-			this._telemetryService,
-			this._languageDiagnosticsService,
-		);
+		if (location === ChatLocation.Editor) {
+			return this.instantiationService.createInstance(InlineChatTelemetry,
+				this._sessionId,
+				this._documentContext!,
+				this._firstTurn,
+				this._request,
+				this._startTime,
+				this.baseUserTelemetry,
+				conversation,
+				intent,
+				messages,
+				references,
+				endpoint,
+				promptTokenLength,
+				telemetryData,
+				availableToolCount,
+				toolTokenCount,
+				this._repoInfoTelemetry
+			);
+		} else {
+			return this.instantiationService.createInstance(PanelChatTelemetry,
+				this._sessionId,
+				this._documentContext!,
+				this._firstTurn,
+				this._request,
+				this._startTime,
+				this.baseUserTelemetry,
+				conversation,
+				intent,
+				messages,
+				references,
+				endpoint,
+				promptTokenLength,
+				telemetryData,
+				availableToolCount,
+				toolTokenCount,
+				this._repoInfoTelemetry
+			);
+		}
 	}
 }
 
@@ -253,6 +301,10 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		return this._editLineCount;
 	}
 
+	public get sessionId(): string {
+		return this._sessionId;
+	}
+
 	constructor(
 		protected readonly _location: ChatLocation,
 		protected readonly _sessionId: string,
@@ -262,7 +314,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		protected readonly _startTime: number,
 		baseUserTelemetry: ConversationalBaseTelemetryData,
 		protected readonly _conversation: Conversation,
-		protected readonly _queryWithoutCommand: string,
 		protected readonly _intent: IIntent,
 		protected readonly _messages: Raw.ChatMessage[],
 		protected readonly _references: readonly PromptReference[],
@@ -270,6 +321,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		promptTokenLength: number,
 		protected readonly _genericTelemetryData: readonly TelemetryData[],
 		protected readonly _availableToolCount: number,
+		protected readonly _toolTokenCount: number,
+		protected readonly _repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 	) {
 		// Extend the base user telemetry with message and prompt information.
@@ -325,7 +378,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			this._request.prompt,
 			responseType === ChatFetchResponseType.OffTopic ? true : false,
 			this._documentContext?.document,
-			this._userTelemetry
+			this._userTelemetry,
+			this._getModeName(),
 		);
 
 		if (responseType === ChatFetchResponseType.OffTopic) {
@@ -348,7 +402,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				response,
 				this.telemetryMessageId, // That's the message id of the user message
 				this._documentContext?.document,
-				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind })
+				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind }),
+				this._getModeName()
 			);
 		}
 
@@ -372,8 +427,20 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}
 	}
 
-	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableToolCount: number, responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
-		if (availableToolCount === 0) {
+	protected _getModeName(): string {
+		return this._request.modeInstructions2 ? 'custom' :
+			this._intent.id === AgentIntent.ID ? 'agent' :
+				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
+					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
+						'ask';
+	}
+
+	protected _getModeNameWithSubagent(): string {
+		return this._request.subAgentName ?? this._getModeName();
+	}
+
+	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
+		if (availableTools.length === 0) {
 			return;
 		}
 
@@ -391,6 +458,26 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return acc;
 		}, 0);
 
+		const toolCallProperties = {
+			intentId: this._intent.id,
+			conversationId: this._conversation.sessionId,
+			responseType,
+			toolCounts: JSON.stringify(toolCounts),
+			model: this._endpoint.model
+		};
+
+		const toolCallMeasurements = {
+			numRequests: toolCallRounds.length, // This doesn't include cancelled requests
+			turnIndex: this._conversation.turns.length,
+			sessionDuration: Date.now() - this._conversation.turns[0].startTime,
+			turnDuration: Date.now() - this._conversation.getLatestTurn().startTime,
+			promptTokenCount: this._userTelemetry.measurements.promptTokenLen,
+			messageCharLen: this._userTelemetry.measurements.messageCharLen,
+			availableToolCount: availableTools.length,
+			toolTokenCount: this._toolTokenCount,
+			invalidToolCallCount
+		};
+
 		/* __GDPR__
 			"toolCallDetails" : {
 				"owner": "roblourens",
@@ -406,27 +493,28 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were in the last generated prompt." },
 				"messageCharLen": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many characters were in the user message." },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
 				"responseType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the final response was successful or how it failed." },
 				"invalidToolCallCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of tool call rounds that had an invalid tool call." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." }
 			}
 		*/
-		this._telemetryService.sendMSFTTelemetryEvent('toolCallDetails', {
-			intentId: this._intent.id,
-			conversationId: this._conversation.sessionId,
-			responseType,
-			toolCounts: JSON.stringify(toolCounts),
-			model: this._endpoint.model
-		}, {
-			numRequests: toolCallRounds.length, // This doesn't include cancelled requests
-			turnIndex: this._conversation.turns.length,
-			sessionDuration: Date.now() - this._conversation.turns[0].startTime,
-			turnDuration: Date.now() - this._conversation.getLatestTurn().startTime,
-			promptTokenCount: this._userTelemetry.measurements.promptTokenLen,
-			messageCharLen: this._userTelemetry.measurements.messageCharLen,
-			availableToolCount,
-			invalidToolCallCount
-		});
+		this._telemetryService.sendMSFTTelemetryEvent('toolCallDetails', toolCallProperties, toolCallMeasurements);
+
+		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
+			...toolCallProperties,
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
+		}, toolCallMeasurements);
+
+		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsExternal', {
+			...toolCallProperties,
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
+		}, toolCallMeasurements);
+
+		// Send internal repo info telemetry at the end of the tool loop
+		this._repoInfoTelemetry.sendEndTelemetry();
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -438,6 +526,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
+
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
@@ -450,7 +539,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		startTime: number,
 		baseUserTelemetry: ConversationalBaseTelemetryData,
 		conversation: Conversation,
-		queryWithoutCommand: string,
 		intent: IIntent,
 		messages: Raw.ChatMessage[],
 		references: readonly PromptReference[],
@@ -458,7 +546,10 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		toolTokenCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -468,7 +559,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			startTime,
 			baseUserTelemetry,
 			conversation,
-			queryWithoutCommand,
 			intent,
 			messages,
 			references,
@@ -476,6 +566,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			toolTokenCount,
+			repoInfoTelemetry,
 			telemetryService
 		);
 	}
@@ -485,21 +577,34 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 
 		// Capture the created prompt in internal telemetry
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionMessage', {
+			chatLocation: 'panel',
+			sessionId: this._sessionId,
+			requestId: this.telemetryMessageId,
+			baseModel: this._endpoint.model,
+			apiType: this._endpoint.apiType,
 			intent: this._intent.id,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			detectedIntent: this._request.enableCommandDetection ? this._intent?.id : 'none',
 			contextTypes: 'none', // TODO this is defunct
 			query: this._request.prompt
-		} satisfies RequestInternalPanelTelemetryProperties, {});
+		} satisfies RequestInternalPanelTelemetryProperties, {
+			turnNumber: this._conversation.turns.length,
+		} satisfies ResponseInternalPanelTelemetryMeasurements);
+
+		// Send the begin telemetry for repo info, this uses the same repo info telemetry instance held by the builder class
+		// as the begin event need to be sent only once per user request and PanelChatTelemetry is recreated per step. The class is
+		// guarded to only send one time.
+		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded();
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
 
-		const temporalContexData = this._getTelemetryData(TemporalContextStats);
 
 		const turn = this._conversation.getLatestTurn();
+		const roundIndex = turn.rounds.length - 1;
 
 		const codeBlocks = response ? getCodeBlocks(response) : [];
+		const codeBlockLanguages = codeBlocks.map(block => block.languageId);
 
 		// TBD@digitarald: This is a first cheap way to detect off-topic LLM responses.
 		const offTopicHints = ['programming-related tasks', 'programming related questions', 'software development topics', 'related to programming', 'expertise is limited', 'sorry, i can\'t assist with that'];
@@ -534,7 +639,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language of the active editor." },
 				"codeBlocks": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Code block languages in the response." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that is used in the endpoint." },
+				"apiType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API type used in the endpoint- responses or chatCompletions" },
 				"turn": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many turns have been made in the conversation." },
+				"round": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The current round index of the turn." },
 				"textBlocks": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "For text-only responses (no code), how many paragraphs were in the response." },
 				"links": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Symbol and file links in the response.", "isMeasurement": true },
 				"maybeOffTopic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the response sounds like it got rejected due to the request being off-topic." },
@@ -553,25 +660,33 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
-				"temporalCtxFileCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many temporal document-parts where included" },
-				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" }
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
+				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
+				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
 			command: this._intent.id,
 			contextTypes: 'none', // TODO this is defunct
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content?.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: turn.id,
 			responseId: turn.id, // SAME as fetchResult.requestId ,
-			responseType: responseType,
+			responseType,
 			languageId: this._documentContext?.document.languageId,
-			codeBlocks: codeBlocks.join(','),
+			codeBlocks: codeBlockLanguages.join(','),
 			model: this._endpoint.model,
+			apiType: this._endpoint.apiType,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
+			mode: this._getModeNameWithSubagent(),
+			parentRequestId: this._request.parentRequestId
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
+			round: roundIndex,
 			textBlocks: codeBlocks.length ? -1 : response.split(/\n{2,}/).length ?? 0,
 			links: this._addedLinkCount,
 			maybeOffTopic: maybeOffTopic,
@@ -585,9 +700,47 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			...getCustomInstructionTelemetry(turn.references),
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
-			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
+			toolTokenCount: this._toolTokenCount,
+			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestPanelTelemetryMeasurements);
+
+		const modeName = this._getModeName();
+		sendUserActionTelemetry(
+			this._telemetryService,
+			undefined,
+			{
+				command: this._intent.id,
+				conversationId: this._sessionId,
+				requestId: turn.id,
+				responseType,
+				languageId: this._documentContext?.document.languageId ?? '',
+				model: this._endpoint.model,
+				isParticipantDetected: String(this._request.isParticipantDetected),
+				toolCounts: JSON.stringify(toolCounts),
+				mode: modeName,
+				codeBlocks: JSON.stringify(codeBlocks),
+			},
+			{
+				isAgent: this._intent.id === AgentIntent.ID ? 1 : 0,
+				turn: this._conversation.turns.length,
+				round: roundIndex,
+				textBlocks: codeBlocks.length ? -1 : response.split(/\n{2,}/).length ?? 0,
+				links: this._addedLinkCount,
+				maybeOffTopic,
+				messageTokenCount,
+				promptTokenCount,
+				userPromptCount: this._messages.filter(msg => msg.role === Raw.ChatRole.User).length,
+				responseTokenCount,
+				timeToRequest: this._requestStartTime - this._startTime,
+				timeToFirstToken: this._firstTokenTime ? this._firstTokenTime - this._startTime : -1,
+				timeToComplete: Date.now() - this._startTime,
+				numToolCalls: toolCalls.length,
+				availableToolCount: this._availableToolCount,
+			},
+			'panel_request'
+		);
 	}
 
 	protected override _sendResponseInternalTelemetryEvent(_responseType: ChatFetchResponseType, response: string): void {
@@ -595,10 +748,12 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionResponse', {
 			// shared
 			chatLocation: 'panel',
+			requestId: this.telemetryMessageId,
 			intent: this._intent.id,
 			request: this._request.prompt,
 			response: response ?? '',
 			baseModel: this._endpoint.model,
+			apiType: this._endpoint.apiType,
 
 			// shareable but NOT
 			isParticipantDetected: String(this._request.isParticipantDetected),
@@ -629,7 +784,6 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		startTime: number,
 		baseUserTelemetry: ConversationalBaseTelemetryData,
 		conversation: Conversation,
-		queryWithoutCommand: string,
 		intent: IIntent,
 		messages: Raw.ChatMessage[],
 		references: readonly PromptReference[],
@@ -637,6 +791,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		toolTokenCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
@@ -648,7 +804,6 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			startTime,
 			baseUserTelemetry,
 			conversation,
-			queryWithoutCommand,
 			intent,
 			messages,
 			references,
@@ -656,6 +811,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			toolTokenCount,
+			repoInfoTelemetry,
 			telemetryService
 		);
 
@@ -671,15 +828,25 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			intent: this._intent.id,
 			language: this._documentContext.document.languageId,
 			prompt: this._messages.map(m => `${roleToString(m.role).toUpperCase()}:\n${m.content}`).join('\n---\n'),
-			model: this._endpoint.model
+			model: this._endpoint.model,
+			apiType: this._endpoint.apiType
 		} satisfies RequestInternalInlineTelemetryProperties, {
-			isNotebook: this._isNotebookDocument
+			isNotebook: this._isNotebookDocument,
+			turnNumber: this._conversation.turns.length,
 		} satisfies RequestInternalInlineTelemetryMeasurements);
 	}
 
-	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome): Promise<void> {
+	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
 
-		const temporalContexData = this._getTelemetryData(TemporalContextStats);
+		const toolCounts = toolCalls.reduce((acc, call) => {
+			acc[call.name] = (acc[call.name] || 0) + 1;
+			return acc;
+		}, {} as Record<string, number>);
+
+
+		const selectionData = this._getTelemetryData(DocumentToAstSelectionData);
+		const userSelectionLength = selectionData?.original.length ?? -1;
+		const adjustedSelectionLength = selectionData?.adjusted.length ?? -1;
 
 		/* __GDPR__
 			"inline.request" : {
@@ -694,6 +861,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"responseType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The result type of the response." },
 				"replyType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How response is shown in the interface." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that is used in the endpoint." },
+				"apiType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The API type used in the endpoint- responses or chatCompletions" },
 				"diagnosticsProvider": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The diagnostics provider." },
 				"diagnosticCodes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The diagnostics codes in the file." },
 				"selectionDiagnosticCodes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The selected diagnostics codes." },
@@ -717,34 +885,42 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 				"timeToRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to start the final request." },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to get the first token." },
 				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to complete the request." },
-				"temporalCtxFileCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many temporal document-parts where included" },
-				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" },
 				"codeGenInstructionsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions are in the request." },
 				"codeGenInstructionsLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the code generation instructions that were added to request." },
 				"codeGenInstructionsFilteredCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions were filtered." },
 				"codeGenInstructionFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instruction files were read." },
-				"codeGenInstructionSettingsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions originated from settings." }
+				"codeGenInstructionSettingsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many code generation instructions originated from settings." },
+				"toolCounts": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The number of times each tool was used" },
+				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
+				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
+				"toolTokenCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many tokens were used by tool definitions." },
+				"userSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the user selection" },
+				"adjustedSelectionLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The length of the adjusted user selection" },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
+				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('inline.request', {
 			command: this._intent.id,
 			contextTypes: 'none',// TODO@jrieken intentResult.contexts.map(part => part.kind).join(',') ?? 'none',
-			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${msg.content.length}`).join(','),
+			promptTypes: this._messages.map(msg => `${msg.role}${'name' in msg && msg.name ? `-${msg.name}` : ''}:${getTextPart(msg.content).length}`).join(','),
 			conversationId: this._sessionId,
 			requestId: this.telemetryMessageId,
 			languageId: this._documentContext.document.languageId,
 			responseType: responseType,
 			replyType: interactionOutcome.kind,
 			model: this._endpoint.model,
+			apiType: this._endpoint.apiType,
 			diagnosticsProvider: this._diagnosticsTelemetryData.diagnosticsProvider,
 			diagnosticCodes: this._diagnosticsTelemetryData.fileDiagnosticsTelemetry.diagnosticCodes,
 			selectionDiagnosticCodes: this._diagnosticsTelemetryData.selectionDiagnosticsTelemetry.diagnosticCodes,
 			outcomeAnnotations: interactionOutcome.annotations?.map(a => a.label).join(','),
+			toolCounts: JSON.stringify(toolCounts),
 		} satisfies RequestInlineTelemetryProperties, {
 			firstTurn: this._firstTurn ? 1 : 0,
 			isNotebook: this._isNotebookDocument,
 			withIntentDetection: this._request.enableCommandDetection ? 1 : 0,
-			messageTokenCount: await this._endpoint.acquireTokenizer().tokenLength(this._queryWithoutCommand),
+			messageTokenCount: await this._endpoint.acquireTokenizer().tokenLength(this._request.prompt),
 			promptTokenCount: await this._endpoint.acquireTokenizer().countMessagesTokens(this._messages),
 			responseTokenCount: responseType === ChatFetchResponseType.Success ? await this._endpoint.acquireTokenizer().tokenLength(response) : -1,
 			implicitCommand: (!this._request.prompt.trim().startsWith(`/${this._intent.id}`) ? 1 : 0),
@@ -762,8 +938,13 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			timeToFirstToken: this._firstTokenTime ? this._firstTokenTime - this._startTime : -1,
 			timeToComplete: Date.now() - this._startTime,
 			...getCustomInstructionTelemetry(this._references),
-			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
+			numToolCalls: toolCalls.length,
+			availableToolCount: this._availableToolCount,
+			toolTokenCount: this._toolTokenCount,
+			userSelectionLength,
+			adjustedSelectionLength,
+			isBYOK: isBYOKModel(this._endpoint),
+			isAuto: isAutoModel(this._endpoint)
 		} satisfies RequestInlineTelemetryMeasurements);
 	}
 
@@ -776,6 +957,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			conversationId: this._sessionId,
 			requestId: this.telemetryMessageId,
 			baseModel: this._endpoint.model,
+			apiType: this._endpoint.apiType,
 			responseType,
 			problems: this._diagnosticsTelemetryData.fileDiagnosticsTelemetry.problems,
 			selectionProblems: this._diagnosticsTelemetryData.selectionDiagnosticsTelemetry.problems,
@@ -784,7 +966,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			diagnosticsProvider: this._diagnosticsTelemetryData.diagnosticsProvider,
 			language: this._documentContext.document.languageId,
 		} satisfies ResponseInternalInlineTelemetryProperties, {
-			isNotebook: this._isNotebookDocument
+			isNotebook: this._isNotebookDocument,
+			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalInlineTelemetryMeasurements);
 	}
 }

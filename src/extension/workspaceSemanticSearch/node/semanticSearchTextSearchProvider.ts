@@ -15,6 +15,7 @@ import { IParserService } from '../../../platform/parser/node/parserService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { IRerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { KeywordItem, ResolvedWorkspaceChunkQuery } from '../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
 import { IWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
@@ -44,6 +45,8 @@ export interface ISearchFeedbackTelemetry {
 	rawLlmRankingResultsCount?: number;
 	parseResult?: string;
 	strategy?: string;
+	llmBestInRerank?: number;
+	llmWorstInRerank?: number;
 }
 
 export const enum SearchFeedbackKind {
@@ -74,10 +77,11 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 		@ISearchService private readonly searchService: ISearchService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IParserService private readonly _parserService: IParserService,
+		@IRerankerService private readonly _rerankerService: IRerankerService,
 	) { }
 
 	private async getEndpoint() {
-		this._endpoint = this._endpoint ?? await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+		this._endpoint = this._endpoint ?? await this._endpointProvider.getChatEndpoint('copilot-fast');
 		return this._endpoint;
 	}
 
@@ -128,7 +132,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			const chatProgress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
 				report(_obj) { }
 			};
-			this._logService.logger.trace(`Starting semantic search for ${query}`);
+			this._logService.trace(`Starting semantic search for ${query}`);
 			SemanticSearchTextSearchProvider.latestQuery = query;
 			const includes = new Set<vscode.GlobPattern>();
 			const excludes = new Set<vscode.GlobPattern>();
@@ -158,6 +162,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				{
 					endpoint: await this.getEndpoint(),
 					tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{
@@ -199,7 +204,9 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					toolInvocationToken: undefined as never,
 					model: null!,
 					tools: new Map(),
-					id: '1'
+					id: '1',
+					sessionId: '1',
+					hasHooksEnabled: false,
 				};
 				const intentInvocation = await intent.invoke({ location: ChatLocation.Other, request });
 				const progress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
@@ -232,7 +239,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 						messageId: generateUuid(),
 						messageSource: 'search.workspace'
 					},
-					{ intent: true }
 				);
 				SemanticSearchTextSearchProvider.feedBackTelemetry.llmFilteringDuration = Date.now() - llmFilteringDuration;
 				searchResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
@@ -263,86 +269,169 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			const combinedChunks = combinedRank.map(chunk => chunk.chunk);
 			await this.reportSearchResults(rankingResults, combinedChunks, progress, token);
 
-			/* __GDPR__
-			"copilot.search.request" : {
-				"owner": "osortega",
-				"comment": "Copilot search request.",
-				"chunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of copilot search code chunks." },
-				"rankResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Result of the copilot search ranking." },
-				"rankResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of the results from copilot search ranking." },
-				"combinedResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of combined results from copilot search." },
-				"chunkSearchDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the chunk search" },
-				"llmFilteringDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the LLM filtering" },
-				"llmBestRank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the original retrieval ranking." },
-				"llmWorstRank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the original retrieval ranking." },
-				"llmSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks selected by LLM from the initial retrieval." },
-				"rawLlmRankingResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of raw results returned by the LLM." },
-				"parseResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the result of parsing the LLM response." },
-				"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." }
+			// call workspace chunk search service with options to do reranking
+			if (this._rerankerService.isAvailable) {
+				try {
+					this.workspaceChunkSearch.searchFileChunks(
+						{
+							endpoint: await this.getEndpoint(),
+							tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+							fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
+							maxResults: MAX_CHUNKS_RESULTS,
+						},
+						{
+							rawQuery: query,
+							resolveQueryAndKeywords: async (): Promise<ResolvedWorkspaceChunkQuery> => ({
+								rephrasedQuery: query,
+								keywords: this.getKeywordsForContent(query),
+							}),
+							resolveQuery: async () => query,
+						},
+						{
+							globPatterns: {
+								include: includes.size > 0 ? Array.from(includes) : undefined,
+								exclude: excludes.size > 0 ? Array.from(excludes) : undefined,
+							},
+							enableRerank: true
+						},
+						new TelemetryCorrelationId('copilotSearchPanel'),
+						chatProgress,
+						token,
+					).then(rerankResult => {
+						if (rerankResult && rankingResults.length > 0) {
+							const rerankInsights = combineRankingInsights([...rerankResult.chunks], rankingResults);
+							SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank = rerankInsights.llmBestRank;
+							SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank = rerankInsights.llmWorstRank;
+						}
+
+						this.reportTelemetry();
+					});
+				} catch (ex) {
+					// ignore rerank errors
+					this._logService.error(`SemanticSearchTextSearchProvider::provideAITextSearchResults rerank failed. error=${ex}`);
 				}
+			} else {
+				this.reportTelemetry();
+			}
+
+
+			this._logService.debug(`Semantic search took ${sw.elapsed()}ms`);
+			return { limitHit: false } satisfies vscode.TextSearchComplete;
+		};
+		return getResults();
+	}
+
+	reportTelemetry() {
+		/* __GDPR__
+		"copilot.search.request" : {
+			"owner": "osortega",
+			"comment": "Copilot search request.",
+			"chunkCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of copilot search code chunks." },
+			"rankResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Result of the copilot search ranking." },
+			"rankResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of the results from copilot search ranking." },
+			"combinedResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Count of combined results from copilot search." },
+			"chunkSearchDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the chunk search" },
+			"llmFilteringDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Duration of the LLM filtering" },
+			"llmBestRank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the original retrieval ranking." },
+			"llmWorstRank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the original retrieval ranking." },
+			"llmSelectedCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of chunks selected by LLM from the initial retrieval." },
+			"rawLlmRankingResultsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of raw results returned by the LLM." },
+			"parseResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the result of parsing the LLM response." },
+			"strategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Indicates the strategy used for the search." },
+			"llmBestInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results." },
+			"llmWorstInRerank": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results." }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('copilot.search.request', {
+			rankResult: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResult,
+			parseResult: SemanticSearchTextSearchProvider.feedBackTelemetry.parseResult,
+			strategy: SemanticSearchTextSearchProvider.feedBackTelemetry.strategy,
+		}, {
+			chunkCount: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount,
+			rankResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResultsCount,
+			combinedResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.combinedResultsCount,
+			chunkSearchDuration: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkSearchDuration,
+			llmFilteringDuration: SemanticSearchTextSearchProvider.feedBackTelemetry.llmFilteringDuration,
+			llmBestRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank,
+			llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
+			llmSelectedCount: SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount,
+			rawLlmRankingResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rawLlmRankingResultsCount,
+			llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank ?? -1,
+			llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank ?? -1,
+		});
+
+		if (SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank !== undefined
+			&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank !== undefined
+			&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount !== undefined
+		) {
+			/* __GDPR__
+			"semanticSearch.ranking" : {
+				"owner": "rebornix",
+				"comment": "Semantic search request ranking.",
+				"llmBestRank": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Best rank (lowest index) among LLM-selected chunks in the original retrieval ranking."
+				},
+				"llmWorstRank": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Worst rank (highest index) among LLM-selected chunks in the original retrieval ranking."
+				},
+				"llmSelectedCount": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Number of chunks selected by LLM from the initial retrieval."
+				},
+				"rawLlmRankingResultsCount": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Number of raw results returned by the LLM."
+				},
+				"llmBestInRerank": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Best rank (lowest index) among LLM-selected chunks in the reranked results."
+				},
+				"llmWorstInRerank": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"isMeasurement": true,
+					"comment": "Worst rank (highest index) among LLM-selected chunks in the reranked results."
+				}
+			}
 			*/
-			this._telemetryService.sendMSFTTelemetryEvent('copilot.search.request', {
-				rankResult: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResult,
-				parseResult: SemanticSearchTextSearchProvider.feedBackTelemetry.parseResult,
-				strategy: SemanticSearchTextSearchProvider.feedBackTelemetry.strategy,
-			}, {
-				chunkCount: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkCount,
-				rankResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rankResultsCount,
-				combinedResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.combinedResultsCount,
-				chunkSearchDuration: SemanticSearchTextSearchProvider.feedBackTelemetry.chunkSearchDuration,
-				llmFilteringDuration: SemanticSearchTextSearchProvider.feedBackTelemetry.llmFilteringDuration,
+			this._telemetryService.sendMSFTTelemetryEvent('semanticSearch.ranking', {}, {
 				llmBestRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank,
 				llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
 				llmSelectedCount: SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount,
 				rawLlmRankingResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rawLlmRankingResultsCount,
+				llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank,
+				llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank,
 			});
 
-			if (SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank !== undefined
-				&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank !== undefined
-				&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount !== undefined
+			if (SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank !== undefined
+				&& SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank !== undefined
+				&& (
+					SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank > SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank
+					|| SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank > SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank
+				)
 			) {
-				/* __GDPR__
-				"semanticSearch.ranking" : {
-					"owner": "rebornix",
-					"comment": "Semantic search request ranking.",
-					"llmBestRank": {
-						"classification": "SystemMetaData",
-						"purpose": "FeatureInsight",
-						"isMeasurement": true,
-						"comment": "Best rank (lowest index) among LLM-selected chunks in the original retrieval ranking."
-					},
-					"llmWorstRank": {
-						"classification": "SystemMetaData",
-						"purpose": "FeatureInsight",
-						"isMeasurement": true,
-						"comment": "Worst rank (highest index) among LLM-selected chunks in the original retrieval ranking."
-					},
-					"llmSelectedCount": {
-						"classification": "SystemMetaData",
-						"purpose": "FeatureInsight",
-						"isMeasurement": true,
-						"comment": "Number of chunks selected by LLM from the initial retrieval."
-					},
-					"rawLlmRankingResultsCount": {
-						"classification": "SystemMetaData",
-						"purpose": "FeatureInsight",
-						"isMeasurement": true,
-						"comment": "Number of raw results returned by the LLM."
-					}
-				}
-				*/
-				this._telemetryService.sendMSFTTelemetryEvent('semanticSearch.ranking', {}, {
+				this._telemetryService.sendInternalMSFTTelemetryEvent('semanticSearch.rerankImprovement', {
+					keyword: SemanticSearchTextSearchProvider.latestQuery || '',
+				}, {
 					llmBestRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestRank,
 					llmWorstRank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstRank,
-					llmSelectedCount: SemanticSearchTextSearchProvider.feedBackTelemetry.llmSelectedCount,
-					rawLlmRankingResultsCount: SemanticSearchTextSearchProvider.feedBackTelemetry.rawLlmRankingResultsCount,
+					llmBestInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmBestInRerank,
+					llmWorstInRerank: SemanticSearchTextSearchProvider.feedBackTelemetry.llmWorstInRerank,
 				});
 			}
-
-			this._logService.logger.debug(`Semantic search took ${sw.elapsed()}ms`);
-			return { limitHit: false } satisfies vscode.TextSearchComplete;
-		};
-		return getResults();
+		}
 	}
 
 	async reportSearchResults(rankingResults: IRankResult[], combinedChunks: FileChunk[], progress: vscode.Progress<vscode.AISearchResult>, token: vscode.CancellationToken): Promise<void> {
@@ -450,7 +539,9 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				toolInvocationToken: undefined as never,
 				model: null!,
 				tools: new Map(),
-				id: '1'
+				id: '1',
+				sessionId: '1',
+				hasHooksEnabled: false,
 			};
 			const intentInvocation = await searchKeywordsIntent.invoke({ location: ChatLocation.Other, request });
 			const fakeProgress: vscode.Progress<any | any> = {
@@ -481,7 +572,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					messageId: generateUuid(),
 					messageSource: 'search.keywords'
 				},
-				{ intent: true }
 			);
 			const keywordResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
 			const usedResults = [];

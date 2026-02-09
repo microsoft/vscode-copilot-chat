@@ -10,15 +10,16 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { getInstantApplyModel } from './proxyModelHelper';
 
 export class Proxy4oEndpoint extends ChatEndpoint {
 
@@ -28,7 +29,6 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -36,9 +36,16 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@ILogService logService: ILogService,
+		@IProxyModelsService proxyModelsService: IProxyModelsService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? 'gpt-4o-instant-apply-full-ft-v66';
+		const model = getInstantApplyModel(
+			configurationService,
+			experimentationService,
+			proxyModelsService,
+			ConfigKey.TeamInternal.InstantApplyModelName,
+		);
+
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
@@ -60,19 +67,16 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			envService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
-			thinkingDataService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 
-	public getExtraHeaders(): Record<string, string> {
+	public override getExtraHeaders(): Record<string, string> {
 		const headers: Record<string, string> = {};
 		if (this.authService.speculativeDecodingEndpointToken) {
 			headers['Copilot-Edits-Session'] = this.authService.speculativeDecodingEndpointToken;

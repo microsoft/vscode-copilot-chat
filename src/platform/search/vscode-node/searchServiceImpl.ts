@@ -33,7 +33,7 @@ export class SearchServiceImpl extends BaseSearchServiceImpl {
 		}
 	}
 
-	@LogExecTime(self => self._logService, 'SearchServiceImpl.findFiles')
+	@LogExecTime(self => self._logService, 'SearchServiceImpl::findFiles')
 	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
 		const copilotIgnoreExclude = await this._ignoreService.asMinimatchPattern();
 		if (options?.exclude) {

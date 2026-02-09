@@ -3,26 +3,30 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestType } from '@vscode/copilot-api';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Limiter } from '../../../util/vs/base/common/async';
 import { env } from '../../../util/vs/base/common/process';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEndpointProvider } from '../../endpoint/common/endpointProvider';
 import { IEnvService } from '../../env/common/envService';
+import { logExecTime } from '../../log/common/logExecTime';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { IEmbeddingEndpoint, postRequest } from '../../networking/common/networking';
+import { IEmbeddingsEndpoint, postRequest } from '../../networking/common/networking';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { Embedding, EmbeddingType, EmbeddingTypeInfo, EmbeddingVector, Embeddings, IEmbeddingsComputer, getWellKnownEmbeddingTypeInfo } from './embeddingsComputer';
+import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingTypeInfo, EmbeddingVector, Embeddings, IEmbeddingsComputer, getWellKnownEmbeddingTypeInfo } from './embeddingsComputer';
 
-interface RemoteEmbeddingResults {
+interface CAPIEmbeddingResults {
 	readonly type: 'success';
 	readonly embeddings: EmbeddingVector[];
 }
-interface RemoteEmbeddingError {
+interface CAPIEmbeddingError {
 	readonly type: 'failed';
 	readonly reason: string;
 }
@@ -31,34 +35,132 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 
 	declare readonly _serviceBrand: undefined;
 
+	private readonly batchSize = 100;
 
 	constructor(
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEnvService private readonly _envService: IEnvService,
-		@IFetcherService private readonly _fetcherService: IFetcherService
+		@IFetcherService private readonly _fetcherService: IFetcherService,
+		@ILogService private readonly _logService: ILogService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 	) { }
 
 	public async computeEmbeddings(
-		type: EmbeddingType,
+		embeddingType: EmbeddingType,
 		inputs: readonly string[],
-		options?: { parallelism?: number },
+		options?: ComputeEmbeddingsOptions,
+		telemetryInfo?: TelemetryCorrelationId,
 		cancellationToken?: CancellationToken,
-	): Promise<Embeddings | undefined> {
-		const typeInfo = getWellKnownEmbeddingTypeInfo(type);
+	): Promise<Embeddings> {
+		return logExecTime(this._logService, 'RemoteEmbeddingsComputer::computeEmbeddings', async () => {
+
+			// Determine endpoint type: use CAPI for no-auth users, otherwise use GitHub
+			const copilotToken = await this._authService.getCopilotToken();
+			if (copilotToken.isNoAuthUser) {
+				const embeddings = await this.computeCAPIEmbeddings(inputs, options, cancellationToken);
+				return embeddings ?? { type: embeddingType, values: [] };
+			}
+
+			const token = (await this._authService.getGitHubSession('any', { silent: true }))?.accessToken;
+			if (!token) {
+				throw new Error('No authentication token available');
+			}
+
+			const embeddingsOut: Embedding[] = [];
+			for (let i = 0; i < inputs.length; i += this.batchSize) {
+				const batch = inputs.slice(i, i + this.batchSize);
+				if (!batch.length) {
+					break;
+				}
+
+				const body: {
+					inputs: readonly string[];
+					input_type: 'document' | 'query';
+					embedding_model: string;
+				} = {
+					inputs: batch,
+					input_type: options?.inputType ?? 'document',
+					embedding_model: embeddingType.id,
+				};
+				const response = await postRequest(
+					this._fetcherService,
+					this._telemetryService,
+					this._capiClientService,
+					{ type: RequestType.DotcomEmbeddings },
+					token,
+					await createRequestHMAC(env.HMAC_SECRET),
+					'copilot-panel',
+					generateUuid(),
+					body as any,
+					getGithubMetadataHeaders(telemetryInfo?.callTracker ?? new CallTracker(), this._envService),
+					cancellationToken
+				);
+				if (!response.ok) {
+					/* __GDPR__
+						"remoteEmbeddingsComputer.computeEmbeddings.error" : {
+							"owner": "mjbvz",
+							"comment": "Total time for searchFileChunks to complete",
+							"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller" },
+							"correlationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id" },
+							"embeddingType": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Embedding type" },
+							"totalInputLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total length of the input" },
+							"batchInputLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total length of the batch" },
+							"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Status code of the response" }
+						}
+					*/
+					this._telemetryService.sendMSFTTelemetryEvent('remoteEmbeddingsComputer.computeEmbeddings.error', {
+						source: telemetryInfo?.callTracker.toString(),
+						correlationId: telemetryInfo?.correlationId,
+						embeddingType: embeddingType.id,
+					}, {
+						totalInputLength: inputs.length,
+						batchInputLength: batch.length,
+						statusCode: response.status,
+					});
+					throw new Error(`Error fetching embeddings: ${response.status}`);
+				}
+
+				type EmbeddingResponse = {
+					embedding_model: string;
+					embeddings: Array<{ embedding: number[] }>;
+				};
+				const jsonResponse: EmbeddingResponse = await response.json();
+
+				const resolvedType = new EmbeddingType(jsonResponse.embedding_model);
+				if (!resolvedType.equals(embeddingType)) {
+					throw new Error(`Unexpected embedding model. Got: ${resolvedType}. Expected: ${embeddingType}`);
+				}
+
+				if (batch.length !== jsonResponse.embeddings.length) {
+					throw new Error(`Mismatched embedding result count. Expected: ${batch.length}. Got: ${jsonResponse.embeddings.length}`);
+				}
+
+				embeddingsOut.push(...jsonResponse.embeddings.map(embedding => ({
+					type: resolvedType,
+					value: embedding.embedding,
+				})));
+			}
+
+			return { type: embeddingType, values: embeddingsOut };
+		});
+	}
+
+	private async computeCAPIEmbeddings(
+		inputs: readonly string[],
+		options?: ComputeEmbeddingsOptions,
+		cancellationToken?: CancellationToken,
+	) {
+		const typeInfo = getWellKnownEmbeddingTypeInfo(EmbeddingType.text3small_512);
 		if (!typeInfo) {
-			throw new Error(`Unknown embedding type: ${type.id}`);
+			throw new Error(`Embeddings type info not found: ${EmbeddingType.text3small_512}`);
 		}
-
-		const endpoint = await this._endpointProvider.getEmbeddingsEndpoint(typeInfo.family);
-
+		const endpoint = await this._endpointProvider.getEmbeddingsEndpoint('text3small');
 		const batchSize = endpoint.maxBatchSize;
 		// Open AI seems to allow 1 less than max tokens for the model requests. So if the max tokens is 8192, we can only send 8191 tokens.
 		const maxTokens = endpoint.modelMaxPromptTokens - 1;
-		return this.fetchResponseWithBatches(typeInfo, endpoint, inputs, cancellationToken, maxTokens, batchSize, options?.parallelism);
+		return this.fetchResponseWithBatches(typeInfo, endpoint, inputs, cancellationToken, maxTokens, batchSize);
 	}
 
 	/**
@@ -70,7 +172,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 	 */
 	private async fetchResponseWithBatches(
 		type: EmbeddingTypeInfo,
-		endpoint: IEmbeddingEndpoint,
+		endpoint: IEmbeddingsEndpoint,
 		inputs: readonly string[],
 		cancellationToken: CancellationToken | undefined,
 		maxTokens: number,
@@ -86,8 +188,8 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 		}
 
 		let embeddings: EmbeddingVector[] = [];
-		const promises: Promise<RemoteEmbeddingResults | undefined>[] = [];
-		const limiter = new Limiter<RemoteEmbeddingResults | undefined>(parallelism);
+		const promises: Promise<CAPIEmbeddingResults | undefined>[] = [];
+		const limiter = new Limiter<CAPIEmbeddingResults | undefined>(parallelism);
 		try {
 			for (let i = 0; i < inputs.length; i += batchSize) {
 				const currentBatch = inputs.slice(i, i + batchSize);
@@ -124,7 +226,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 
 	private async rawEmbeddingsFetchWithTelemetry(
 		type: EmbeddingTypeInfo,
-		endpoint: IEmbeddingEndpoint,
+		endpoint: IEmbeddingsEndpoint,
 		requestId: string,
 		inputs: readonly string[],
 		cancellationToken: CancellationToken | undefined
@@ -132,14 +234,6 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 		const startTime = Date.now();
 		const rawRequest = await this.rawEmbeddingsFetch(type, endpoint, requestId, inputs, cancellationToken);
 		if (rawRequest.type === 'failed') {
-			/* __GDPR__
-				"embedding.error" : {
-					"owner": "digitarald",
-					"comment": "Tracks errors for embedding requests",
-					"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Error type" },
-					"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Detailed error reason" }
-				}
-			*/
 			this._telemetryService.sendMSFTTelemetryErrorEvent('embedding.error', {
 				type: rawRequest.type,
 				reason: rawRequest.reason
@@ -147,20 +241,9 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 			return rawRequest;
 		}
 
-		/* __GDPR__
-			"embedding.success" : {
-				"owner": "digitarald",
-				"comment": "Performance data for embedding requests",
-				"inputTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The number of tokens in the input." },
-				"batchSize": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The number of inputs sent over." },
-				"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How long it took to complete the request." }
-			}
-		*/
-
 		const tokenizer = endpoint.acquireTokenizer();
 		const tokenCounts = await Promise.all(inputs.map(input => tokenizer.tokenLength(input)));
 		const inputTokenCount = tokenCounts.reduce((acc, count) => acc + count, 0);
-
 		this._telemetryService.sendMSFTTelemetryEvent('embedding.success', {}, {
 			batchSize: inputs.length,
 			inputTokenCount,
@@ -175,11 +258,11 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 	 */
 	public async rawEmbeddingsFetch(
 		type: EmbeddingTypeInfo,
-		endpoint: IEmbeddingEndpoint,
+		endpoint: IEmbeddingsEndpoint,
 		requestId: string,
 		inputs: readonly string[],
 		cancellationToken: CancellationToken | undefined
-	): Promise<RemoteEmbeddingResults | RemoteEmbeddingError> {
+	): Promise<CAPIEmbeddingResults | CAPIEmbeddingError> {
 		try {
 			const token = await this._authService.getCopilotToken();
 
@@ -187,13 +270,11 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 			endpoint.interceptBody?.(body);
 			const response = await postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				token.token,
-				await createRequestHMAC(env.HMAC_SECRET), // TODO@bpasero we need web support for these environmental things
+				await createRequestHMAC(env.HMAC_SECRET),
 				'copilot-panel',
 				requestId,
 				body,
@@ -201,6 +282,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				cancellationToken
 			);
 			const jsonResponse = response.status === 200 ? await response.json() : await response.text();
+
 			type EmbeddingResponse = {
 				object: string;
 				index: number;
@@ -218,6 +300,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				errorMessage = 'timeout';
 			}
 			return { type: 'failed', reason: errorMessage };
+
 		}
 	}
 }

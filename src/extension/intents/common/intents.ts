@@ -3,23 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export enum ParticipantIds {
-	Ask = 'github.copilot.default',
-	Agent = 'github.copilot.editsAgent',
-	Edit = 'github.copilot.editingSession',
-	Edit2 = 'github.copilot.editingSession2',
-}
+import { defaultAgentName, editingSessionAgent2Name, editingSessionAgentName, editorAgentName, editsAgentName, getChatParticipantNameFromId, terminalAgentName, vscodeAgentName } from '../../../platform/chat/common/chatAgents';
 
-export function participantIdToName(participantId: string): string {
-	switch (participantId) {
-		case ParticipantIds.Ask:
+/**
+ * Create a mode name for gh telemetry
+ */
+export function participantIdToModeName(participantId: string): string {
+	const name = getChatParticipantNameFromId(participantId);
+
+	switch (name) {
+		case defaultAgentName:
+		case vscodeAgentName:
+		case 'terminalPanel':
 			return 'ask';
-		case ParticipantIds.Agent:
+		case editsAgentName:
 			return 'agent';
-		case ParticipantIds.Edit:
-		case ParticipantIds.Edit2:
+		case editingSessionAgentName:
+		case editingSessionAgent2Name:
 			return 'edit';
+		case editorAgentName:
+		case terminalAgentName: // Count terminal and "etc" as 'inline'
 		default:
-			return participantId;
+			return 'inline';
 	}
 }

@@ -10,8 +10,8 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { promisify } from 'util';
 import { ITestingServicesAccessor } from '../../../src/platform/test/node/services';
-import { Range as ShimsRange } from '../../../src/util/common/test/shims/range';
 import { generateUuid } from '../../../src/util/vs/base/common/uuid';
+import { Range } from '../../../src/util/vs/workbench/api/common/extHostTypes/range';
 import { computeSHA256 } from '../../base/hash';
 import { TestingCacheSalts } from '../../base/salts';
 import { CacheScope, ICachingResourceFetcher } from '../../base/simulationContext';
@@ -51,7 +51,7 @@ export class PyrightDiagnosticsProvider extends LintingDiagnosticsProvider {
 		for (const diagnostic of generalDiagnostics) {
 			const range = diagnostic.range;
 			const message = diagnostic.message;
-			assert(ShimsRange.isRange(range) && typeof message === 'string');
+			assert(Range.isRange(range) && typeof message === 'string');
 			diagnostics.push({
 				file: fileName,
 				startLine: range.start.line,
@@ -111,7 +111,7 @@ export class PylintDiagnosticsProvider extends LintingDiagnosticsProvider {
 			const column = stdout.column;
 			const endLine = stdout.endLine ?? null;
 			const endColumn = stdout.endColumn ?? null;
-			const code = stdout["message-id"] ?? null;
+			const code = stdout['message-id'] ?? null;
 			assert(
 				typeof message === 'string'
 				&& typeof line === 'number'

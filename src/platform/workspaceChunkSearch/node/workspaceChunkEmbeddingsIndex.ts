@@ -22,12 +22,12 @@ import { distance, Embedding, EmbeddingType, rankEmbeddings } from '../../embedd
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { BuildIndexTriggerReason } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
+import { BuildIndexTriggerReason } from './codeSearch/codeSearchRepo';
 import { createWorkspaceChunkAndEmbeddingCache, IWorkspaceChunkAndEmbeddingCache } from './workspaceChunkAndEmbeddingCache';
-import { FileRepresentation, IWorkspaceFileIndex, shouldIndexFile } from './workspaceFileIndex';
+import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 
 
 export interface WorkspaceChunkEmbeddingsIndexState {
@@ -47,8 +47,8 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		@IVSCodeExtensionContext vsExtensionContext: IVSCodeExtensionContext,
+		@IInstantiationService instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -60,7 +60,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		this._cacheRoot = vsExtensionContext.storageUri;
 
 		this._cache = new Lazy(async () => {
-			const cache = this._register(await _instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
+			const cache = this._register(await instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
 			this._onDidChangeWorkspaceIndexState.fire();
 			return cache;
 		});
@@ -138,7 +138,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	async triggerIndexingOfFile(uri: URI, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
-		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri))) {
+		if (!await this._workspaceIndex.shouldIndexWorkspaceFile(uri, token)) {
 			return;
 		}
 
@@ -260,7 +260,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 			const resolvedFileSemanticChunks = new Map<string, FileChunkAndScore>();
 			if (!semanticChunks) {
-				this._logService.logger.error(`toSemanticChunks - Could not get semantic chunks for ${uri}`);
+				this._logService.error(`toSemanticChunks - Could not get semantic chunks for ${uri}`);
 
 				for (const chunk of chunks) {
 					const key = chunk.range.toString();
@@ -282,7 +282,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 					// If we didn't find any semantic chunks we still want to make sure the original chunk is included
 					if (!resolvedFileSemanticChunks.size) {
-						this._logService.logger.error(`No semantic chunk found for in ${uri} for chunk ${chunk.range}`,);
+						this._logService.error(`No semantic chunk found for in ${uri} for chunk ${chunk.range}`,);
 
 						const key = chunk.range.toString();
 						if (!resolvedFileSemanticChunks.has(key)) {
@@ -371,7 +371,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		const batchInfo = telemetry.batchInfo ?? new ComputeBatchInfo();
 
 		return logExecTime(this._logService, 'workspaceChunkEmbeddingsIndex.getEmbeddingsForFiles', async () => {
-			this._logService.logger.trace(`workspaceChunkEmbeddingsIndex: Getting auth token `);
+			this._logService.trace(`workspaceChunkEmbeddingsIndex: Getting auth token `);
 			const authToken = await this.tryGetAuthToken();
 			if (!authToken) {
 				throw new Error('Unable to get auth token');
@@ -419,7 +419,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	/**
 	 * Get the chunks and embeddings for a file.
-	 */
+	*/
 	private async getChunksAndEmbeddings(authToken: string, file: FileRepresentation, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, telemetryInfo: CallTracker, token: CancellationToken): Promise<readonly FileChunkWithEmbedding[] | undefined> {
 		const cache = await raceCancellationError(this._cache.value, token);
 		const existing = await raceCancellationError(cache.get(file), token);
@@ -450,6 +450,6 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	private async tryGetAuthToken(options: AuthenticationGetSessionOptions = { createIfNone: true }): Promise<string | undefined> {
-		return (await this._authService.getAnyGitHubSession(options))?.accessToken;
+		return (await this._authService.getGitHubSession('any', options))?.accessToken;
 	}
 }

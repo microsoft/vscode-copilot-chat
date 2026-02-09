@@ -74,13 +74,14 @@ export function sendUserMessageTelemetry(
 	message: string | undefined,
 	offTopic: boolean | undefined,
 	doc: TextDocumentSnapshot | undefined,
-	baseTelemetry: ConversationalBaseTelemetryData
+	baseTelemetry: ConversationalBaseTelemetryData,
+	modeName: string,
 ): void {
 	if (offTopic !== undefined) {
 		baseTelemetry = baseTelemetry.extendedBy({ offTopic: offTopic.toString() });
 	}
 	baseTelemetry = baseTelemetry.extendedBy({ headerRequestId: requestId });
-	sendConversationalMessageTelemetry(telemetryService, doc, location, message, {}, {}, baseTelemetry);
+	sendConversationalMessageTelemetry(telemetryService, doc, location, message, { mode: modeName }, {}, baseTelemetry);
 }
 
 export function sendModelMessageTelemetry(
@@ -90,7 +91,8 @@ export function sendModelMessageTelemetry(
 	appliedText: string,
 	requestId: string,
 	doc: TextDocumentSnapshot | undefined,
-	baseTelemetry: ConversationalBaseTelemetryData
+	baseTelemetry: ConversationalBaseTelemetryData,
+	modeName: string,
 ): void {
 	// Get the languages of code blocks within the message
 	const codeBlockLanguages = getCodeBlocks(appliedText);
@@ -107,6 +109,7 @@ export function sendModelMessageTelemetry(
 			headerRequestId: requestId,
 			uiKind: ChatLocation.toString(location),
 			codeBlockLanguages: JSON.stringify({ ...codeBlockLanguages }),
+			mode: modeName,
 		},
 		{ messageCharLen: appliedText.length, numCodeBlocks: codeBlockLanguages.length },
 		baseTelemetry
@@ -169,6 +172,7 @@ export function sendConversationalMessageTelemetry(
 
 	telemetryService.sendGHTelemetryEvent(`${prefix}.message`, standardTelemetryData.raw.properties, standardTelemetryData.raw.measurements);
 	telemetryService.sendEnhancedGHTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
 
 	return standardTelemetryData.raw;
 }
@@ -228,25 +232,43 @@ function telemetryPrefixForLocation(location: ChatLocation): string {
 	}
 }
 
-export function getCodeBlocks(text: string): string[] {
-	const lines = text.split('\n');
-	const codeBlockLanguages: string[] = [];
+export interface ICodeblockDetails {
+	readonly languageId: string;
+	readonly totalLines: number;
+}
 
-	let codeBlockState: undefined | { readonly delimiter: string; readonly languageId: string };
+export function getCodeBlocks(text: string): ICodeblockDetails[] {
+	const lines = text.split('\n');
+	const codeBlocks: ICodeblockDetails[] = [];
+
+	let codeBlockState: undefined | {
+		readonly delimiter: string;
+		readonly languageId: string;
+		totalLines: number;
+	};
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 
 		if (codeBlockState) {
 			if (new RegExp(`^\\s*${codeBlockState.delimiter}\\s*$`).test(line)) {
-				codeBlockLanguages.push(codeBlockState.languageId);
+				codeBlocks.push({
+					languageId: codeBlockState.languageId,
+					totalLines: codeBlockState.totalLines
+				});
 				codeBlockState = undefined;
+			} else {
+				codeBlockState.totalLines++;
 			}
 		} else {
 			const match = line.match(/^(\s*)(`{3,}|~{3,})(\w*)/);
 			if (match) {
-				codeBlockState = { delimiter: match[2], languageId: match[3] };
+				codeBlockState = {
+					delimiter: match[2],
+					languageId: match[3],
+					totalLines: 0
+				};
 			}
 		}
 	}
-	return codeBlockLanguages;
+	return codeBlocks;
 }

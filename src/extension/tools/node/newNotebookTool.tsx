@@ -8,6 +8,7 @@ import { BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, UserM
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { extractNotebookOutline, INotebookOutline } from '../../../util/common/notebooks';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
@@ -23,12 +24,10 @@ import { NewNotebookCodeGenerationPromptState, NewNotebookPlanningPrompt } from 
 import { NotebookXmlFormatPrompt } from '../../prompts/node/panel/notebookEditCodePrompt';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
 export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 	// Make sure this matches the name in the ToolName enum and package.json
 	public static readonly toolName = ToolName.CreateNewJupyterNotebook;
-	private outputStream: vscode.ChatResponseStream | undefined;
 
 	private _input: IBuildPromptContext | undefined;
 
@@ -39,7 +38,7 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IBuildPromptContext>, token: CancellationToken): Promise<LanguageModelToolResult> {
-		if (!this.outputStream) {
+		if (!this._input?.stream) {
 			this.sendTelemetry('noStream', options);
 			throw new Error('No output stream found');
 		}
@@ -57,7 +56,7 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 				chatVariables: this._input?.chatVariables ?? new ChatVariablesCollection([]),
 			};
 
-			this.outputStream.progress(l10n.t("Planning ..."));
+			this._input?.stream?.progress(l10n.t("Planning ..."));
 
 			// planning outline stage
 			outcome = 'failedToRenderPlanningPrompt';
@@ -71,13 +70,13 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 				}
 			);
 			outcome = 'failedToMakePlanningRequest';
-			const planningResponse = await planningEndpoint.makeChatRequest(
-				'notebookPlanning',
-				planningMessages,
-				undefined,
-				token,
-				ChatLocation.Panel
-			);
+			const planningResponse = await planningEndpoint.makeChatRequest2({
+				debugName: 'notebookPlanning',
+				messages: planningMessages,
+				finishedCb: undefined,
+				location: ChatLocation.Panel,
+				enableRetryOnFilter: true
+			}, token);
 			if (planningResponse.type !== ChatFetchResponseType.Success) {
 				this.sendTelemetry('planningFailed', options);
 				return new LanguageModelToolResult([
@@ -104,7 +103,8 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 						{
 							outline: outline,
 							promptContext: mockContext,
-							originalCreateNotebookQuery
+							originalCreateNotebookQuery,
+							availableTools: this._input.tools?.availableTools,
 						},
 						// If we are not called with tokenization options, have _some_ fake tokenizer
 						// otherwise we end up returning the entire document
@@ -130,7 +130,6 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 	}
 
 	async resolveInput(input: IBuildPromptContext, promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IBuildPromptContext> {
-		this.outputStream = promptContext.stream;
 		this._input = promptContext;
 
 		return input;
@@ -160,6 +159,7 @@ export interface NewNotebookToolPromptProps extends BasePromptElementProps {
 	outline: INotebookOutline;
 	promptContext: IBuildPromptContext;
 	originalCreateNotebookQuery: string;
+	availableTools?: readonly vscode.LanguageModelToolInformation[];
 }
 
 export class NewNotebookToolPrompt extends PromptElement<NewNotebookToolPromptProps, NewNotebookCodeGenerationPromptState> {
@@ -171,6 +171,7 @@ export class NewNotebookToolPrompt extends PromptElement<NewNotebookToolPromptPr
 						outline={this.props.outline}
 						promptContext={this.props.promptContext}
 						originalCreateNotebookQuery={this.props.originalCreateNotebookQuery}
+						availableTools={this.props.availableTools}
 					/>
 				</UserMessage>
 			</>
@@ -180,6 +181,9 @@ export class NewNotebookToolPrompt extends PromptElement<NewNotebookToolPromptPr
 
 export class NewNotebookToolPromptContent extends PromptElement<NewNotebookToolPromptProps, NewNotebookCodeGenerationPromptState> {
 	override render(state: NewNotebookCodeGenerationPromptState, sizing: PromptSizing): PromptPiece<any, any> | undefined {
+		const hasEditNotebookTool = this.props.availableTools?.some(t => t.name === ToolName.EditNotebook);
+		const hasEditTools = this.props.availableTools?.some(t => t.name === ToolName.EditFile) && hasEditNotebookTool;
+		const hasCreateTool = !hasEditTools && this.props.availableTools?.some(t => t.name === ToolName.CreateFile) && hasEditNotebookTool;
 		return (
 			<>
 				<NotebookXmlFormatPrompt tsExampleFilePath={'/Users/someone/proj01/example.ipynb'} />
@@ -187,8 +191,10 @@ export class NewNotebookToolPromptContent extends PromptElement<NewNotebookToolP
 				<CustomInstructions flexGrow={6} priority={750} languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
 				<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} />
 				<ChatVariablesAndQuery flexGrow={3} priority={898} chatVariables={this.props.promptContext.chatVariables} query={this.props.originalCreateNotebookQuery} />
-				Use the `{`${ToolName.CreateFile}`}` tool to first create an empty notebook file with the file path,<br />
-				And then use the `{`${ToolName.EditNotebook}`}` tool to generate the notebook of the notebook by editing the empty notebook.
+				{hasEditTools && <>Use the `{`${ToolName.EditFile}`}` tool to first create an empty notebook file with the file path,<br />
+					And then use the `{`${ToolName.EditNotebook}`}` tool to generate the notebook of the notebook by editing the empty notebook.<br /></>}
+				{hasCreateTool && <>Use the `{`${ToolName.CreateFile}`}` tool to first create an empty notebook file with the file path,<br />
+					And then use the `{`${ToolName.EditNotebook}`}` tool to generate the notebook of the notebook by editing the empty notebook.<br /></>}
 				You must follow the new file location hint when generating the notebook.<br />
 
 				You MUST use the following outline when generating the notebook:<br />

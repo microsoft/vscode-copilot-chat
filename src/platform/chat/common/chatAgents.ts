@@ -14,13 +14,15 @@ export interface IChatAgentService {
 }
 
 export const defaultAgentName = 'default';
+
+/** @deprecated  this is now `editingSessionAgentEditorName` */
 export const editorAgentName = 'editor';
-export const workspaceAgentName = 'workspace';
 export const vscodeAgentName = 'vscode';
 export const terminalAgentName = 'terminal';
 export const editingSessionAgentName = 'editingSession';
 export const editingSessionAgent2Name = 'editingSession2';
 export const editingSessionAgentEditorName = 'editingSessionEditor';
+export const notebookEditorAgentName = 'notebookEditorAgent';
 export const editsAgentName = 'editsAgent';
 
 export const CHAT_PARTICIPANT_ID_PREFIX = 'github.copilot.';

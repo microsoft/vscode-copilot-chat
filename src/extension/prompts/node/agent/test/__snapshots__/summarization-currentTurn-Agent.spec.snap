@@ -1,29 +1,15 @@
 ### User
 ~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
-<instructions>
-This is a test custom instruction file
-</instructions>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
-
-
-### User
-~~~md
 <environment_info>
 The user's current OS is: Linux
-The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
 </environment_info>
 <workspace_info>
 I am working in a workspace with the following folders:
 - /workspace 
-I am working in a workspace that has the following structure:
-```
-
-```
-This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -32,5 +18,7 @@ copilot_cache_control: {"type":"ephemeral"}
 <conversation-summary>
 summarized!
 </conversation-summary>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

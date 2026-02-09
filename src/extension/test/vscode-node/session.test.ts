@@ -5,11 +5,11 @@
 
 import assert from 'assert';
 import * as sinon from 'sinon';
-import { authentication, AuthenticationGetSessionOptions, AuthenticationSession, AuthenticationSessionAccountInformation, ConfigurationScope, ConfigurationTarget, workspace, WorkspaceConfiguration } from 'vscode';
+import { authentication, AuthenticationGetSessionOptions, AuthenticationSession, AuthenticationSessionAccountInformation, AuthenticationWwwAuthenticateRequest, ConfigurationScope, ConfigurationTarget, workspace, WorkspaceConfiguration } from 'vscode';
 import { GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_READ_USER, GITHUB_SCOPE_USER_EMAIL } from '../../../platform/authentication/common/authentication';
 import { getAlignedSession, getAnyAuthSession } from '../../../platform/authentication/vscode-node/session';
 import { AuthProviderId, Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
@@ -21,7 +21,7 @@ suite('Session tests', function () {
 	const accessor = testingServiceCollection.createTestingAccessor();
 
 	let sandbox: sinon.SinonSandbox;
-	let getSessionStub: sinon.SinonStub<[providerId: string, scopes: readonly string[], options?: AuthenticationGetSessionOptions | undefined], Thenable<AuthenticationSession | undefined>>;
+	let getSessionStub: sinon.SinonStub<[providerId: string, scopeListOrRequest: readonly string[] | AuthenticationWwwAuthenticateRequest, options?: AuthenticationGetSessionOptions | undefined], Thenable<AuthenticationSession | undefined>>;
 	let getAccountsStub: sinon.SinonStub<[providerId: string], Thenable<readonly AuthenticationSessionAccountInformation[]>>;
 	let configurationStub: sinon.SinonStub<[section?: string | undefined, scope?: ConfigurationScope | null | undefined], WorkspaceConfiguration>;
 
@@ -37,7 +37,8 @@ suite('Session tests', function () {
 			sessionsByScope.set(scopeKey, sessionsWithScope);
 		}
 
-		getSessionStub.callsFake((_providerId: string, scopes: readonly string[], options?: AuthenticationGetSessionOptions | undefined) => {
+		getSessionStub.callsFake((_providerId: string, scopeListOrRequest: readonly string[] | AuthenticationWwwAuthenticateRequest, options?: AuthenticationGetSessionOptions | undefined) => {
+			const scopes = scopeListOrRequest as readonly string[];
 			let sessionsWithScope = sessionsByScope.get(scopes.join(' '));
 			if (sessionsWithScope) {
 				if (options?.account) {

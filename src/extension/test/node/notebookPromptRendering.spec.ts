@@ -107,6 +107,7 @@ describe('Notebook Prompt Rendering', function () {
 			override onDidChangeTextDocument = Event.None;
 			override onDidChangeWorkspaceFolders = Event.None;
 			override onDidChangeNotebookDocument = Event.None;
+			override onDidChangeTextEditorSelection = Event.None;
 			override openTextDocument(uri: vscode.Uri): Promise<vscode.TextDocument> {
 				throw new Error('Method not implemented.');
 			}
@@ -120,7 +121,7 @@ describe('Notebook Prompt Rendering', function () {
 			}
 
 			override getWorkspaceFolders(): URI[] {
-				throw new Error('Method not implemented.');
+				return [];
 			}
 			override getWorkspaceFolderName(workspaceFolderUri: URI): string {
 				return '';
@@ -134,10 +135,16 @@ describe('Notebook Prompt Rendering', function () {
 			override applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
 				throw new Error('Method not implemented.');
 			}
+			override requestResourceTrust(_options: vscode.ResourceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
+			override requestWorkspaceTrust(_options?: vscode.WorkspaceTrustRequestOptions): Thenable<boolean | undefined> {
+				return Promise.resolve(true);
+			}
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
-			override getTreatmentVariable<T extends string | number | boolean>(_configId: string, _name: string): T | undefined {
+			override getTreatmentVariable<T extends string | number | boolean>(_name: string): T | undefined {
 				if (_name === 'copilotchat.notebookPackages' || _name === 'copilotchat.notebookPriorities') {
 					return treatmeants[_name] as T;
 				}
@@ -195,15 +202,28 @@ describe('Notebook Prompt Rendering', function () {
 			info: () => { /* no-op */ },
 			debug: () => { /* no-op */ },
 			trace: () => { /* no-op */ },
-			show: () => { /* no-op */ }
+			show: () => { /* no-op */ },
+			createSubLogger(): ILogger { return mockLogger; },
+			withExtraTarget(): ILogger { return mockLogger; }
 		};
 		testingServiceCollection.define(IAlternativeNotebookContentService, new SimulationAlternativeNotebookContentService('json'));
 		testingServiceCollection.define(IAlternativeNotebookContentEditGenerator, new AlternativeNotebookContentEditGenerator(new SimulationAlternativeNotebookContentService('json'), new DiffServiceImpl(), new class implements ILogService {
 			_serviceBrand: undefined;
 			internal = mockLogger;
 			logger = mockLogger;
-			showPublicLog(preserveFocus?: boolean): void {
+			trace = mockLogger.trace;
+			debug = mockLogger.debug;
+			info = mockLogger.info;
+			warn = mockLogger.warn;
+			error = mockLogger.error;
+			show(preserveFocus?: boolean): void {
 				//
+			}
+			createSubLogger(): ILogger {
+				return this;
+			}
+			withExtraTarget(): ILogger {
+				return this;
 			}
 		}(), new NullTelemetryService()));
 		accessor = testingServiceCollection.createTestingAccessor();
@@ -215,7 +235,7 @@ describe('Notebook Prompt Rendering', function () {
 	});
 
 	test('Notebook prompt structure is rendered correctly', async function () {
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatNotebookGeneratePrompt, {
 			documentContext: contexts[1],
@@ -236,7 +256,7 @@ describe('Notebook Prompt Rendering', function () {
 
 	test('Disable package should not render packages', async function () {
 		treatmeants['copilotchat.notebookPackages'] = true;
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatNotebookGeneratePrompt, {
 			documentContext: contexts[1],
@@ -271,9 +291,7 @@ describe('Notebook Prompt Rendering', function () {
 			name: 'Test',
 			family: 'Test',
 			version: 'Test',
-			policy: 'enabled',
 			showInModelPicker: false,
-			isDefault: false,
 			isFallback: false,
 			urlOrRequestMetadata: '',
 			model: CHAT_MODEL.GPT41,
@@ -281,8 +299,9 @@ describe('Notebook Prompt Rendering', function () {
 				return accessor.get(ITokenizerProvider).acquireTokenizer({ tokenizer: TokenizerType.O200K });
 			},
 			processResponseFromChatEndpoint: async () => { throw new Error('Method not implemented.'); },
-			acceptChatPolicy: async () => true,
 			cloneWithTokenOverride: () => endpoint,
+			createRequestBody: () => { return {}; },
+			makeChatRequest2: () => { throw new Error('Method not implemented.'); },
 			makeChatRequest: async () => { throw new Error('Method not implemented.'); },
 		};
 		const progressReporter = { report() { } };

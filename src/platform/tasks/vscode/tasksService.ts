@@ -15,18 +15,45 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { OffsetLineColumnConverter } from '../../editing/common/offsetLineColumnConverter';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
+import { ILogService } from '../../log/common/logService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { ITasksService, TaskResult, TaskStatus } from '../common/tasksService';
 
 
-export class TasksService implements ITasksService {
+export class TasksService extends DisposableStore implements ITasksService {
 	_serviceBrand: undefined;
 
+	private latestTerminalForTaskDefinition: Map<vscode.TaskDefinition, vscode.Terminal> = new Map();
 	constructor(
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
-	) { }
+		@ILogService private readonly logService: ILogService
+	) {
+		super();
+		this.add(vscode.tasks.onDidStartTask(e => {
+			const terminal: vscode.Terminal | undefined = (e.execution as unknown as { terminal?: vscode.Terminal }).terminal;
+			if (!terminal) {
+				return;
+			}
+			this.latestTerminalForTaskDefinition.set(e.execution.task.definition, terminal);
+			const closeListener = vscode.window.onDidCloseTerminal(closedTerminal => {
+				if (closedTerminal === terminal && this.latestTerminalForTaskDefinition.has(e.execution.task.definition)) {
+					this.latestTerminalForTaskDefinition.delete(e.execution.task.definition);
+					closeListener.dispose();
+				}
+			});
+			this.add(closeListener);
+
+			const endListener = vscode.tasks.onDidEndTask(ev => {
+				if (ev.execution.task.definition === e.execution.task.definition) {
+					closeListener.dispose();
+					endListener.dispose();
+				}
+			});
+			this.add(endListener);
+		}));
+	}
 
 	private getTasksFromConfig(workspaceFolder: URI): vscode.TaskDefinition[] {
 		const tasks = vscode.workspace.getConfiguration('tasks', workspaceFolder);
@@ -40,6 +67,38 @@ export class TasksService implements ITasksService {
 	hasTask(workspaceFolder: URI, def: vscode.TaskDefinition): boolean {
 		const existingTasks = this.getTasksFromConfig(workspaceFolder);
 		return existingTasks.some(t => this.matchesTask(t, def));
+	}
+
+	/**
+	 * This is needed because when tasks exit, they're removed from the taskExecutions, but we might want to review the output of the task
+	 * after it has exited. This allows us to get the terminal for a task definition.
+	 * @param task
+	 */
+	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
+		for (const [key, terminal] of this.latestTerminalForTaskDefinition.entries()) {
+			if (key.id) {
+				// Only some task definitions have IDs
+				const taskId = this._getTaskId(taskDefinition);
+				if (taskId === key.id) {
+					return terminal;
+				}
+			}
+			if ((taskDefinition.type === key.type &&
+				(key.label || key.script || key.command) &&
+				(!key.label || taskDefinition.label === key.label) &&
+				(!key.script || taskDefinition.script === key.script) &&
+				(!key.command || taskDefinition.command === key.command))) {
+				return terminal;
+			}
+			this.logService.debug(`getTerminalForTask: no terminal found for task definition: ${JSON.stringify(taskDefinition)} matching ${JSON.stringify(key)}`);
+			this.logService.debug(`getTerminalForTask: current stored terminals: ${[...this.latestTerminalForTaskDefinition.values()].map(t => t.name).join(', ')}`);
+		}
+	}
+	private _getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
+		if (!taskDefinition.type || (taskDefinition.command === undefined && taskDefinition.script === undefined)) {
+			return undefined;
+		}
+		return taskDefinition.type + ',' + (taskDefinition.command ?? taskDefinition.script) + ',';
 	}
 
 	async getTaskConfigPosition(workspaceFolder: URI, def: vscode.TaskDefinition) {
@@ -208,7 +267,7 @@ export class TasksService implements ITasksService {
 								if (!resolved) {
 									resolve({ status: TaskStatus.Started });
 								}
-							}, 10000);
+							}, task?.isBackground && task.problemMatchers.length ? 10000 : 0);
 						} else {
 							resolve({ status: TaskStatus.Started });
 						}

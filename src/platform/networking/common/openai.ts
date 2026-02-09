@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { OpenAI, OutputMode, Raw, toMode } from '@vscode/prompt-tsx';
+import { ChatCompletionContentPartImage } from '@vscode/prompt-tsx/dist/base/output/openaiTypes';
 import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
+import { rawPartAsThinkingData } from '../../endpoint/common/thinkingDataContainer';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { ThinkingData, ThinkingDataInMessage } from '../../thinking/common/thinking';
 import { ICopilotReference, RequestId } from './fetch';
 
 /**
@@ -37,7 +40,7 @@ export interface APIUsage {
 	/**
 	 * Breakdown of tokens used in the prompt.
 	 */
-	prompt_tokens_details: {
+	prompt_tokens_details?: {
 		cached_tokens: number;
 	};
 	/**
@@ -107,7 +110,7 @@ export type CAPIChatMessage = OpenAI.ChatMessage & {
 	copilot_cache_control?: {
 		'type': 'ephemeral';
 	};
-};
+} & ThinkingDataInMessage;
 
 export function getCAPITextPart(content: string | OpenAI.ChatCompletionContentPart[] | OpenAI.ChatCompletionContentPart): string {
 	if (Array.isArray(content)) {
@@ -121,17 +124,18 @@ export function getCAPITextPart(content: string | OpenAI.ChatCompletionContentPa
 	}
 }
 
+export type RawMessageConversionCallback = (message: CAPIChatMessage, thinkingData?: ThinkingData) => void;
 /**
  * Converts a raw TSX chat message to CAPI's format.
  *
  * **Extra:** the raw message can have `copilot_references` and
  * `copilot_confirmations` properties, which are copied to the CAPI message.
  */
-export function rawMessageToCAPI(message: Raw.ChatMessage): CAPIChatMessage;
-export function rawMessageToCAPI(message: Raw.ChatMessage[]): CAPIChatMessage[];
-export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage): CAPIChatMessage | CAPIChatMessage[] {
+export function rawMessageToCAPI(message: Raw.ChatMessage, callback?: RawMessageConversionCallback): CAPIChatMessage;
+export function rawMessageToCAPI(message: Raw.ChatMessage[], callback?: RawMessageConversionCallback): CAPIChatMessage[];
+export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, callback?: RawMessageConversionCallback): CAPIChatMessage | CAPIChatMessage[] {
 	if (Array.isArray(message)) {
-		return message.map(m => rawMessageToCAPI(m));
+		return message.map(m => rawMessageToCAPI(m, callback));
 	}
 
 	const out: CAPIChatMessage = toMode(OutputMode.OpenAI, message);
@@ -144,15 +148,35 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage): 
 	if (typeof out.content === 'string') {
 		out.content = out.content.trimEnd();
 	} else {
-		for (const part of out.content) {
+		for (let i = 0; i < out.content.length; i++) {
+			const part = out.content[i];
 			if (part.type === 'text') {
 				part.text = part.text.trimEnd();
+			} else if (part.type === 'image_url' && Array.isArray(message.content) && i < message.content.length) {
+				const rawPart = message.content[i] as Raw.ChatCompletionContentPart;
+				if (rawPart?.type === Raw.ChatCompletionContentPartKind.Image && rawPart.imageUrl?.mediaType) {
+					// CAPI expects `media_type` instead of `mediaType`. This is only used for CAPI and not OpenAI.
+					const { mediaType, ...rawImageUrl } = rawPart.imageUrl;
+					(part.image_url as ChatCompletionContentPartImage.ImageURL & { media_type: string }) = {
+						...rawImageUrl,
+						media_type: mediaType
+					};
+				}
 			}
 		}
 	}
 
 	if (message.content.find(part => part.type === ChatCompletionContentPartKind.CacheBreakpoint)) {
 		out.copilot_cache_control = { type: 'ephemeral' };
+	}
+
+	for (const content of message.content) {
+		if (content.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const data = rawPartAsThinkingData(content);
+			if (callback && data) {
+				callback(out, data);
+			}
+		}
 	}
 
 	return out;
@@ -239,6 +263,7 @@ export interface ChatCompletion {
 	requestId: RequestId;
 	tokens: readonly string[];
 	usage: APIUsage | undefined;
+	model: string;
 	blockFinished: boolean; // Whether the block completion was determined to be finished
 	finishReason: FinishedCompletionReason;
 	filterReason?: FilterReason; // optional filter reason if the completion was filtered
@@ -250,7 +275,7 @@ export interface ChoiceLogProbs {
 	content: ChoiceLogProbsContent[];
 }
 
-interface TokenLogProb {
+export interface TokenLogProb {
 	bytes: number[];
 	token: string;
 	logprob: number;

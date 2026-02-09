@@ -6,67 +6,36 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
-import { CompilerOptionsContextRunnable } from './baseContextProviders';
-import { ClassContextProvider } from './classContextProvider';
-import { ContextComputeRunnableCollector, ContextProvider, RecoverableError, RequestContext, type ComputeContextSession, type ContextComputeRunnable, type ContextProviderFactory, type ContextResult, type ProviderComputeContext } from './contextProvider';
-import { FunctionContextProvider } from './functionContextProvider';
-import { ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
-import { ModuleContextProvider } from './moduleContextProvider';
-import { CompletionContextKind, type CachedContextItem, type CacheScope, type ContextItemKey, type FilePath, type Range } from './protocol';
-import { SourceFileContextProvider } from './sourceFileContextProvider';
 import tss from './typescripts';
+
+import { CompilerOptionsRunnable } from './baseContextProviders';
+import { ClassContextProvider } from './classContextProvider';
+import { ContextProvider, ContextRunnableCollector, RequestContext, type ComputeContextSession, type ContextProviderFactory, type ContextResult, type ContextRunnable, type ProviderComputeContext } from './contextProvider';
+import { FunctionContextProvider } from './functionContextProvider';
+import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
+import { ModuleContextProvider } from './moduleContextProvider';
+import { validateNesRename, type PrepareNesRenameResult } from './nesRenameValidator';
+import { RenameKind, type FilePath, type Range, type RenameGroup } from './protocol';
+import { SourceFileContextProvider } from './sourceFileContextProvider';
+import { RecoverableError } from './types';
 
 class ProviderComputeContextImpl implements ProviderComputeContext {
 
 	private firstCallableProvider: ContextProvider | undefined;
-	private completionKind: CompletionContextKind | undefined;
-	private symbolsToQuery: tt.SymbolFlags;
-	private importsByCacheRange: Range | undefined;
-	private callableProviderCacheScope: CacheScope | undefined;
 
 	constructor() {
-		this.completionKind = undefined;
-		this.symbolsToQuery = ts.SymbolFlags.None;
 		this.firstCallableProvider = undefined;
 	}
 
 	public update(contextProvider: ContextProvider): ContextProvider {
-		if (this.completionKind === undefined) {
-			this.completionKind = contextProvider.contextKind;
-		}
-		if (contextProvider.symbolsToQuery !== undefined && contextProvider.symbolsToQuery !== ts.SymbolFlags.None) {
-			this.symbolsToQuery |= contextProvider.symbolsToQuery;
-		}
-		if (this.importsByCacheRange === undefined && typeof contextProvider.getImportsByCacheRange === 'function') {
-			this.importsByCacheRange = contextProvider.getImportsByCacheRange();
-		}
 		if (this.firstCallableProvider === undefined && contextProvider.isCallableProvider !== undefined && contextProvider.isCallableProvider === true) {
 			this.firstCallableProvider = contextProvider;
-			if (typeof contextProvider.getCallableCacheScope === 'function') {
-				this.callableProviderCacheScope = contextProvider.getCallableCacheScope();
-			}
 		}
 		return contextProvider;
 	}
 
-	public getImportsByCacheRange(): Range | undefined {
-		return this.importsByCacheRange;
-	}
-
-	public getCompletionKind(): CompletionContextKind {
-		return this.completionKind ?? CompletionContextKind.None;
-	}
-
-	public getSymbolsToQuery(): tt.SymbolFlags {
-		return this.symbolsToQuery;
-	}
-
 	public isFirstCallableProvider(contextProvider: ContextProvider): boolean {
 		return this.firstCallableProvider === contextProvider;
-	}
-
-	public getCallableCacheScope(): CacheScope | undefined {
-		return this.callableProviderCacheScope;
 	}
 }
 
@@ -77,49 +46,40 @@ class ContextProviders {
 		[ts.SyntaxKind.FunctionDeclaration, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.FunctionDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.ArrowFunction, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.ArrowFunction, tokenInfo, computeContext)],
 		[ts.SyntaxKind.FunctionExpression, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.FunctionExpression, tokenInfo, computeContext)],
+		[ts.SyntaxKind.GetAccessor, (node, tokenInfo, computeContext) => new AccessorProvider(node as tt.GetAccessorDeclaration, tokenInfo, computeContext)],
+		[ts.SyntaxKind.SetAccessor, (node, tokenInfo, computeContext) => new AccessorProvider(node as tt.SetAccessorDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.ClassDeclaration, ClassContextProvider.create as unknown as ContextProviderFactory],
 		[ts.SyntaxKind.Constructor, (node, tokenInfo, computeContext) => new ConstructorContextProvider(node as tt.ConstructorDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.MethodDeclaration, (node, tokenInfo, computeContext) => new MethodContextProvider(node as tt.MethodDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.ModuleDeclaration, (node, tokenInfo, computeContext) => new ModuleContextProvider(node as tt.ModuleDeclaration, tokenInfo, computeContext)],
 	]);
 
-	private readonly document: FilePath;
 	private readonly tokenInfo: tss.TokenInfo;
 	private readonly computeInfo: ProviderComputeContextImpl;
-	private readonly neighborFiles: readonly string[] | undefined;
-	private readonly knownContextItems: Map<ContextItemKey, CachedContextItem>;
 
 
-	constructor(document: FilePath, tokenInfo: tss.TokenInfo, neighborFiles: readonly string[] | undefined, knownContextItems: readonly CachedContextItem[]) {
-		this.document = document;
+	constructor(tokenInfo: tss.TokenInfo) {
 		this.tokenInfo = tokenInfo;
 		this.computeInfo = new ProviderComputeContextImpl();
-		this.neighborFiles = neighborFiles;
-		this.knownContextItems = new Map<ContextItemKey, CachedContextItem>(knownContextItems.map(item => [item.key, item]));
 	}
 
 	public execute(result: ContextResult, session: ComputeContextSession, languageService: tt.LanguageService, token: tt.CancellationToken): void {
-		const normalizedPaths: tt.server.NormalizedPath[] = [];
-		if (this.neighborFiles !== undefined) {
-			for (const file of this.neighborFiles) {
-				normalizedPaths.push(ts.server.toNormalizedPath(file));
-			}
+		const collector = this.getContextRunnables(session, languageService, result.context, token);
+		result.addPath(tss.StableSyntaxKinds.getPath(this.tokenInfo.touching ?? this.tokenInfo.token));
+		for (const runnable of collector.entries()) {
+			runnable.initialize(result);
 		}
-		const requestContext = new RequestContext(session, normalizedPaths, this.knownContextItems);
-		const collector = this.getContextComputeRunnables(session, languageService, requestContext, token);
-		const completionContextKind: CompletionContextKind = this.computeInfo.getCompletionKind();
-		result.addMetaData(completionContextKind, tss.StableSyntaxKinds.getPath(this.tokenInfo.touching ?? this.tokenInfo.token));
 		this.executeRunnables(collector.getPrimaryRunnables(), result, token);
 		this.executeRunnables(collector.getSecondaryRunnables(), result, token);
 		this.executeRunnables(collector.getTertiaryRunnables(), result, token);
-		session.addComputationStateItems(result, this.computeInfo);
+		result.done();
 	}
 
-	private executeRunnables(runnables: ContextComputeRunnable[], result: ContextResult, token: tt.CancellationToken): void {
+	private executeRunnables(runnables: ContextRunnable[], result: ContextResult, token: tt.CancellationToken): void {
 		for (const runnable of runnables) {
 			token.throwIfCancellationRequested();
 			try {
-				runnable.compute(result, token);
+				runnable.compute(token);
 			} catch (error) {
 				if (error instanceof RecoverableError) {
 					result.addErrorData(error);
@@ -130,9 +90,9 @@ class ContextProviders {
 		}
 	}
 
-	private getContextComputeRunnables(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): ContextComputeRunnableCollector {
-		const result: ContextComputeRunnableCollector = new ContextComputeRunnableCollector();
-		result.addPrimary(new CompilerOptionsContextRunnable(session, languageService, context, this.document));
+	private getContextRunnables(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): ContextRunnableCollector {
+		const result: ContextRunnableCollector = new ContextRunnableCollector(context.clientSideRunnableResults);
+		result.addPrimary(new CompilerOptionsRunnable(session, languageService, context, this.tokenInfo.token.getSourceFile()));
 		const providers = this.computeProviders();
 		for (const provider of providers) {
 			provider.provide(result, session, languageService, context, token);
@@ -170,17 +130,152 @@ class ContextProviders {
 	}
 }
 
-export function computeContext(result: ContextResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, neighborFiles: readonly string[] | undefined, knownContextItems: readonly CachedContextItem[], token: tt.CancellationToken): void {
+export function computeContext(result: ContextResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, token: tt.CancellationToken): void {
 	const program = languageService.getProgram();
 	if (program === undefined) {
+		result.addErrorData(new RecoverableError(`No program found on language service`, RecoverableError.NoProgram));
 		return;
 	}
 	const sourceFile = program.getSourceFile(document);
 	if (sourceFile === undefined) {
+		result.addErrorData(new RecoverableError(`No source file found for document`, RecoverableError.NoSourceFile));
 		return;
 	}
 
 	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
-	const providers = new ContextProviders(document, tokenInfo, neighborFiles, knownContextItems);
+	const providers = new ContextProviders(tokenInfo);
 	providers.execute(result, session, languageService, token);
+}
+
+export function prepareNesRename(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: Range | undefined, token: tt.CancellationToken): void {
+	if (typeof oldName !== 'string' || oldName.length === 0) {
+		result.setCanRename(RenameKind.no, 'No old name provided');
+		return;
+	}
+	if (typeof newName !== 'string' || newName.length === 0) {
+		result.setCanRename(RenameKind.no, 'No new name provided');
+		return;
+	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		result.setCanRename(RenameKind.no, 'No program found on language service');
+		return;
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		result.setCanRename(RenameKind.no, 'No source file found for document');
+		return;
+	}
+
+	const renameInfo = languageService.getRenameInfo(document, position, {});
+	if (!renameInfo.canRename) {
+		if (lastSymbolRename !== undefined) {
+			runPrepareNesRenameOnOldState(result, session, languageService, sourceFile, position, oldName, newName, lastSymbolRename, token);
+			return;
+		}
+		result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
+		return;
+	}
+	if (renameInfo.displayName !== oldName) {
+		result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+		return;
+	}
+	doPrepareNesRename(result, program, sourceFile, position, oldName, newName, token);
+}
+
+function doPrepareNesRename(result: PrepareNesRenameResult, program: tt.Program, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, token: tt.CancellationToken) {
+	const tokenInfo = tss.getRelevantTokens(sourceFile, position);
+	if (tokenInfo.token === undefined) {
+		result.setCanRename(RenameKind.no, 'No token found at position');
+		return;
+	}
+	result.setCanRename(RenameKind.maybe, oldName);
+	token.throwIfCancellationRequested();
+	validateNesRename(result, program, tokenInfo.token, oldName, newName, token);
+}
+
+function runPrepareNesRenameOnOldState(result: PrepareNesRenameResult, session: ComputeContextSession, languageService: tt.LanguageService, sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: Range, token: tt.CancellationToken) {
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameInfo = languageService.getRenameInfo(updatedSourceFile.fileName, oldPos, {});
+		if (!renameInfo.canRename) {
+			result.setCanRename(RenameKind.no, renameInfo.localizedErrorMessage);
+			return;
+		}
+		if (renameInfo.displayName !== oldName) {
+			result.setCanRename(RenameKind.no, `Old name '${oldName}' does not match symbol name '${renameInfo.displayName}'`);
+			return;
+		}
+		doPrepareNesRename(result, updatedProgram, updatedSourceFile, oldPos, oldName, newName, token);
+		if (result.getCanRename() === RenameKind.maybe || result.getCanRename() === RenameKind.yes) {
+			result.setOnOldState(true);
+		}
+	});
+}
+
+export function nesRename(session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, oldName: string | undefined, newName: string | undefined, lastSymbolRename: Range | undefined): RenameGroup[] {
+	if (oldName === undefined || newName === undefined || lastSymbolRename === undefined) {
+		return [];
+	}
+
+	const program = languageService.getProgram();
+	if (program === undefined) {
+		return [];
+	}
+
+	const sourceFile = program.getSourceFile(document);
+	if (sourceFile === undefined) {
+		return [];
+	}
+
+	const [oldText, oldPos] = getOldText(sourceFile, position, oldName, newName, lastSymbolRename);
+	const delta = newName.length - oldName.length;
+	const map: Map<string, RenameGroup> = new Map();
+	tss.LanguageServiceHost.runWithTemporaryFileUpdate(session.languageServiceHost, sourceFile.fileName, oldText, (updatedProgram, _originalProgram, updatedSourceFile) => {
+		const renameLocations = languageService.findRenameLocations(updatedSourceFile.fileName, oldPos, false, false, {});
+		if (renameLocations === undefined) {
+			return;
+		}
+		for (const loc of renameLocations) {
+			let group = map.get(loc.fileName);
+			if (group === undefined) {
+				group = {
+					file: loc.fileName,
+					changes: [],
+				};
+				map.set(loc.fileName, group);
+			}
+			const sf = updatedProgram.getSourceFile(loc.fileName);
+			if (sf === undefined) {
+				continue;
+			}
+			const start = sf.getLineAndCharacterOfPosition(loc.textSpan.start);
+			const end = sf.getLineAndCharacterOfPosition(loc.textSpan.start + loc.textSpan.length);
+			if (
+				loc.fileName === document &&
+				start.line === lastSymbolRename.start.line && start.character === lastSymbolRename.start.character &&
+				end.line === lastSymbolRename.end.line && end.character === lastSymbolRename.end.character - delta
+			) {
+				continue;
+			}
+			group.changes.push({
+				range: {
+					start: { line: start.line, character: start.character },
+					end: { line: end.line, character: end.character }
+				},
+				newText: (loc.prefixText || loc.suffixText) ? (loc.prefixText ?? '') + newName + (loc.suffixText ?? '') : undefined
+			});
+		}
+	});
+	return Array.from(map.values());
+}
+
+function getOldText(sourceFile: tt.SourceFile, position: number, oldName: string, newName: string, lastSymbolRename: Range): [string, number] {
+	const text = sourceFile.getFullText();
+	const startPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.start.line, lastSymbolRename.start.character);
+	const endPos = sourceFile.getPositionOfLineAndCharacter(lastSymbolRename.end.line, lastSymbolRename.end.character);
+	return [text.substring(0, startPos) + oldName + text.substring(endPos), position < startPos ? position : position - (newName.length - oldName.length)];
 }

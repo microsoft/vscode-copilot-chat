@@ -25,7 +25,7 @@ export class GitExtensionServiceImpl implements IGitExtensionService {
 	private readonly _disposables: vscode.Disposable[] = [];
 
 	constructor(@ILogService private readonly _logService: ILogService) {
-		this._logService.logger.info('[GitExtensionServiceImpl] Initializing Git extension service.');
+		this._logService.info('[GitExtensionServiceImpl] Initializing Git extension service.');
 
 		this._disposables.push(...this._initializeExtensionApi());
 	}
@@ -46,20 +46,20 @@ export class GitExtensionServiceImpl implements IGitExtensionService {
 			let extension: GitExtension;
 			try {
 				extension = await gitExtension!.activate();
-				this._logService.logger.info('[GitExtensionServiceImpl] Successfully activated the vscode.git extension.');
+				this._logService.info('[GitExtensionServiceImpl] Successfully activated the vscode.git extension.');
 			} catch (e) {
-				this._logService.logger.error(e, '[GitExtensionServiceImpl] Failed to activate the vscode.git extension.');
+				this._logService.error(e, '[GitExtensionServiceImpl] Failed to activate the vscode.git extension.');
 				return;
 			}
 
 			const onDidChangeGitExtensionEnablement = (enabled: boolean) => {
-				this._logService.logger.info(`[GitExtensionServiceImpl] Enablement state of the vscode.git extension: ${enabled}.`);
+				this._logService.info(`[GitExtensionServiceImpl] Enablement state of the vscode.git extension: ${enabled}.`);
 				this._extensionEnablement = enabled;
 				if (enabled) {
 					this._api = extension.getAPI(1);
 					this._onDidChange.fire({ enabled: true });
 
-					this._logService.logger.info('[GitExtensionServiceImpl] Successfully registered Git commit message provider.');
+					this._logService.info('[GitExtensionServiceImpl] Successfully registered Git commit message provider.');
 				} else {
 					this._api = undefined;
 					this._onDidChange.fire({ enabled: false });
@@ -73,7 +73,7 @@ export class GitExtensionServiceImpl implements IGitExtensionService {
 		if (gitExtension) {
 			initialize();
 		} else {
-			this._logService.logger.info('[GitExtensionServiceImpl] vscode.git extension is not yet activated.');
+			this._logService.info('[GitExtensionServiceImpl] vscode.git extension is not yet activated.');
 
 			const listener = vscode.extensions.onDidChange(() => {
 				if (!gitExtension && vscode.extensions.getExtension<GitExtension>('vscode.git')) {

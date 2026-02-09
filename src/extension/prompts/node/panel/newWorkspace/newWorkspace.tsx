@@ -79,7 +79,7 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 		}
 
 		progress?.report(new ChatResponseProgressPart(l10n.t('Determining user intent...')));
-		const endpoint = await this.endPointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endPointProvider.getChatEndpoint('copilot-fast');
 		const { messages } = await buildNewWorkspaceMetaPrompt(this.instantiationService, endpoint, this.props.promptContext);
 
 		if (token.isCancellationRequested) {
@@ -106,29 +106,27 @@ export class NewWorkspacePrompt extends PromptElement<NewWorkspacePromptProps, N
 			else if (instruction.intent === 'Project') {
 				if (this.props.useTemplates) {
 					const result = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [instruction.question], {}, undefined);
-					if (result && result.values.length > 0) {
-						progress.report(new ChatResponseProgressPart(l10n.t('Searching project template index...')));
-						const similarProjects = await this.projectTemplatesIndex.nClosestValues(result.values[0], 1);
-						if (similarProjects.length > 0) {
-							const content = similarProjects[0]?.split(':');
-							const org = content[0].trim();
-							const repo = content[1].trim();
-							const repoPath = content[2].trim() === '' ? '.' : content[2].trim();
+					progress.report(new ChatResponseProgressPart(l10n.t('Searching project template index...')));
+					const similarProjects = await this.projectTemplatesIndex.nClosestValues(result.values[0], 1);
+					if (similarProjects.length > 0) {
+						const content = similarProjects[0]?.split(':');
+						const org = content[0].trim();
+						const repo = content[1].trim();
+						const repoPath = content[2].trim() === '' ? '.' : content[2].trim();
 
-							if (org && repo && repoPath) {
-								const items = await reportProgressOnSlowPromise(progress, new ChatResponseProgressPart(l10n.t('Fetching project contents...')), this.repositoryService.getRepositoryItems(org, repo, repoPath), 500);
-								if (items.length > 0) {
-									let url: string;
-									if (repoPath === '.') {
-										url = `httpx://github.com/${org}/${repo}`;
-									} else {
-										url = path.dirname(items[0].html_url);
-									}
-
-									this._metadata = new NewWorkspaceGithubContentMetadata(org, repo, repoPath, items);
-									return { url: url };
-
+						if (org && repo && repoPath) {
+							const items = await reportProgressOnSlowPromise(progress, new ChatResponseProgressPart(l10n.t('Fetching project contents...')), this.repositoryService.getRepositoryItems(org, repo, repoPath), 500);
+							if (items.length > 0) {
+								let url: string;
+								if (repoPath === '.') {
+									url = `httpx://github.com/${org}/${repo}`;
+								} else {
+									url = path.dirname(items[0].html_url);
 								}
+
+								this._metadata = new NewWorkspaceGithubContentMetadata(org, repo, repoPath, items);
+								return { url: url };
+
 							}
 						}
 					}

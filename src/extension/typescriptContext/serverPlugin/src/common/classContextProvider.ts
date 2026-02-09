@@ -7,9 +7,9 @@ import TS from './typescript';
 const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
-import { ComputeCost, ContextComputeRunnable, ContextProvider, ContextResult, Search, type ComputeContextSession, type ContextComputeRunnableCollector, type RequestContext } from './contextProvider';
-import { CompletionContextKind, EmitMode, Priorities, SnippetKind, SpeculativeKind, type Range } from './protocol';
-import tss, { ClassDeclarations, ReferencedByVisitor, Symbols } from './typescripts';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
+import { EmitMode, Priorities, SpeculativeKind } from './protocol';
+import tss, { ClassDeclarations, ReferencedByVisitor, Symbols, type DirectSuperSymbolInfo } from './typescripts';
 
 export type TypeInfo = {
 	symbol: tt.Symbol;
@@ -44,7 +44,7 @@ export class ClassBlueprintSearch extends Search<SimilarClassDeclaration> {
 				if (sourceFile !== undefined) {
 					const localType = tss.getTokenAtPosition(sourceFile, type.pos);
 					if (ts.isExpressionWithTypeArguments(localType)) {
-						const symbol = symbols.getSymbolAtLocation(localType.expression);
+						const symbol = symbols.getLeafSymbolAtLocation(localType.expression);
 						if (symbol !== undefined && !this.getSymbolInfo(symbol).skip) {
 							return { symbol, type: localType, abstractMembers: typeInfo.abstractMembers };
 						}
@@ -259,54 +259,73 @@ export class ClassBlueprintSearch extends Search<SimilarClassDeclaration> {
 	}
 }
 
-export class SuperClassContextRunnable extends ContextComputeRunnable {
+export class SuperClassRunnable extends AbstractContextRunnable {
 
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Inherited) {
-		super(session, languageService, context, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'SuperClassRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
 		this.classDeclaration = classDeclaration;
 	}
 
-	public override compute(result: ContextResult, token: tt.CancellationToken): void {
-		token.throwIfCancellationRequested();
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.classDeclaration.getSourceFile();
+	}
+
+	protected override createRunnableResult(result: ContextResult): RunnableResult {
+		const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
+	}
+
+	protected override run(_result: RunnableResult, _token: tt.CancellationToken): void {
 		const symbols = this.symbols;
-		const clazz = symbols.getSymbolAtLocation(this.classDeclaration.name ?? this.classDeclaration);
+		const clazz = symbols.getLeafSymbolAtLocation(this.classDeclaration.name ?? this.classDeclaration);
 		if (clazz === undefined || !Symbols.isClass(clazz) || clazz.declarations === undefined) {
 			return;
 		}
 
-		const seen = this.getSeenSymbols();
-		const [extendsClass, extendsName] = symbols.getExtendsSymbol(clazz);
-		if (extendsClass !== undefined && extendsName !== undefined) {
-			const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
-			const [handled, cacheInfo] = this.handleSymbolIfCachedOrSeen(result, extendsClass, EmitMode.ClientBased, cacheScope);
-			if (handled) {
-				return;
+		const directSuperSymbolInfo: DirectSuperSymbolInfo | undefined = symbols.getDirectSuperSymbols(clazz);
+		if (directSuperSymbolInfo === undefined) {
+			return;
+		}
+		if (directSuperSymbolInfo.extends !== undefined) {
+			const { symbol, name } = directSuperSymbolInfo.extends;
+			if (symbol !== undefined && name !== undefined) {
+				this.handleSymbol(symbol, name);
 			}
-			const sourceFile = this.classDeclaration.getSourceFile();
-			const snippetBuilder: CodeSnippetBuilder = new CodeSnippetBuilder(this.session, symbols, sourceFile, seen);
-			snippetBuilder.addClassSymbol(extendsClass, extendsName, true, false);
-			result.addSnippet(snippetBuilder, SnippetKind.SuperClass, this.priority, SpeculativeKind.emit, cacheInfo);
-			seen.add(extendsClass);
+		}
+		if (directSuperSymbolInfo.implements !== undefined) {
+			for (const impl of directSuperSymbolInfo.implements) {
+				const { symbol, name } = impl;
+				if (symbol !== undefined && name !== undefined) {
+					this.handleSymbol(symbol, name);
+				}
+			}
 		}
 	}
 }
 
-class SimilarClassContextRunnable extends ContextComputeRunnable {
+class SimilarClassRunnable extends AbstractContextRunnable {
 
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, priority, ComputeCost.High);
+		super(session, languageService, context, 'SimilarClassRunnable', SnippetLocation.Primary, priority, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
 	}
 
-	public override compute(result: ContextResult, token: tt.CancellationToken): void {
-		token.throwIfCancellationRequested();
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.classDeclaration.getSourceFile();
+	}
+
+	protected override createRunnableResult(result: ContextResult): RunnableResult {
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit);
+	}
+
+	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
 		const program = this.getProgram();
 		const classDeclaration = this.classDeclaration;
-		const symbol = this.symbols.getSymbolAtLocation(classDeclaration.name ?? classDeclaration);
+		const symbol = this.symbols.getLeafSymbolAtLocation(classDeclaration.name ?? classDeclaration);
 		if (symbol === undefined || !Symbols.isClass(symbol)) {
 			return;
 		}
@@ -318,9 +337,9 @@ class SimilarClassContextRunnable extends ContextComputeRunnable {
 		if (foundInProgram === undefined || similarClass === undefined) {
 			return;
 		}
-		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile(), this.getSeenSymbols());
+		const code = new CodeSnippetBuilder(this.context, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
 		code.addDeclaration(similarClass.declaration);
-		result.addSnippet(code, SnippetKind.Blueprint, this.priority, SpeculativeKind.emit, undefined);
+		result.addSnippet(code, this.location, undefined);
 	}
 }
 
@@ -337,14 +356,14 @@ export class ClassContextProvider extends ContextProvider {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(classDeclaration: tt.ClassDeclaration, _tokenInfo: tss.TokenInfo) {
-		super(CompletionContextKind.Class);
+		super();
 		this.classDeclaration = classDeclaration;
 	}
 
-	public override provide(result: ContextComputeRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
+	public override provide(result: ContextRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
 		token.throwIfCancellationRequested();
 		result.addPrimary(
-			new SuperClassContextRunnable(session, languageService, context, this.classDeclaration),
+			new SuperClassRunnable(session, languageService, context, this.classDeclaration),
 		);
 	}
 }
@@ -354,21 +373,17 @@ export class WholeClassContextProvider extends ContextProvider {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(classDeclaration: tt.ClassDeclaration, _tokenInfo: tss.TokenInfo) {
-		super(CompletionContextKind.WholeClass, ts.SymbolFlags.Function);
+		super();
 		this.classDeclaration = classDeclaration;
 	}
 
-	public override getImportsByCacheRange(): Range {
-		return this._getImportsByCacheRange(this.classDeclaration);
-	}
-
-	public override provide(result: ContextComputeRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
+	public override provide(result: ContextRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
 		token.throwIfCancellationRequested();
 		result.addPrimary(
-			new SuperClassContextRunnable(session, languageService, context, this.classDeclaration),
+			new SuperClassRunnable(session, languageService, context, this.classDeclaration),
 		);
 		if (session.enableBlueprintSearch()) {
-			result.addPrimary(new SimilarClassContextRunnable(session, languageService, context, this.classDeclaration));
+			result.addPrimary(new SimilarClassRunnable(session, languageService, context, this.classDeclaration));
 		}
 	}
 }

@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { OpenAI } from '@vscode/prompt-tsx';
+import { Raw } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { getTextPart, roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
-import { getCAPITextPart } from '../../../platform/networking/common/openai';
-import { ChatParams } from '../../../platform/openai/node/fetch';
-import { IRequestLogger, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { ILoggedPendingRequest, IRequestLogger, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservable } from '../../../util/vs/base/common/observableInternal';
@@ -43,10 +42,10 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 	) {
 		super();
 
-		this.canReport = this._configurationService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
+		this.canReport = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.DebugReportFeedback);
 	}
 
-	private _findChatParamsForTurn(turn: Turn): ChatParams | undefined {
+	private _findChatParamsForTurn(turn: Turn): ILoggedPendingRequest | undefined {
 		for (const request of this._requestLogger.getRequests().reverse()) {
 			if (request.kind !== LoggedInfoKind.Request) {
 				continue;
@@ -55,7 +54,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 				continue;
 			}
 			if (request.entry.chatParams.ourRequestId === turn.id) {
-				return (<ChatParams>request.entry.chatParams);
+				return (<ILoggedPendingRequest>request.entry.chatParams);
 			}
 		}
 	}
@@ -79,7 +78,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 		let messagesDump = '';
 
 		if (latestMessages && latestMessages.length > 0) {
-			const messagesInfo = latestMessages.map(message => this._embedCodeblock(message.role.toUpperCase(), getCAPITextPart(message.content))).join('\n');
+			const messagesInfo = latestMessages.map(message => this._embedCodeblock(roleToString(message.role).toUpperCase(), getTextPart(message.content))).join('\n');
 			messagesDump = `\t${SEPARATOR}\n${this._headerSeparator()}PROMPT MESSAGES:\n${messagesInfo}`;
 		} else {
 			messagesDump = this._embedCodeblock(turn.request.type.toUpperCase(), turn.request.message);
@@ -104,15 +103,16 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 
 		if (params?.messages && params.messages.length > 0) {
 			const messagesInfo = params.messages.map(message => {
-				let content = getCAPITextPart(message.content);
-				if (message.copilot_cache_control) {
-					content += `\ncopilot_cache_control: ${JSON.stringify(message.copilot_cache_control)}`;
+				let content = getTextPart(message.content);
+
+				if (message.content.some(part => part.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint)) {
+					content += `\ncopilot_cache_control: { type: 'ephemeral' }`;
 				}
-				if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls?.length) {
+				if (message.role === Raw.ChatRole.Assistant && message.toolCalls?.length) {
 					if (content) {
 						content += '\n';
 					}
-					content += message.tool_calls.map(c => {
+					content += message.toolCalls.map(c => {
 						let argsStr = c.function.arguments;
 						try {
 							const parsedArgs = JSON.parse(c.function.arguments);
@@ -120,11 +120,11 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 						} catch (e) { }
 						return `🛠️ ${c.function.name} (${c.id}) ${argsStr}`;
 					}).join('\n');
-				} else if (message.role === OpenAI.ChatRole.Tool) {
-					content = `🛠️ ${message.tool_call_id}\n${message.content}`;
+				} else if (message.role === Raw.ChatRole.Tool) {
+					content = `🛠️ ${message.toolCallId}\n${content}`;
 				}
 
-				return this._embedCodeblock(message.role.toUpperCase(), content);
+				return this._embedCodeblock(roleToString(message.role).toUpperCase(), content);
 			}).join('\n');
 			messagesDump += `\t${SEPARATOR}\n${this._headerSeparator()}PROMPT MESSAGES:\n${messagesInfo}`;
 		} else {
@@ -136,7 +136,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 		const responseDump = this._embedCodeblock('ASSISTANT', turn.responseMessage?.message || '');
 		const workspaceState = await this._instantiationService.createInstance(WorkspaceStateSnapshotHelper).captureWorkspaceStateSnapshot([]);
 		const workspaceStateDump = this._embedCodeblock('WORKSPACE STATE', JSON.stringify(workspaceState, null, 2));
-		const toolsDump = params?.postOptions?.tools ? this._embedCodeblock('TOOLS', JSON.stringify(params.postOptions.tools, null, 2)) : '';
+		const toolsDump = params?.body?.tools ? this._embedCodeblock('TOOLS', JSON.stringify(params.body.tools, null, 2)) : '';
 		const metadata = this._embedCodeblock('METADATA', `requestID: ${turn.id}\nmodel: ${params?.model}`);
 		const edits = (await this._editLogService.getEditLog(turn.id))?.map((edit, i) => {
 			return this._embedCodeblock(`EDIT ${i + 1}`, JSON.stringify(edit, null, 2));
@@ -252,7 +252,7 @@ export function generateInlineChatSTest(turn: Turn): string[] | undefined {
 		return undefined;
 	}
 	const fileName = basename(requestInfo.uri);
-	const str = (val: any) => JSON.stringify(val);
+	const str = (val: unknown) => JSON.stringify(val);
 
 	return [
 		`stest({ description: 'Issue #XXXXX', language: ${str(requestInfo.languageId)}, model }, (testingServiceCollection) => {`,

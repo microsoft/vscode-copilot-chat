@@ -10,8 +10,9 @@ import { IFindFilesToolParams } from '../../src/extension/tools/node/findFilesTo
 import { deserializeWorkbenchState } from '../../src/platform/test/node/promptContextModel';
 import { ssuite, stest } from '../base/stest';
 import { generateToolTestRunner } from './toolSimTest';
+import { shouldSkipAgentTests } from './tools.stest';
 
-ssuite({ title: 'findFilesTool', subtitle: 'toolCalling', location: 'panel' }, () => {
+ssuite.optional(shouldSkipAgentTests, { title: 'findFilesTool', subtitle: 'toolCalling', location: 'panel' }, () => {
 	const scenarioFolder = path.join(__dirname, '..', 'test/scenarios/test-tools');
 	const getState = () => deserializeWorkbenchState(scenarioFolder, path.join(scenarioFolder, 'tools.state.json'));
 

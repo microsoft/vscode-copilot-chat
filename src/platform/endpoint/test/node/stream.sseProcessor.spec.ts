@@ -12,7 +12,7 @@ import { FinishedCompletion, SSEProcessor } from '../../../networking/node/strea
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
-import { IThinkingDataService } from '../../../thinking/node/thinkingDataService';
+import { isEncryptedThinkingDelta } from '../../../thinking/common/thinking';
 
 async function getAll<T>(iter: AsyncIterable<T>): Promise<T[]> {
 	const result: T[] = [];
@@ -40,13 +40,11 @@ const createSpyingFinishedCb = () => {
 suite('SSEProcessor', () => {
 	let telemetryService: ITelemetryService;
 	let logService: ILogService;
-	let thinkingData: IThinkingDataService;
 
 	beforeAll(() => {
 		const accessor = createPlatformServices().createTestingAccessor();
 		telemetryService = accessor.get(ITelemetryService);
 		logService = accessor.get(ILogService);
-		thinkingData = accessor.get(IThinkingDataService);
 	});
 
 	interface SimpleResult {
@@ -76,7 +74,6 @@ suite('SSEProcessor', () => {
 			telemetryService,
 			1,
 			createFakeStreamResponse(''),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -88,7 +85,6 @@ suite('SSEProcessor', () => {
 			telemetryService,
 			1,
 			createFakeStreamResponse('data: [DONE]\n'),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -100,7 +96,6 @@ suite('SSEProcessor', () => {
 			telemetryService,
 			1,
 			createFakeStreamResponse('data: {\n'),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -112,7 +107,6 @@ suite('SSEProcessor', () => {
 			telemetryService,
 			1,
 			createFakeStreamResponse('data: {}\n'),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -127,7 +121,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -147,7 +140,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -169,7 +161,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -192,7 +183,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -212,7 +202,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -232,7 +221,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -254,7 +242,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -276,7 +263,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -298,7 +284,6 @@ data: [DONE]
 			telemetryService,
 			2,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -324,7 +309,6 @@ data: [DONE]
 			telemetryService,
 			2,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -350,7 +334,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -372,7 +355,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -394,7 +376,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -416,7 +397,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -440,7 +420,6 @@ data: [DONE]
 			telemetryService,
 			2,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -468,7 +447,6 @@ data: [DONE]
 			telemetryService,
 			2,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -497,7 +475,6 @@ data: [DONE]
 			telemetryService,
 			2,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => {
 			callCount++;
@@ -527,7 +504,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assert.ok(results[0].usage);
@@ -551,7 +527,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			responseStream,
-			thinkingData,
 			cts.token
 		);
 		const results = await getAll(processor.processSSE());
@@ -570,7 +545,6 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assert.ok(results[0].usage);
@@ -592,21 +566,40 @@ data: [DONE]
 			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_id":"cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf"},"index":0}],"created":1751050807,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
 			`data: [DONE]\n`,
 		];
-		thinkingData.clear();
 		const processor = await SSEProcessor.create(
 			logService,
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
 		);
 
-		await getAll(processor.processSSE());
-		const thinking = thinkingData.consume('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+		let thinkingText: string | string[] | undefined = undefined;
+		let thinkingId: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
-		expect(thinking).toBeDefined();
-		expect(thinking?.cot_summary).toBeUndefined();
-		expect(thinking?.cot_id).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+
+		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
+				if (delta.thinking.text) {
+					if (thinkingText === undefined) {
+						thinkingText = '';
+					}
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
+				}
+				if (delta.thinking.id) {
+					thinkingId = delta.thinking.id;
+				}
+				if (delta.thinking.metadata) {
+					metadata = delta.thinking.metadata;
+				}
+			}
+			return Promise.resolve(undefined);
+		}));
+
+		expect(thinkingText).toBeDefined();
+		expect(thinkingText).toBe(' Analyzing');
+		expect(thinkingId).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+		expect(metadata).toEqual({ toolId: 'call_bNK0HIaqlEFyZK6wEz8bXDXJ' });
 	});
 
 	test('stream containing only cot_id', async function () {
@@ -619,21 +612,40 @@ data: [DONE]
 			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_id":"cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf"},"index":0}],"created":1751050807,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
 			`data: [DONE]\n`,
 		];
-		thinkingData.clear();
 		const processor = await SSEProcessor.create(
 			logService,
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
-			thinkingData
+
 		);
 
-		await getAll(processor.processSSE());
-		const thinking = thinkingData.consume('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+		let thinkingText: string | string[] | undefined = undefined;
+		let thinkingId: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
-		expect(thinking).toBeDefined();
-		expect(thinking?.cot_summary).toBeUndefined();
-		expect(thinking?.cot_id).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+
+		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
+				if (delta.thinking.text) {
+					if (thinkingText === undefined) {
+						thinkingText = '';
+					}
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
+				}
+				if (delta.thinking.id) {
+					thinkingId = delta.thinking.id;
+				}
+				if (delta.thinking.metadata) {
+					metadata = delta.thinking.metadata;
+				}
+			}
+			return Promise.resolve(undefined);
+		}));
+
+		expect(thinkingText).toBeUndefined();
+		expect(thinkingId).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+		expect(metadata).toBeUndefined();
 	});
 
 	suite('real world snapshots', () => {
@@ -645,7 +657,7 @@ data: [DONE]
 				telemetryService,
 				expectedNumChoices,
 				createFakeStreamResponse(response),
-				thinkingData
+
 			);
 			const results = await getAll(processor.processSSE(finishedCb));
 			return { collection, results };

@@ -20,7 +20,7 @@ abstract class NewWorkspaceContentGenerator {
 	) { }
 
 	public async generate(promptArgs: NewWorkspaceContentsPromptProps, token: CancellationToken): Promise<string> {
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, this.promptType, promptArgs);
 		const prompt = await promptRenderer.render();
 

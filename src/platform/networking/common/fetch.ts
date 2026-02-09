@@ -3,36 +3,32 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Response } from './fetcherService';
-import { ChoiceLogProbs } from './openai';
+import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
+import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
+import { IHeaders } from './fetcherService';
+import { ChoiceLogProbs, FilterReason } from './openai';
 
 
 // Request helpers
 
 export interface RequestId {
 	headerRequestId: string;
+	gitHubRequestId: string;
 	completionId: string;
 	created: number;
 	serverExperiments: string;
 	deploymentId: string;
 }
 
-export function getRequestId(response: Response, json?: any): RequestId {
+export function getRequestId(headers: IHeaders, json?: any): RequestId {
 	return {
-		headerRequestId: response.headers.get('x-request-id') || '',
+		headerRequestId: headers.get('x-request-id') || '',
+		gitHubRequestId: headers.get('x-github-request-id') || '',
 		completionId: json && json.id ? json.id : '',
 		created: json && json.created ? json.created : 0,
-		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
-		deploymentId: response.headers.get('azureml-model-deployment') || '',
+		serverExperiments: headers.get('X-Copilot-Experiment') || '',
+		deploymentId: headers.get('azureml-model-deployment') || '',
 	};
-}
-
-export function getProcessingTime(response: Response): number {
-	const reqIdStr = response.headers.get('openai-processing-ms');
-	if (reqIdStr) {
-		return parseInt(reqIdStr, 10);
-	}
-	return 0;
 }
 
 // Request methods
@@ -89,8 +85,26 @@ export interface ICopilotToolCall {
 	id: string;
 }
 
+export interface IServerToolCall {
+	/** Indicates this is a server-side tool call (e.g., tool_search, websearch) - not validated/executed by client */
+	isServer: true;
+	name: string;
+	id: string;
+	/** The parsed input arguments for this tool call */
+	args?: unknown;
+	/** The parsed result returned by the server for this tool call */
+	result?: unknown;
+}
+
+export interface ICopilotToolCallStreamUpdate {
+	name: string;
+	arguments: string;
+	id?: string;
+}
+
 export interface ICopilotBeginToolCall {
 	name: string;
+	id?: string;
 }
 
 /**
@@ -107,15 +121,6 @@ export interface ICopilotError {
 	message: string;
 	agent: string;
 	identifier?: string;
-}
-
-export interface ICopilotKnowledgeBaseReference {
-	type: 'github.knowledge-base';
-	id: string;
-	data: {
-		type: 'knowledge-base';
-		id: string;
-	};
 }
 
 export function isCopilotWebReference(reference: unknown) {
@@ -142,10 +147,121 @@ export interface IResponseDelta {
 	copilotReferences?: ICopilotReference[];
 	copilotErrors?: ICopilotError[];
 	copilotToolCalls?: ICopilotToolCall[];
+	copilotToolCallStreamUpdates?: ICopilotToolCallStreamUpdate[];
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
+	thinking?: ThinkingDelta | EncryptedThinkingDelta;
+	retryReason?: FilterReason | 'network_error' | 'server_error';
+	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
+	statefulMarker?: string;
+	/** Context management information from Anthropic Messages API */
+	contextManagement?: ContextManagementResponse;
+	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
+	serverToolCalls?: IServerToolCall[];
 }
+
+export const enum ResponsePartKind {
+	ContentDelta,
+	Content,
+	ToolCallDelta,
+	ToolCall,
+	Annotation,
+	Confirmation,
+	Error,
+	Thinking,
+	ThinkingDelta,
+}
+
+/** Part that contains incremental data added to the output */
+export interface IContentDeltaResponsePart {
+	kind: ResponsePartKind.ContentDelta;
+	/** Part ID corresponds to the later IContentResponsePart  */
+	partId: string;
+	/** Incremental content chunk */
+	delta: string;
+}
+
+/** Part that is emitted once the content is finished */
+export interface IContentResponsePart {
+	kind: ResponsePartKind.Content;
+	/** Part ID of the IContentDeltaResponsePart */
+	partId: string;
+	/** Finalized content */
+	content: string;
+	/** Log probabilities, if requested */
+	logProbs?: ChoiceLogProbs;
+}
+
+/** Part that contains incremental data for a tool call that's being generated */
+export interface IToolCallDeltaResponsePart {
+	kind: ResponsePartKind.ToolCallDelta;
+	/** Part ID corresponds to the later IToolCallResponsePart  */
+	partId: string;
+	/** Name of the function being called */
+	name: string;
+	/** Arguments delta */
+	delta: string;
+}
+
+/** Part that is emitted once a tool call is ready. */
+export interface IToolCallResponsePart extends ICopilotToolCall {
+	kind: ResponsePartKind.ToolCall;
+	/** Part ID of the IToolCallDeltaResponsePart */
+	partId: string;
+}
+
+/** Part that is emitted when the model wants to ask the user for confirmation. */
+export interface IConfirmationResponsePart extends ICopilotConfirmation {
+	kind: ResponsePartKind.Confirmation;
+}
+
+/** Part that is emitted when the model want to add annotations to a response. */
+export interface IAnnotationResponsePart {
+	kind: ResponsePartKind.Annotation;
+	codeVulnAnnotations?: ICodeVulnerabilityAnnotation[];
+	ipCitations?: IIPCodeCitation[];
+	copilotReferences?: ICopilotReference[];
+}
+
+/** Part that is emitted when the model begins thinking. */
+export interface IThinkingResponseDeltaPart {
+	kind: ResponsePartKind.ThinkingDelta;
+	/** Part ID of the IThinkingResponsePart */
+	partId: string;
+	/** Delta of the thinking process */
+	delta: ThinkingDelta;
+}
+
+/**
+ * Part that is emitted when the model finishes thinking.
+ * WARN: currently CAPI never signals the end of thinking.
+ */
+export interface IThinkingResponsePart {
+	kind: ResponsePartKind.Thinking;
+	/** Part ID of IThinkingResponseDeltaPart */
+	partId: string;
+	/** Summary text shown to the user. */
+	data: ThinkingData;
+}
+
+/** Part that is emitted when the model encounters an error. */
+export interface IErrorResponsePart {
+	kind: ResponsePartKind.Error;
+	error: ICopilotError;
+}
+
+export type ResponsePart =
+	| IContentDeltaResponsePart
+	| IContentResponsePart
+	| IToolCallDeltaResponsePart
+	| IToolCallResponsePart
+	| IAnnotationResponsePart
+	| IThinkingResponseDeltaPart
+	| IThinkingResponsePart
+	| IConfirmationResponsePart
+	| IErrorResponsePart;
+
 
 export interface FinishedCallback {
 	/**
@@ -166,6 +282,14 @@ export interface OpenAiFunctionDef {
 export interface OpenAiFunctionTool {
 	function: OpenAiFunctionDef;
 	type: 'function';
+}
+
+export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
+	type: 'function';
+}
+
+export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool | AnthropicMessagesTool): tool is OpenAiFunctionTool {
+	return (tool as OpenAiFunctionTool).function !== undefined;
 }
 
 /**
@@ -237,4 +361,7 @@ export interface OptionalChatRequestParams {
 
 	prediction?: Prediction;
 	logprobs?: boolean;
+
+	/** Responses API */
+	previous_response_id?: string;
 }

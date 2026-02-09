@@ -11,13 +11,17 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatImageMimeType, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { RunNotebookCellOutput } from './runNotebookCellTool';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { getCellIdMap } from '../../../platform/notebook/common/helpers';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { ILogService } from '../../../platform/log/common/logService';
+import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 
 export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellOutputToolParams> {
 	public static toolName = ToolName.ReadCellOutput;
@@ -30,6 +34,8 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@INotebookService private readonly notebookService: INotebookService,
+		@ILogService private readonly logger: ILogService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetNotebookCellOutputToolParams>, token: vscode.CancellationToken) {
@@ -42,19 +48,22 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 		}
 		// Sometimes we get the notebook cell Uri in the resource.
 		// Resolve this to notebook.
-		uri = findNotebook(uri, this.workspaceService.notebookDocuments)?.uri || uri;
-
-		let notebook: vscode.NotebookDocument;
+		let notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
+		if (notebook) {
+			uri = notebook.uri;
+		} else if (!this.notebookService.hasSupportedNotebooks(uri)) {
+			sendOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'notNotebookUri');
+			throw new Error(`Use this tool only with Notebook files, the file ${uri.toString()} is not a notebook.`);
+		}
 		try {
-			notebook = await this.workspaceService.openNotebookDocument(uri);
+			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
 		} catch (ex) {
 			sendOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'failedToOpenNotebook');
-			throw ex;
+			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
+			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
 		}
 
-		const altDocProvider = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
-
-		const cell = altDocProvider.getCell(notebook, cellId);
+		const cell = getCellIdMap(notebook).get(cellId);
 		if (!cell) {
 			sendOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'cellNotFound');
 			throw new Error(`Cell not found, use the ${ToolName.ReadFile} file tool to get the latest content of the notebook file.`);

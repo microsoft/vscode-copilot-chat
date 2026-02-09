@@ -3,21 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Command } from 'vscode';
 import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
+import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
-import { ILogService } from '../../../../platform/log/common/logService';
+import { ILogService, ILogger } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
-import { createTracer, ITracer } from '../../../../util/common/tracing';
-import { timeout } from '../../../../util/vs/base/common/async';
+import { raceCancellation, timeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { INextEditProvider } from '../../node/nextEditProvider';
+import { INextEditProvider, NESInlineCompletionContext } from '../../node/nextEditProvider';
 import { DiagnosticsTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
 import { INextEditDisplayLocation, INextEditResult } from '../../node/nextEditResult';
 import { VSCodeWorkspace } from '../parts/vscodeWorkspace';
@@ -32,7 +32,9 @@ export class DiagnosticsNextEditResult implements INextEditResult {
 			displayLocation?: INextEditDisplayLocation;
 			item: DiagnosticCompletionItem;
 			showRangePreference?: ShowNextEditPreference;
+			action?: Command;
 		} | undefined,
+		public workInProgress: boolean = false
 	) { }
 }
 
@@ -50,70 +52,68 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	}
 
 	private readonly _diagnosticsCompletionHandler: DiagnosticsCompletionProcessor;
-	private _tracer: ITracer;
+	private _logger: ILogger;
 
 	constructor(
 		workspace: VSCodeWorkspace,
-		private readonly _historyContextProvider: NesHistoryContextProvider,
+		git: ObservableGit,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'DiagnosticsNextEditProvider'], (s) => logService.logger.trace(s));
-		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, this._historyContextProvider));
+		this._logger = logService.createSubLogger(['NES', 'DiagnosticsNextEditProvider']);
+		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 
-	async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async getNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
 		this._lastTriggerTime = Date.now();
-
-		if (cancellationToken.isCancellationRequested) {
-			this._tracer.trace('cancellationRequested before started');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
-		}
-
-		let diagnosticEditResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
-		if (!diagnosticEditResult.item) {
-			diagnosticEditResult = await this._diagnosticsCompletionHandler.getNextUpdatedState(docId, cancellationToken);
-		}
-
-		return this._createNextEditResult(diagnosticEditResult, logContext, tb);
+		throw new BugIndicatingError('DiagnosticsNextEditProvider does not support getNextEdit, use runUntilNextEdit instead');
 	}
 
-	async runUntilNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
+	async runUntilNextEdit(docId: DocumentId, context: NESInlineCompletionContext, logContext: InlineEditRequestLogContext, delayStart: number, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {
 		try {
 			await timeout(delayStart);
 			if (cancellationToken.isCancellationRequested) {
-				this._tracer.trace('cancellationRequested before started');
+				this._logger.trace('cancellationRequested before started');
 				return new DiagnosticsNextEditResult(logContext.requestId, undefined);
 			}
 
 			// Check if the last computed edit is still valid
-			let completionResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
-			let telemetry = new DiagnosticsTelemetryBuilder();
-			let diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
-
-			// If the last computed edit is not valid, wait until the state is updated or the operation is cancelled
-			while (!diagnosticEditResult.result && !cancellationToken.isCancellationRequested) {
-				completionResult = await this._diagnosticsCompletionHandler.getNextUpdatedState(docId, cancellationToken);
-				telemetry = new DiagnosticsTelemetryBuilder();
-				diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
+			const initialResult = this._getResultForCurrentState(docId, logContext, tb);
+			if (initialResult.result) {
+				return initialResult;
 			}
 
-			telemetry.populate(tb);
+			const asyncResult = await raceCancellation(new Promise<DiagnosticsNextEditResult>((resolve) => {
+				const onDidChangeDisposable = this._diagnosticsCompletionHandler.onDidChange((hasResult) => {
+					const completionResult = this._getResultForCurrentState(docId, logContext, tb);
+					if (completionResult.result || !completionResult.workInProgress) {
+						resolve(completionResult);
+						onDidChangeDisposable.dispose();
+					}
+				});
+			}), cancellationToken);
 
-			// TODO: Better incorporate diagnostics logging
-			if (completionResult.logContext) {
-				completionResult.logContext.getLogs().forEach(log => logContext.addLog(log));
-			}
-
-			return diagnosticEditResult;
+			return asyncResult ?? initialResult;
 		} catch (error) {
 			const errorMessage = `Error occurred while waiting for diagnostic edit: ${errors.toString(errors.fromUnknown(error))}`;
 			logContext.addLog(errorMessage);
-			this._tracer.trace(errorMessage);
+			this._logger.trace(errorMessage);
 			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+		} finally {
+			this._logger.trace('DiagnosticsInlineCompletionProvider runUntilNextEdit complete' + (cancellationToken.isCancellationRequested ? ' (cancelled)' : ''));
 		}
+	}
+
+	private _getResultForCurrentState(docId: DocumentId, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult {
+		const completionResult = this._diagnosticsCompletionHandler.getCurrentState(docId);
+		const telemetry = new DiagnosticsTelemetryBuilder();
+		const diagnosticEditResult = this._createNextEditResult(completionResult, logContext, telemetry);
+		if (diagnosticEditResult.result) {
+			telemetry.populate(tb);
+		}
+		return diagnosticEditResult;
 	}
 
 	private _createNextEditResult(diagnosticEditResult: DiagnosticCompletionState, logContext: InlineEditRequestLogContext, tb: DiagnosticsTelemetryBuilder): DiagnosticsNextEditResult {
@@ -122,28 +122,28 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 		// Diagnostics might not have updated yet since accepting a diagnostics based NES
 		if (item && this._hasRecentlyBeenAccepted(item)) {
 			tb.addDroppedReason(`${item.type}:recently-accepted`);
-			this._tracer.trace('recently accepted');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+			this._logger.trace('recently accepted');
+			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
 		telemetry.droppedReasons.forEach(reason => tb.addDroppedReason(reason));
 		tb.setDiagnosticRunTelemetry(telemetry);
 
 		if (!item) {
-			this._tracer.trace('no diagnostic edit result');
-			return new DiagnosticsNextEditResult(logContext.requestId, undefined);
+			this._logger.trace('no diagnostic edit result');
+			return new DiagnosticsNextEditResult(logContext.requestId, undefined, diagnosticEditResult.workInProgress);
 		}
 
 		tb.setType(item.type);
 		logContext.setDiagnosticsResult(item.getRootedLineEdit());
 
-		this._tracer.trace(`created next edit result`);
+		this._logger.trace(`created next edit result`);
 
 		return new DiagnosticsNextEditResult(logContext.requestId, {
 			edit: item.toOffsetEdit(),
 			displayLocation: item.nextEditDisplayLocation,
 			item
-		});
+		}, diagnosticEditResult.workInProgress);
 	}
 
 	handleShown(suggestion: DiagnosticsNextEditResult): void { }

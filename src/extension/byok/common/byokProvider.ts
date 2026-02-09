@@ -2,12 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseProviderMetadata, Disposable } from 'vscode';
+import * as l10n from '@vscode/l10n';
+import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart, LanguageModelToolResultPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { TokenizerType } from '../../../util/common/tokenizer';
-import { localize } from '../../../util/vs/nls';
 
 export const enum BYOKAuthType {
 	/**
@@ -29,6 +30,8 @@ interface BYOKBaseModelConfig {
 	capabilities?: BYOKModelCapabilities;
 }
 
+export type LMResponsePart = LanguageModelTextPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart | LanguageModelToolResultPart;
+
 export interface BYOKGlobalKeyModelConfig extends BYOKBaseModelConfig {
 	apiKey: string;
 }
@@ -46,10 +49,18 @@ export type BYOKModelConfig = BYOKGlobalKeyModelConfig | BYOKPerModelConfig | BY
 
 export interface BYOKModelCapabilities {
 	name: string;
+	url?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
 	toolCalling: boolean;
 	vision: boolean;
+	thinking?: boolean;
+	adaptiveThinking?: boolean;
+	streaming?: boolean;
+	editTools?: EndpointEditToolName[];
+	requestHeaders?: Record<string, string>;
+	supportedEndpoints?: ModelSupportedEndpoint[];
+	zeroDataRetentionEnabled?: boolean;
 }
 
 export interface BYOKModelRegistry {
@@ -76,24 +87,24 @@ export function isNoAuthConfig(config: BYOKModelConfig): config is BYOKNoAuthMod
 	return !('apiKey' in config) && !('deploymentUrl' in config);
 }
 
-export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): ChatResponseProviderMetadata {
+export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): LanguageModelChatInformation {
 	const outputTokens = chatModelInfo.capabilities.limits?.max_output_tokens ?? 4096;
 	const inputTokens = chatModelInfo.capabilities.limits?.max_prompt_tokens ?? ((chatModelInfo.capabilities.limits?.max_context_window_tokens || 64000) - outputTokens);
 	return {
+		id: chatModelInfo.id,
 		family: chatModelInfo.capabilities.family,
-		cost: chatModelInfo.capabilities.family, // This is a bit odd, but this is what renders in the grey side text
-		description: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
-		vendor: 'copilot-byok',
+		tooltip: l10n.t('{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
 		version: '1.0.0',
 		maxOutputTokens: outputTokens,
 		maxInputTokens: inputTokens,
 		name: chatModelInfo.name,
 		isUserSelectable: true,
+		multiplierNumeric: 0,
 		capabilities: {
-			agentMode: chatModelInfo.capabilities.supports.tool_calls,
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
-			vision: chatModelInfo.capabilities.supports.vision,
-		}
+			imageInput: chatModelInfo.capabilities.supports.vision,
+		},
+		requiresAuthorization: true
 	};
 }
 
@@ -105,17 +116,19 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	}
 	const modelName = knownModelInfo?.name || modelId;
 	const contextWinow = knownModelInfo ? (knownModelInfo.maxInputTokens + knownModelInfo.maxOutputTokens) : 128000;
-	return {
+	const modelInfo: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',
-			family: providerName,
+			family: modelId,
 			supports: {
-				streaming: true,
+				streaming: knownModelInfo?.streaming ?? true,
 				tool_calls: !!knownModelInfo?.toolCalling,
-				vision: !!knownModelInfo?.vision
+				vision: !!knownModelInfo?.vision,
+				thinking: !!knownModelInfo?.thinking,
+				adaptive_thinking: !!knownModelInfo?.adaptiveThinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {
@@ -126,12 +139,111 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		},
 		is_chat_default: false,
 		is_chat_fallback: false,
-		model_picker_enabled: true
+		model_picker_enabled: true,
+		supported_endpoints: knownModelInfo?.supportedEndpoints,
+		zeroDataRetentionEnabled: knownModelInfo?.zeroDataRetentionEnabled
+	};
+	if (knownModelInfo?.requestHeaders && Object.keys(knownModelInfo.requestHeaders).length > 0) {
+		modelInfo.requestHeaders = { ...knownModelInfo.requestHeaders };
+	}
+	return modelInfo;
+}
+
+export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOKKnownModels | undefined): LanguageModelChatInformation[] {
+	if (!knownModels) {
+		return [];
+	}
+	return Object.entries(knownModels).map(([id, capabilities]) => byokKnownModelToAPIInfo(providerName, id, capabilities));
+}
+
+export function byokKnownModelToAPIInfo(providerName: string, id: string, capabilities: BYOKModelCapabilities): LanguageModelChatInformation {
+	return {
+		id,
+		name: capabilities.name,
+		version: '1.0.0',
+		maxOutputTokens: capabilities.maxOutputTokens,
+		maxInputTokens: capabilities.maxInputTokens,
+		detail: providerName,
+		family: id,
+		tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+		multiplierNumeric: 0,
+		capabilities: {
+			toolCalling: capabilities.toolCalling,
+			imageInput: capabilities.vision
+		}
 	};
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
+export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
+	if (isScenarioAutomation) {
+		return true;
+	}
+
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
 	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
 	return byokAllowed;
+}
+
+/**
+ * Result of handling an API key update operation.
+ */
+export interface HandleAPIKeyUpdateResult {
+	/**
+	 * The new API key value, or undefined if the key was deleted or operation was cancelled.
+	 */
+	apiKey: string | undefined;
+	/**
+	 * Whether the API key was deleted (user entered empty string during reconfigure).
+	 */
+	deleted: boolean;
+	/**
+	 * Whether the operation was cancelled (user dismissed the input).
+	 */
+	cancelled: boolean;
+}
+
+/**
+ * Storage service interface for BYOK API key operations.
+ * This is a minimal interface to avoid importing the full IBYOKStorageService in common code.
+ */
+export interface IBYOKStorageServiceLike {
+	getAPIKey(providerName: string, modelId?: string): Promise<string | undefined>;
+	storeAPIKey(providerName: string, apiKey: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+	deleteAPIKey(providerName: string, authType: BYOKAuthType, modelId?: string): Promise<void>;
+}
+
+/**
+ * Handles API key update flow for BYOK providers using a consistent pattern.
+ * This utility handles all three cases from promptForAPIKey:
+ * - undefined: user cancelled/dismissed the input
+ * - empty string: user wants to delete the saved key (only when reconfiguring)
+ * - non-empty string: user provided a new API key
+ *
+ * @param providerName - Name of the provider (e.g., 'Anthropic', 'Gemini')
+ * @param storageService - Storage service for API key operations
+ * @param promptForAPIKeyFn - Function to prompt user for API key
+ * @returns Result containing the new API key (if any) and status flags
+ */
+export async function handleAPIKeyUpdate(
+	providerName: string,
+	storageService: IBYOKStorageServiceLike,
+	promptForAPIKeyFn: (providerName: string, reconfigure: boolean) => Promise<string | undefined>
+): Promise<HandleAPIKeyUpdateResult> {
+	const existingKey = await storageService.getAPIKey(providerName);
+	const isReconfiguring = existingKey !== undefined;
+
+	const newAPIKey = await promptForAPIKeyFn(providerName, isReconfiguring);
+
+	if (newAPIKey === undefined) {
+		// User cancelled/dismissed the input
+		return { apiKey: undefined, deleted: false, cancelled: true };
+	} else if (newAPIKey === '') {
+		// User wants to delete the key (only valid when reconfiguring)
+		await storageService.deleteAPIKey(providerName, BYOKAuthType.GlobalApiKey);
+		return { apiKey: undefined, deleted: true, cancelled: false };
+	} else {
+		// User provided a new API key
+		await storageService.storeAPIKey(providerName, newAPIKey, BYOKAuthType.GlobalApiKey);
+		return { apiKey: newAPIKey, deleted: false, cancelled: false };
+	}
 }

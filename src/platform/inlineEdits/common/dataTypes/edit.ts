@@ -14,7 +14,7 @@ import { RootedLineEdit } from './rootedLineEdit';
 export class RootedEdit<TEdit extends BaseStringEdit<BaseStringReplacement<any>, any> = StringEdit> {
 
 	public static toLineEdit(edit: RootedEdit<BaseStringEdit<BaseStringReplacement<any>, any>>): LineEdit {
-		return LineEdit.fromEdit(edit.edit, edit.base);
+		return LineEdit.fromStringEdit(edit.edit as StringEdit, edit.base);
 	}
 
 	constructor(

@@ -76,7 +76,7 @@ export const Toolbar = mobxlite.observer(
 );
 
 const ThemeToggler = ({ theme, toggleTheme }: { theme: ThemeKind; toggleTheme: () => void }) => (
-	<Tooltip content="Toggle workbench theme" relationship="label">
+	<Tooltip content='Toggle workbench theme' relationship='label'>
 		<ToggleButton
 			appearance='subtle'
 			icon={theme === 'dark' ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />}
@@ -93,7 +93,7 @@ const ModeToggler = ({ testSource, onFiltererChange }: { testSource: TestSourceV
 			testSource.value = testSource.value === TestSource.External ? TestSource.Local : TestSource.External;
 			onFiltererChange(undefined);
 		})}
-		title="Switch to workbench mode suited for viewing simulations in Azure ML"
+		title='Switch to workbench mode suited for viewing simulations in Azure ML'
 	>
 		Switch to {testSource.value === TestSource.Local ? 'AML' : 'Local'} mode
 	</Button>

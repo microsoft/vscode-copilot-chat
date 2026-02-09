@@ -2,55 +2,55 @@
 	{
 		"name": "setupTests - recommend [panel] - dotnetCoreApp",
 		"requests": [
-			"30fb18045640f2d296af052bc0e8b19e320e228b9c8f5565d1f6e2b4f32bd84d"
+			"74c4ceda4059852708bdda4fd8f18b1cbf75a5d93437bb6e9f8c69ae3dfa2495"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - goWebApp",
 		"requests": [
-			"3f31943322d21b86faebb1c160d723ac379bbace5ed8840dba0086f13cbd6bb0"
+			"9b35d191f2af38536df51f8eafbd510147c4d0632a0dee1acb888a7215207880"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - javaSpringApp",
 		"requests": [
-			"40f7ed643c976e5324790e5bcbfe6127f3401d35f6a699edfd00361cbf7d6c82"
+			"58eac1a10447b0154ca345eb0b3047f01ed6c91a4d44bc5f22f55b1a28939ba9"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - nodeApp",
 		"requests": [
-			"c1a8b4a7f7d8af34766bfd1fa45971a6840afa1e6037343ec158e53a083632e7"
+			"066d5296b36b65db598f162b4afd60f6aba8a5fef8f4dedc5115194ece3ed7dd"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - nodeExpressApp",
 		"requests": [
-			"1d524f7bab6ac6e9d9706e0258f59ee99cbaa3882676e2a0458a0c81ae6caa60"
+			"8bad41ec721506ca92d24b4fb0cf4f0b06baa35f91a0744544c0c9c37b7d9d64"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - phpLaravelApp",
 		"requests": [
-			"5fc67da548e64eb08f8863107259e19bbdfa9343d06ae21f16bcf5236fa873e6"
+			"77ba40a27d6a5a5e35400684de25bf39a5628445d9bd6eef721f4e860938e3e1"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - pythonFlaskApp",
 		"requests": [
-			"86c608c8fc6699d4d1369da651787039473742523e3c7b567dc40538a098d4e8"
+			"fb66a9e299e9a8a539bf590031322498e0d060f9c5a2be31b3ae896f8dd03550"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - rubyOnRailsApp",
 		"requests": [
-			"649e3a4f6e74cbb9187e3187a8731504f9f2e9ebea7f5f959973a8a58f27af81"
+			"ca10f68bfe1a3f5689ab5fc01831f16504bbeb21e7a5dbf4489941c7dadb1ffc"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - webAppWithWebpack",
 		"requests": [
-			"2bcf463e2cd41a166d45d511192686c850e76b42dad8fa19fe332601f1351764"
+			"82197ea5f00a4cf294e36883601da4f9e7039289e6da1bfe83ccd12bfe92df24"
 		]
 	}
 ]

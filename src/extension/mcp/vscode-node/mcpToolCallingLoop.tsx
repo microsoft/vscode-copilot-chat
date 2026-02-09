@@ -3,19 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Raw } from '@vscode/prompt-tsx';
-import { randomUUID } from 'crypto';
-import type { CancellationToken, ChatRequest, LanguageModelToolInformation, Progress } from 'vscode';
+import type { CancellationToken, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
-import { IToolCallingLoopOptions, ToolCallingLoop } from '../../intents/node/toolCallingLoop';
+import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IBuildPromptResult } from '../../prompt/node/intents';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -37,20 +38,20 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 	}
 
-	private async getEndpoint(request: ChatRequest) {
-		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
-		if (!endpoint.supportsToolCalls) {
-			endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
-		}
-		return endpoint;
+	private async getEndpoint() {
+		return await this.endpointProvider.getChatEndpoint('copilot-fast');
 	}
 
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
-		const endpoint = await this.getEndpoint(this.options.request);
+		const endpoint = await this.getEndpoint();
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -64,38 +65,35 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
+		if (this.options.conversation.turns.length > 5) {
+			return []; // force a response
+		}
+
 		return [{
 			description: QuickInputTool.description,
 			name: QuickInputTool.ID,
 			inputSchema: QuickInputTool.schema,
+			source: undefined,
 			tags: [],
 		}, {
 			description: QuickPickTool.description,
 			name: QuickPickTool.ID,
 			inputSchema: QuickPickTool.schema,
+			source: undefined,
 			tags: [],
 		}];
 	}
 
-	protected async fetch(messages: Raw.ChatMessage[], finishedCb: FinishedCallback, requestOptions: OptionalChatRequestParams, firstFetchCall: boolean, token: CancellationToken): Promise<ChatResponse> {
-		const endpoint = await this.getEndpoint(this.options.request);
-		return endpoint.makeChatRequest(
-			McpToolCallingLoop.ID,
-			messages,
-			finishedCb,
-			token,
-			ChatLocation.Agent,
-			undefined,
-			{
-				...requestOptions,
+	protected async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
+		const endpoint = await this.getEndpoint();
+		return endpoint.makeChatRequest2({
+			...opts,
+			debugName: McpToolCallingLoop.ID,
+			location: ChatLocation.Agent,
+			requestOptions: {
+				...opts.requestOptions,
 				temperature: 0
 			},
-			firstFetchCall,
-			{
-				messageId: randomUUID(),
-				messageSource: McpToolCallingLoop.ID
-			},
-			{ intent: true }
-		);
+		}, token);
 	}
 }

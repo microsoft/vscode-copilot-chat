@@ -6,11 +6,14 @@
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { BaseStringEdit, StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
+import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
 import { RootedEdit } from './edit';
+
+ensureDependenciesAreSet();
 
 export class RootedLineEdit {
 	public static fromEdit<TEdit extends BaseStringEdit>(edit: RootedEdit<TEdit>): RootedLineEdit {
-		const lineEdit = LineEdit.fromEdit(edit.edit, edit.base);
+		const lineEdit = LineEdit.fromStringEdit(edit.edit as BaseStringEdit as StringEdit, edit.base);
 		return new RootedLineEdit(edit.base, lineEdit);
 	}
 
@@ -40,7 +43,7 @@ export class RootedLineEdit {
 
 	public removeCommonSuffixPrefixLines(): RootedLineEdit {
 		const isNotEmptyEdit = (edit: LineReplacement) => !edit.lineRange.isEmpty || edit.newLines.length > 0;
-		const newEdit = this.edit.edits.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
+		const newEdit = this.edit.replacements.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
 		return new RootedLineEdit(this.base, new LineEdit(newEdit));
 	}
 }

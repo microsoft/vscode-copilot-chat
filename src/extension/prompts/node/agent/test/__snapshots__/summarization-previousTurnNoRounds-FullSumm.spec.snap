@@ -9,13 +9,15 @@
 <userRequest>
 previous turn 1
 </userRequest>
+
 ~~~
 
 
 ### Assistant
 ~~~md
 response
-copilot_cache_control: {"type":"ephemeral"}
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -30,13 +32,15 @@ copilot_cache_control: {"type":"ephemeral"}
 <userRequest>
 previous turn 2
 </userRequest>
+
 ~~~
 
 
 ### Assistant
 ~~~md
 response
-copilot_cache_control: {"type":"ephemeral"}
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -49,5 +53,6 @@ Focus particularly on:
 - What the agent was actively working on when the token budget was exceeded
 - How these recent operations connect to the overall user goals
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
-copilot_cache_control: {"type":"ephemeral"}
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

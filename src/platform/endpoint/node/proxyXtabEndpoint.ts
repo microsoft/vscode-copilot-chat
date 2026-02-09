@@ -6,24 +6,17 @@
 import { RequestType } from '@vscode/copilot-api';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { CHAT_MODEL, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
-import { IFetcherService } from '../../networking/common/fetcherService';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
-import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
-import { ICAPIClientService } from '../common/capiClient';
-import { IDomainService } from '../common/domainService';
+import { CHAT_MODEL } from '../../configuration/common/configurationService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
 
-export class ProxyXtabEndpoint extends ChatEndpoint {
-
-	private static chatModelInfo: IChatModelInformation = {
-		id: CHAT_MODEL.NES_XTAB,
+export function createProxyXtabEndpoint(
+	instaService: IInstantiationService,
+	overriddenModelName: string | undefined,
+) {
+	const defaultInfo: IChatModelInformation = {
+		id: overriddenModelName ?? CHAT_MODEL.NES_XTAB,
+		urlOrRequestMetadata: { type: RequestType.ProxyChatCompletions },
 		name: 'xtab-proxy',
 		model_picker_enabled: false,
 		is_chat_default: false,
@@ -46,44 +39,5 @@ export class ProxyXtabEndpoint extends ChatEndpoint {
 			}
 		}
 	};
-
-	constructor(
-		overriddenModelName: string | undefined,
-		@IConfigurationService _configService: IConfigurationService,
-		@IExperimentationService _experimentationService: IExperimentationService,
-		@IDomainService _domainService: IDomainService,
-		@IFetcherService _fetcherService: IFetcherService,
-		@ICAPIClientService _capiClientService: ICAPIClientService,
-		@IEnvService _envService: IEnvService,
-		@ITelemetryService _telemetryService: ITelemetryService,
-		@IAuthenticationService _authService: IAuthenticationService,
-		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
-		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService _instantiationService: IInstantiationService,
-		@IThinkingDataService _thinkingDataService: IThinkingDataService,
-	) {
-		const chatModelInfo = overriddenModelName === undefined
-			? ProxyXtabEndpoint.chatModelInfo
-			: {
-				...ProxyXtabEndpoint.chatModelInfo,
-				id: overriddenModelName
-			};
-		super(
-			chatModelInfo,
-			_domainService,
-			_capiClientService,
-			_fetcherService,
-			_envService,
-			_telemetryService,
-			_authService,
-			_chatMLFetcher,
-			_tokenizerProvider,
-			_instantiationService,
-			_thinkingDataService
-		);
-	}
-
-	override get urlOrRequestMetadata() {
-		return { type: RequestType.ProxyChatCompletions };
-	}
+	return instaService.createInstance(ChatEndpoint, defaultInfo);
 }

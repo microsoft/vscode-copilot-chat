@@ -4,11 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { isPreRelease } from '../../../../../platform/env/common/packagejson';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
+import { CodeActionData } from '../../../../../platform/inlineEdits/common/dataTypes/codeActionData';
 import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
+import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ITracer } from '../../../../../util/common/tracing';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { isAbsolute } from '../../../../../util/vs/base/common/path';
 import { dirname, resolvePath } from '../../../../../util/vs/base/common/resources';
@@ -17,7 +20,7 @@ import { TextReplacement } from '../../../../../util/vs/editor/common/core/edits
 import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
-import { CodeAction, Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, getCodeActionsForDiagnostic, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
+import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
 
 class ImportCodeAction {
 
@@ -42,7 +45,7 @@ class ImportCodeAction {
 	}
 
 	constructor(
-		public readonly codeAction: CodeAction,
+		public readonly codeAction: CodeActionData,
 		public readonly edit: TextReplacement,
 		private readonly _importDetails: ImportDetails,
 		public readonly hasExistingSameFileImport: boolean
@@ -114,11 +117,11 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	constructor(
 		private readonly _importCodeAction: ImportCodeAction,
 		diagnostic: Diagnostic,
-		displayLocation: INextEditDisplayLocation,
+		private _importLabel: string,
 		workspaceDocument: IVSCodeObservableDocument,
 		public readonly alternativeImportsCount: number,
 	) {
-		super(ImportDiagnosticCompletionItem.type, diagnostic, _importCodeAction.edit, displayLocation, workspaceDocument);
+		super(ImportDiagnosticCompletionItem.type, diagnostic, _importCodeAction.edit, workspaceDocument);
 
 		let importFilePath: string;
 		if (isAbsolute(this._importCodeAction.importPath)) {
@@ -128,6 +131,11 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 		}
 
 		this._importSourceFile = DocumentId.create(importFilePath);
+	}
+
+	protected override _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		const transformer = this._workspaceDocument.value.get().getTransformer();
+		return { range: transformer.getRange(this.diagnostic.range), label: this._importLabel };
 	}
 }
 
@@ -173,7 +181,7 @@ class WorkspaceInformation {
 
 export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletionProvider<ImportDiagnosticCompletionItem> {
 
-	public static SupportedLanguages = new Set<string>(['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python']);
+	public static SupportedLanguages = new Set<string>(['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java']);
 
 	public readonly providerName = 'import';
 
@@ -182,7 +190,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 	private readonly _importHandlers: Map<string, ILanguageImportHandler>;
 
 	constructor(
-		private readonly _tracer: ITracer,
+		private readonly _logger: ILogger,
 		private readonly _workspaceService: IWorkspaceService,
 		private readonly _fileService: IFileSystemService,
 	) {
@@ -191,6 +199,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 		const javascriptImportHandler = new JavascriptImportHandler();
 		const pythonImportHandler = new PythonImportHandler();
+		const javaImportHandler = new JavaImportHandler();
 		this._importHandlers = new Map<string, ILanguageImportHandler>([
 			['javascript', javascriptImportHandler],
 			['typescript', javascriptImportHandler],
@@ -198,15 +207,19 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 			['javascriptreact', javascriptImportHandler],
 			['python', pythonImportHandler],
 		]);
+
+		if (isPreRelease) {
+			this._importHandlers.set('java', javaImportHandler);
+		}
 	}
 
-	public providesCompletionsForDiagnostic(diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean {
+	public providesCompletionsForDiagnostic(workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean {
 		const importHandler = this._importHandlers.get(language);
 		if (!importHandler) {
 			return false;
 		}
 
-		if (!isDiagnosticWithinDistance(diagnostic, pos, 12)) {
+		if (!isDiagnosticWithinDistance(workspaceDocument, diagnostic, pos, 12)) {
 			return false;
 		}
 
@@ -215,45 +228,44 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 	async provideDiagnosticCompletionItem(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<ImportDiagnosticCompletionItem | null> {
 		const language = workspaceDocument.languageId.get();
-		const importDiagnosticToFix = sortedDiagnostics.find(diagnostic => this.providesCompletionsForDiagnostic(diagnostic, language, pos));
+		const importDiagnosticToFix = sortedDiagnostics.find(diagnostic => this.providesCompletionsForDiagnostic(workspaceDocument, diagnostic, language, pos));
 		if (!importDiagnosticToFix) {
 			return null;
 		}
 
 		// fetch code actions for missing import
 		const startTime = Date.now();
-		const availableCodeActions = await getCodeActionsForDiagnostic(importDiagnosticToFix, workspaceDocument, token);
+		const availableCodeActions = await workspaceDocument.getCodeActions(importDiagnosticToFix.range, 3, token);
 		const resolveCodeActionDuration = Date.now() - startTime;
 		if (availableCodeActions === undefined) {
-			log(`Fetching code actions likely timed out for \`${importDiagnosticToFix.message}\``, logContext, this._tracer);
+			log(`Fetching code actions likely timed out for \`${importDiagnosticToFix.message}\``, logContext, this._logger);
 			return null;
 		}
 
-		log(`Resolving code actions for \`${importDiagnosticToFix.message}\` took \`${resolveCodeActionDuration}ms\``, logContext, this._tracer);
+		log(`Resolving code actions for \`${importDiagnosticToFix.message}\` took \`${resolveCodeActionDuration}ms\``, logContext, this._logger);
 
 		const availableImportCodeActions = this._getImportCodeActions(availableCodeActions, workspaceDocument, importDiagnosticToFix, this._workspaceInfo);
 		if (availableImportCodeActions.length === 0) {
-			log('No import code actions found in the available code actions', logContext, this._tracer);
+			log('No import code actions found in the available code actions', logContext, this._logger);
 			return null;
 		}
 
 		const sortedImportCodeActions = availableImportCodeActions.sort((a, b) => a.compareTo(b));
 
-		logList(`Sorted import code actions for \`${importDiagnosticToFix.message}\``, sortedImportCodeActions, logContext, this._tracer);
+		logList(`Sorted import code actions for \`${importDiagnosticToFix.message}\``, sortedImportCodeActions, logContext, this._logger);
 
 		for (const codeAction of sortedImportCodeActions) {
 			const importCodeActionLabel = availableImportCodeActions.length === 1 && codeAction.importSource !== ImportSource.external ? codeAction.labelShort : codeAction.labelDeduped;
-			const displayLocation: INextEditDisplayLocation = { range: importDiagnosticToFix.range, label: importCodeActionLabel };
 
-			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, displayLocation, workspaceDocument, availableImportCodeActions.length - 1);
+			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, importCodeActionLabel, workspaceDocument, availableImportCodeActions.length - 1);
 
 			if (this._hasImportBeenRejected(item)) {
-				log(`Rejected import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._tracer);
+				log(`Rejected import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._logger);
 				logContext.markToBeLogged();
 				continue;
 			}
 
-			log(`Created import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._tracer);
+			log(`Created import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._logger);
 
 			return item;
 		}
@@ -272,8 +284,11 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 		rejectedItems.add(item.importItemName);
 	}
 
-	isCompletionItemStillValid(item: ImportDiagnosticCompletionItem): boolean {
-		return !this._hasImportBeenRejected(item);
+	isCompletionItemStillValid(item: ImportDiagnosticCompletionItem, workspaceDocument: IObservableDocument): boolean {
+		if (this._hasImportBeenRejected(item)) {
+			return false;
+		}
+		return item.diagnostic.range.substring(workspaceDocument.value.get().value) === item.importItemName;
 	}
 
 	private _hasImportBeenRejected(item: ImportDiagnosticCompletionItem): boolean {
@@ -281,9 +296,9 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 		return rejected?.has(item.importItemName) ?? false;
 	}
 
-	private _getImportCodeActions(codeActions: CodeAction[], workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, workspaceInfo: WorkspaceInformation): ImportCodeAction[] {
+	private _getImportCodeActions(codeActions: CodeActionData[], workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, workspaceInfo: WorkspaceInformation): ImportCodeAction[] {
 		const documentContent = workspaceDocument.value.get();
-		const importName = documentContent.getValueOfRange(diagnostic.range);
+		const importName = diagnostic.range.substring(documentContent.value);
 		const language = workspaceDocument.languageId.get();
 
 		const importHandler = this._importHandlers.get(language);
@@ -298,20 +313,17 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 				continue;
 			}
 
-			const edits = codeAction.getEditForWorkspaceDocument(workspaceDocument);
-			if (!edits) {
+			if (!codeAction.edits) {
 				continue;
 			}
 
-			const filteredEdits = edits.filter(edit => documentContent.getValueOfRange(edit.range) !== edit.text); // remove no-op edits
-			const joinedEdit = TextReplacement.joinReplacements(filteredEdits, documentContent);
+			const joinedEdit = TextReplacement.joinReplacements(codeAction.edits, documentContent);
 
 			// The diagnostic might have changed in the meantime to a different range
 			// So we need to get the import name from the referenced diagnostic
 			let codeActionImportName = importName;
-			const referencedDiagnostics = [...codeAction.diagnostics, ...codeAction.getDiagnosticsReferencedInCommand()];
-			if (referencedDiagnostics.length > 0) {
-				codeActionImportName = documentContent.getValueOfRange(referencedDiagnostics[0].range);
+			if (codeAction.diagnostics && codeAction.diagnostics.length > 0) {
+				codeActionImportName = codeAction.diagnostics[0].range.substring(documentContent.value);
 			}
 
 			const importDetails = importHandler.getImportDetails(codeAction, codeActionImportName, workspaceInfo);
@@ -353,22 +365,22 @@ export type ImportDetails = {
 
 export interface ILanguageImportHandler {
 	isImportDiagnostic(diagnostic: Diagnostic): boolean;
-	isImportCodeAction(codeAction: CodeAction): boolean;
+	isImportCodeAction(codeAction: CodeActionData): boolean;
 	isImportInIgnoreList(importCodeAction: ImportCodeAction): boolean;
-	getImportDetails(codeAction: CodeAction, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null;
+	getImportDetails(codeAction: CodeActionData, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null;
 }
 
 class JavascriptImportHandler implements ILanguageImportHandler {
 
 	private static CodeActionTitlePrefixes = ['Add import from', 'Update import from'];
 	private static ImportsToIgnore = new Set<string>(['type', 'namespace', 'module', 'declare', 'abstract', 'from', 'of', 'require', 'async']);
-	private static ModulesToIgnore = new Set<string>(['node']);
+	private static ModulesToIgnore = new Set<string>([]);
 
 	isImportDiagnostic(diagnostic: Diagnostic): boolean {
 		return diagnostic.message.includes('Cannot find name');
 	}
 
-	isImportCodeAction(codeAction: CodeAction): boolean {
+	isImportCodeAction(codeAction: CodeActionData): boolean {
 		return JavascriptImportHandler.CodeActionTitlePrefixes.some(prefix => codeAction.title.startsWith(prefix));
 	}
 
@@ -379,6 +391,10 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 
 		if (importCodeAction.importSource === ImportSource.external && importCodeAction.importPath.includes('/')) {
 			return true; // Ignore imports that are from node_modules and point to a subpath
+		}
+
+		if (importCodeAction.importSource === ImportSource.external && importCodeAction.importName === importCodeAction.importName.toLowerCase()) {
+			return true; // Ignore imports which consits of a single word as they are likely variable names. All lowercase is an over approximation for this
 		}
 
 		if (JavascriptImportHandler.ImportsToIgnore.has(importCodeAction.importName)) {
@@ -392,7 +408,7 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 		return false;
 	}
 
-	getImportDetails(codeAction: CodeAction, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
+	getImportDetails(codeAction: CodeActionData, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
 		const importTitlePrefix = JavascriptImportHandler.CodeActionTitlePrefixes.find(prefix => codeAction.title.startsWith(prefix));
 		if (!importTitlePrefix) {
 			return null;
@@ -401,7 +417,7 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 		const pathAsInTitle = codeAction.title.substring(importTitlePrefix.length).trim();
 		let importPath = pathAsInTitle;
 		if ((importPath.startsWith('"') && importPath.endsWith('"')) ||
-			(importPath.startsWith("'") && importPath.endsWith("'")) ||
+			(importPath.startsWith(`'`) && importPath.endsWith(`'`)) ||
 			(importPath.startsWith('`') && importPath.endsWith('`'))) {
 			importPath = importPath.slice(1, -1);
 		}
@@ -428,7 +444,11 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 			}
 		}
 
-		const potentialNodeModules = [importPath, importPath.split('/')[0], importPath.split(':')[0]];
+		if (importPath.includes(':')) {
+			return ImportSource.external;
+		}
+
+		const potentialNodeModules = [importPath, importPath.split('/')[0]];
 		if (potentialNodeModules.some(importPath => workspaceInfo.nodeModules.has(importPath))) {
 			return ImportSource.external;
 		}
@@ -443,7 +463,7 @@ class PythonImportHandler implements ILanguageImportHandler {
 		return diagnostic.message.includes('is not defined');
 	}
 
-	isImportCodeAction(codeAction: CodeAction): boolean {
+	isImportCodeAction(codeAction: CodeActionData): boolean {
 		return codeAction.title.startsWith('Add "from') || codeAction.title.startsWith('Add "import');
 	}
 
@@ -451,7 +471,7 @@ class PythonImportHandler implements ILanguageImportHandler {
 		return false;
 	}
 
-	getImportDetails(codeAction: CodeAction, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
+	getImportDetails(codeAction: CodeActionData, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
 		const fromImportMatch = codeAction.title.match(/Add "from\s+(.+?)\s+import\s(.+?)"/);
 		if (fromImportMatch) {
 			const importPath = fromImportMatch[1];
@@ -481,5 +501,30 @@ class PythonImportHandler implements ILanguageImportHandler {
 		}
 
 		return ImportSource.unknown;
+	}
+}
+
+class JavaImportHandler implements ILanguageImportHandler {
+
+	isImportDiagnostic(diagnostic: Diagnostic): boolean {
+		return String(diagnostic.data.code) === '16777218' || diagnostic.message.endsWith('cannot be resolved to a type');
+	}
+
+	isImportCodeAction(codeAction: CodeActionData): boolean {
+		return codeAction.title.startsWith('Import');
+	}
+
+	isImportInIgnoreList(importCodeAction: ImportCodeAction): boolean {
+		return false;
+	}
+
+	getImportDetails(codeAction: CodeActionData, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
+		return {
+			importName,
+			importPath: codeAction.title.split(`\'`)[2].trim(),
+			labelShort: 'import ' + importName,
+			labelDeduped: codeAction.title,
+			importSource: ImportSource.unknown
+		};
 	}
 }

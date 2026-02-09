@@ -18,6 +18,18 @@ export class SafetyRules extends PromptElement {
 	}
 }
 
+export class Gpt5SafetyRule extends PromptElement {
+	render() {
+		return (
+			<>
+				Follow Microsoft content policies.<br />
+				Avoid content that violates copyrights.<br />
+				If you are asked to generate content that is harmful, hateful, racist, sexist, lewd, or violent, only respond with "Sorry, I can't assist with that."<br />
+			</>
+		);
+	}
+}
+
 export class LegacySafetyRules extends PromptElement {
 	render() {
 		return (

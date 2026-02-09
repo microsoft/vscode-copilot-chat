@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import { afterAll, beforeAll, beforeEach, expect, suite, test } from 'vitest';
 import { IChatMLFetcher } from '../../../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation } from '../../../../../platform/chat/common/commonTypes';
@@ -11,16 +12,15 @@ import { CodeGenerationTextInstruction, ConfigKey, IConfigurationService } from 
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../../../platform/networking/common/fetch';
-import { ChatRole, rawMessageToCAPI } from '../../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ExtHostDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../../intents/node/agentIntent';
+import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, normalizeSummariesOnRounds, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -29,6 +29,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { PromptRegistry } from '../promptRegistry';
 import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
@@ -39,7 +40,7 @@ suite('Agent Summarization', () => {
 	let conversation: Conversation;
 
 	beforeAll(() => {
-		const testDoc = ExtHostDocumentData.create(fileTsUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
+		const testDoc = createTextDocumentData(fileTsUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
 
 		const services = createExtensionUnitTestingServices();
 		services.define(IWorkspaceService, new SyncDescriptor(
@@ -74,7 +75,7 @@ suite('Agent Summarization', () => {
 
 	async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>, promptType: TestPromptType = TestPromptType.Agent): Promise<string> {
 		const instaService = accessor.get(IInstantiationService);
-		const endpoint = instaService.createInstance(MockEndpoint);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 		normalizeSummariesOnRounds(promptContext.history);
 		if (!promptContext.conversation) {
 			promptContext = { ...promptContext, conversation };
@@ -91,7 +92,8 @@ suite('Agent Summarization', () => {
 
 		let renderer;
 		if (promptType === 'Agent') {
-			const props: AgentPromptProps = baseProps;
+			const customizations = await PromptRegistry.resolveAllCustomizations(instaService, endpoint);
+			const props: AgentPromptProps = { ...baseProps, customizations };
 			renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
 		} else {
 			const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
@@ -109,9 +111,9 @@ suite('Agent Summarization', () => {
 			}
 		}
 		addCacheBreakpoints(r.messages);
-		return rawMessageToCAPI(r.messages)
-			.filter(message => message.role !== ChatRole.System)
-			.map(messageToMarkdown)
+		return r.messages
+			.filter(message => message.role !== Raw.ChatRole.System)
+			.map(m => messageToMarkdown(m))
 			.join('\n\n')
 			.replace(/\\+/g, '/')
 			.replace(/The current date is.*/g, '(Date removed from snapshot)');
@@ -144,6 +146,29 @@ suite('Agent Summarization', () => {
 		toolInvocationToken: null as never,
 		toolReferences: [],
 	};
+
+	test('continuation turns are not rendered in conversation history', async () => {
+		const firstTurn = new Turn('id1', { type: 'user', message: 'previous turn message' });
+		const continuationTurn = new Turn('id2', { type: 'user', message: 'continuation turn message' }, undefined, [], undefined, undefined, true);
+
+		const promptContext: IBuildPromptContext = {
+			chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
+			history: [firstTurn, continuationTurn],
+			query: 'edit this file',
+			toolCallRounds: [],
+			tools,
+		};
+
+		const rendered = await agentPromptToString(
+			accessor,
+			promptContext,
+			{ enableCacheBreakpoints: true },
+			TestPromptType.Agent
+		);
+
+		expect(rendered).toContain('previous turn message');
+		expect(rendered).not.toContain('continuation turn message');
+	});
 
 	test('cannot summarize with no history', async () => {
 		const promptContextNoHistory: IBuildPromptContext = {

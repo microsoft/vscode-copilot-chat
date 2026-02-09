@@ -6,21 +6,25 @@
 import * as watcher from '@parcel/watcher';
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
-import { copyFile, mkdir } from 'fs/promises';
+import { copyFile, mkdir, readdir, rename } from 'fs/promises';
 import { glob } from 'glob';
 import * as path from 'path';
 
-const REPO_ROOT = path.join(__dirname);
+const REPO_ROOT = import.meta.dirname;
 const isWatch = process.argv.includes('--watch');
 const isDev = process.argv.includes('--dev');
 const isPreRelease = process.argv.includes('--prerelease');
+const generateSourceMaps = process.argv.includes('--sourcemaps');
+const sourceMapOutDir = './dist-sourcemaps';
 
 const baseBuildOptions = {
 	bundle: true,
 	logLevel: 'info',
 	minify: !isDev,
 	outdir: './dist',
-	sourcemap: isDev ? 'linked' : false,
+	// In dev mode, use linked source maps for debugging.
+	// With --sourcemaps flag, generate external source maps (no sourceMappingURL comment in output).
+	sourcemap: isDev ? 'linked' : (generateSourceMaps ? 'external' : false),
 	sourcesContent: false,
 	treeShaking: true
 } satisfies esbuild.BuildOptions;
@@ -36,16 +40,29 @@ const baseNodeBuildOptions = {
 		'applicationinsights-native-metrics',
 		'@opentelemetry/instrumentation',
 		'@azure/opentelemetry-instrumentation-azure-sdk',
-		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
+		'node-pty', // Required by @github/copilot
+		'@github/copilot',
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
 	mainFields: ["module", "main"], // needed for jsonc-parser,
 	define: {
-		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': '"{}"'
-	}
+		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': JSON.stringify(JSON.stringify({
+			proxyHttpUrl: "",
+			proxyHttpsUrl: ""
+		}))
+	},
+} satisfies esbuild.BuildOptions;
+
+const webviewBuildOptions = {
+	...baseBuildOptions,
+	platform: 'browser',
+	target: 'es2024', // Electron 34 -> Chrome 132 -> ES2024
+	entryPoints: [
+		{ in: 'src/extension/completions-core/vscode-node/extension/src/copilotPanel/webView/suggestionsPanelWebview.ts', out: 'suggestionsPanelWebview' },
+	],
 } satisfies esbuild.BuildOptions;
 
 const nodeExtHostTestGlobs = [
@@ -59,11 +76,13 @@ const testBundlePlugin: esbuild.Plugin = {
 	name: 'testBundlePlugin',
 	setup(build) {
 		build.onResolve({ filter: /[\/\\]test-extension\.ts$/ }, args => {
-			if (args.kind !== 'entry-point') return;
+			if (args.kind !== 'entry-point') {
+				return;
+			}
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]test-extension\.ts$/ }, async args => {
-			let files = await glob(nodeExtHostTestGlobs, { cwd: REPO_ROOT, posix: true });
+			let files = await glob(nodeExtHostTestGlobs, { cwd: REPO_ROOT, posix: true, ignore: ['src/extension/completions-core/**/*'] });
 			files = files.map(f => path.posix.relative('src', f));
 			if (files.length === 0) {
 				throw new Error('No extension tests found');
@@ -87,11 +106,13 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 	name: 'sanityTestBundlePlugin',
 	setup(build) {
 		build.onResolve({ filter: /[\/\\]sanity-test-extension\.ts$/ }, args => {
-			if (args.kind !== 'entry-point') return;
+			if (args.kind !== 'entry-point') {
+				return;
+			}
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]sanity-test-extension\.ts$/ }, async args => {
-			let files = await glob(nodeExtHostSanityTestGlobs, { cwd: REPO_ROOT, posix: true });
+			let files = await glob(nodeExtHostSanityTestGlobs, { cwd: REPO_ROOT, posix: true, ignore: ['src/extension/completions-core/**/*'] });
 			files = files.map(f => path.posix.relative('src', f));
 			if (files.length === 0) {
 				throw new Error('No extension tests found');
@@ -102,6 +123,23 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 					.join(''),
 				watchDirs: files.map(path.dirname),
 				watchFiles: files,
+			};
+		});
+	}
+};
+
+const importMetaPlugin: esbuild.Plugin = {
+	name: 'claudeAgentSdkImportMetaPlugin',
+	setup(build) {
+		// Handle import.meta.url in @anthropic-ai/claude-agent-sdk package
+		build.onLoad({ filter: /node_modules[\/\\]@anthropic-ai[\/\\]claude-agent-sdk[\/\\].*\.mjs$/ }, async (args) => {
+			const contents = await fs.promises.readFile(args.path, 'utf8');
+			return {
+				contents: contents.replace(
+					/import\.meta\.url/g,
+					'require("url").pathToFileURL(__filename).href'
+				),
+				loader: 'js'
 			};
 		});
 	}
@@ -149,11 +187,12 @@ const nodeExtHostBuildOptions = {
 		{ in: './src/platform/diff/node/diffWorkerMain.ts', out: 'diffWorker' },
 		{ in: './src/platform/tfidf/node/tfidfWorker.ts', out: 'tfidfWorker' },
 		{ in: './src/extension/onboardDebug/node/copilotDebugWorker/index.ts', out: 'copilotDebugCommand' },
+		{ in: './src/extension/chatSessions/vscode-node/copilotCLIShim.ts', out: 'copilotCLIShim' },
 		{ in: './src/test-extension.ts', out: 'test-extension' },
 		{ in: './src/sanity-test-extension.ts', out: 'sanity-test-extension' },
 	],
 	loader: { '.ps1': 'text' },
-	plugins: [testBundlePlugin, sanityTestBundlePlugin],
+	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 		'vscode'
@@ -169,6 +208,7 @@ const webExtHostBuildOptions = {
 	format: 'cjs', // Necessary to export activate function from bundle for extension
 	external: [
 		'vscode',
+		'http',
 	]
 } satisfies esbuild.BuildOptions;
 
@@ -213,13 +253,13 @@ const nodeSimulationWorkbenchUIBuildOptions = {
 		'child_process',
 		'http',
 		'assert',
-	]
+	],
 } satisfies esbuild.BuildOptions;
 
 async function typeScriptServerPluginPackageJsonInstall(): Promise<void> {
 	await mkdir('./node_modules/@vscode/copilot-typescript-server-plugin', { recursive: true });
-	const source = path.join(__dirname, './src/extension/typescriptContext/serverPlugin/package.json')
-	const destination = path.join(__dirname, './node_modules/@vscode/copilot-typescript-server-plugin/package.json');
+	const source = path.join(import.meta.dirname, './src/extension/typescriptContext/serverPlugin/package.json');
+	const destination = path.join(import.meta.dirname, './node_modules/@vscode/copilot-typescript-server-plugin/package.json');
 	try {
 		await copyFile(source, destination);
 	} catch (error) {
@@ -247,6 +287,42 @@ const typeScriptServerPluginBuildOptions = {
 	]
 } satisfies esbuild.BuildOptions;
 
+/**
+ * Moves all .map files from the output directories to a separate source maps directory.
+ * This keeps source maps out of the packaged extension while making them available for upload.
+ */
+async function moveSourceMapsToSeparateDir(): Promise<void> {
+	if (!generateSourceMaps) {
+		return;
+	}
+
+	const outputDirs = [
+		'./dist',
+		'./node_modules/@vscode/copilot-typescript-server-plugin/dist',
+	];
+
+	await mkdir(sourceMapOutDir, { recursive: true });
+
+	for (const dir of outputDirs) {
+		try {
+			const files = await readdir(dir);
+			for (const file of files) {
+				if (file.endsWith('.map')) {
+					const sourcePath = path.join(dir, file);
+					// Prefix with directory name to avoid collisions
+					const prefix = dir === './dist' ? '' : 'ts-plugin-';
+					const destPath = path.join(sourceMapOutDir, prefix + file);
+					await rename(sourcePath, destPath);
+					console.log(`Moved source map: ${sourcePath} -> ${destPath}`);
+				}
+			}
+		} catch (error) {
+			// Directory might not exist in some build configurations
+			console.warn(`Could not process directory ${dir}:`, error);
+		}
+	}
+}
+
 async function main() {
 	if (!isDev) {
 		applyPackageJsonPatch(isPreRelease);
@@ -270,7 +346,7 @@ async function main() {
 		const nodeSimulationWorkbenchUIContext = await esbuild.context(nodeSimulationWorkbenchUIBuildOptions);
 		contexts.push(nodeSimulationWorkbenchUIContext);
 
-		const nodeExtHostSimulationContext = await esbuild.context(nodeExtHostSimulationTestOptions)
+		const nodeExtHostSimulationContext = await esbuild.context(nodeExtHostSimulationTestOptions);
 		contexts.push(nodeExtHostSimulationContext);
 
 		const typeScriptServerPluginContext = await esbuild.context(typeScriptServerPluginBuildOptions);
@@ -318,6 +394,7 @@ async function main() {
 				`**/*.w.json`,
 				'**/*.sqlite',
 				'**/*.sqlite-journal',
+				'test/aml/out/**'
 			]
 		});
 		rebuild();
@@ -329,12 +406,16 @@ async function main() {
 			esbuild.build(nodeSimulationWorkbenchUIBuildOptions),
 			esbuild.build(nodeExtHostSimulationTestOptions),
 			esbuild.build(typeScriptServerPluginBuildOptions),
+			esbuild.build(webviewBuildOptions),
 		]);
+
+		// Move source maps to separate directory so they're not packaged with the extension
+		await moveSourceMapsToSeparateDir();
 	}
 }
 
 function applyPackageJsonPatch(isPreRelease: boolean) {
-	const packagejsonPath = path.join(__dirname, './package.json');
+	const packagejsonPath = path.join(import.meta.dirname, './package.json');
 	const json = JSON.parse(fs.readFileSync(packagejsonPath).toString());
 
 	const newProps: any = {

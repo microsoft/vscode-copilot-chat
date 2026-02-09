@@ -14,6 +14,8 @@ import { FilePathMode, FileVariable } from '../panel/fileVariable';
 import { UnsafeCodeBlock } from '../panel/unsafeElements';
 
 export interface GitCommitMessagePromptProps extends BasePromptElementProps {
+	readonly repositoryName: string;
+	readonly branchName: string;
 	readonly changes: Diff[];
 	readonly recentCommitMessages: RecentCommitMessages;
 }
@@ -28,6 +30,11 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 					<ResponseTranslationRules />
 				</SystemMessage>
 				<UserMessage>
+					<Tag priority={850} name='repository-context'>
+						# REPOSITORY DETAILS:<br />
+						Repository name: {this.props.repositoryName}<br />
+						Branch name: {this.props.branchName}<br />
+					</Tag>
 					{this.props.recentCommitMessages.user.length > 0 && (
 						<Tag priority={700} name='user-commits'>
 							# RECENT USER COMMITS (For reference only, do not copy!):<br />
@@ -59,13 +66,13 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 							</>
 						))}
 					</Tag>
-					<Tag priority={900} name='reminder'>
+					<Tag priority={950} name='reminder'>
 						Now generate a commit messages that describe the CODE CHANGES.<br />
-						DO NOT COPY commits from RECENT COMMITS, but it as reference for the commit style.<br />
+						DO NOT COPY commits from RECENT COMMITS, but use it as reference for the commit style.<br />
 						ONLY return a single markdown code block, NO OTHER PROSE!<br />
 						<UnsafeCodeBlock languageId='text' code='commit message goes here' />
 					</Tag>
-					<Tag priority={750} name='custom-instructions'>
+					<Tag priority={950} name='custom-instructions'>
 						<CustomInstructions
 							chatVariables={undefined}
 							customIntroduction='When generating the commit message, please use the following custom instructions provided by the user.'

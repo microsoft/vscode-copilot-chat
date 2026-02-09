@@ -6,8 +6,8 @@ import * as l10n from '@vscode/l10n';
 import { PromptElement, PromptReference, PromptSizing, SystemMessage, TextChunk, UserMessage } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatResponseStream, ChatVulnerability, MarkdownString } from 'vscode';
 import { IResponsePart } from '../../../../platform/chat/common/chatMLFetcher';
-import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { KnownSources } from '../../../../platform/languageServer/common/languageContextService';
@@ -43,12 +43,12 @@ import { InlineChatWorkspaceSearch } from './inlineChatWorkspaceSearch';
 import { LanguageServerContextPrompt } from './languageServerContextPrompt';
 import { ProjectedDocument } from './summarizedDocument/summarizeDocument';
 import { summarizeDocumentSync } from './summarizedDocument/summarizeDocumentHelpers';
-import { TemporalContext } from './temporalContext';
 
 export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
 	constructor(props: InlineFixProps,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IParserService private readonly parserService: IParserService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -87,7 +87,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
 		const diagnostics = findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, document.uri, selection, query);
 
-		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.Internal.InlineChatUseCodeMapper);
+		const enableCodeMapper = this.configurationService.getConfig(ConfigKey.TeamInternal.InlineChatUseCodeMapper);
 
 		const replyInterpreter = enableCodeMapper ?
 			this.instantiationService.createInstance(CodeMapperFixReplyInterpreter, document.uri) :
@@ -96,7 +96,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 		const GenerationRulesAndExample = enableCodeMapper ? CodeMapperRulesAndExample : PatchEditFixRulesAndExample;
 		const InputCodeBlock = enableCodeMapper ? CodeMapperInputCodeBlock : PatchEditInputCodeBlock;
 
-		const renderedChatVariables = await renderChatVariables(chatVariables);
+		const renderedChatVariables = await renderChatVariables(chatVariables, this.fileSystemService);
 
 		return (
 			<>
@@ -120,7 +120,6 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 				<UserMessage priority={700}>
 					<CustomInstructions /*priority={700}*/ languageId={language.languageId} chatVariables={chatVariables} />
 					<LanguageServerContextPrompt priority={700} document={document} position={selection.start} requestId={this.props.promptContext.requestId} source={KnownSources.fix} />
-					<TemporalContext context={[document]} location={ChatLocation.Editor} />
 					<CompositeElement priority={750} >{...renderedChatVariables}</CompositeElement>
 					<CompositeElement priority={600} >
 						{
@@ -185,7 +184,7 @@ class PatchEditFixRulesAndExample extends PromptElement {
 						<PatchEditInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C { }", "", "new C().Field = 9;"]}
+							code={['// This is my class', 'class C { }', '', 'new C().Field = 9;']}
 						/>
 					</Tag>
 					<Tag name='assistant'>
@@ -196,13 +195,13 @@ class PatchEditFixRulesAndExample extends PromptElement {
 								[
 									{
 										uri: exampleUri,
-										find: ["// This is my class", "class C { }"],
-										replace: ["// This is my class", "class C {", "public int Field { get; set; }", "}"]
+										find: ['// This is my class', 'class C { }'],
+										replace: ['// This is my class', 'class C {', 'public int Field { get; set; }', '}']
 									},
 									{
 										uri: exampleUri,
-										find: ["new C().Field = 9;"],
-										replace: ["// set the field to 9", "new C().Field = 9;"]
+										find: ['new C().Field = 9;'],
+										replace: ['// set the field to 9', 'new C().Field = 9;']
 									}
 								]
 							}
@@ -232,11 +231,12 @@ export class PatchEditFixReplyInterpreter implements ReplyInterpreter {
 	async processResponse(context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
 		let inFirstParagraph = true; // print only the frist paragraph
 		let charactersSent = 0;
+		let newText = '';
 		for await (const part of inputStream) {
 			if (token.isCancellationRequested) {
 				return;
 			}
-			const newText = part.text;
+			newText += part.delta.text;
 			if (newText.length > this._lastText.length) {
 				this._lastText = newText; // the new complete text
 				if (inFirstParagraph) {
@@ -299,7 +299,7 @@ export class PatchEditFixReplyInterpreter implements ReplyInterpreter {
 			outputStream.warning(l10n.t('The edit generation was not successful. Please try again.'));
 		}
 		if (res.annotations.length) {
-			this.logService.logger.info(`[inline fix] Problems generating edits: ${res.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, invalid patches: ${res.invalidPatches.length}`);
+			this.logService.info(`[inline fix] Problems generating edits: ${res.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, invalid patches: ${res.invalidPatches.length}`);
 		}
 	}
 
@@ -341,7 +341,7 @@ class CodeMapperRulesAndExample extends PromptElement {
 						<CodeMapperInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C { }", "", "new C().Field = 9;"].join('\n')}
+							code={['// This is my class', 'class C { }', '', 'new C().Field = 9;'].join('\n')}
 							shouldTrim={false}
 						/>
 					</Tag>
@@ -351,7 +351,7 @@ class CodeMapperRulesAndExample extends PromptElement {
 						<CodeMapperInputCodeBlock
 							uri={exampleUri}
 							languageId='csharp'
-							code={["// This is my class", "class C {", "  public int Field { get; set; }", "}", ""].join('\n')}
+							code={['// This is my class', 'class C {', '  public int Field { get; set; }', '}', ''].join('\n')}
 							shouldTrim={false}
 						/>
 					</Tag>

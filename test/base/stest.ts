@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 import * as fs from 'fs';
 import path from 'path';
-import { Config, EMBEDDING_MODEL, ExperimentBasedConfig, ExperimentBasedConfigType } from '../../src/platform/configuration/common/configurationService';
+import { Config, ExperimentBasedConfig, ExperimentBasedConfigType } from '../../src/platform/configuration/common/configurationService';
+import { EmbeddingType } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { ILogTarget, LogLevel } from '../../src/platform/log/common/logService';
 import { ISimulationTestContext } from '../../src/platform/simulationTestContext/common/simulationTestContext';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
@@ -95,7 +96,7 @@ export interface ISimulationTestDescriptor {
 	/**
 	 * The embeddings model used for the test.
 	 */
-	readonly embeddingsModel?: EMBEDDING_MODEL;
+	readonly embeddingType?: EmbeddingType;
 
 	/**
 	 * Setting configurations defined for the test
@@ -123,7 +124,7 @@ export class SimulationTest {
 	public readonly description: string;
 	public readonly language: string | undefined;
 	public readonly model: string | undefined;
-	public readonly embeddingsModel: EMBEDDING_MODEL | undefined;
+	public readonly embeddingType: EmbeddingType | undefined;
 	public readonly configurations: Configuration<any>[] | undefined;
 	public readonly nonExtensionConfigurations: NonExtensionConfiguration[] | undefined;
 	public readonly attributes: Record<string, string | number> | undefined;
@@ -137,7 +138,7 @@ export class SimulationTest {
 		this.description = descriptor.description;
 		this.language = descriptor.language;
 		this.model = descriptor.model;
-		this.embeddingsModel = descriptor.embeddingsModel;
+		this.embeddingType = descriptor.embeddingType;
 		this.configurations = descriptor.configurations;
 		this.nonExtensionConfigurations = descriptor.nonExtensionConfigurations;
 		this.attributes = descriptor.attributes;
@@ -145,7 +146,7 @@ export class SimulationTest {
 	}
 
 	public get fullName(): string {
-		return `${this.suite.fullName} ${this.language ? `[${this.language}] ` : ''}- ${this.description}${this.model ? ` - (${this.model})` : ''}${this.embeddingsModel ? ` - (${this.embeddingsModel})` : ''}`;
+		return `${this.suite.fullName} ${this.language ? `[${this.language}] ` : ''}- ${this.description}${this.model ? ` - (${this.model})` : ''}${this.embeddingType ? ` - (${this.embeddingType})` : ''}`;
 	}
 
 	public get outcomeCategory(): string {
@@ -637,28 +638,4 @@ export function toDirname(testName: string): string {
 		return `${filename.substring(0, FILENAME_LIMIT)}-${computeSHA256(filename).substring(0, 8)}`;
 	}
 	return filename;
-}
-
-/**
- * Returns a function that calls the inner function for each combination of the given arguments.
- * Useful to mass-create tests.
-*/
-export function forEachCombination<T extends Record<string, any[]>>(arg: T, fn: (m: { [K in keyof T]: T[K][number] }) => void): () => void {
-	return () => {
-		const keys = Object.keys(arg) as (keyof T)[];
-		const values = keys.map(key => arg[key]);
-		const max = values.reduce((p, c) => p * c.length, 1);
-		for (let i = 0; i < max; i++) {
-			const m: { [K in keyof T]: T[K][number] } = {} as any;
-			let rem = i;
-			for (let j = 0; j < keys.length; j++) {
-				const key = keys[j];
-				const value = values[j];
-				const idx = rem % value.length;
-				rem = Math.floor(rem / value.length);
-				m[key] = value[idx];
-			}
-			fn(m);
-		}
-	};
 }

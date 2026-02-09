@@ -10,6 +10,8 @@ import { OffsetRange } from '../ranges/offsetRange';
 import { StringText } from '../text/abstractText';
 import { BaseEdit, BaseReplacement } from './edit';
 
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseStringReplacement<any>, TEdit extends BaseStringEdit<T, TEdit> = BaseStringEdit<any, any>> extends BaseEdit<T, TEdit> {
 	get TReplacement(): T {
 		throw new Error('TReplacement is not defined for BaseStringEdit');
@@ -21,6 +23,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		}
 		let result = edits[0];
 		for (let i = 1; i < edits.length; i++) {
+			// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 			result = result.compose(edits[i]) as any;
 		}
 		return result;
@@ -30,9 +33,9 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	 * r := trySwap(e1, e2);
 	 * e1.compose(e2) === r.e1.compose(r.e2)
 	*/
-	public static trySwap(e1: BaseStringEdit, e2: BaseStringEdit): { e1: StringEdit; e2: StringEdit; } | undefined {
+	public static trySwap(e1: BaseStringEdit, e2: BaseStringEdit): { e1: StringEdit; e2: StringEdit } | undefined {
 		// TODO make this more efficient
-		const e1Inv = e1.inverseOnSlice((start, endEx) => " ".repeat(endEx - start));
+		const e1Inv = e1.inverseOnSlice((start, endEx) => ' '.repeat(endEx - start));
 
 		const e1_ = e2.tryRebase(e1Inv);
 		if (!e1_) {
@@ -82,16 +85,15 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		return this.inverseOnSlice((start, endEx) => original.substring(start, endEx));
 	}
 
-	/**
-	 * Consider `t1 := text o base` and `t2 := text o this`.
-	 * We are interested in `tm := tryMerge(t1, t2, base: text)`.
-	 * For that, we compute `tm' := t1 o base o this.rebase(base)`
-	 * such that `tm' === tm`.
-	 */
-	public tryRebase(base: StringEdit): StringEdit | undefined;
-	/** @deprecated avoid */
-	public tryRebase(base: StringEdit, noOverlap: false): StringEdit;
-	public tryRebase(base: StringEdit, noOverlap: boolean = true): StringEdit | undefined {
+	public rebaseSkipConflicting(base: StringEdit): StringEdit {
+		return this._tryRebase(base, false)!;
+	}
+
+	public tryRebase(base: StringEdit): StringEdit | undefined {
+		return this._tryRebase(base, true);
+	}
+
+	private _tryRebase(base: StringEdit, noOverlap: boolean): StringEdit | undefined {
 		const newEdits: StringReplacement[] = [];
 
 		let baseIdx = 0;
@@ -100,30 +102,33 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 
 		while (ourIdx < this.replacements.length || baseIdx < base.replacements.length) {
 			// take the edit that starts first
-			const baseEdit = base.replacements[baseIdx];
-			const ourEdit = this.replacements[ourIdx];
+			const baseEdit = base.replacements.at(baseIdx);
+			const ourEdit = this.replacements.at(ourIdx);
 
 			if (!ourEdit) {
 				// We processed all our edits
 				break;
 			} else if (!baseEdit) {
 				// no more edits from base
-				newEdits.push(new StringReplacement(
-					ourEdit.replaceRange.delta(offset),
-					ourEdit.newText
-				));
+				const transformedRange = ourEdit.replaceRange.delta(offset);
+				newEdits.push(new StringReplacement(transformedRange, ourEdit.newText));
 				ourIdx++;
-			} else if (ourEdit.replaceRange.intersectsOrTouches(baseEdit.replaceRange)) {
+			} else if (
+				ourEdit.replaceRange.intersects(baseEdit.replaceRange) ||
+				areConcurrentInserts(ourEdit.replaceRange, baseEdit.replaceRange) ||
+				isInsertStrictlyInsideRange(ourEdit.replaceRange, baseEdit.replaceRange) ||
+				isInsertStrictlyInsideRange(baseEdit.replaceRange, ourEdit.replaceRange)
+			) {
 				ourIdx++; // Don't take our edit, as it is conflicting -> skip
 				if (noOverlap) {
 					return undefined;
 				}
-			} else if (ourEdit.replaceRange.start < baseEdit.replaceRange.start) {
-				// Our edit starts first
-				newEdits.push(new StringReplacement(
-					ourEdit.replaceRange.delta(offset),
-					ourEdit.newText
-				));
+			} else if (ourEdit.replaceRange.start < baseEdit.replaceRange.start ||
+				(ourEdit.replaceRange.isEmpty && ourEdit.replaceRange.start === baseEdit.replaceRange.start)) {
+				// Our edit starts first, or is an insert at the start of base's range
+				const transformedRange = ourEdit.replaceRange.delta(offset);
+				// Check if the transformed edit would violate the sorted/disjoint invariant
+				newEdits.push(new StringReplacement(transformedRange, ourEdit.newText));
 				ourIdx++;
 			} else {
 				baseIdx++;
@@ -135,11 +140,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	}
 
 	public toJson(): ISerializedStringEdit {
-		return this.replacements.map(e => ({
-			txt: e.newText,
-			pos: e.replaceRange.start,
-			len: e.replaceRange.length,
-		}));
+		return this.replacements.map(e => e.toJson());
 	}
 
 	public isNeutralOn(text: string): boolean {
@@ -175,11 +176,11 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		return e.toEdit();
 	}
 
-	removeCommonSuffixAndPrefix(source: string): TEdit {
+	public removeCommonSuffixAndPrefix(source: string): TEdit {
 		return this._createNew(this.replacements.map(e => e.removeCommonSuffixAndPrefix(source))).normalize();
 	}
 
-	applyOnText(docContents: StringText): StringText {
+	public applyOnText(docContents: StringText): StringText {
 		return new StringText(this.apply(docContents.value));
 	}
 
@@ -194,6 +195,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> = BaseStringReplacement<any>> extends BaseReplacement<T> {
 	constructor(
 		range: OffsetRange,
@@ -231,7 +233,7 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 
 		const replaceRange = new OffsetRange(
 			this.replaceRange.start + prefixLen,
-			this.replaceRange.endExclusive - suffixLen
+			this.replaceRange.endExclusive - suffixLen,
 		);
 		const newText = this.newText.substring(prefixLen, this.newText.length - suffixLen);
 
@@ -271,6 +273,14 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 	public toEdit(): StringEdit {
 		return new StringEdit([this]);
 	}
+
+	public toJson(): ISerializedStringReplacement {
+		return ({
+			txt: this.newText,
+			pos: this.replaceRange.start,
+			len: this.replaceRange.length,
+		});
+	}
 }
 
 
@@ -279,6 +289,25 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
  * All these replacements are applied at once.
 */
 export class StringEdit extends BaseStringEdit<StringReplacement, StringEdit> {
+	/**
+	 * Parses an edit from its string representation.
+	 * E.g. [[2, 12) -> "fgh", [14, 20) -> "qrst", [22, 22) -> "de\n"]
+	*/
+	public static parse(toStringValue: string): StringEdit {
+		const replacements: StringReplacement[] = [];
+		const regex = /\[(\d+),\s*(\d+)\)\s*->\s*"([^"]*)"/g;
+		let match;
+
+		while ((match = regex.exec(toStringValue)) !== null) {
+			const start = parseInt(match[1], 10);
+			const endEx = parseInt(match[2], 10);
+			const text = match[3].replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
+			replacements.push(new StringReplacement(new OffsetRange(start, endEx), text));
+		}
+
+		return new StringEdit(replacements);
+	}
+
 	public static readonly empty = new StringEdit([]);
 
 	public static create(replacements: readonly StringReplacement[]): StringEdit {
@@ -458,11 +487,11 @@ export function applyEditsToRanges(sortedRanges: OffsetRange[], edit: StringEdit
 	}
 
 	return result;
-}/**
+}
+
+/**
  * Represents data associated to a single edit, which survives certain edit operations.
 */
-
-
 export interface IEditData<T> {
 	join(other: T): T | undefined;
 }
@@ -472,11 +501,11 @@ export class VoidEditData implements IEditData<VoidEditData> {
 		return this;
 	}
 }
+
 /**
  * Represents a set of replacements to a string.
  * All these replacements are applied at once.
 */
-
 export class AnnotatedStringEdit<T extends IEditData<T>> extends BaseStringEdit<AnnotatedStringReplacement<T>, AnnotatedStringEdit<T>> {
 	public static readonly empty = new AnnotatedStringEdit<never>([]);
 
@@ -519,8 +548,14 @@ export class AnnotatedStringEdit<T extends IEditData<T>> extends BaseStringEdit<
 		return new AnnotatedStringEdit<T>(replacements);
 	}
 
-	toStringEdit(): StringEdit {
-		return new StringEdit(this.replacements.map(e => new StringReplacement(e.replaceRange, e.newText)));
+	public toStringEdit(filter?: (replacement: AnnotatedStringReplacement<T>) => boolean): StringEdit {
+		const newReplacements: StringReplacement[] = [];
+		for (const r of this.replacements) {
+			if (!filter || filter(r)) {
+				newReplacements.push(new StringReplacement(r.replaceRange, r.newText));
+			}
+		}
+		return new StringEdit(newReplacements);
 	}
 }
 
@@ -562,3 +597,19 @@ export class AnnotatedStringReplacement<T extends IEditData<T>> extends BaseStri
 	}
 }
 
+/**
+ * Returns true if both ranges are empty (inserts) at the exact same position.
+ * In this case, although they don't "intersect" in the traditional sense,
+ * they conflict because the order of insertion matters.
+ */
+function areConcurrentInserts(r1: OffsetRange, r2: OffsetRange): boolean {
+	return r1.isEmpty && r2.isEmpty && r1.start === r2.start;
+}
+
+/**
+ * Returns true if `insert` is an empty range (insert) strictly inside `range`.
+ * For example, insert at position 5 is inside [3, 7) but not inside [5, 7) or [3, 5).
+ */
+function isInsertStrictlyInsideRange(insert: OffsetRange, range: OffsetRange): boolean {
+	return insert.isEmpty && range.start < insert.start && insert.start < range.endExclusive;
+}

@@ -2,127 +2,127 @@
 	{
 		"name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
 		"requests": [
-			"dbdd13fcffff0ee1f8f61635908adddf04271c33461c289b2ba72b889007dd93"
+			"872647fe3308aefe31fccceb0ea2d3c1957052fd48df356432d002d511d3a656"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [cpp] - includes function definitions from same file",
 		"requests": [
-			"5e3c6c43c3f468a8540c2ae98f4bb6974cd8bdd142e78831d6bf36522fbd3d49"
+			"54b255e150d389fa423bcaa21c5700623e720ee7c34c98959d5c7df8b278d9ee"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [csharp] - includes function definitions from same file",
 		"requests": [
-			"86e03732e54b8124c5d99279795068e1b625e9877ed70513d72137b1da051397"
+			"8a01844393703fc37e6711b7453b2a1df29130adfd929d044d106e52cea05913"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [go] - includes function definitions from same file",
 		"requests": [
-			"61e5e97b57548ee06fa228e075ab5113c685c5915fc12ebc70b892c2f84f868e"
+			"7dcf9be1b3a0b36aa9e321785533035b26947aa35121a0d3d2879aa25f3547d1"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [java] - includes function definitions from same file",
 		"requests": [
-			"8e74d1f7aef716315e16d75240b1b99d281745d57aec82304bd7acc7ebe7536b"
+			"4a83516d81719e8f08dbe4cc9a80a0b94ecdf4842bbe25c0f9bd11010f3b4eb9"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [python] - includes class definitions from same file",
 		"requests": [
-			"c2ab79983a79beb20eb335ae1f211c6ddd71be71222f3ba3832d62c4f6baab46"
+			"28493821403d5b2716f34f4b477469e1a774ddc78d74ccd3cdabc481ce79ab98"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [python] - includes function definitions from same file",
 		"requests": [
-			"9c2186bfe85790267f55bdf4da6a70d18bcd262787ac0cc911fb25904abc1bb0"
+			"dc89525eff575151161858abb2fa76af3a8c50bb5eebaa2448d7313edf4fe334"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [ruby] - includes class definitions from same file",
 		"requests": [
-			"5f7a0f4d44165332375859e4a9ab97aca8412209dd411597cfd0d4d7bbab2e17"
+			"b61126d0cb837715db6d83c7118e3e9c2582b8bf22cb17237b0ee95c1f6b50df"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [ruby] - includes function definitions from same file",
 		"requests": [
-			"70b702d8949fdaf5aeaffbdfebefbbf99cfb310f899dfe36f8fe5e07f531ae07"
+			"74fe2b70ec89ebc20eea3d46683ba9860c68031d81a2830b1a12e42a1fccfca1"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - can explain different editor selections in a single conversation",
 		"requests": [
-			"0158d81c04bd3f953f9b91100f447897f76a25c32d71d32f9099935df01b3e0c",
-			"0a0e348cc4c9137a020c42ae12039b6820943b51567d1f49c9db4465c5a150a6",
-			"0bd71f437d5661ca20b639b9e736799c8499597777d5024297fb9f2dad11dd45",
-			"0c1506271835ea329ce87b8938f24f0313772449e730619851564130f58e0326",
-			"1959498b5fac587113d703576a369581bcfeafbe5ff736a7636bf8b1c963f8fe",
-			"25c581ede91c37c76181ab8977f8c9ea21dd25988b639de471b4770b70a6d2b8",
-			"29e240852c72a1f87e9e020db11932196671783f752e9ff790c577b95b682faa",
-			"2c0c778ee516cb22e11e04ab8d4cb10c151d21d183a02db378d0f283e3a0f48b",
-			"4034787f06e943e84e1f45d79011ae34b2c8b571110bcc894ffb353d9f39a6d0",
-			"5138f24407a629d6a5f448d236009b7f568f6ada742bc6cc07b4f53ce083cc13",
-			"51f4f83fc035d67b418d6d7d8fc448df8c68f779c54ec9ca245091245db7b001",
-			"6500c2e60b2ad50b7715caf6fe73722cb804d29f2d08599a0a0d7ef16afc9003",
-			"78170c2ab439623531d626ebc2ceacc66cd7436f7bb06d9fca775c7908c45cf1",
-			"83e05213704c97418d813abee489ba41b897face7fc289b399042ba1fb147458",
-			"8b2ad6c725046308dd65fef9a252ec50627e18f9cf0e2c68bcc5a12cbc6a1b49",
-			"8f2e8f39908e1aa01bff133785308f3fa612a3d190c8d15352df9a917a2fc678",
-			"8f9069e0705f8c8b710e763fdfaf37ab535f90527352fa3dd0f227963073362a",
-			"9cce7c4100c17d41c8df30130087f19377c1d2a44da3ce894f4f5eb39b816236",
-			"aa142126592388962e28bc1a6372727bb69d56577ffc9f957c699c1eb02241dd",
-			"b061e7d6d93de1d30bcb51f1f58b861402fd04ba8069e25204e1623929b64bb1",
-			"b4c257f0ff56b79698dec14e077577b7aa8892324019bb81bf783beafbecb86b",
-			"c07bf19f5ff0b8821d8b180a4cff0d3782ee3bd4de9d92d6a2dd3590a4bf5cf2",
-			"c92c927a4117021972370bb09bce1a226acec23fac46b940b7f712dc36275c38",
-			"cbff604b630accfffb3ecf88034652d4bfd9f66da8e2af67d181c43d2071fe22",
-			"d2e0e41bdd068cbb352b7b53bebc111820b34d657ab60a3a0c7b504bb213d64f",
-			"d3d9b59d364ab14e6880e1a5bd6187a1764e2d724388348fa5530155f3e8cbdc",
-			"d869ee372b3c364b43d9fc87e789aa86bc3823633c547deea3015a40d1214180",
-			"d8bcf9adbe35f2512c0f6ef23182a38dacc9f95ffa04555655f9582c1041f393",
-			"e98d62808d402c489d02a9b3a54a4ba1f6e65f4244b2a314bf57b22eeeb801c3",
-			"f33aa389bfc4961c0d6569b35006325ed15cc461afdee1b556194ad5dbf5f764",
-			"faca911d6f707b1cb38605068eede797eb82610a31ff7719d244630ade655555"
+			"104622d4483fd08b0d92a1cef46905024da5e161ff6d7c0b04e0343e771b3f5b",
+			"1791e0b801509a79a6840cb8e898b38d48c06bc5e9c7ed2cb66dedd7c1298324",
+			"20791da08c72399ec8fd3982caecb78a060ab1c2de270896a2040530ffb93e6e",
+			"2cf3c74e786ccfb70c5bb959f53aa4eda84f2e1c3bd7694ae74720cc2b4304a2",
+			"347d8375b64bc7c93dff99c843b91a71243078dc0a86673f5bbe7798202dc523",
+			"3b9e6ee521314c53dc9f12ac67e3f7ff1fca6575f7ff72c94bec9f282aa7b215",
+			"3e18e60fa6b1eb1e954e304ac458abdcd0b747a03c4ce0284ebbe86ac05a73f4",
+			"451606678de57606b7805dc5333eb7f17fafb004709d6e0b51bbc39fa2a7c2a7",
+			"4dcf308b54c772acefdc0904790a307b5a510633e28ebec74365627f567a0ed2",
+			"573d4771127e7a5107425a45fe69d20f69baee25f56cbf539ce2e226791c25eb",
+			"5b4d8b2b2bfe2afd2edb6fb6d7039603157da66db25e2b56be2e3a2764cb7fe3",
+			"63d8c064808c0e626965bfb85e509b4ef72f47fba9e03fe1cc9106e2eca5eca1",
+			"66ffee0d4b319e587a6b1aa16a53e3cffa8cd19565d8f4696a2cd8f8be51fcdf",
+			"7acefb5283eb4e0f08d6c49b848d6ad036f7660bf99a341cc97b40bd3a3894e1",
+			"7e6a906f85e72b7ba27e8b5299ad7e973ac3be8dda3bc2caeb764f489e7964b3",
+			"7f305a8f13cce9430ac38fdedde6857a016de643ddc9ec3e9f335383fee47b4b",
+			"8394d5e3fdb7baeda1bf6e9c68b1e3846f97760f02fdf052d69fcd4e67f827d4",
+			"93c0606c35dd1e7eeae5da41457446a34e07f82d833da0ea6a083244ce15438d",
+			"94ba9e1ed2ba9fa22fbb73bebdb8ef20602bc813a9b048734c06337ebbeacf86",
+			"9764d1dfff3c946a2fd55fe064a966b2132971baff4c5ae512cecdd5d6d429e5",
+			"9a6d47699b7a78abe8973b1faa1b3f95e3d2df2c83a752f70f0a02808beef80d",
+			"9d4ec24443099156b3bfb0e355d79f5e1751b525c24ffcc5f706f93d4d2b9b96",
+			"a2a2e637356a163f700ddc01d9f48b52d851d2908956f7d05bbb619a712530a9",
+			"a55aaf4b241ed5944ca31c42da188638e0bfba4e6c2c7a62062ab03d13df2d22",
+			"ab138dd1c53b1c09cf93fa05b65bcbce5acc00a98d305c8e276078e9eda6559d",
+			"c6f9544aed38c57bc1077984c9afc0a386a19436f86e86731b8e81dd4c5a850e",
+			"c73608aa52c9b44aa50b37a956c432917a36563b2009aac17b8f7b70b4af2d8e",
+			"cbf98c131eb8884362940d93adc013c1f0a3e38b596c41ee41809804ba6e73d1",
+			"e179210c85e1b41274c24665b4a86893ed1ff32f00189f4aa3227580d49a1791",
+			"ec68a47ed9505a5b021e42464042348d1d778003d7c1f05ef427c9b0ab4c71f1",
+			"edadef5142c520752995909a1f894ab0ecf2b8d3dbde98ad2a1f584ef3a9eaf3"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - includes class definitions from same file",
 		"requests": [
-			"446d0832e15301e1e48b924185a8878becabf35b98cda910ee15b2b3137a56ee"
+			"91f11d8ccd7a5e8c809ce2d5e7aa9fdd6cd0b7e7132eb41bcf7a76cac179283a"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - includes function definitions from same file",
 		"requests": [
-			"17e0da5dd24e35949b6cb7069e25dc4f9759bb23aefb11a27651476ff73f3db1"
+			"6b63af218d109d266d93a0dd04f62025724d3992fadc5f80f9d48416d21dce85"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - includes function definitions from same file when the active selection is empty",
 		"requests": [
-			"ca0598e7406ad14668cf7fd2d531b9b3d021cb2447224d4f5f742e0b1b6c1040"
+			"4ad1fdb0aa2fe8e13a323ebe80f2b1cc4db003984c250cc0a6a30b3e27c5b062"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - includes method definitions from same file",
 		"requests": [
-			"4cb1237edf1163a9b00098197f5bdf503fbe473132ef106bc7892d0812db7fa3"
+			"7cfb997c5564688d43fa815246321614be7d22205205fa30ed80a7587093cfda"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - includes types from same file",
 		"requests": [
-			"faca911d6f707b1cb38605068eede797eb82610a31ff7719d244630ade655555"
+			"c6f9544aed38c57bc1077984c9afc0a386a19436f86e86731b8e81dd4c5a850e"
 		]
 	},
 	{
 		"name": "explain (expanded context) [panel] [typescript] - resolves multiple #file variables and is not distracted by default selection context",
 		"requests": [
-			"af3796ad4589586fb2825c9c858768668c634d5227306479a534f52b753ee9d6"
+			"aee8219757c9d09f2a1d0baeab277980f669416c539c0e05e8837ef1d7d17411"
 		]
 	}
 ]

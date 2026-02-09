@@ -2,12 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { AuthenticationGetSessionOptions, AuthenticationSession } from 'vscode';
+import type { AuthenticationGetSessionOptions, AuthenticationGetSessionPresentationOptions, AuthenticationSession } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived } from '../../../util/vs/base/common/observableInternal';
-import { AuthPermissionMode, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { AuthPermissionMode, AuthProviderId, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { CopilotToken } from './copilotToken';
 import { ICopilotTokenManager } from './copilotTokenManager';
@@ -37,8 +37,8 @@ export interface IAuthenticationService {
 	/**
 	 * Whether the authentication service is in minimal mode. If true, the authentication service will not attempt to
 	 * fetch the permissive token. This means that:
-	 * * {@link getPermissiveGitHubSession} interactive flows will always throw an error
-	 * * {@link getPermissiveGitHubSession} silent flows and {@link permissiveGitHubSession} will always return undefined
+	 * * {@link getGitHubSession} interactive flows with 'permissive' kind will always throw an error
+	 * * {@link getGitHubSession} silent flows with 'permissive' kind and {@link permissiveGitHubSession} will always return undefined
 	 */
 	readonly isMinimalMode: boolean;
 
@@ -59,44 +59,57 @@ export interface IAuthenticationService {
 	 * Checks if there is currently any session available in the cache. Does not make any network requests and does not
 	 * call out to the underlying authentication provider.
 	 *
-	 * @note See {@link getAnyGitHubToken} for more information and for an async version by calling {@link getAnyGitHubSession} with `{ silent: true }`.
+	 * @note See {@link getAnyGitHubToken} for more information and for an async version by calling {@link getGitHubSession} with kind 'any' and `{ silent: true }`.
 	 * @note For best practice of handling of the user's authentication state, you should react to {@link onDidAuthenticationChange}.
 	 * @note This token will have at least the `user:email` scope to be able to access the minimum Copilot API.
 	 */
 	readonly anyGitHubSession: AuthenticationSession | undefined;
 
 	/**
-	 * Returns a currently valid GitHub session, also known as session or auth session. Skips the cache and calls
-	 * the underlying authentication provider using the options passed in.
-	 *
-	 * @note You should typically use the synchronous version {@link anyGitHubToken} if you are fetching a session silently.
-	 * @note For best practice of handling of the user's authentication state, you should react to {@link onDidAuthenticationChange}.
-	 * @note This token will have at least the `user:email` scope to be able to access the minimum Copilot API.
-	 * @returns an auth session or undefined if none is found.
-	 */
-	getAnyGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
-
-	/**
 	 * Checks if there is currently a permissive session available in the cache. Does not make any network requests and does not
 	 * call out to the underlying authentication provider.
 	 *
-	 * @note See {@link getPermissiveGitHubToken} for more information and for an async version by calling {@link getPermissiveGitHubSession} with `{ silent: true }`.
+	 * @note See {@link getPermissiveGitHubToken} for more information and for an async version by calling {@link getGitHubSession} with kind 'permissive' and `{ silent: true }`.
 	 * @note For best practice of handling of the user's authentication state, you should react to {@link onDidAuthenticationChange}.
 	 * @returns undefined if no auth session is available or Minimal Mode is enabled. Otherwise, returns an auth session with the `repo` scope.
 	 */
 	readonly permissiveGitHubSession: AuthenticationSession | undefined;
+
 	/**
-	 * Returns a currently valid permissive GitHub session, also known as session or auth session. Skips the cache and calls
-	 * the underlying authentication provider using the options passed in.
-	 *
-	 * @note We have the {@link IAuthenticationChatUpgradeService} to upgrade the session to a permissive one. Use this for confirmation in Chat/Edits instead of showing the modal.
-	 * @note You should typically use the synchronous version {@link getPermissiveGitHubToken} if you are fetching a session silently.
-	 * @note For best practice of handling of the user's authentication state, you should react to {@link onDidAuthenticationChange}.
-	 * @note This token will have at least the `repo` scope to be able to access the extended features of the Copilot API.
-	 * @returns an auth session or undefined if none is found.
-	 * @throws MinimalModeError {@link MinimalModeError} if the authentication service is in minimal mode.
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session.
+	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
+	 * @throws Error - If no session is acquired (user cancels).
 	 */
-	getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+
+	/**
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session.
+	 * @throws MinimalModeError - If kind is 'permissive' and the authentication service is in minimal mode.
+	 * @throws Error - If no session is acquired (user cancels).
+	 */
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+
+	/**
+	 * Gets a GitHub session capable of calling GitHub APIs.
+	 * @param kind - The kind of session that you need. **Your choice here should be thoughtful.**
+	 * - 'permissive': You need a session that can access the user's private repositories or needs write access.
+	 * - 'any': You only need a session that can access public information about the user.
+	 * @param options - Options for getting the session.
+	 * @returns Promise<AuthenticationSession> - The requested authentication session. OR
+	 * @returns Promise<undefined> - If no session is available or kind is 'permissive' and the authentication service is in minimal mode.
+	 * @see {@link isMinimalMode} for more information about minimal mode.
+	 */
+	getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
 
 	/**
 	 * Checks if there is currently a Copilot token available in the cache. Does not make any network requests.
@@ -145,8 +158,14 @@ export interface IAuthenticationService {
 export abstract class BaseAuthenticationService extends Disposable implements IAuthenticationService {
 	declare readonly _serviceBrand: undefined;
 
-	protected readonly _onDidAuthenticationChange = this._register(new Emitter<void>());
+	private readonly _onDidAuthenticationChange = this._register(new Emitter<void>());
 	readonly onDidAuthenticationChange: Event<void> = this._onDidAuthenticationChange.event;
+
+	protected fireAuthenticationChange(source: string): void {
+		const hasSession = !!this.copilotToken;
+		this._logService.info(`AuthenticationService: firing onDidAuthenticationChange from ${source}. Has token: ${hasSession}`);
+		this._onDidAuthenticationChange.fire();
+	}
 
 	protected readonly _onDidAccessTokenChange = this._register(new Emitter<void>());
 	readonly onDidAccessTokenChange: Event<void> = this._onDidAccessTokenChange.event;
@@ -162,7 +181,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	) {
 		super();
 		this._register(_tokenManager.onDidCopilotTokenRefresh(() => {
-			this._logService.logger.debug('Handling CopilotToken refresh.');
+			this._logService.debug('Handling CopilotToken refresh.');
 			void this._handleAuthChangeEvent();
 		}));
 	}
@@ -182,7 +201,6 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	get anyGitHubSession(): AuthenticationSession | undefined {
 		return this._anyGitHubSession;
 	}
-	abstract getAnyGitHubSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
 
 	//#endregion
 
@@ -192,7 +210,24 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	get permissiveGitHubSession(): AuthenticationSession | undefined {
 		return this._permissiveGitHubSession;
 	}
-	abstract getPermissiveGitHubSession(options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+
+	//#endregion
+
+	//#region GitHub Session
+
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { createIfNone: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions & { forceNewSession: boolean | AuthenticationGetSessionPresentationOptions }): Promise<AuthenticationSession>;
+	abstract getGitHubSession(kind: 'permissive' | 'any', options: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+
+	//#endregion
+
+	//#region Ado
+
+	protected _anyAdoSession: AuthenticationSession | undefined;
+	get anyAdoSession(): AuthenticationSession | undefined {
+		return this._anyAdoSession;
+	}
+	protected abstract getAnyAdoSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
 
 	//#endregion
 
@@ -204,8 +239,6 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	}
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		try {
-			await this.getAnyGitHubSession({ silent: true });
-			// TODO: could this take in an auth session?
 			const token = await this._tokenManager.getCopilotToken(force);
 			this._tokenStore.copilotToken = token;
 			this._copilotTokenError = undefined;
@@ -219,7 +252,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			// to an account that doesn't have a valid subscription (no copilot token can be minted).
 			// NOTE: if either error is undefined, this event should be fired elsewhere already.
 			if (beforeError && afterError && beforeError.message !== afterError.message) {
-				this._onDidAuthenticationChange.fire();
+				this.fireAuthenticationChange('getCopilotToken error change');
 			}
 			throw afterError;
 		}
@@ -243,17 +276,19 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	protected async _handleAuthChangeEvent(): Promise<void> {
 		const anyGitHubSessionBefore = this._anyGitHubSession;
 		const permissiveGitHubSessionBefore = this._permissiveGitHubSession;
+		const anyAdoSessionBefore = this._anyAdoSession;
 		const copilotTokenBefore = this._tokenStore.copilotToken;
 		const copilotTokenErrorBefore = this._copilotTokenError;
 
 		// Update caches
 		const resolved = await Promise.allSettled([
-			this.getAnyGitHubSession({ silent: true }),
-			this.getPermissiveGitHubSession({ silent: true }),
+			this.getGitHubSession('any', { silent: true }),
+			this.getGitHubSession('permissive', { silent: true }),
+			this.getAnyAdoSession({ silent: true }),
 		]);
 		for (const res of resolved) {
 			if (res.status === 'rejected') {
-				this._logService.logger.error(`Error getting a session: ${res.reason}`);
+				this._logService.error(`Error getting a session: ${res.reason}`);
 			}
 		}
 
@@ -262,15 +297,20 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			permissiveGitHubSessionBefore?.accessToken !== this._permissiveGitHubSession?.accessToken
 		) {
 			this._onDidAccessTokenChange.fire();
-			this._logService.logger.debug('Auth state changed, minting a new CopilotToken...');
+			this._logService.debug('Auth state changed, minting a new CopilotToken...');
 			// The auth state has changed, so mint a new Copilot token
 			try {
 				await this.getCopilotToken(true);
 			} catch (e) {
 				// Ignore errors
 			}
-			this._logService.logger.debug('Minted a new CopilotToken.');
+			this._logService.debug('Minted a new CopilotToken.');
 			return;
+		}
+
+		if (anyAdoSessionBefore?.accessToken !== this._anyAdoSession?.accessToken) {
+			this._logService.debug(`Ado auth state changed, firing event. Had token before: ${!!anyAdoSessionBefore?.accessToken}. Has token now: ${!!this._anyAdoSession?.accessToken}.`);
+			this._onDidAdoAuthenticationChange.fire();
 		}
 
 		// Auth state hasn't changed, but the Copilot token might have
@@ -284,9 +324,17 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			// React to errors changing too (i.e. I go from zero session to a session that doesn't have Copilot access)
 			copilotTokenErrorBefore?.message !== this._copilotTokenError?.message
 		) {
-			this._logService.logger.debug('CopilotToken state changed, firing event.');
-			this._onDidAuthenticationChange.fire();
+			this._logService.debug('CopilotToken state changed, firing event.');
+			this.fireAuthenticationChange('handleAuthChangeEvent');
 		}
-		this._logService.logger.debug('Finished handling auth change event.');
+		this._logService.debug('Finished handling auth change event.');
 	}
+}
+
+export function authProviderId(configurationService: IConfigurationService): AuthProviderId {
+	return (
+		configurationService.getConfig(ConfigKey.Shared.AuthProvider) === AuthProviderId.GitHubEnterprise
+			? AuthProviderId.GitHubEnterprise
+			: AuthProviderId.GitHub
+	);
 }

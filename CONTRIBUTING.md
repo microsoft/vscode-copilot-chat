@@ -25,6 +25,7 @@
   * [API updates](#api-updates)
     * [Making breaking changes to API](#making-breaking-changes-to-api)
     * [Making additive changes to API](#making-additive-changes-to-api)
+  * [Running with Code OSS](#running-with-code-oss)
 
 # Creating good issues
 
@@ -68,6 +69,8 @@ Please include the following with each issue:
 ## Requirements
 - Node 22.x
 - Python >= 3.10, <= 3.12
+- Git Large File Storage (LFS) - for running tests
+- (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
 
 ### First-time setup
 - on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
@@ -77,9 +80,10 @@ Please include the following with each issue:
 
 **Tip:** If "Launch Copilot Extension - Watch Mode" doesn't work for you, try using the "Launch Copilot Extension" debug configuration instead.
 
-**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
+**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported by following the [VS Code setup instructions](https://github.com/microsoft/vscode/wiki/Selfhosting-on-Windows-WSL).
 
 ### Testing
+If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
 
 There are unit tests which run in Node.JS:
 
@@ -93,7 +97,7 @@ There are also integration tests that run within VS Code itself:
 npm run test:extension
 ```
 
-Finally, there are **simulation tests**. These tests reach out to Copilot API endpoints, invoke LLMs and require expensive computations to run. Each test runs 10 times, to accomodate for the stochastic nature of LLMs themselves. The results of all runs of all tests are snapshotted in the baseline file, [`test/simulation/baseline.json`](test/simulation/baseline.json), which encodes the quality of the test suite at any given point in time.
+Finally, there are **simulation tests**. These tests reach out to Copilot API endpoints, invoke LLMs and require expensive computations to run. Each test runs 10 times, to accommodate for the stochastic nature of LLMs themselves. The results of all runs of all tests are snapshotted in the baseline file, [`test/simulation/baseline.json`](test/simulation/baseline.json), which encodes the quality of the test suite at any given point in time.
 
 Because LLM results are both random and costly, they are cached within the repo in `test/simulation/cache`. This means rerunning the simulation tests and benefiting from the cache will make the test run be both faster as well as deterministic.
 
@@ -286,6 +290,8 @@ Tools are registered through VS Code's normal [Language Model Tool API](https://
 - [`toolNames.ts`](src/extension/tools/common/toolNames.ts): Contains the model-facing tool names.
 - [`tools/`](src/extension/tools/node/): Tool implementations are in this folder. For the most part, they are implementations of the standard `vscode.LanguageModelTool` interface, but since some have additional custom behavior, they can implement the extended `ICopilotTool` interface.
 
+See the [tools.md](docs/tools.md) document for more important details on how to develop tools. Please read it before adding a new tool!
+
 ## Tree Sitter
 
 We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WASM prebuilds.
@@ -294,9 +300,11 @@ We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WA
 
 ### Reading requests
 
-To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect!
+To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect! You can save the request log with right click > "Export As...".
 
 The view also has entries for tool calls on their own, and a prompt-tsx debug view that opens in the Simple Browser.
+
+> 🚨 **Note**: This log is also very helpful in troubleshooting issues, and we will appreciate if you share it when filing an issue about the agent's behavior. But, this log may contain personal information such as the contents of your files or terminal output. Please review the contents carefully before sharing it with anyone else.
 
 ## API updates
 
@@ -323,3 +331,108 @@ Examples of additive changes
 - Adding a new response type to `ChatResponseStream`
 - Adding a new API proposal
 - Adding a new method to an existing interface
+
+## Running with Code OSS
+
+### Desktop
+
+You can run the extension from Code OSS Desktop, provided that you follow along these steps:
+- Create a top level `product.overrides.json` in the `vscode` repository
+- Add below contents as JSON
+- Run the extension launch configuration in Code OSS
+
+```json
+{
+   "trustedExtensionAuthAccess": {
+      "github": [
+         "github.copilot-chat"
+      ]
+   }
+}
+```
+
+### Web
+
+Code OSS for Web unfortunately does not support the `product.overrides.json` trick. You have to manually copy the
+contents of the `defaultChatAgent` property into the `src/vs/platform/product/common/product.ts` file [here](https://github.com/microsoft/vscode/blob/d499211732305086bbac4e603392e540dee05bd2/src/vs/platform/product/common/product.ts#L72).
+
+For example:
+
+```ts
+Object.assign(product, {
+		version: '1.102.0-dev',
+		nameShort: 'Code - OSS Dev',
+		nameLong: 'Code - OSS Dev',
+		applicationName: 'code-oss',
+		dataFolderName: '.vscode-oss',
+		urlProtocol: 'code-oss',
+		reportIssueUrl: 'https://github.com/microsoft/vscode/issues/new',
+		licenseName: 'MIT',
+		licenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
+		serverLicenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
+		defaultChatAgent: {
+			'extensionId': 'GitHub.copilot',
+			'chatExtensionId': 'GitHub.copilot-chat',
+			'documentationUrl': 'https://aka.ms/github-copilot-overview',
+			'termsStatementUrl': 'https://aka.ms/github-copilot-terms-statement',
+			'privacyStatementUrl': 'https://aka.ms/github-copilot-privacy-statement',
+			'skusDocumentationUrl': 'https://aka.ms/github-copilot-plans',
+			'publicCodeMatchesUrl': 'https://aka.ms/github-copilot-match-public-code',
+			'manageSettingsUrl': 'https://aka.ms/github-copilot-settings',
+			'managePlanUrl': 'https://aka.ms/github-copilot-manage-plan',
+			'manageOverageUrl': 'https://aka.ms/github-copilot-manage-overage',
+			'upgradePlanUrl': 'https://aka.ms/github-copilot-upgrade-plan',
+			'signUpUrl': 'https://aka.ms/github-sign-up',
+			'provider': {
+				'default': {
+					'id': 'github',
+					'name': 'GitHub'
+				},
+				'enterprise': {
+					'id': 'github-enterprise',
+					'name': 'GHE.com'
+				},
+				'google': {
+					'id': 'google',
+					'name': 'Google'
+				},
+				'apple': {
+					'id': 'apple',
+					'name': 'Apple'
+				}
+			},
+			'providerUriSetting': 'github-enterprise.uri',
+			'providerScopes': [
+				[
+					'user:email'
+				],
+				[
+					'read:user'
+				],
+				[
+					'read:user',
+					'user:email',
+					'repo',
+					'workflow'
+				]
+			],
+			'entitlementUrl': 'https://api.github.com/copilot_internal/user',
+			'entitlementSignupLimitedUrl': 'https://api.github.com/copilot_internal/subscribe_limited_user',
+			'chatQuotaExceededContext': 'github.copilot.chat.quotaExceeded',
+			'completionsQuotaExceededContext': 'github.copilot.completions.quotaExceeded',
+			'walkthroughCommand': 'github.copilot.open.walkthrough',
+			'completionsMenuCommand': 'github.copilot.toggleStatusMenu',
+			'completionsRefreshTokenCommand': 'github.copilot.signIn',
+			'chatRefreshTokenCommand': 'github.copilot.refreshToken',
+			'completionsAdvancedSetting': 'github.copilot.advanced',
+			'completionsEnablementSetting': 'github.copilot.enable',
+			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
+		},
+		trustedExtensionAuthAccess: {
+			'github': [
+				'github.copilot-chat'
+			]
+		}
+	});
+}
+```

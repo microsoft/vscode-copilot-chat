@@ -9,6 +9,7 @@ import { sumBy } from '../../../../base/common/arrays';
 import { BugIndicatingError } from '../../../../base/common/errors';
 import { OffsetRange } from '../ranges/offsetRange';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseEdit<T extends BaseReplacement<T> = BaseReplacement<any>, TEdit extends BaseEdit<T, TEdit> = BaseEdit<T, any>> {
 	constructor(
 		public readonly replacements: readonly T[],
@@ -114,7 +115,7 @@ export abstract class BaseEdit<T extends BaseReplacement<T> = BaseReplacement<an
 		for (const r2 of edits2.replacements) {
 			// Copy over edit1 unmodified until it touches edit2.
 			while (true) {
-				const r1 = edit1Queue[0]!;
+				const r1 = edit1Queue[0];
 				if (!r1 || r1.replaceRange.start + edit1ToEdit2 + r1.getNewLength() >= r2.replaceRange.start) {
 					break;
 				}
@@ -184,7 +185,6 @@ export abstract class BaseEdit<T extends BaseReplacement<T> = BaseReplacement<an
 
 		return this._createNew(result).normalize();
 	}
-
 
 	public decomposeSplit(shouldBeInE1: (repl: T) => boolean): { e1: TEdit; e2: TEdit } {
 		const e1: T[] = [];

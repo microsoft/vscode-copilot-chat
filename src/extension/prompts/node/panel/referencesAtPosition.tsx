@@ -6,6 +6,7 @@
 import { PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService } from '../../../../platform/languages/common/languageFeaturesService';
@@ -64,18 +65,18 @@ export class ReferencesAtPosition extends PromptElement<Props> {
 			return <ignoredFiles value={[this.props.document.uri]} />;
 		}
 
-		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test
+		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation
 			? 0
 			: (this.props.timeoutMs === undefined ? ReferencesAtPosition.DEFAULT_TIMEOUT_MS : this.props.timeoutMs);
 
 		const [definitions, usages] = await this.findReferences(timeout);
 
-		this.logService.logger.debug(`Found ${definitions.length} implementation(s)/definition(s), ${usages.length} usages`);
+		this.logService.debug(`Found ${definitions.length} implementation(s)/definition(s), ${usages.length} usages`);
 		if (definitions.length > 0) {
-			this.logService.logger.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
+			this.logService.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
 		}
 		if (usages.length > 0) {
-			this.logService.logger.debug(`Usages found:` + JSON.stringify(usages, null, '\t'));
+			this.logService.debug(`Usages found:` + JSON.stringify(usages, null, '\t'));
 		}
 
 		return (
@@ -112,7 +113,7 @@ export class ReferencesAtPosition extends PromptElement<Props> {
 		const findReference = async () => {
 			try {
 				const refs = await this.languageFeaturesService.getReferences(document.uri, position);
-				this.logService.logger.debug(`Found ${refs.length} references: ` + JSON.stringify(refs, null, '\t'));
+				this.logService.debug(`Found ${refs.length} references: ` + JSON.stringify(refs, null, '\t'));
 				return refs;
 			} catch (e) {
 				return [];

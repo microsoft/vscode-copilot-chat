@@ -22,7 +22,7 @@ export class LineOfText {
 	}
 }
 
-// TODO @rebornix for notebook alternative content we use \n always as the line ending for now.
+/** End of Line for alternative Notebook contnt is always \n */
 export const EOL = '\n';
 export type LineOfCellText = {
 	type: 'start';
@@ -106,6 +106,43 @@ const CELL_ID_PREFIX = '#VSC-';
 
 /** RegExp to match all Cell Ids */
 export const CellIdPatternRe = new RegExp(`(\\s+|^|\\b|\\W)(#VSC-[a-f0-9]{${CELL_ID_HASH_LENGTH}})\\b`, 'gi');
+
+/**
+ * Sometimes the model may return a cellId that is not in the expected format.
+ * This function attempts to convert such cellIds to the expected format.
+ */
+export function normalizeCellId(cellId: string): string {
+	if (cellId.startsWith(CELL_ID_PREFIX)) {
+		return cellId;
+	}
+	if (cellId.startsWith('VSC-')) {
+		return `#${cellId}`;
+	}
+	if (cellId.startsWith('#V-') && cellId.length === (CELL_ID_HASH_LENGTH + 3)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(3)}`;
+	}
+	if (cellId.toLowerCase().startsWith('vscode-') && cellId.length === (CELL_ID_HASH_LENGTH + 7)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(7)}`;
+	}
+	if (cellId.startsWith('-')) {
+		return `#VSC${cellId}`;
+	}
+	// Possible case where the cellId is just a hash without the prefix
+	return cellId.length === CELL_ID_HASH_LENGTH ? `${CELL_ID_PREFIX}${cellId}` : cellId;
+}
+
+const notebookIdCache = new WeakMap<NotebookDocument, string>();
+export function getNotebookId(notebook: NotebookDocument): string {
+	let id = notebookIdCache.get(notebook);
+	if (id) {
+		return id;
+	}
+	const hash = new StringSHA1();
+	hash.update(notebook.uri.toString());
+	id = hash.digest();
+	notebookIdCache.set(notebook, id);
+	return id;
+}
 
 /**
  * Given a Notebook cell returns a unique identifier for the cell.

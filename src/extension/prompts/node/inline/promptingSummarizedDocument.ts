@@ -162,7 +162,7 @@ export class InlineReplyInterpreter implements ReplyInterpreter {
 
 	private readonly _initialDocumentSnapshot: DocumentSnapshot;
 	private readonly _workingCopySummarizedDoc: WorkingCopyDerivedDocument;
-	private _lastText: string | undefined = undefined;
+	private _lastText: string = '';
 
 	constructor(
 		private readonly _uri: vscode.Uri,
@@ -199,8 +199,8 @@ export class InlineReplyInterpreter implements ReplyInterpreter {
 		);
 
 		for await (const part of inputStream) {
-			this._lastText = part.text;
-			const { shouldFinish } = streaming.update(part.text);
+			this._lastText += part.delta.text;
+			const { shouldFinish } = streaming.update(this._lastText);
 			if (shouldFinish) {
 				break;
 			}

@@ -3,32 +3,30 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { GithubRepositoryItem, IGithubRepositoryService } from '../common/githubService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { makeGitHubAPIRequest } from '../common/githubAPI';
+import { GithubRepositoryItem, IGetRepositoryInfoResponseData, IGithubRepositoryService } from '../common/githubService';
 
 export class GithubRepositoryService implements IGithubRepositoryService {
 
 	declare readonly _serviceBrand: undefined;
 
-	private readonly githubRepositoryInfoCache = new Map<string, { id: number }>();
+	private readonly githubRepositoryInfoCache = new Map<string, IGetRepositoryInfoResponseData>();
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@ILogService private readonly _logService: ILogService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 	}
 
-	private async _doGetRepositoryInfo(owner: string, repo: string) {
+	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
-		const headers: Record<string, string> = {
-			Accept: 'application/vnd.github+json',
-			'X-GitHub-Api-Version': '2022-11-28'
-		};
-		if (authToken) {
-			headers['Authorization'] = `Bearer ${authToken}`;
-		}
-		// cache this based on creation info
-		return this._fetcherService.fetch(`https://api.github.com/repos/${owner}/${repo}`, { method: 'GET', headers });
+
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
 	}
 
 	async getRepositoryInfo(owner: string, repo: string) {
@@ -38,10 +36,9 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		}
 
 		const response = await this._doGetRepositoryInfo(owner, repo);
-		if (response.ok) {
-			const repoInfo = await response.json();
-			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, repoInfo);
-			return repoInfo;
+		if (response) {
+			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, response);
+			return response;
 		}
 		throw new Error(`Failed to fetch repository info for ${owner}/${repo}`);
 	}
@@ -49,7 +46,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	async isAvailable(org: string, repo: string): Promise<boolean> {
 		try {
 			const response = await this._doGetRepositoryInfo(org, repo);
-			return response.ok;
+			return response !== undefined;
 		} catch (e) {
 			return false;
 		}
@@ -60,11 +57,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-
-			const response = await this._fetcherService.fetch(`https://api.github.com/repos/${org}/${repo}/contents/${encodedPath}`, {
-				method: 'GET',
-				headers: { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Authorization': `Bearer ${authToken}` }
-			});
+			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
 
 			if (response.ok) {
 				const data = (await response.json());
@@ -93,10 +86,8 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		try {
 			const authToken = this._authenticationService.permissiveGitHubSession?.accessToken;
 			const encodedPath = path.split('/').map((segment) => encodeURIComponent(segment)).join('/');
-			const response = await this._fetcherService.fetch(`https://api.github.com/repos/${org}/${repo}/contents/${encodedPath}`, {
-				method: 'GET',
-				headers: { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Authorization': `Bearer ${authToken}` }
-			});
+			const response = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${org}/${repo}/contents/${encodedPath}`, 'GET', authToken);
+
 			if (response.ok) {
 
 				const data = (await response.json());

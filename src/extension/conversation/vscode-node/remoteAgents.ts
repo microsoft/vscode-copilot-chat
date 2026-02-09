@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { RequestType } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
-import { ChatCompletionItem, ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseReferencePart, ChatResponseTurn, ChatResponseWarningPart, ChatVariableLevel, Disposable, DynamicChatParticipantProps, Location, MarkdownString, Position, Progress, QuickPickItem, QuickPickItemKind, Range, TextDocument, TextEditor, ThemeIcon, chat, commands, l10n, window } from 'vscode';
+import { ChatCompletionItem, ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseReferencePart, ChatResponseTurn, ChatResponseWarningPart, ChatVariableLevel, Disposable, DynamicChatParticipantProps, Location, MarkdownString, Position, Progress, Range, TextDocument, TextEditor, ThemeIcon, chat, commands, l10n } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
@@ -16,8 +16,8 @@ import { IGitService, getGitHubRepoInfoFromContext, toGithubNwo } from '../../..
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { HAS_IGNORED_FILES_MESSAGE, IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ICopilotKnowledgeBaseReference, ICopilotReference } from '../../../platform/networking/common/fetch';
-import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
+import { ICopilotReference } from '../../../platform/networking/common/fetch';
+import { Response } from '../../../platform/networking/common/fetcherService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
@@ -47,23 +47,11 @@ interface IAgentsResponse {
 
 const agentRegistrations = new Map<string, Disposable>();
 
-export class SSOQuickPickItem implements QuickPickItem {
-	public readonly iconPath = new ThemeIcon('lock');
-	constructor(public label: string) { }
-}
-
-const SSO_CONFIRMATION_TEXT = l10n.t('Sign in again to {0}', 'GitHub');
-
 const GITHUB_PLATFORM_AGENT_NAME = 'github';
 const GITHUB_PLATFORM_AGENT_ID = 'platform';
 const GITHUB_PLATFORM_AGENT_SKILLS: { [key: string]: string } = {
 	web: 'bing-search',
-	kb: 'kb-search',
 };
-
-const KNOWLEDGE_BASE_VARIABLE_PREFIX = 'kb:';
-const SELECT_KNOWLEDGE_BASE_COMMAND = 'github.copilot.chat.selectKnowledgeBase';
-type ICopilotKnowledgeBaseReferenceItem = ICopilotKnowledgeBaseReference & { label: string; name: string; description: string; organization: string };
 
 type IPlatformReference = IFileReference | ISelectionReference | IGitHubRepositoryReference;
 
@@ -91,7 +79,7 @@ interface ISelectionReference {
 interface IGitHubRepositoryReference {
 	type: 'github.repository';
 	data: {
-		type: "repository";
+		type: 'repository';
 		name: string; // name of the repository
 		ownerLogin: string; // owner of the repository
 		id: number;
@@ -103,12 +91,9 @@ export class RemoteAgentContribution implements IDisposable {
 	private disposables = new DisposableStore();
 	private refreshRemoteAgentsP: Promise<void> | undefined;
 	private enabledSkillsPromise: Promise<Set<string>> | undefined;
-	private knowledgeBases: Map<string, ICopilotKnowledgeBaseReferenceItem> | null = null;
-	private organizationsMissingSSO?: { name?: string; numberOfOrganizations: number } = undefined;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IFetcherService private readonly fetcherService: IFetcherService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
@@ -124,55 +109,6 @@ export class RemoteAgentContribution implements IDisposable {
 		@IAuthenticationChatUpgradeService private readonly authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		this.disposables.add(new Disposable(() => agentRegistrations.forEach(agent => agent.dispose())));
-		this.disposables.add(commands.registerCommand(SELECT_KNOWLEDGE_BASE_COMMAND, async () => {
-			const quickpick = window.createQuickPick<QuickPickItem>();
-			quickpick.placeholder = l10n.t('Select a knowledge base');
-			quickpick.busy = true;
-			quickpick.show();
-			quickpick.items = await this.getKnowledgeBaseAutocompleteQuickPickItems();
-			quickpick.busy = false;
-
-			const selection = await new Promise((resolve, reject) => {
-				quickpick.canSelectMany = false;
-				let refetchingKnowledgeBases = false;
-				quickpick.onDidAccept(async () => {
-					if (quickpick.selectedItems[0] instanceof SSOQuickPickItem) {
-						// Recompute items based on new token access
-						quickpick.busy = true;
-						const authSession = await this.authenticationService.getPermissiveGitHubSession({ forceNewSession: true });
-						if (!authSession) {
-							this.logService.logger.error('Failed to get a new auth session for knowledge base selection');
-							resolve(undefined);
-							quickpick.hide();
-							return;
-						}
-						refetchingKnowledgeBases = true;
-						this.organizationsMissingSSO = undefined;
-						this.knowledgeBases?.clear();
-						quickpick.items = await this.getKnowledgeBaseAutocompleteQuickPickItems(authSession.accessToken);
-						if (quickpick.items.length === 1 && quickpick.items[0] instanceof SSOQuickPickItem) {
-							this.logService.logger.error('Failed to fetch new knowledge bases after fetching new auth session');
-							resolve(undefined);
-							quickpick.hide();
-							return;
-						}
-						quickpick.busy = false;
-						quickpick.show();
-					} else {
-						resolve(quickpick.selectedItems[0]);
-						quickpick.hide();
-					}
-				});
-				quickpick.onDidHide(() => {
-					if (!refetchingKnowledgeBases) {
-						resolve(undefined);
-					}
-				});
-			});
-
-			quickpick.dispose();
-			return (selection as any)?.insertText;
-		}));
 
 		this.refreshRemoteAgents();
 		// Refresh remote agents whenever auth changes, e.g. in case the user was initially not signed in
@@ -200,17 +136,17 @@ export class RemoteAgentContribution implements IDisposable {
 			const authToken = this.authenticationService.anyGitHubSession?.accessToken;
 			if (!authToken) {
 				// We have to silently wait for auth to become available so we can fetch remote agents
-				this.logService.logger.warn('Unable to fetch remote agents because user is not signed in.');
+				this.logService.warn('Unable to fetch remote agents because user is not signed in.');
 				return;
 			}
 			try {
 				// First try to register the default platform agent
 				if (!existingAgents.delete(GITHUB_PLATFORM_AGENT_ID)) { // Don't reregister it
-					this.logService.logger.info('Registering default platform agent...');
+					this.logService.info('Registering default platform agent...');
 					agentRegistrations.set(GITHUB_PLATFORM_AGENT_ID, this.registerAgent(null));
 				}
 			} catch (ex) {
-				this.logService.logger.info(`Encountered error while registering platform agent: ${JSON.stringify(ex)}`);
+				this.logService.info(`Encountered error while registering platform agent: ${JSON.stringify(ex)}`);
 			}
 			const response = await this.capiClientService.makeRequest<Response>({
 				method: 'GET',
@@ -227,7 +163,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}
 			} catch (e) {
 				if (!text.includes('access denied')) {
-					this.logService.logger.warn(`Invalid remote agent response: ${text} (${e})`);
+					this.logService.warn(`Invalid remote agent response: ${text} (${e})`);
 				}
 				return;
 			}
@@ -239,7 +175,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}
 			}
 		} catch (e) {
-			this.logService.logger.error(e, 'Failed to load remote copilot agents');
+			this.logService.error(e, 'Failed to load remote copilot agents');
 		}
 
 		for (const item of existingAgents) {
@@ -265,7 +201,7 @@ export class RemoteAgentContribution implements IDisposable {
 		const store = new DisposableStore();
 		const participantId = `github.copilot-dynamic.${agentData?.slug ?? GITHUB_PLATFORM_AGENT_ID}`;
 		const slug = agentData?.slug ?? GITHUB_PLATFORM_AGENT_NAME;
-		const description = agentData?.description ?? l10n.t("Get answers grounded in web search, code search, and your enterprise's knowledge bases");
+		const description = agentData?.description ?? l10n.t("Get answers grounded in web search and code search");
 		const dynamicProps: DynamicChatParticipantProps = {
 			name: slug,
 			description,
@@ -289,11 +225,7 @@ export class RemoteAgentContribution implements IDisposable {
 			let accessToken: string | undefined;
 			if (request.acceptedConfirmationData) {
 				for (const data of request.acceptedConfirmationData) {
-					if (data?.ssoSignIn) {
-						await this.authenticationService.getPermissiveGitHubSession({ forceNewSession: true });
-						responseStream.markdown(l10n.t('Please complete the sign-in process in your browser.'));
-						return { metadata } satisfies ICopilotChatResult;
-					} else if (data?.url) {
+					if (data?.url) {
 						// Store that the user has authorized the agent
 						await this.setAuthorized(slug, request.prompt.startsWith(l10n.t('Authorize for all workspaces')));
 						await commands.executeCommand('vscode.open', Uri.parse(data.url));
@@ -308,7 +240,7 @@ export class RemoteAgentContribution implements IDisposable {
 					} else if (data?.authPermissionPrompted) {
 						request = await this.authenticationChatUpgradeService.handleConfirmationRequest(responseStream, request, context.history);
 						metadata.command = request.command;
-						accessToken = (await this.authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken;
+						accessToken = (await this.authenticationService.getGitHubSession('permissive', { silent: true }))?.accessToken;
 						if (!accessToken) {
 							responseStream.markdown(l10n.t('The additional permissions are required for this feature.'));
 							return { metadata } satisfies ICopilotChatResult;
@@ -369,10 +301,7 @@ export class RemoteAgentContribution implements IDisposable {
 
 				// Collect copilot skills and references to be sent in the request
 				const copilotReferences = [];
-				const { copilot_skills, copilot_references: copilotSkillReferences } = await this.resolveCopilotSkills(slug, request);
-				if (copilotSkillReferences) {
-					copilotReferences.push(...copilotSkillReferences);
-				}
+				const { copilot_skills } = await this.resolveCopilotSkills(slug, request);
 
 				let hasIgnoredFiles = false;
 				try {
@@ -404,7 +333,6 @@ export class RemoteAgentContribution implements IDisposable {
 				let reportedProgress: Progress<ChatResponseWarningPart | ChatResponseReferencePart2> | undefined = undefined;
 				let pendingProgress: { resolvedMessage: string; deferred: DeferredPromise<string> } | undefined;
 				let hadCopilotErrorsOrConfirmations = false;
-				let githubSSOHeaderValue: string | undefined;
 
 				const response = await endpoint.makeChatRequest(
 					'remoteAgent',
@@ -488,13 +416,6 @@ export class RemoteAgentContribution implements IDisposable {
 										} catch (ex) { }
 										break;
 									}
-									case 'kb-search': {
-										try {
-											const data: { kbID: string; query: string } = JSON.parse(call.arguments);
-											responseStream.progress(l10n.t('Searching knowledge base for "{0}"...', data.query), async (progress) => reportProgress(progress, l10n.t('Knowledge base results for "{0}"', data.query)));
-										} catch (ex) { }
-										break;
-									}
 									case 'codesearch': {
 										try {
 											const data: { query: string; scopingQuery: string } = JSON.parse(call.arguments);
@@ -510,9 +431,7 @@ export class RemoteAgentContribution implements IDisposable {
 						if (delta.copilotErrors && typeof responseStream.warning === 'function') {
 							hadCopilotErrorsOrConfirmations = true;
 							for (const error of delta.copilotErrors) {
-								if (error.code === 'sso') {
-									githubSSOHeaderValue = error.identifier;
-								} else if (reportedProgress) {
+								if (reportedProgress) {
 									reportedProgress?.report(new ChatResponseWarningPart(error.message));
 								} else {
 									responseStream.warning(error.message);
@@ -553,14 +472,8 @@ export class RemoteAgentContribution implements IDisposable {
 					responseStream.markdown(HAS_IGNORED_FILES_MESSAGE);
 				}
 
-				if (githubSSOHeaderValue && accessToken) {
-					const orgName = this.updateMissingSSOOrganizationInfo(githubSSOHeaderValue, accessToken);
-					const ssoMessage = orgName ? l10n.t('Please grant permission to read resources protected by SSO in the {0} organization.', orgName) : l10n.t('Please grant permission to read resources protected by SSO.');
-					responseStream.confirmation(SSO_CONFIRMATION_TEXT, ssoMessage, { ssoSignIn: true }, [l10n.t('Sign In')]);
-				}
-
 				if (response.type !== ChatFetchResponseType.Success) {
-					this.logService.logger.warn(`Bad response from remote agent "${slug}": ${response.type} ${response.reason}`);
+					this.logService.warn(`Bad response from remote agent "${slug}": ${response.type} ${response.reason}`);
 					if (response.reason.includes('400 no docs found')) {
 						return {
 							errorDetails: { message: 'No docs found' },
@@ -575,7 +488,7 @@ export class RemoteAgentContribution implements IDisposable {
 							l10n.t({
 								message: 'Please authorize usage of **@{0}** on {1} and resend your question. [Learn more]({2}).',
 								args: [slug, url.hostname, 'https://aka.ms/vscode-github-chat-extension-editor-context'],
-								comment: ["{Locked=']({'}"]
+								comment: [`{Locked=']({'}`]
 							}),
 							{ url: response.authorizationUrl },
 							[l10n.t("Authorize"), l10n.t('Authorize for All Workspaces')]
@@ -601,7 +514,7 @@ export class RemoteAgentContribution implements IDisposable {
 						l10n.t({
 							message: '**@{0}** would like to read your active file and selection. [Learn More]({1})',
 							args: [slug, 'https://aka.ms/vscode-github-chat-extension-editor-context'],
-							comment: ["{Locked=']({'}"]
+							comment: [`{Locked=']({'}`]
 						}),
 						{ hasAcknowledgedImplicitReferences: true },
 						[l10n.t("Allow"), l10n.t("Allow for All Workspaces")]
@@ -611,7 +524,7 @@ export class RemoteAgentContribution implements IDisposable {
 
 				return { metadata } satisfies ICopilotChatResult;
 			} catch (e) {
-				this.logService.logger.error(`/agents/${slug} failed: ${e}`);
+				this.logService.error(`/agents/${slug} failed: ${e}`);
 				return { metadata };
 			}
 		}));
@@ -627,8 +540,6 @@ export class RemoteAgentContribution implements IDisposable {
 							const item = new ChatCompletionItem(`copilot.${i.name}`, '#' + i.name, [{ value: i.insertText, level: ChatVariableLevel.Full, description: i.description }]);
 							item.command = i.command;
 							item.detail = i.description;
-							item.fullName = i.fullName;
-							item.icon = i.icon;
 							return item;
 						});
 					},
@@ -731,7 +642,7 @@ export class RemoteAgentContribution implements IDisposable {
 			} else if (variable.name === 'selection') {
 				const { activeTextEditor } = this.tabsAndEditorsService;
 				if (!activeTextEditor) {
-					throw new Error(l10n.t({ message: 'Please open a text editor to use the `#selection` variable.', comment: "{Locked='`#selection`'}" }));
+					throw new Error(l10n.t({ message: 'Please open a text editor to use the `#selection` variable.', comment: '{Locked=\'`#selection`\'}' }));
 				}
 				if (!hasSentImplicitSelectionReference) {
 					await addSelectionReference(activeTextEditor, variable.name, true);
@@ -758,7 +669,7 @@ export class RemoteAgentContribution implements IDisposable {
 					type: 'github.repository',
 					id: toGithubNwo(repoId),
 					data: {
-						type: "repository",
+						type: 'repository',
 						name: repoId.repo,
 						ownerLogin: repoId.org,
 						id: repo.id
@@ -768,9 +679,9 @@ export class RemoteAgentContribution implements IDisposable {
 				if (ex instanceof Error && ex.message.includes('Failed to fetch repository info')) {
 					// TODO display a merged confirmation to reauthorize with the repo scope
 					// For now, raise a reauth badge so the user has a way out of this state
-					void this.authenticationService.getPermissiveGitHubSession({ silent: true });
+					void this.authenticationService.getGitHubSession('permissive', { silent: true });
 				}
-				this.logService.logger.error(ex, 'Failed to fetch info about current GitHub repository');
+				this.logService.error(ex, 'Failed to fetch info about current GitHub repository');
 			}
 		}
 
@@ -791,135 +702,18 @@ export class RemoteAgentContribution implements IDisposable {
 		return this.enabledSkillsPromise;
 	}
 
-	private async resolveCopilotSkills(agent: string, request: ChatRequest): Promise<{ copilot_skills: string[]; copilot_references?: ICopilotKnowledgeBaseReference[] }> {
+	private async resolveCopilotSkills(agent: string, request: ChatRequest): Promise<{ copilot_skills: string[] }> {
 		if (agent === GITHUB_PLATFORM_AGENT_NAME) {
 			const skills = new Set<string>();
-			const copilotReferences = new Set<ICopilotKnowledgeBaseReference>();
 			for (const variable of request.references) {
 				if (GITHUB_PLATFORM_AGENT_SKILLS[variable.name]) {
 					skills.add(GITHUB_PLATFORM_AGENT_SKILLS[variable.name]);
-				} else if (variable.name.startsWith(KNOWLEDGE_BASE_VARIABLE_PREFIX)) {
-					skills.add('kb-search');
-					await this.getKnowledgeBases();
-					const knowledgeBase = this.knowledgeBases?.get(variable.name.slice(KNOWLEDGE_BASE_VARIABLE_PREFIX.length));
-					if (knowledgeBase) {
-						copilotReferences.add(knowledgeBase);
-					}
 				}
 			}
-			return { copilot_skills: [...skills], copilot_references: [...copilotReferences] };
+			return { copilot_skills: [...skills] };
 		}
 
 		return { copilot_skills: [] };
-	}
-
-	private async updateMissingSSOOrganizationInfo(xGithubSSOHeader: string, authToken: string): Promise<string | undefined> {
-		// Parse missing orgs
-		const missingOrganizations = xGithubSSOHeader?.split('partial-results; organizations=')[1];
-		if (missingOrganizations) {
-			const organizationsMissingSSO = missingOrganizations.split(',');
-			this.logService.logger.debug(`Missing knowledge bases SSO for ${organizationsMissingSSO.length} organizations: ${missingOrganizations}`);
-
-			const orgName = await this.getOrganizationName(authToken, parseInt(organizationsMissingSSO[0]));
-			if (orgName) {
-				this.organizationsMissingSSO = { name: orgName, numberOfOrganizations: organizationsMissingSSO.length };
-			} else {
-				this.organizationsMissingSSO = { name: undefined, numberOfOrganizations: organizationsMissingSSO.length };
-			}
-			return orgName;
-		}
-	}
-
-	private async getKnowledgeBases(accessToken?: string): Promise<{ knowledgeBases: ICopilotKnowledgeBaseReferenceItem[]; organizationsMissingSSO?: { name?: string; numberOfOrganizations: number } }> {
-		if (this.knowledgeBases?.size) {
-			return { knowledgeBases: [...this.knowledgeBases.values()], organizationsMissingSSO: this.organizationsMissingSSO };
-		}
-		const authToken = accessToken ?? (await this.authenticationService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
-		if (!authToken) {
-			this.logService.logger.debug('No auth token available to fetch knowledge bases');
-			return { knowledgeBases: [], organizationsMissingSSO: undefined };
-		}
-		const response = await this.listKnowledgeBases(authToken);
-		const text = await response.text();
-
-		const ssoHeaderValue = response.headers.get('X-GitHub-SSO');
-		if (ssoHeaderValue) {
-			this.updateMissingSSOOrganizationInfo(ssoHeaderValue, authToken);
-		}
-
-		try {
-			const data = JSON.parse(text);
-			this.knowledgeBases = new Map();
-			const kbs = data.map((kb: any) => ({ label: kb.name, organization: kb.owner.login, iconPath: new ThemeIcon('github'), insertText: kb.name, name: kb.name, description: kb.description, type: 'github.knowledge-base', id: generateUuid(), data: { type: 'knowledge-base', id: kb.id } }));
-			for (const kb of kbs) {
-				this.knowledgeBases.set(kb.name, kb);
-			}
-			return { knowledgeBases: [...this.knowledgeBases.values()], organizationsMissingSSO: this.organizationsMissingSSO };
-		} catch (ex) {
-			this.logService.logger.error(ex);
-			return { knowledgeBases: [], organizationsMissingSSO: this.organizationsMissingSSO };
-		}
-	}
-
-	private async getOrganizationName(authToken: string, id: number) {
-		const org = await this.fetcherService.fetch(`https://api.github.com/user/${id}`, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${authToken}`
-			}
-		});
-		if (org.ok) {
-			return (await org.json()).name;
-		}
-		return undefined;
-	}
-
-	private async listKnowledgeBases(authToken: string) {
-		return this.fetcherService.fetch(`https://api.github.com/user/knowledge-bases`, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${authToken}`
-			}
-		});
-	}
-
-	private async getKnowledgeBaseAutocompleteQuickPickItems(accessToken?: string) {
-		const { knowledgeBases, organizationsMissingSSO } = await this.getKnowledgeBases(accessToken);
-		const quickpickItems: (QuickPickItem & ICopilotKnowledgeBaseReferenceItem | QuickPickItem)[] = [];
-		if (organizationsMissingSSO) {
-			let message;
-			if (organizationsMissingSSO.name && organizationsMissingSSO.numberOfOrganizations > 1) {
-				message = l10n.t("Single-sign on to see knowledge bases from {0} and {1} other organizations", organizationsMissingSSO.name, organizationsMissingSSO.numberOfOrganizations - 1);
-			} else if (organizationsMissingSSO.name) {
-				message = l10n.t("Single-sign on to see knowledge bases from the {0} organization", organizationsMissingSSO.name);
-			} else if (organizationsMissingSSO.numberOfOrganizations === 1) {
-				message = l10n.t("Single-sign on to see knowledge bases from 1 additional organization");
-			} else {
-				message = l10n.t("Single-sign on to see knowledge bases from {0} additional organizations", organizationsMissingSSO.numberOfOrganizations);
-			}
-			quickpickItems.push(new SSOQuickPickItem(message));
-			quickpickItems.push({ kind: QuickPickItemKind.Separator, label: '' });
-		}
-
-		// Group all the knowledge bases by organization and insert labeled separators into the quickpick
-		const organizationMap = new Map<string, ICopilotKnowledgeBaseReferenceItem[]>();
-		for (const kb of knowledgeBases) {
-			const org = kb.organization;
-			if (!organizationMap.has(org)) {
-				organizationMap.set(org, []);
-			}
-			organizationMap.get(org)?.push(kb);
-		}
-
-		// Sort organizations alphabetically
-		for (const organization of [...organizationMap.keys()].sort()) {
-			const knowledgeBases = organizationMap.get(organization);
-			if (knowledgeBases?.length) {
-				quickpickItems.push({ kind: QuickPickItemKind.Separator, label: organization });
-				quickpickItems.push(...knowledgeBases.sort((a, b) => a.label.localeCompare(b.label)));
-			}
-		}
-		return quickpickItems;
 	}
 
 	private async getPlatformAgentSkills() {
@@ -933,11 +727,8 @@ export class RemoteAgentContribution implements IDisposable {
 
 		return [
 			{ name: 'web', insertText: `#web`, description: 'Search Bing for real-time context', kind: 'bing-search', command: undefined },
-			{ name: 'kb', insertText: `#${KNOWLEDGE_BASE_VARIABLE_PREFIX}`, icon: new ThemeIcon('book'), fullName: 'Knowledge Bases...', description: 'Search your enterprises\' knowledge bases', kind: 'kb-search', command: { title: '', command: SELECT_KNOWLEDGE_BASE_COMMAND } }
 		].filter((skill) => skills.has(skill.kind));
 	}
-
-
 }
 
 function prepareConfirmations(request: ChatRequest) {

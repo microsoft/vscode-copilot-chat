@@ -48,7 +48,7 @@ class FooBar {
 `);
 
 		const lineEdit = RootedEdit.toLineEdit(await computeDiff(doc1, doc2));
-		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.edits[0], 'typescript', doc1.getLines())).toBe(true);
+		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.replacements[0], 'typescript', doc1.getLines())).toBe(true);
 	});
 
 
@@ -69,7 +69,7 @@ class FooBar {
 `);
 
 		const lineEdit = RootedEdit.toLineEdit(await computeDiff(doc1, doc2));
-		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.edits[0], 'typescript', doc1.getLines())).toBe(true);
+		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.replacements[0], 'typescript', doc1.getLines())).toBe(true);
 	});
 
 	test('ImportChange', async () => {
@@ -88,7 +88,7 @@ class FooBar {
 `);
 
 		const lineEdit = RootedEdit.toLineEdit(await computeDiff(doc1, doc2));
-		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.edits[0], 'typescript', doc1.getLines())).toBe(true);
+		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.replacements[0], 'typescript', doc1.getLines())).toBe(true);
 	});
 
 
@@ -109,6 +109,6 @@ class FooBar {
 `);
 
 		const lineEdit = RootedEdit.toLineEdit(await computeDiff(doc1, doc2));
-		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.edits[0], 'typescript', doc1.getLines())).toBe(false);
+		expect(IgnoreImportChangesAspect.isImportChange(lineEdit.replacements[0], 'typescript', doc1.getLines())).toBe(false);
 	});
 });

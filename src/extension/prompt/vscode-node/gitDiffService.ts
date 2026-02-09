@@ -30,19 +30,59 @@ export class GitDiffService implements IGitDiffService {
 		return repositoryOrUri;
 	}
 
-	async getChangeDiffs(repositoryOrUri: Repository | Uri, changes: Change[]): Promise<Diff[]> {
-		this._logService.logger.debug(`[GitDiffService] Changes (before context exclusion): ${changes.length} file(s)`);
+	// Get the diff between the current state of the repository and the specified ref for each of the provided changes
+	async getWorkingTreeDiffsFromRef(repositoryOrUri: Repository | Uri, changes: Change[], ref: string): Promise<Diff[]> {
+		this._logService.debug(`[GitDiffService] Getting working tree diffs from ref ${ref} for ${changes.length} file(s)`);
 
 		const repository = await this._resolveRepository(repositoryOrUri);
 		if (!repository) {
-			this._logService.logger.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
+			this._logService.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
 			return [];
 		}
 
 		const diffs: Diff[] = [];
 		for (const change of changes) {
 			if (await this._ignoreService.isCopilotIgnored(change.uri)) {
-				this._logService.logger.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
+				this._logService.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
+				continue;
+			}
+
+			let diff: string;
+			if (change.status === 7 /* UNTRACKED */) {
+				// For untracked files, generate a patch showing all content as additions
+				diff = await this._getUntrackedChangePatch(repository, change.uri);
+			} else {
+				// For all other changes, get diff from ref to current working tree state
+				diff = await repository.diffWith(ref, change.uri.fsPath);
+			}
+
+			diffs.push({
+				originalUri: change.originalUri,
+				renameUri: change.renameUri,
+				status: change.status,
+				uri: change.uri,
+				diff
+			});
+		}
+
+		this._logService.debug(`[GitDiffService] Working tree diffs from ref (after context exclusion): ${diffs.length} file(s)`);
+
+		return diffs;
+	}
+
+	async getChangeDiffs(repositoryOrUri: Repository | Uri, changes: Change[]): Promise<Diff[]> {
+		this._logService.debug(`[GitDiffService] Changes (before context exclusion): ${changes.length} file(s)`);
+
+		const repository = await this._resolveRepository(repositoryOrUri);
+		if (!repository) {
+			this._logService.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
+			return [];
+		}
+
+		const diffs: Diff[] = [];
+		for (const change of changes) {
+			if (await this._ignoreService.isCopilotIgnored(change.uri)) {
+				this._logService.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
 				continue;
 			}
 
@@ -63,7 +103,7 @@ export class GitDiffService implements IGitDiffService {
 			}
 		}
 
-		this._logService.logger.debug(`[GitDiffService] Changes (after context exclusion): ${diffs.length} file(s)`);
+		this._logService.debug(`[GitDiffService] Changes (after context exclusion): ${diffs.length} file(s)`);
 
 		return diffs;
 	}
@@ -74,22 +114,38 @@ export class GitDiffService implements IGitDiffService {
 		try {
 			const buffer = await workspace.fs.readFile(resource);
 			const relativePath = path.relative(repository.rootUri.fsPath, resource.fsPath);
+			const content = buffer.toString();
 
 			// Header
 			patch.push(`diff --git a/${relativePath} b/${relativePath}`);
-
-			// Add original/modified file paths
+			// 100644 is standard file mode for new git files. Saves us from trying to check file permissions and handling
+			// UNIX vs Windows permission differences. Skipping calculating the SHA1 hashes as well since they are not strictly necessary
+			// to apply the patch.
+			patch.push('new file mode 100644');
 			patch.push('--- /dev/null', `+++ b/${relativePath}`);
 
-			// Add range header
-			patch.push(`@@ -0,0 +1,${buffer.length} @@`);
+			// For non-empty files, add range header and content (empty files omit this)
+			if (content.length > 0) {
+				const lines = content.split('\n');
+				if (content.endsWith('\n')) {
+					// Prevent an extra empty line at the end
+					lines.pop();
+				}
 
-			// Add content
-			patch.push(...buffer.toString().split('\n').map(line => `+${line}`));
+				// Range header and content
+				patch.push(`@@ -0,0 +1,${lines.length} @@`);
+				patch.push(...lines.map(line => `+${line}`));
+
+				// Git standard to add this comment if the file does not end with a newline
+				if (!content.endsWith('\n')) {
+					patch.push('\\ No newline at end of file');
+				}
+			}
 		} catch (err) {
 			console.error(err, `Failed to generate patch file for untracked file: ${resource.toString()}`);
 		}
 
-		return patch.join('\n');
+		// The patch itself should always end with a newline per git patch standards
+		return patch.join('\n') + '\n';
 	}
 }

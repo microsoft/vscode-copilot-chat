@@ -17,7 +17,7 @@ export function forEachModel(models: readonly string[], func: (model: string) =>
 }
 
 interface FixtureFileInfo {
-	readonly kind: "relativeFile";
+	readonly kind: 'relativeFile';
 	readonly fileName: string;
 	readonly fileContents: string;
 }
@@ -123,24 +123,6 @@ export function assertOneOf<T>(assertions: (() => T)[]): T {
 		}
 	}
 	throw new assert.AssertionError({ message: 'none of the assertions passed' });
-}
-
-/**
- * Throws if at least one value in `expecteds` is not `assert.deepStrictEqual` to `actual`.
- */
-export function assertDeepStrictEqualsAny<T>(actual: T, expecteds: T[], message?: string | Error): asserts actual is T {
-	if (!expecteds.some(expected => {
-		try {
-			assert.deepStrictEqual(actual, expected);
-			return true;
-		} catch (e: unknown) {
-			if (!(e instanceof assert.AssertionError)) {
-				throw e;
-			}
-		}
-	})) {
-		throw new assert.AssertionError({ message: 'Expected at least one of `expected` to equal `actual`', actual, expected: expecteds });
-	}
 }
 
 export interface IInlineReplaceEdit {

@@ -10,6 +10,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { DiagnosticData } from './dataTypes/diagnosticData';
 import { DocumentId } from './dataTypes/documentId';
 import { LanguageId } from './dataTypes/languageId';
 import { EditReason } from './editReason';
@@ -94,6 +95,7 @@ export interface IObservableDocument {
 	readonly selection: IObservable<readonly OffsetRange[]>;
 	readonly visibleRanges: IObservable<readonly OffsetRange[]>;
 	readonly languageId: IObservable<LanguageId>;
+	readonly diagnostics: IObservable<readonly DiagnosticData[]>;
 }
 
 export class StringEditWithReason extends StringEdit {
@@ -110,10 +112,6 @@ export class MutableObservableWorkspace extends ObservableWorkspace {
 	public readonly openDocuments = this._openDocuments;
 
 	private readonly _documents = new Map<DocumentId, MutableObservableDocument>();
-
-	constructor() {
-		super();
-	}
 
 	/**
 	 * Dispose to remove.
@@ -177,6 +175,9 @@ export class MutableObservableDocument extends Disposable implements IObservable
 	private readonly _version: ISettableObservable<number>;
 	public get version(): IObservable<number> { return this._version; }
 
+	private readonly _diagnostics: ISettableObservable<readonly DiagnosticData[]>;
+	public get diagnostics(): IObservable<readonly DiagnosticData[]> { return this._diagnostics; }
+
 	constructor(
 		public readonly id: DocumentId,
 		value: StringText,
@@ -193,6 +194,7 @@ export class MutableObservableDocument extends Disposable implements IObservable
 		this._visibleRanges = observableValue(this, []);
 		this._languageId = observableValue(this, languageId);
 		this._version = observableValue(this, versionId);
+		this._diagnostics = observableValue(this, []);
 
 		this._register(toDisposable(onDispose));
 	}
@@ -225,5 +227,9 @@ export class MutableObservableDocument extends Disposable implements IObservable
 			this._value.set(value, tx, e);
 			this._version.set(newVersion ?? this._version.get() + 1, tx);
 		});
+	}
+
+	updateDiagnostics(diagnostics: readonly DiagnosticData[], tx: ITransaction | undefined = undefined): void {
+		this._diagnostics.set(diagnostics, tx);
 	}
 }

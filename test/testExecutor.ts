@@ -26,7 +26,7 @@ import { safeStringify } from '../src/util/vs/base/common/objects';
 import { SyncDescriptor } from '../src/util/vs/platform/instantiation/common/descriptors';
 import { SimulationExtHostToolsService } from './base/extHostContext/simulationExtHostToolsService';
 import { SimulationBaseline, TestBaselineComparison } from './base/simulationBaseline';
-import { createSimulationAccessor, CurrentTestRunInfo, SimulationServicesOptions } from './base/simulationContext';
+import { CacheMode, createSimulationAccessor, CurrentTestRunInfo, SimulationServicesOptions } from './base/simulationContext';
 import { ISimulationEndpointHealth } from './base/simulationEndpointHealth';
 import { SimulationOptions } from './base/simulationOptions';
 import { ISimulationOutcome } from './base/simulationOutcome';
@@ -250,7 +250,8 @@ async function executeTestNTimes(
 
 	const duration = testSummary.results.reduce((acc, c) => acc + c.duration, 0);
 
-	const usage = testSummary.results.reduce((acc, c): APIUsage => {
+	const initial: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
+	const usage: APIUsage = testSummary.results.reduce((acc, c): APIUsage => {
 		if (c.usage === undefined) { return acc; }
 		const { completion_tokens, prompt_tokens, total_tokens, prompt_tokens_details } = c.usage;
 		return {
@@ -258,10 +259,10 @@ async function executeTestNTimes(
 			prompt_tokens: acc.prompt_tokens + prompt_tokens,
 			total_tokens: acc.total_tokens + total_tokens,
 			prompt_tokens_details: {
-				cached_tokens: acc.prompt_tokens_details.cached_tokens + (prompt_tokens_details?.cached_tokens ?? 0),
+				cached_tokens: (acc.prompt_tokens_details?.cached_tokens ?? 0) + (prompt_tokens_details?.cached_tokens ?? 0),
 			}
-		};
-	}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
+		} satisfies APIUsage;
+	}, initial);
 
 	return {
 		test: test.fullName,
@@ -398,13 +399,12 @@ export const executeTestOnce = async (
 	testingServiceCollection.define(IJSONOutputPrinter, ctx.jsonOutputPrinter);
 	testingServiceCollection.define(ITasksService, new TestTasksService());
 
-	if (test.model || test.embeddingsModel) {
+	if (test.model || test.embeddingType) {
 		// We prefer opts that come from the CLI over test specific args since Opts are global and must apply to the entire simulation
 		const smartChatModel = (opts.smartChatModel ?? opts.chatModel) ?? test.model;
 		const fastChatModel = (opts.fastChatModel ?? opts.chatModel) ?? test.model;
 		const fastRewriteModel = (opts.fastRewriteModel ?? opts.chatModel) ?? test.model;
-		const embeddingsModel = opts.embeddingModel ?? test.embeddingsModel;
-		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, embeddingsModel, fastRewriteModel]));
+		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, fastRewriteModel, currentTestRunInfo, opts.modelCacheMode === CacheMode.Disable, undefined]));
 	}
 
 	const simulationTestRuntime = (ctx.externalScenariosPath !== undefined)

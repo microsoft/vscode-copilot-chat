@@ -7,6 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import type { Hash } from './host';
+import type { KeyComputationContext } from './types';
 
 const EmptyIterator = (function* () { })();
 namespace tss {
@@ -19,7 +20,7 @@ namespace tss {
 		getSymbolId(symbol: tt.Symbol): SymbolId;
 	} & typeof ts;
 
-	const its = ts as any as InternalTypeScript;
+	const its = ts as unknown as InternalTypeScript;
 
 	export const getTokenAtPosition: (sourceFile: tt.SourceFile, position: number) => tt.Node = its.getTokenAtPosition;
 	export const getTouchingToken: (sourceFile: tt.SourceFile, position: number, includePrecedingTokenAtEndPosition?: (n: tt.Node) => boolean) => tt.Node = its.getTouchingToken;
@@ -34,7 +35,7 @@ namespace tss {
 	};
 
 	export function getRelevantTokens(sourceFile: tt.SourceFile, position: number): TokenInfo {
-		// We first get the token at the position. This will be the leave token even if
+		// We first get the token at the position. This will be the leaf token even if
 		// position denotes a white space. In this case the next token after the while space
 		// will be considered.
 		const token = tss.getTokenAtPosition(sourceFile, position);
@@ -71,19 +72,19 @@ namespace tss {
 		if (needsPrevious) {
 			let current = token;
 			while (current.parent) {
-				const children = getChildren(current.parent, sourceFile);
+				const children = Nodes.getChildren(current.parent, sourceFile);
 				const currentIndex = findNodeIndex(children, current);
 				if (currentIndex > 0) {
 					// Found a previous sibling, now get its rightmost token
 					let previousNode = children[currentIndex - 1];
-					let previousChildren = getChildren(previousNode, sourceFile);
+					let previousChildren = Nodes.getChildren(previousNode, sourceFile);
 					while (previousChildren.length > 0) {
 						const lastChild = previousChildren[previousChildren.length - 1];
 						if (lastChild.kind === ts.SyntaxKind.EndOfFileToken) {
 							break;
 						}
 						previousNode = lastChild;
-						previousChildren = getChildren(previousNode, sourceFile);
+						previousChildren = Nodes.getChildren(previousNode, sourceFile);
 					}
 					if (previousNode.kind !== ts.SyntaxKind.EndOfFileToken) {
 						result.previous = previousNode;
@@ -95,21 +96,6 @@ namespace tss {
 		}
 
 		return result;
-	}
-
-	export function getChildren(node: tt.Node, sourceFile: tt.SourceFile): readonly tt.Node[] {
-		// If you ask a source file for its children you get an array
-		// with [SyntaxList, EndOfFileToken]
-		if (ts.isSourceFile(node)) {
-			const children = node.getChildren(sourceFile);
-			if (children.length > 0 && children[0].kind === ts.SyntaxKind.SyntaxList) {
-				return children[0].getChildren(sourceFile);
-			} else {
-				return node.statements;
-			}
-		} else {
-			return node.getChildren(sourceFile);
-		}
 	}
 
 	function findNodeIndex(nodes: readonly tt.Node[], target: tt.Node): number {
@@ -194,6 +180,22 @@ namespace tss {
 	}
 
 	export namespace Nodes {
+
+		export function getChildren(node: tt.Node, sourceFile: tt.SourceFile): readonly tt.Node[] {
+			// If you ask a source file for its children you get an array
+			// with [SyntaxList, EndOfFileToken]
+			if (ts.isSourceFile(node)) {
+				const children = node.getChildren(sourceFile);
+				if (children.length > 0 && children[0].kind === ts.SyntaxKind.SyntaxList) {
+					return children[0].getChildren(sourceFile);
+				} else {
+					return node.statements;
+				}
+			} else {
+				return node.getChildren(sourceFile);
+			}
+		}
+
 
 		export function getSymbol(node: tt.Node): tt.Symbol | undefined {
 			return (node as InternalNode).symbol;
@@ -293,6 +295,20 @@ namespace tss {
 		}
 	}
 
+	export namespace TypeChecker {
+
+		interface InternalTypeChecker extends tt.TypeChecker {
+			getAccessibleSymbolChain(symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined;
+		}
+		export function getAccessibleSymbolChain(typeChecker: tt.TypeChecker, symbol: tt.Symbol, enclosingDeclaration: tt.Node | undefined, meaning: tt.SymbolFlags, useOnlyExternalAliasing: boolean): tt.Symbol[] | undefined {
+			const internalTypeChecker = typeChecker as InternalTypeChecker;
+			if (typeof internalTypeChecker.getAccessibleSymbolChain !== 'function') {
+				return undefined;
+			}
+			return internalTypeChecker.getAccessibleSymbolChain(symbol, enclosingDeclaration, meaning, useOnlyExternalAliasing);
+		}
+	}
+
 	export namespace Types {
 
 		export function isIntersection(type: tt.Type): type is tt.IntersectionType {
@@ -333,6 +349,18 @@ namespace tss {
 		}
 	}
 
+	interface InternalLanguageServiceHost extends tt.LanguageServiceHost {
+		runWithTemporaryFileUpdate?(rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void;
+	}
+
+	export namespace LanguageServiceHost {
+		export function runWithTemporaryFileUpdate(host: tt.LanguageServiceHost, rootFile: string, updatedText: string, cb: (updatedProgram: tt.Program, originalProgram: tt.Program | undefined, updatedFile: tt.SourceFile) => void): void {
+			const internalHost = host as InternalLanguageServiceHost;
+			if (typeof internalHost.runWithTemporaryFileUpdate === 'function') {
+				internalHost.runWithTemporaryFileUpdate(rootFile, updatedText, cb);
+			}
+		}
+	}
 
 	interface InternalSymbol extends tt.Symbol {
 		parent?: tt.Symbol;
@@ -423,6 +451,8 @@ namespace tss {
 		}
 	}
 
+	export type DirectSuperSymbolInfo = { extends?: { symbol: tt.Symbol; name: string } | undefined; implements?: { symbol: tt.Symbol; name: string }[] }
+
 	export class Symbols {
 
 		private readonly program: tt.Program;
@@ -439,6 +469,14 @@ namespace tss {
 
 		public static getParent(symbol: tt.Symbol): tt.Symbol | undefined {
 			return (symbol as InternalSymbol).parent;
+		}
+
+		public static isFunctionScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.FunctionScopedVariable) !== 0;
+		}
+
+		public static isBlockScopedVariable(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.BlockScopedVariable) !== 0;
 		}
 
 		public static isConstructor(symbol: tt.Symbol | undefined): boolean {
@@ -477,6 +515,10 @@ namespace tss {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 		}
 
+		public static isTypeParameter(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
+		}
+
 		public static isTypeLiteral(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeLiteral) !== 0;
 		}
@@ -491,6 +533,10 @@ namespace tss {
 
 		public static isValueModule(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.ValueModule) !== 0;
+		}
+
+		public static isNamespaceModule(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.NamespaceModule) !== 0;
 		}
 
 		public static isEnum(symbol: tt.Symbol | undefined): boolean {
@@ -539,7 +585,7 @@ namespace tss {
 			if (this.internalSymbolNames === undefined) {
 				this.internalSymbolNames = new Set();
 				for (const item in ts.InternalSymbolName) {
-					this.internalSymbolNames.add((ts.InternalSymbolName as any)[item]);
+					this.internalSymbolNames.add((ts.InternalSymbolName as Record<string, string>)[item]);
 				}
 			}
 			return this.internalSymbolNames.has(symbol.escapedName as string);
@@ -631,7 +677,7 @@ namespace tss {
 		 * @param hashProvider Provides a hash function to create the key.
 		 * @returns A versioned key for the symbol or `undefined` if the key could not be created.
 		 */
-		public static createVersionedKey(symbol: tt.Symbol, versionProvider: { getScriptVersion(sourceFile: tt.SourceFile): string | undefined }, hashProvider: { createHash(algorithm: string): Hash }): string | undefined {
+		public static createVersionedKey(symbol: tt.Symbol, context: KeyComputationContext): string | undefined {
 			const declarations = symbol.getDeclarations();
 			if (declarations === undefined) {
 				return undefined;
@@ -639,7 +685,7 @@ namespace tss {
 			const fragments: { f: string; v: string; s: number; e: number; k: number }[] = [];
 			for (const declaration of declarations) {
 				const sourceFile = declaration.getSourceFile();
-				const scriptVersion = versionProvider.getScriptVersion(sourceFile);
+				const scriptVersion = context.getScriptVersion(sourceFile);
 				if (scriptVersion === undefined) {
 					return undefined;
 				}
@@ -672,7 +718,7 @@ namespace tss {
 					return a.k - b.k;
 				});
 			}
-			const hash = hashProvider.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
+			const hash = context.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
 			if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
 				hash.update(JSON.stringify({ trans: true }, undefined, 0));
 			}
@@ -776,7 +822,42 @@ namespace tss {
 			return [undefined, undefined];
 		}
 
-		public getLeafSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
+		public getDirectSuperSymbols(symbol: tt.Symbol): DirectSuperSymbolInfo | undefined {
+			const declarations = symbol.declarations;
+			if (declarations === undefined) {
+				return undefined;
+			}
+			const result: DirectSuperSymbolInfo = {};
+			for (const declaration of declarations) {
+				if (ts.isClassDeclaration(declaration)) {
+					const heritageClauses = declaration.heritageClauses;
+					if (heritageClauses !== undefined) {
+						for (const heritageClause of heritageClauses) {
+							const extendsNode = heritageClause.types[0]?.expression;
+							let candidate = this.typeChecker.getSymbolAtLocation(extendsNode);
+							if (Symbols.isAlias(candidate)) {
+								candidate = this.typeChecker.getAliasedSymbol(candidate!);
+							}
+							if (heritageClause.token === ts.SyntaxKind.ExtendsKeyword) {
+								if (Symbols.isClass(candidate)) {
+									result.extends = { symbol: candidate!, name: extendsNode.getText() };
+								}
+							} else if (heritageClause.token === ts.SyntaxKind.ImplementsKeyword) {
+								if (Symbols.isInterface(candidate)) {
+									if (result.implements === undefined) {
+										result.implements = [];
+									}
+									result.implements.push({ symbol: candidate!, name: extendsNode.getText() });
+								}
+							}
+						}
+					}
+				}
+			}
+			return result;
+		}
+
+		public getAliasedSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
 			const symbol = this.getSymbolAtLocation(node);
 			if (symbol === undefined) {
 				return undefined;
@@ -785,6 +866,14 @@ namespace tss {
 				return this.typeChecker.getAliasedSymbol(symbol);
 			}
 			return symbol;
+		}
+
+		public getLeafSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
+			const symbol = this.getSymbolAtLocation(node);
+			if (symbol === undefined) {
+				return undefined;
+			}
+			return this.getLeafSymbol(symbol);
 		}
 
 		public getSymbolAtTypeNodeLocation(node: tt.TypeNode): tt.Symbol | undefined {
@@ -797,14 +886,29 @@ namespace tss {
 			}
 		}
 
-		public getAliasedSymbol(symbol: tt.Symbol): tt.Symbol {
-			return this.typeChecker.getAliasedSymbol(symbol);
+		public getAliasedSymbol(symbol: tt.Symbol): tt.Symbol | undefined {
+			return Symbols.isAlias(symbol) ? this.typeChecker.getAliasedSymbol(symbol) : symbol;
 		}
 
-		public getLeafAliasedSymbol(symbol: tt.Symbol): tt.Symbol {
+		public getLeafSymbol(symbol: tt.Symbol): tt.Symbol {
 			let count = 0;
 			while (Symbols.isAlias(symbol) && count++ < 10) {
-				symbol = this.getAliasedSymbol(symbol);
+				symbol = this.typeChecker.getAliasedSymbol(symbol);
+			}
+			while (Symbols.isTypeAlias(symbol) && count++ < 10) {
+				const declarations = symbol.declarations;
+				if (declarations === undefined || declarations.length !== 1) {
+					break;
+				}
+				const declaration = declarations[0];
+				if (!ts.isTypeAliasDeclaration(declaration)) {
+					break;
+				}
+				const typeSymbol = this.getSymbolAtLocation(declaration.type);
+				if (typeSymbol === undefined) {
+					break;
+				}
+				symbol = typeSymbol;
 			}
 			return symbol;
 		}
@@ -850,7 +954,9 @@ namespace tss {
 						// In TS classes must come first.
 						for (const heritageClause of heritageClauses) {
 							for (const type of heritageClause.types) {
-								const superType = this.getLeafSymbolAtLocation(type.expression);
+								// We can't reach to the leave symbol here since in a hierarchy we need to
+								// reference Type References by name.
+								const superType = this.getAliasedSymbolAtLocation(type.expression);
 								if (superType !== undefined && !seen.has(superType)) {
 									seen.add(superType);
 									yield includePath ? [symbol, superType] : superType;
@@ -873,13 +979,13 @@ namespace tss {
 						if (ts.isTypeAliasDeclaration(declaration)) {
 							const type = declaration.type;
 							if (ts.isTypeLiteralNode(type)) {
-								const superType = this.getSymbolAtLocation(type);
+								const superType = this.getAliasedSymbolAtLocation(type);
 								if (superType !== undefined && !seen.has(superType)) {
 									seen.add(superType);
 									yield includePath ? [symbol, superType] : superType;
 								}
 							} else if (ts.isTypeReferenceNode(type)) {
-								const superType = this.getLeafSymbolAtLocation(type.typeName);
+								const superType = this.getAliasedSymbolAtLocation(type.typeName);
 								if (superType !== undefined && !seen.has(superType)) {
 									// This is something like type _NameLength = NameLength
 									// Yield NameLength since it could represent and interface.
@@ -952,7 +1058,7 @@ namespace tss {
 						}
 						// TypeScript has exactly one extends clause.
 						const type = heritageClause.types[0];
-						const superClass = this.getLeafSymbolAtLocation(type.expression);
+						const superClass = this.getAliasedSymbolAtLocation(type.expression);
 						if (superClass !== undefined && !seen.has(superClass)) {
 							seen.add(superClass);
 							yield superClass;
@@ -969,7 +1075,7 @@ namespace tss {
 			}
 			for (const heritageClause of declaration.heritageClauses) {
 				for (const type of heritageClause.types) {
-					const superType = this.getLeafSymbolAtLocation(type.expression);
+					const superType = this.getAliasedSymbolAtLocation(type.expression);
 					if (superType !== undefined && superType === symbol) {
 						return true;
 					}
@@ -990,7 +1096,7 @@ namespace tss {
 				if (heritageClause.types.length < 1) {
 					return false;
 				}
-				const superType = this.getLeafSymbolAtLocation(heritageClause.types[0].expression);
+				const superType = this.getAliasedSymbolAtLocation(heritageClause.types[0].expression);
 				if (superType !== undefined && superType === symbol) {
 					return true;
 				}
@@ -1039,7 +1145,7 @@ namespace tss {
 					const referencedBy = new ReferencedByVisitor(this.program, declaration.getSourceFile(), preferredSourceFiles, stateProvider, token);
 					for (const sourceFile of referencedBy) {
 						for (const typeDeclaration of traversal.getDeclarations(sourceFile)) {
-							const symbol = this.getLeafSymbolAtLocation(typeDeclaration.name ? typeDeclaration.name : typeDeclaration);
+							const symbol = this.getAliasedSymbolAtLocation(typeDeclaration.name ? typeDeclaration.name : typeDeclaration);
 							if (symbol === undefined || seen.has(symbol)) {
 								continue;
 							}

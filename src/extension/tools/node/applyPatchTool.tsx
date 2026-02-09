@@ -3,11 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptPiece, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { StringTextDocumentWithLanguageId } from '../../../platform/editing/common/abstractText';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -15,12 +14,12 @@ import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../..
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { getDefaultLanguage } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -30,47 +29,28 @@ import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
+import { count } from '../../../util/vs/base/common/strings';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/agentInstructions';
+import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
 import { processFullRewriteNotebook } from '../../prompts/node/codeMapper/codeMapper';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
+import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
+import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
+import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
-import { guessIndentation, normalizeIndentation } from '../../prompt/node/indentationGuesser';
-
-export const applyPatchWithNotebookSupportDescription: vscode.LanguageModelToolInformation = {
-	name: ToolName.ApplyPatch,
-	description: 'Edit text files. `apply_patch` allows you to execute a diff/patch against a text file, but the format of the diff specification is unique to this task, so pay careful attention to these instructions. To use the `apply_patch` command, you should pass a message of the following structure as \"input\":\n\n*** Begin Patch\n[YOUR_PATCH]\n*** End Patch\n\nWhere [YOUR_PATCH] is the actual content of your patch, specified in the following V4A diff format.\n\n*** [ACTION] File: [/absolute/path/to/file] -> ACTION can be one of Add, Update, or Delete.\nAn example of a message that you might pass as \"input\" to this function, in order to apply a patch, is shown below.\n\n*** Begin Patch\n*** Update File: /Users/someone/pygorithm/searching/binary_search.py\n@@class BaseClass\n@@    def search():\n-        pass\n+        raise NotImplementedError()\n\n@@class Subclass\n@@    def search():\n-        pass\n+        raise NotImplementedError()\n\n*** End Patch\nDo not use line numbers in this diff format.',
-	tags: [],
-	inputSchema: {
-		"type": "object",
-		"properties": {
-			"input": {
-				"type": "string",
-				"description": "The edit patch to apply."
-			},
-			"explanation": {
-				"type": "string",
-				"description": "A short description of what the tool call is aiming to achieve."
-			}
-		},
-		"required": [
-			"input",
-			"explanation"
-		]
-	} satisfies ObjectJsonSchema,
-};
+import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
 export interface IApplyPatchToolParams {
 	input: string;
@@ -79,10 +59,15 @@ export interface IApplyPatchToolParams {
 
 type DocText = Record</* URI */ string, { text: string; notebookUri?: URI }>;
 
+export const applyPatch5Description = 'Use the `apply_patch` tool to edit files.\nYour patch language is a stripped-down, file-oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high-level envelope:\n\n*** Begin Patch\n[ one or more file sections ]\n*** End Patch\n\nWithin that envelope, you get a sequence of file operations.\nYou MUST include a header to specify the action you are taking.\nEach operation starts with one of three headers:\n\n*** Add File: <path> - create a new file. Every following line is a + line (the initial contents).\n*** Delete File: <path> - remove an existing file. Nothing follows.\n*** Update File: <path> - patch an existing file in place (optionally with a rename).\n\nMay be immediately followed by *** Move to: <new path> if you want to rename the file.\nThen one or more “hunks”, each introduced by @@ (optionally followed by a hunk header).\nWithin a hunk each line starts with:\n\nFor instructions on [context_before] and [context_after]:\n- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change\'s [context_after] lines in the second change\'s [context_before] lines.\n- If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs. For instance, we might have:\n@@ class BaseClass\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\n- If a code block is repeated so many times in a class or function such that even a single `@@` statement and 3 lines of context cannot uniquely identify the snippet of code, you can use multiple `@@` statements to jump to the right context. For instance:\n\n@@ class BaseClass\n@@ \t def method():\n[3 lines of pre-context]\n- [old_code]\n+ [new_code]\n[3 lines of post-context]\n\nThe full grammar definition is below:\nPatch := Begin { FileOp } End\nBegin := "*** Begin Patch" NEWLINE\nEnd := "*** End Patch" NEWLINE\nFileOp := AddFile | DeleteFile | UpdateFile\nAddFile := "*** Add File: " path NEWLINE { "+" line NEWLINE }\nDeleteFile := "*** Delete File: " path NEWLINE\nUpdateFile := "*** Update File: " path NEWLINE [ MoveTo ] { Hunk }\nMoveTo := "*** Move to: " newPath NEWLINE\nHunk := "@@" [ header ] NEWLINE { HunkLine } [ "*** End of File" NEWLINE ]\nHunkLine := (" " | "-" | "+") text NEWLINE\n\nA full patch can combine several operations:\n\n*** Begin Patch\n*** Add File: hello.txt\n+Hello world\n*** Update File: src/app.py\n*** Move to: src/main.py\n@@ def greet():\n-print("Hi")\n+print("Hello, world!")\n*** Delete File: obsolete.txt\n*** End Patch\n\nIt is important to remember:\n\n- You must include a header with your intended action (Add/Delete/Update)\n- You must prefix new lines with `+` even when creating a new file\n- File references must be ABSOLUTE, NEVER RELATIVE.';
+
 export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	public static toolName = ToolName.ApplyPatch;
 
 	private _promptContext: IBuildPromptContext | undefined;
+
+	// Simple cache using stringified params as key to avoid WeakMap stability issues
+	private lastProcessed: { input: string; output: Promise<{ commit: Commit; docTexts: DocText; healed?: string }> } | undefined;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -97,11 +82,11 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
-	private getTrailingDocumentEmptyLineCount(document: vscode.TextDocument): number {
+	private getTrailingDocumentEmptyLineCount(document: TextDocumentSnapshot): number {
 		let trailingEmptyLines = 0;
 		for (let i = document.lineCount - 1; i >= 0; i--) {
 			const line = document.lineAt(i);
@@ -126,39 +111,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return trailingEmptyLines;
 	}
 
-
-	/**
-	 * Normalize the indentation of the content to match the original document's style
-	 * @param document The original document
-	 * @param content The content to normalize
-	 * @returns The normalized content
-	 */
-	private normalizeIndentationStyle(document: vscode.TextDocument, content: string): string {
-		// Detect the indentation style of the original document
-		const indentInfo = guessIndentation(document, 4, true);
-
-		// Split into lines, normalize each line, and then join back
-		const lines = content.split('\n');
-		const normalizedLines = lines.map(line => {
-			// Only process lines that have indentation
-			if (line.match(/^\s+/)) {
-				return normalizeIndentation(line, indentInfo.tabSize, indentInfo.insertSpaces);
-			}
-			return line;
-		});
-
-		return normalizedLines.join('\n');
-	}
-
-
-	private async generateUpdateTextDocumentEdit(file: string, change: FileChange, workspaceEdit: WorkspaceEdit, applyIndentationFix: boolean) {
+	private async generateUpdateTextDocumentEdit(textDocument: TextDocumentSnapshot, file: string, change: FileChange, workspaceEdit: WorkspaceEdit) {
 		const uri = resolveToolInputPath(file, this.promptPathRepresentationService);
-		const textDocument = await this.workspaceService.openTextDocument(uri);
-		let newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
-
-		if (!applyIndentationFix) { // the 'old way' of normalizing the edit once it's created
-			newContent = this.normalizeIndentationStyle(textDocument, newContent);
-		}
+		const newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
 
 		const lines = newContent?.split('\n') ?? [];
 		let path = uri;
@@ -188,13 +143,6 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		}
 
 		return path;
-	}
-
-	private async getNotebookDocumentForEdit(file: string) {
-		let uri = resolveToolInputPath(file, this.promptPathRepresentationService);
-		uri = findNotebook(uri, this.workspaceService.notebookDocuments)?.uri || uri;
-		const altDoc = await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
-		return { altDoc, uri };
 	}
 
 	private async generateUpdateNotebookDocumentEdit(altDoc: NotebookDocumentSnapshot, uri: URI, file: string, change: FileChange) {
@@ -236,19 +184,54 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return { path: uri, edits };
 	}
 
+	async handleToolStream(options: vscode.LanguageModelToolInvocationStreamOptions<IApplyPatchToolParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolStreamResult> {
+		const partialInput = options.rawInput as Partial<IApplyPatchToolParams> | undefined;
+
+		let invocationMessage: MarkdownString;
+		if (partialInput && typeof partialInput === 'object' && partialInput.input) {
+			const lineCount = count(partialInput.input, '\n') + 1;
+			const files = [...identify_files_needed(partialInput.input), ...identify_files_added(partialInput.input)]
+				.map(f => this.promptPathRepresentationService.resolveFilePath(f))
+				.filter(isDefined)
+				.map(uri => formatUriForFileWidget(uri));
+			if (files.length > 0) {
+				const fileNames = files.join(', ');
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines) in ${fileNames}`);
+			} else {
+				invocationMessage = new MarkdownString(l10n.t`Generating patch (${lineCount} lines)`);
+			}
+		} else {
+			invocationMessage = new MarkdownString(l10n.t`Generating patch`);
+		}
+
+		return { invocationMessage };
+	}
+
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, token: vscode.CancellationToken) {
 		if (!options.input.input || !this._promptContext?.stream) {
 			this.sendApplyPatchTelemetry('invalidInput', options, undefined, false, undefined);
 			throw new Error('Missing patch text or stream');
 		}
 
-		const useIndentationFix = !!this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.applyPatchIndentationFix');
-
 		let commit: Commit | undefined;
 		let healed: string | undefined;
 		const docText: DocText = {};
+
 		try {
-			({ commit, healed } = await this.buildCommitWithHealing(options.input.input, docText, options.input.explanation, useIndentationFix, token));
+			if (this.lastProcessed?.input === options.input.input) {
+				const cached = await this.lastProcessed.output;
+				commit = cached.commit;
+				healed = cached.healed;
+				Object.assign(docText, cached.docTexts);
+				logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
+				this.lastProcessed = undefined;
+			}
+
+			// If not cached or cache failed, build with healing
+			if (!commit) {
+				({ commit, healed } = await this.buildCommitWithHealing(options.model, options.input.input, docText, options.input.explanation, token));
+				logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
+			}
 		} catch (error) {
 			if (error instanceof HealedError) {
 				healed = error.healedPatch;
@@ -261,8 +244,10 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			} else if (error instanceof InvalidPatchFormatError) {
 				this.sendApplyPatchTelemetry(error.kindForTelemetry, options, '', !!healed, !!notebookUri);
 			} else {
-				this.sendApplyPatchTelemetry('processPatchFailed', options, error.file, !!healed, !!notebookUri);
+				this.sendApplyPatchTelemetry('processPatchFailed', options, error.file, !!healed, !!notebookUri, error);
 			}
+
+			logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: false, healed });
 
 
 			if (notebookUri) {
@@ -297,37 +282,44 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				});
 			}
 
-			const resourceToOperation = new ResourceMap<ActionType>();
+			const resourceToOperation = new ResourceMap<{ action: ActionType.ADD | ActionType.DELETE } | { action: ActionType.UPDATE; updated: TextDocumentSnapshot | NotebookDocumentSnapshot | undefined }>();
 			const workspaceEdit = new WorkspaceEdit();
 			const notebookEdits = new ResourceMap<(vscode.NotebookEdit | [vscode.Uri, vscode.TextEdit[]])[]>();
+			const deletedFiles = new ResourceSet();
 			for (const [file, changes] of Object.entries(commit.changes)) {
 				let path = resolveToolInputPath(file, this.promptPathRepresentationService);
-				await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, path));
+				await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, path));
 
 				switch (changes.type) {
 					case ActionType.ADD: {
 						if (changes.newContent) {
 							workspaceEdit.insert(path, new Position(0, 0), changes.newContent);
-							resourceToOperation.set(path, ActionType.ADD);
+							resourceToOperation.set(path, { action: ActionType.ADD });
 						}
 						break;
 					}
 					case ActionType.DELETE: {
 						workspaceEdit.deleteFile(path);
-						resourceToOperation.set(path, ActionType.DELETE);
+						resourceToOperation.set(path, { action: ActionType.DELETE });
+						deletedFiles.add(path);
 						break;
 					}
 					case ActionType.UPDATE: {
-						if (this.notebookService.hasSupportedNotebooks(resolveToolInputPath(file, this.promptPathRepresentationService))) {
-							const { altDoc, uri } = await this.getNotebookDocumentForEdit(file);
+						const document = await this.instantiationService.invokeFunction(openDocumentAndSnapshot, this._promptContext, path);
+						let updated: TextDocumentSnapshot | NotebookDocumentSnapshot | undefined;
+
+						if (document instanceof NotebookDocumentSnapshot) {
 							// We have found issues with the patches generated by Model for XML, Jupytext
 							// Possible there are other issues with other formats as well.
 							try {
-								const result = await this.generateUpdateNotebookDocumentEdit(altDoc, uri, file, changes);
+								const result = await this.generateUpdateNotebookDocumentEdit(document, path, file, changes);
 								notebookEdits.set(result.path, result.edits);
 								path = result.path;
+								if (changes.newContent) {
+									updated = NotebookDocumentSnapshot.fromNewText(changes.newContent, document);
+								}
 							} catch (error) {
-								this.sendApplyPatchTelemetry('invalidNotebookEdit', options, altDoc.getText(), !!healed, true);
+								this.sendApplyPatchTelemetry('invalidNotebookEdit', options, document.getText(), !!healed, true, error);
 								return new LanguageModelToolResult([
 									new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 									new LanguageModelTextPart(`Use the ${ToolName.EditNotebook} tool to edit notebook files such as ${file}.`),
@@ -335,9 +327,12 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							}
 						}
 						else {
-							path = await this.generateUpdateTextDocumentEdit(file, changes, workspaceEdit, useIndentationFix);
+							path = await this.generateUpdateTextDocumentEdit(document, file, changes, workspaceEdit);
+							if (changes.newContent) {
+								updated = TextDocumentSnapshot.fromNewText(changes.newContent, document);
+							}
 						}
-						resourceToOperation.set(path, ActionType.UPDATE);
+						resourceToOperation.set(path, { action: ActionType.UPDATE, updated });
 						break;
 					}
 				}
@@ -365,12 +360,15 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				const existingDiagnostics = this.languageDiagnosticsService.getDiagnostics(uri);
 
 				// Initialize edit survival tracking for text documents
-				const document = notebookUri ?
-					await this.workspaceService.openNotebookDocumentAndSnapshot(notebookUri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
-					await this.workspaceService.openTextDocumentAndSnapshot(uri);
-				if (document instanceof TextDocumentSnapshot) {
-					const tracker = this._editSurvivalTrackerService.initialize(document.document);
-					editSurvivalTrackers.set(uri, tracker);
+				const existsOnDisk = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
+				if (existsOnDisk) {
+					const document = notebookUri ?
+						await this.workspaceService.openNotebookDocumentAndSnapshot(notebookUri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
+						await this.workspaceService.openTextDocumentAndSnapshot(uri);
+					if (document instanceof TextDocumentSnapshot) {
+						const tracker = this._editSurvivalTrackerService.initialize(document.document);
+						editSurvivalTrackers.set(uri, tracker);
+					}
 				}
 
 				if (notebookUri) {
@@ -388,17 +386,28 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				} else {
 					this._promptContext.stream.markdown('\n```\n');
 					this._promptContext.stream.codeblockUri(notebookUri || uri, true);
-					// TODO@joyceerhl hack: when an array of text edits for a single URI
-					// are pushed in a single textEdit call, the edits are not applied
-					const edits = Array.isArray(textEdit) ? textEdit : [textEdit];
-					for (const textEdit of edits) {
-						responseStream.textEdit(uri, textEdit);
-					}
+
+					responseStream.textEdit(uri, textEdit);
 					responseStream.textEdit(uri, true);
 					this._promptContext.stream.markdown('\n' + '```\n');
 				}
 
-				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: resourceToOperation.get(uri) ?? ActionType.UPDATE });
+				const opResult = resourceToOperation.get(uri);
+				if (opResult?.action === ActionType.UPDATE && opResult.updated) {
+					this._promptContext.turnEditedDocuments ??= new ResourceMap();
+					this._promptContext.turnEditedDocuments.set(uri, opResult.updated);
+				}
+				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: opResult?.action ?? ActionType.UPDATE });
+			}
+			if (deletedFiles.size > 0) {
+				responseStream.workspaceEdit([...deletedFiles].map(oldResource => ({ oldResource })));
+				for (const uri of deletedFiles) {
+					files.push({ uri, isNotebook: false, existingDiagnostics: [], operation: ActionType.DELETE });
+				}
+			}
+
+			if (healed && files.length) {
+				files[0].healed = healed;
 			}
 
 			timeout(2000).then(() => {
@@ -425,19 +434,43 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendInternalMSFTTelemetryEvent('applyPatch.trackEditSurvival', {
+							requestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool',
+							textBeforeAiEdits: res.textBeforeAiEdits ? JSON.stringify(res.textBeforeAiEdits) : undefined,
+							textAfterAiEdits: res.textAfterAiEdits ? JSON.stringify(res.textAfterAiEdits) : undefined,
+							textAfterUserEdits: res.textAfterUserEdits ? JSON.stringify(res.textAfterUserEdits) : undefined,
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
+						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				}
 			});
 
 			// Return the result
+			const isInlineChat = this._promptContext.request?.location2 instanceof ChatRequestEditorData;
 			const isNotebook = editEntires.length === 1 ? handledNotebookUris.size === 1 : undefined;
 			this.sendApplyPatchTelemetry('success', options, undefined, !!healed, isNotebook);
-			return new LanguageModelToolResult([
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
 						this.instantiationService,
 						EditFileResult,
-						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model, healed },
+						{ files, diagnosticsTimeout: isInlineChat ? -1 : 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
 						options.tokenizationOptions ?? {
 							tokenBudget: 1000,
 							countTokens: (t) => Promise.resolve(t.length * 3 / 4)
@@ -446,19 +479,17 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					),
 				)
 			]);
+			result.hasError = files.some(f => f.error);
+			return result;
 		} catch (error) {
 			const isNotebook = Object.values(docText).length === 1 ? (!!mapFindFirst(Object.values(docText), v => v.notebookUri)) : undefined;
 			// TODO parser.ts could annotate DiffError with a telemetry detail if we want
-			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook);
-			return new LanguageModelToolResult([
+			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook, error);
+			const result = new ExtendedLanguageModelToolResult([
 				new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 			]);
-		}
-	}
-
-	public alternativeDefinition(): vscode.LanguageModelToolInformation | undefined {
-		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.EnableApplyPatchForNotebooks, this.experimentationService)) {
-			return applyPatchWithNotebookSupportDescription;
+			result.hasError = true;
+			return result;
 		}
 	}
 
@@ -469,7 +500,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	 * and do another turn.
 	 */
 	private async healCommit(patch: string, docs: DocText, explanation: string, token: CancellationToken) {
-		const endpoint = await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI);
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const prompt = await PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -481,13 +512,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			}
 		).render(undefined, token);
 
-		const fetchResult = await endpoint.makeChatRequest(
-			'healApplyPatch',
-			prompt.messages,
-			undefined,
-			token,
-			ChatLocation.Other
-		);
+		const fetchResult = await endpoint.makeChatRequest2({
+			debugName: 'healApplyPatch',
+			messages: prompt.messages,
+			finishedCb: undefined,
+			location: ChatLocation.Other,
+			enableRetryOnFilter: true
+		}, token);
 
 		if (fetchResult.type !== ChatFetchResponseType.Success) {
 			return undefined;
@@ -502,12 +533,19 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return patchEnd === -1 ? fetchResult.value.slice(patchStart) : fetchResult.value.slice(patchStart, patchEnd + PATCH_SUFFIX.length);
 	}
 
-	private async buildCommitWithHealing(patch: string, docText: DocText, explanation: string, useIndentationFix: boolean, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
+	private async buildCommitWithHealing(model: vscode.LanguageModelChat | undefined, patch: string, docText: DocText, explanation: string, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
 		try {
-			return await this.buildCommit(patch, docText, useIndentationFix);
+			const result = await this.buildCommit(patch, docText);
+			if (model) {
+				this.editToolLearningService.didMakeEdit(model, ToolName.ApplyPatch, true);
+			}
+			return result;
 		} catch (error) {
 			if (!(error instanceof DiffError)) {
 				throw error;
+			}
+			if (model) {
+				this.editToolLearningService.didMakeEdit(model, ToolName.ApplyPatch, false);
 			}
 
 			let success = true;
@@ -519,7 +557,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					throw error;
 				}
 
-				const { commit } = await this.buildCommit(healed, docText, useIndentationFix);
+				const { commit } = await this.buildCommit(healed, docText);
 				return { commit, healed };
 			} catch (healedError) {
 				success = false;
@@ -543,7 +581,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		}
 	}
 
-	private async buildCommit(patch: string, docText: DocText, useIndentationFix: boolean): Promise<{ commit: Commit }> {
+	private async buildCommit(patch: string, docText: DocText): Promise<{ commit: Commit; docTexts: DocText }> {
 		const commit = await processPatch(patch, async (uri) => {
 			const vscodeUri = resolveToolInputPath(uri, this.promptPathRepresentationService);
 			if (this.notebookService.hasSupportedNotebooks(vscodeUri)) {
@@ -556,11 +594,11 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				docText[vscodeUri.toString()] = { text: textDocument.getText() };
 				return textDocument;
 			}
-		}, useIndentationFix);
-		return { commit };
+		});
+		return { commit, docTexts: docText };
 	}
 
-	private async sendApplyPatchTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, file: string | undefined, healed: boolean, isNotebook: boolean | undefined) {
+	private async sendApplyPatchTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, file: string | undefined, healed: boolean, isNotebook: boolean | undefined, unexpectedError?: Error) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 
 		/* __GDPR__
@@ -572,7 +610,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the invocation was successful, or a failure reason" },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
 				"healed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was healed" },
-				"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was a notebook, 1 = yes, 0 = no, other = Unknown" }
+				"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was a notebook, 1 = yes, 0 = no, other = Unknown" },
+				"error": { "classification": "CallstackOrException", "purpose": "FeatureInsight", "comment": "Unexpected error that occurrs during application" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('applyPatchToolInvoked',
@@ -581,6 +620,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				interactionId: options.chatRequestId,
 				outcome,
 				model,
+				error: unexpectedError?.stack || unexpectedError?.message,
 			},
 			{
 				healed: healed ? 1 : 0,
@@ -603,10 +643,66 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		return {
-			presentation: 'hidden'
-		};
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
+		const uris = [...identify_files_needed(options.input.input), ...identify_files_added(options.input.input)].map(f => URI.file(f));
+
+		return this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			uris,
+			this._promptContext?.allowedEditUris,
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token),
+			options.forceConfirmationReason
+		);
+	}
+
+	private async generatePatchConfirmationDetails(
+		options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>,
+		urisNeedingConfirmation: readonly URI[],
+		token: CancellationToken
+	): Promise<string> {
+		const instantiationService = this.instantiationService;
+		const promptPathRepresentationService = this.promptPathRepresentationService;
+
+		// Process the patch and cache it for later use in invoke()
+		const docTexts: DocText = {};
+		const processPromise = (async () => {
+			const { commit, healed } = await this.buildCommitWithHealing(
+				this._promptContext?.request?.model,
+				options.input.input,
+				docTexts,
+				options.input.explanation,
+				token
+			);
+			return { commit, docTexts, healed };
+		})();
+
+		// Cache using stringified params
+		this.lastProcessed = { input: options.input.input, output: processPromise };
+
+		const { commit } = await processPromise;
+
+		// Create a set of URIs needing confirmation for quick lookup
+		const urisNeedingConfirmationSet = new ResourceSet(urisNeedingConfirmation);
+
+		// Generate diffs for all file changes in parallel
+		const diffResults = await Promise.all(
+			Object.entries(commit.changes).map(async ([file, changes]) => {
+				const uri = resolveToolInputPath(file, promptPathRepresentationService);
+				if (!urisNeedingConfirmationSet.has(uri)) {
+					return;
+				}
+
+				return await instantiationService.invokeFunction(
+					formatDiffAsUnified,
+					uri,
+					changes.oldContent || '',
+					changes.newContent || ''
+				);
+			})
+		);
+
+		const diffParts = diffResults.filter(isDefined);
+		return diffParts.length > 0 ? diffParts.join('\n\n') : 'No changes detected.';
 	}
 }
 
@@ -655,7 +751,7 @@ class HealPatchPrompt extends PromptElement<{ patch: string; explanation: string
 					3. Generate the ENTIRE corrected patch. Do not omit anything.<br />
 				</Tag>
 			</SystemMessage>
-			<UserMessage>
+			<UserMessage priority={1}>
 				The goal of the patch is: {this.props.explanation}<br />
 				<br />
 				The patch I want to apply is:<br />
@@ -665,7 +761,7 @@ class HealPatchPrompt extends PromptElement<{ patch: string; explanation: string
 				<br />
 				The referenced files are:<br />
 				{Object.entries(this.props.docs).map(([file, { text }]) =>
-					<CodeBlock code={text} uri={URI.parse(file)} />
+					<CodeBlock code={text} uri={URI.parse(file)} priority={1} lineBasedPriority={true} />
 				)}
 			</UserMessage>
 		</>;

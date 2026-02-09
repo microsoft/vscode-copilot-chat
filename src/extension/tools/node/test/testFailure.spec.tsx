@@ -13,11 +13,11 @@ import { TestingTabsAndEditorsService } from '../../../../platform/test/node/sim
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { ITestFailure, ITestProvider } from '../../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { Position } from '../../../../util/common/test/shims/position';
-import { Range } from '../../../../util/common/test/shims/range';
 import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Position } from '../../../../util/vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { TestFailureTool } from '../testFailureTool';
 import { toolResultToString } from './toolTestUtils';
@@ -91,7 +91,7 @@ suite('TestFailureTool', () => {
 	test('returns a message when no failures exist', async () => {
 		failures = [];
 		const result = await resolver.invoke({ input: {}, toolInvocationToken: '' as any });
-		expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`"No test failures were found yet, call the tool run_tests to run tests and find failures."`);
+		expect(await toolResultToString(accessor, result)).toMatchInlineSnapshot(`"No test failures were found yet, call the tool runTests to run tests and find failures."`);
 	});
 
 	test('formats stack frames', async () => {
@@ -129,7 +129,7 @@ suite('TestFailureTool', () => {
 			## Rules:
 			- Always try to find an error in the implementation code first. Don't suggest any changes in my test cases unless I tell you to.
 			- If you need more information about anything in the codebase, use a tool like read_file, list_dir, or file_search to find and read it. Never ask the user to provide it themselves.
-			- If you make changes to fix the test, call run_tests to run the tests and verify the fix.
+			- If you make changes to fix the test, call runTests to run the tests and verify the fix.
 			- Don't try to make the same changes you made before to fix the test. If you're stuck, ask the user for pointers.
 			"
 		`);
@@ -165,7 +165,7 @@ suite('TestFailureTool', () => {
 			## Rules:
 			- Always try to find an error in the implementation code first. Don't suggest any changes in my test cases unless I tell you to.
 			- If you need more information about anything in the codebase, use a tool like read_file, list_dir, or file_search to find and read it. Never ask the user to provide it themselves.
-			- If you make changes to fix the test, call run_tests to run the tests and verify the fix.
+			- If you make changes to fix the test, call runTests to run the tests and verify the fix.
 			- Don't try to make the same changes you made before to fix the test. If you're stuck, ask the user for pointers.
 			"
 		`);
@@ -264,7 +264,7 @@ suite('TestFailureTool', () => {
 			## Rules:
 			- Always try to find an error in the implementation code first. Don't suggest any changes in my test cases unless I tell you to.
 			- If you need more information about anything in the codebase, use a tool like read_file, list_dir, or file_search to find and read it. Never ask the user to provide it themselves.
-			- If you make changes to fix the test, call run_tests to run the tests and verify the fix.
+			- If you make changes to fix the test, call runTests to run the tests and verify the fix.
 			- Don't try to make the same changes you made before to fix the test. If you're stuck, ask the user for pointers.
 			"
 		`);

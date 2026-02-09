@@ -10,12 +10,14 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { FetchStreamSource, IResponsePart } from '../../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError, getFilteredMessage } from '../../../../platform/chat/common/commonTypes';
 import { getTextPart, toTextPart } from '../../../../platform/chat/common/globalStringUtils';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../../platform/diff/common/diffService';
 import { NotebookDocumentSnapshot } from '../../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../../platform/endpoint/node/chatEndpoint';
 import { Proxy4oEndpoint } from '../../../../platform/endpoint/node/proxy4oEndpoint';
+import { ProxyInstantApplyShortEndpoint } from '../../../../platform/endpoint/node/proxyInstantApplyShortEndpoint';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IEditLogService } from '../../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService } from '../../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -41,7 +43,7 @@ import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Position, Range, TextEdit } from '../../../../vscodeTypes';
+import { NotebookEdit, Position, Range, TextEdit } from '../../../../vscodeTypes';
 import { OutcomeAnnotation, OutcomeAnnotationLabel } from '../../../inlineChat/node/promptCraftingTypes';
 import { Lines, LinesEdit } from '../../../prompt/node/editGeneration';
 import { LineOfText, PartialAsyncTextReader } from '../../../prompt/node/streamingEdits';
@@ -55,6 +57,20 @@ import { findEdit, getCodeBlock, iterateSectionsForResponse, Marker, Patch, Sect
 export type ICodeMapperDocument = TextDocumentSnapshot | NotebookDocumentSnapshot;
 
 export async function processFullRewriteNotebook(document: NotebookDocument, inputStream: string | AsyncIterable<LineOfText>, outputStream: MappedEditsResponseStream, alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator, telemetryOptions: NotebookEditGenerationTelemtryOptions, token: CancellationToken): Promise<void> {
+	for await (const edit of processFullRewriteNotebookEdits(document, inputStream, alternativeNotebookEditGenerator, telemetryOptions, token)) {
+		if (Array.isArray(edit)) {
+			outputStream.textEdit(edit[0], edit[1]);
+		} else {
+			outputStream.notebookEdit(document.uri, edit); // changed this.outputStream to outputStream
+		}
+	}
+
+	return undefined;
+}
+
+export type CellOrNotebookEdit = NotebookEdit | [Uri, TextEdit[]];
+
+export async function* processFullRewriteNotebookEdits(document: NotebookDocument, inputStream: string | AsyncIterable<LineOfText>, alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator, telemetryOptions: NotebookEditGenerationTelemtryOptions, token: CancellationToken): AsyncIterable<CellOrNotebookEdit> {
 	// emit start of notebook
 	const cellMap = new ResourceMap<NotebookCell>();
 	for await (const edit of alternativeNotebookEditGenerator.generateNotebookEdits(document, inputStream, telemetryOptions, token)) {
@@ -68,10 +84,10 @@ export async function processFullRewriteNotebook(document: NotebookDocument, inp
 						continue;
 					}
 				}
-				outputStream.textEdit(cellUri, edit[1]);
+				yield [cellUri, edit[1]];
 			}
 		} else {
-			outputStream.notebookEdit(document.uri, edit); // changed this.outputStream to outputStream
+			yield edit;
 		}
 	}
 
@@ -108,7 +124,7 @@ function emitCodeLine(line: string, uri: Uri, existingDocument: TextDocumentSnap
 	}
 }
 
-export async function processFullRewrite(uri: Uri, document: TextDocumentSnapshot, newContent: string, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[]): Promise<void> {
+export async function processFullRewrite(uri: Uri, document: TextDocumentSnapshot | undefined, newContent: string, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[]): Promise<void> {
 	for (const line of newContent.split(/\r?\n/)) {
 		emitCodeLine(line, uri, document, outputStream, pushedLines, token);
 	}
@@ -276,7 +292,7 @@ interface ICompletedRequest {
 export class CodeMapper {
 
 	static closingXmlTag = 'copilot-edited-file';
-	private gpt4oProxyEndpoint: Promise<Proxy4oEndpoint>;
+	private shortContextLimit: number;
 
 	constructor(
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
@@ -290,9 +306,20 @@ export class CodeMapper {
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditInternalTelemetryService: IMultiFileEditInternalTelemetryService,
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
-		@INotebookService private readonly notebookService: INotebookService
+		@INotebookService private readonly notebookService: INotebookService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
-		this.gpt4oProxyEndpoint = this.experimentationService.initializePromise.then(() => this.instantiationService.createInstance(Proxy4oEndpoint));
+		this.shortContextLimit = configurationService.getExperimentBasedConfig<number>(ConfigKey.Advanced.InstantApplyShortContextLimit, experimentationService) ?? 8000;
+	}
+
+	private async getGpt4oProxyEndpoint(): Promise<Proxy4oEndpoint> {
+		await this.experimentationService.hasTreatments();
+		return this.instantiationService.createInstance(Proxy4oEndpoint);
+	}
+
+	private async getShortIAEndpoint(): Promise<ProxyInstantApplyShortEndpoint> {
+		await this.experimentationService.hasTreatments();
+		return this.instantiationService.createInstance(ProxyInstantApplyShortEndpoint);
 	}
 
 	public async mapCode(request: ICodeMapperRequestInput, resultStream: MappedEditsResponseStream, telemetryInfo: ICodeMapperTelemetryInfo | undefined, token: CancellationToken): Promise<CodeMapperOutcome | undefined> {
@@ -373,7 +400,7 @@ export class CodeMapper {
 			result = createOutcome([{ label: errorDetails.message, message: `request ${fetchResult.type}`, severity: 'error' }], errorDetails);
 		}
 		if (result.annotations.length || result.errorDetails) {
-			this.logService.logger.info(`[code mapper] Problems generating edits: ${result.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, ${result.errorDetails?.message}`);
+			this.logService.info(`[code mapper] Problems generating edits: ${result.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, ${result.errorDetails?.message}`);
 		}
 		return result;
 	}
@@ -381,7 +408,7 @@ export class CodeMapper {
 	//#region Full file rewrite with speculation / predicted outputs
 
 	private async buildPrompt(request: ICodeMapperRequestInput, token: CancellationToken): Promise<IFullRewritePrompt> {
-		const endpoint = await this.gpt4oProxyEndpoint;
+		let endpoint: ChatEndpoint = await this.getGpt4oProxyEndpoint();
 		const tokenizer = this.tokenizerProvider.acquireTokenizer(endpoint);
 		const requestId = generateUuid();
 
@@ -417,6 +444,10 @@ export class CodeMapper {
 			return prev + content;
 		}, '').trimEnd() + `\n\n\nThe resulting document:\n<${CodeMapper.closingXmlTag}>\n${fence}${languageIdToMDCodeBlockLang(languageId)}\n`;
 
+		if (prompt.length < this.shortContextLimit) {
+			endpoint = await this.getShortIAEndpoint();
+		}
+
 		const promptTokenCount = await tokenizer.tokenLength(prompt);
 		const speculationTokenCount = await tokenizer.tokenLength(speculation);
 		const stopTokens = [`${fence}\n</${CodeMapper.closingXmlTag}>`, `${fence}\r\n</${CodeMapper.closingXmlTag}>`, `</${CodeMapper.closingXmlTag}>`];
@@ -435,7 +466,7 @@ export class CodeMapper {
 
 		const timeToFirstToken = firstTokenTime === -1 ? -1 : firstTokenTime - startTime;
 		const timeToComplete = Date.now() - startTime;
-		this.logService.logger.info(`srequest done: ${timeToComplete}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}]`);
+		this.logService.info(`srequest done: ${timeToComplete}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}]`);
 		const isNoopEdit = responseText.trim() === speculation.trim();
 
 		const { addedLines, removedLines } = await computeAdditionsAndDeletions(this.diffService, speculation, responseText);
@@ -487,9 +518,9 @@ export class CodeMapper {
 		const { promptTokenCount, speculationTokenCount } = prompt;
 		const { startTime, requestId } = response;
 
-		this.logService.logger.error(`srequest failed: ${Date.now() - startTime}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}] error: [${errorMessage}]`);
+		this.logService.error(`srequest failed: ${Date.now() - startTime}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}] error: [${errorMessage}]`);
 		if (error) {
-			this.logService.logger.error(error);
+			this.logService.error(error);
 		}
 		/* __GDPR__
 			"speculation.response.error" : {
@@ -523,7 +554,7 @@ export class CodeMapper {
 		// location = panel, is when user is applying code displayed in chat panel into notebook.
 		// Fast apply doesn't work well when we have only a part of the code and no code markers.
 		if (!request.createNew && request.location === 'panel' && this.notebookService.hasSupportedNotebooks(request.uri)) {
-			this.logService.logger.error(`srequest | refuse | SD | refusing notebook from Panel | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | refusing notebook from Panel | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 
@@ -531,12 +562,12 @@ export class CodeMapper {
 
 		const promptLimit = 256_000; // (256K is roughly 64k tokens) and documents longer than this will surely not fit
 		if (combinedDocumentLength > promptLimit) {
-			this.logService.logger.error(`srequest | refuse | SD | refusing huge document | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | refusing huge document | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 
 		const builtPrompt = await this.buildPrompt(request, token);
-		const { promptTokenCount, speculation, requestId } = builtPrompt;
+		const { promptTokenCount, speculation, requestId, endpoint } = builtPrompt;
 
 		// `prompt` includes the whole document, the codeblock and some prosa. we leave space
 		// for the document again and the whole codeblock (assuming it's all insertions)
@@ -544,11 +575,11 @@ export class CodeMapper {
 		// if (promptTokenCount > 128_000 - speculationTokenCount - codeBlockTokenCount) {
 
 		if (promptTokenCount > 64_000) {
-			this.logService.logger.error(`srequest | refuse | SD | exceeds token limit | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | exceeds token limit | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 
-		const mapper = (await this.gpt4oProxyEndpoint).model;
+		const mapper = endpoint.model;
 		const outcomeCorrelationTelemetry: CodeMapperOutcomeTelemetry = {
 			requestId: String(telemetryInfo?.chatRequestId),
 			requestSource: String(telemetryInfo?.chatRequestSource),
@@ -614,10 +645,10 @@ export class CodeMapper {
 	}
 
 	private async fetchNativePredictedOutputs(request: ICodeMapperRequestInput, builtPrompt: IFullRewritePrompt, resultStream: MappedEditsResponseStream, outcomeTelemetry: CodeMapperOutcomeTelemetry, token: CancellationToken, applyEdits: boolean): Promise<CodeMapperOutcome | ISuccessfulRewriteInfo> {
-		const { messages, speculation, requestId } = builtPrompt;
+		const { messages, speculation, requestId, endpoint } = builtPrompt;
 		const startTime = Date.now();
 
-		const fetchResult = await this.fetchAndContinueOnLengthError(messages, speculation, request, resultStream, token, applyEdits);
+		const fetchResult = await this.fetchAndContinueOnLengthError(endpoint, messages, speculation, request, resultStream, token, applyEdits);
 
 		if (fetchResult.result.type !== ChatFetchResponseType.Success) {
 			this.logError(request, builtPrompt, { startTime, firstTokenTime: fetchResult.firstTokenTime, requestId }, outcomeTelemetry, builtPrompt.endpoint.model, fetchResult.result.type);
@@ -633,7 +664,7 @@ export class CodeMapper {
 		return res;
 	}
 
-	private async fetchAndContinueOnLengthError(promptMessages: Raw.ChatMessage[], speculation: string, request: ICodeMapperRequestInput, resultStream: MappedEditsResponseStream, token: CancellationToken, applyEdits: boolean): Promise<ISpeculationFetchResult> {
+	private async fetchAndContinueOnLengthError(endpoint: ChatEndpoint, promptMessages: Raw.ChatMessage[], speculation: string, request: ICodeMapperRequestInput, resultStream: MappedEditsResponseStream, token: CancellationToken, applyEdits: boolean): Promise<ISpeculationFetchResult> {
 		const allResponseText: string[] = [];
 		let responseLength = 0;
 		let firstTokenTime: number = -1;
@@ -648,7 +679,6 @@ export class CodeMapper {
 		const fetchStreamSource = new FetchStreamSource();
 		const textStream = fetchStreamSource.stream.map((part) => part.delta.text);
 
-		const endpoint = await this.gpt4oProxyEndpoint;
 		let processPromise: Promise<unknown> | undefined;
 		if (applyEdits) {
 			processPromise = existingDocument instanceof NotebookDocumentSnapshot

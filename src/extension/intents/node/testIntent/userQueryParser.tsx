@@ -32,7 +32,7 @@ export class UserQueryParser {
 	) { }
 
 	public async parse(query: string): Promise<ParsedUserQuery | null> {
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const promptRenderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -66,7 +66,7 @@ export class UserQueryParser {
 		try {
 			parsedJson = JSON.parse(response);
 		} catch (e) {
-			this.logService.logger.error(`Failed to parse user query response\nResponse:\n${response}\nError:\n${e}`);
+			this.logService.error(`Failed to parse user query response\nResponse:\n${response}\nError:\n${e}`);
 			return null;
 		}
 		return this.isParsedUserQuery(parsedJson) ? parsedJson : null;

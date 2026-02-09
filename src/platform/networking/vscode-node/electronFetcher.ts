@@ -8,6 +8,8 @@ import { BaseFetchFetcher } from '../node/baseFetchFetcher';
 
 export class ElectronFetcher extends BaseFetchFetcher {
 
+	static readonly ID = 'electron-fetch' as const;
+
 	public static create(envService: IEnvService, userAgentLibraryUpdate?: (original: string) => string): ElectronFetcher | null {
 		const net = loadNetModule();
 		if (!net) {
@@ -16,12 +18,20 @@ export class ElectronFetcher extends BaseFetchFetcher {
 		return new ElectronFetcher(net.fetch, envService, userAgentLibraryUpdate);
 	}
 
+	private constructor(
+		fetchImpl: typeof import('electron').net.fetch,
+		envService: IEnvService,
+		userAgentLibraryUpdate?: (original: string) => string,
+	) {
+		super(fetchImpl, envService, userAgentLibraryUpdate, ElectronFetcher.ID);
+	}
+
 	getUserAgentLibrary(): string {
-		return 'electron-fetch';
+		return ElectronFetcher.ID;
 	}
 
 	isInternetDisconnectedError(e: any): boolean {
-		return ['net::ERR_INTERNET_DISCONNECTED'].includes(e?.message);
+		return ['net::ERR_INTERNET_DISCONNECTED', 'net::ERR_NETWORK_IO_SUSPENDED'].includes(e?.message);
 	}
 	isFetcherError(e: any): boolean {
 		return e && e.message && e.message.startsWith('net::');

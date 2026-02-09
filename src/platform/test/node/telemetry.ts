@@ -14,6 +14,7 @@ import { ITelemetryUserConfig } from '../../telemetry/common/telemetry';
 import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD, setupGHTelemetry } from '../../telemetry/node/azureInsights';
 import { ITestingServicesAccessor, TestingServiceCollection } from './services';
 import { startFakeTelemetryServerIfNecessary } from './telemetryFake';
+import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 
 export type EventData = {
 	baseType: 'EventData';
@@ -155,7 +156,7 @@ async function _withTelemetryCapture<T>(
 	const ghTelemetry = new GHTelemetryService(true, accessor.get(IConfigurationService), accessor.get(IEnvService), accessor.get(ITelemetryUserConfig));
 	await ghTelemetry.enablePromiseTracking(true);
 
-	await setupGHTelemetry(ghTelemetry, accessor.get(ICAPIClientService), accessor.get(IEnvService), extensionId, forceTelemetry);
+	await setupGHTelemetry(ghTelemetry, accessor.get(ICAPIClientService), accessor.get(IEnvService), accessor.get(ICopilotTokenStore), extensionId, forceTelemetry);
 
 	try {
 		const result = await work(accessor);

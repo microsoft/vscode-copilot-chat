@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { CancellationToken } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
@@ -20,20 +21,20 @@ type ResponseFormat = 'noTextCodeBlock' | 'oneTextCodeBlock' | 'multipleTextCode
 
 export class GitCommitMessageGenerator {
 	constructor(
-
 		@IConversationOptions private readonly conversationOptions: IConversationOptions,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IInteractionService private readonly interactionService: IInteractionService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) { }
 
-	async generateGitCommitMessage(changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
+	async generateGitCommitMessage(repositoryName: string, branchName: string, changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
 		const startTime = Date.now();
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
-		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { changes, recentCommitMessages });
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { repositoryName, branchName, changes, recentCommitMessages });
 		const prompt = await promptRenderer.render(undefined, undefined);
 
 		const temperature = Math.min(
@@ -81,8 +82,8 @@ export class GitCommitMessageGenerator {
 			timeToComplete: Date.now() - startTime
 		});
 
-		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-			await this.notificationService.showQuotaExceededDialog();
+		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this.authService.copilotToken?.isNoAuthUser)) {
+			await this.notificationService.showQuotaExceededDialog({ isNoAuthUser: this.authService.copilotToken?.isNoAuthUser ?? false });
 			return undefined;
 		}
 

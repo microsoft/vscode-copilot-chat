@@ -1,0 +1,8 @@
+[
+	{
+		"name": "fix-InlineChatIntent (powershell) [inline] [powershell] - Issue #7894",
+		"requests": [
+			"0a1ab0d69e8f340ab1520f8a1a31240ea72ef84e9d9eceea7c985d5f4c12c392"
+		]
+	}
+]

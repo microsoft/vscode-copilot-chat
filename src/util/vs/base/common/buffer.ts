@@ -8,13 +8,20 @@
 import { Lazy } from './lazy';
 import * as streams from './stream';
 
-declare const Buffer: any;
+interface NodeBuffer {
+	allocUnsafe(size: number): Uint8Array;
+	isBuffer(obj: unknown): obj is NodeBuffer;
+	from(arrayBuffer: ArrayBufferLike, byteOffset?: number, length?: number): Uint8Array;
+	from(data: string): Uint8Array;
+}
+
+declare const Buffer: NodeBuffer;
 
 const hasBuffer = (typeof Buffer !== 'undefined');
 const indexOfTable = new Lazy(() => new Uint8Array(256));
 
-let textEncoder: TextEncoder | null;
-let textDecoder: TextDecoder | null;
+let textEncoder: { encode: (input: string) => Uint8Array } | null;
+let textDecoder: { decode: (input: Uint8Array) => string } | null;
 
 export class VSBuffer {
 
@@ -95,6 +102,10 @@ export class VSBuffer {
 		return ret;
 	}
 
+	static isNativeBuffer(buffer: unknown): boolean {
+		return hasBuffer && Buffer.isBuffer(buffer);
+	}
+
 	readonly buffer: Uint8Array;
 	readonly byteLength: number;
 
@@ -118,7 +129,7 @@ export class VSBuffer {
 			return this.buffer.toString();
 		} else {
 			if (!textDecoder) {
-				textDecoder = new TextDecoder();
+				textDecoder = new TextDecoder(undefined, { ignoreBOM: true });
 			}
 			return textDecoder.decode(this.buffer);
 		}
@@ -204,7 +215,7 @@ export function binaryIndexOf(haystack: Uint8Array, needle: Uint8Array, offset =
 	}
 
 	if (needleLen === 1) {
-		return haystack.indexOf(needle[0]);
+		return haystack.indexOf(needle[0], offset);
 	}
 
 	if (needleLen > haystackLen - offset) {
@@ -452,4 +463,39 @@ export function encodeBase64({ buffer }: VSBuffer, padded = true, urlSafe = fals
 	}
 
 	return output;
+}
+
+const hexChars = '0123456789abcdef';
+export function encodeHex({ buffer }: VSBuffer): string {
+	let result = '';
+	for (let i = 0; i < buffer.length; i++) {
+		const byte = buffer[i];
+		result += hexChars[byte >>> 4];
+		result += hexChars[byte & 0x0f];
+	}
+	return result;
+}
+
+export function decodeHex(hex: string): VSBuffer {
+	if (hex.length % 2 !== 0) {
+		throw new SyntaxError('Hex string must have an even length');
+	}
+	const out = new Uint8Array(hex.length >> 1);
+	for (let i = 0; i < hex.length;) {
+		out[i >> 1] = (decodeHexChar(hex, i++) << 4) | decodeHexChar(hex, i++);
+	}
+	return VSBuffer.wrap(out);
+}
+
+function decodeHexChar(str: string, position: number) {
+	const s = str.charCodeAt(position);
+	if (s >= 48 && s <= 57) { // '0'-'9'
+		return s - 48;
+	} else if (s >= 97 && s <= 102) { // 'a'-'f'
+		return s - 87;
+	} else if (s >= 65 && s <= 70) { // 'A'-'F'
+		return s - 55;
+	} else {
+		throw new SyntaxError(`Invalid hex character at position ${position}`);
+	}
 }

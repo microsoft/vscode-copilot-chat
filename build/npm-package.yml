@@ -1,0 +1,88 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+schedules:
+  - cron: "0 7 * * *"
+    displayName: 🌙 Nightly prerelease build
+    branches:
+      include:
+        - main
+    always: true
+
+pr: [main]
+
+resources:
+  repositories:
+    - repository: templates
+      type: github
+      name: microsoft/vscode-engineering
+      ref: main
+      endpoint: Monaco
+
+parameters:
+  - name: nextVersion
+    displayName: '🚀 Release Version (eg: none, major, minor, patch, prerelease, or X.X.X)'
+    type: string
+    default: 'none'
+
+name: "$(Date:yyyyMMdd).$(Rev:r)${{ replace(format(' (🚀 {0})', parameters.nextVersion), ' (🚀 none)', '') }}"
+
+extends:
+  template: azure-pipelines/npm-package/pipeline.yml@templates
+  parameters:
+    npmPackages:
+      - name: vscode-copilot-chat
+        buildSteps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 22.x
+            displayName: 🛠 Install Node.js (22.x)
+
+          - bash: npm ci && npm run extract-chat-lib && rm -rf node_modules
+            displayName: 📂 Extract chat-lib
+
+          - script: npm ci
+            displayName: 📦 Install chat-lib dependencies
+            workingDirectory: chat-lib
+
+          - script: npm run build
+            displayName: 🔨 Build chat-lib
+            workingDirectory: chat-lib
+        testPlatforms:
+          - name: Linux
+            nodeVersions: [22.x]
+          - name: MacOS
+            nodeVersions: [22.x]
+          - name: Windows
+            nodeVersions: [22.x]
+        workingDirectory: chat-lib
+        testSteps:
+          - bash: npm ci && npm run extract-chat-lib && rm -rf node_modules
+            displayName: 📂 Extract chat-lib
+
+          - script: npm ci
+            displayName: 📦 Install chat-lib dependencies
+            workingDirectory: chat-lib
+
+          - script: npm run build
+            displayName: 🔨 Build chat-lib
+            workingDirectory: chat-lib
+
+          - script: npm test
+            displayName: 🧪 Run chat-lib tests
+            workingDirectory: chat-lib
+        ${{ if or(eq(parameters.nextVersion, 'prerelease'), eq(variables['Build.Reason'], 'Schedule')) }}:
+          publishPackage: true
+          publishRequiresApproval: false
+          nextVersion: prerelease
+          tag: next
+        ${{ elseif eq(parameters.nextVersion, 'none') }}:
+          publishPackage: false
+        ${{ else }}:
+          publishPackage: true
+          nextVersion: ${{ parameters.nextVersion }}
+        ghCreateRelease: false
+        ghReleaseAddChangeLog: false

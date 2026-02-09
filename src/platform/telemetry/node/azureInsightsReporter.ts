@@ -9,13 +9,25 @@ process.env.APPLICATION_INSIGHTS_NO_STATSBEAT = 'true';
 import * as appInsights from 'applicationinsights';
 import * as os from 'os';
 import type { TelemetrySender } from 'vscode';
+import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { TelemetryProperties } from '../common/telemetry';
 
+export function wrapEventNameForPrefixRemoval(eventName: string): string {
+	return `wrapped-telemetry-event-name-${eventName}-wrapped-telemetry-event-name`;
+}
+function isWrappedEventName(eventName: string): boolean {
+	return eventName.includes('wrapped-telemetry-event-name-') && eventName.endsWith('-wrapped-telemetry-event-name');
+}
+export function unwrapEventNameFromPrefix(eventName: string): string {
+	const match = eventName.match(/wrapped-telemetry-event-name-(.*?)-wrapped-telemetry-event-name/);
+	return match ? match[1] : eventName;
+}
+
 export class AzureInsightReporter implements TelemetrySender {
 	private readonly client: appInsights.TelemetryClient;
-	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly namespace: string, key: string) {
+	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly tokenStore: ICopilotTokenStore, private readonly namespace: string, key: string) {
 		this.client = createAppInsightsClient(capiClientService, envService, key);
 		configureReporter(capiClientService, envService, this.client);
 	}
@@ -40,10 +52,12 @@ export class AzureInsightReporter implements TelemetrySender {
 
 	sendEventData(eventName: string, data?: Record<string, any> | undefined): void {
 		const { properties, measurements } = this.separateData(data || {});
+		const trackingId = this.tokenStore.copilotToken?.getTokenValue('tid');
 		this.client.trackEvent({
-			name: this.qualifyEventName(eventName),
+			name: this.massageEventName(eventName),
 			properties,
 			measurements,
+			tagOverrides: trackingId ? { 'ai.user.id': trackingId } : undefined
 		});
 	}
 
@@ -66,7 +80,10 @@ export class AzureInsightReporter implements TelemetrySender {
 		});
 	}
 
-	private qualifyEventName(eventName: string): string {
+	private massageEventName(eventName: string): string {
+		if (isWrappedEventName(eventName)) {
+			return unwrapEventNameFromPrefix(eventName);
+		}
 		return eventName.includes(this.namespace) ? eventName : `${this.namespace}/${eventName}`;
 	}
 }
@@ -89,6 +106,8 @@ function configureReporter(capiClientService: ICAPIClientService, envService: IE
 	// Do not want personal machine names to be sent
 	client.context.tags[client.context.keys.cloudRoleInstance] = 'REDACTED';
 
+	client.context.tags[client.context.keys.sessionId] = envService.sessionId;
+
 	client.config.endpointUrl = capiClientService.copilotTelemetryURL;
 }
 
@@ -102,9 +121,10 @@ function decorateWithCommonProperties(properties: TelemetryProperties, envServic
 	// We have editor-agnostic fields but keep the vs-specific ones for backward compatibility
 	properties['common_vscodemachineid'] = envService.machineId;
 	properties['common_vscodesessionid'] = envService.sessionId;
+	properties['client_deviceid'] = envService.devDeviceId;
 
-	properties['common_uikind'] = 'desktop';
-	properties['common_remotename'] = 'none';
+	properties['common_uikind'] = envService.uiKind;
+	properties['common_remotename'] = envService.remoteName ?? 'none';
 	properties['common_isnewappinstall'] = '';
 	return properties;
 }

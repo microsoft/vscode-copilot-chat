@@ -48,6 +48,34 @@
 			}
 		},
 		{
+			"type": "node",
+			"request": "launch",
+			"name": "Launch Copilot Extension - Watch Mode - Code OSS",
+			"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.sh",
+			"windows": {
+				"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.bat",
+			},
+
+			"attachSimplePort": 5870,
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+			],
+			"smartStep": true,
+			"sourceMaps": true,
+			"preLaunchTask": "watch",
+			"env": {
+				"COPILOT_LOG_TELEMETRY": "true",
+				"VSCODE_DEV_DEBUG": "1",
+			},
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "0_launch",
+			}
+		},
+		{
 			// See `launchConfigName` in file://./extensions/visualization-runner/extension.ts
 			"name": "Test Visualization Runner",
 			"type": "node",
@@ -197,6 +225,44 @@
 			"internalConsoleOptions": "neverOpen"
 		},
 		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug chat-lib vitest",
+			"cwd": "${workspaceFolder}/chat-lib",
+			"runtimeExecutable": "${workspaceFolder}/chat-lib/node_modules/.bin/vitest",
+			"runtimeArgs": [
+				"run",
+				"--reporter=verbose"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"presentation": {
+				"group": "1_launch"
+			}
+		},
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug vitest",
+			"cwd": "${workspaceFolder}",
+			"runtimeExecutable": "${workspaceFolder}/node_modules/.bin/vitest",
+			"runtimeArgs": [
+				"run",
+				"--reporter=verbose"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"presentation": {
+				"group": "1_launch"
+			}
+		},
+		{
 			"type": "extensionHost",
 			"request": "launch",
 			"name": "Launch Copilot Extension - TS Server in Debug Mode",
@@ -231,7 +297,49 @@
 			"presentation": {
 				"group": "2_launch"
 			}
-		}
+		},
+		{
+			"name": "Attach to Extension Host - Code OSS",
+			"type": "node",
+			"request": "attach",
+			"restart": true,
+			"timeout": 0,
+			"port": 5870,
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceFolder}/../vscode/out/**/*.js",
+				"${workspaceFolder}/../vscode/extensions/*/out/**/*.js",
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "2_launch"
+			}
+		},
+		{
+			"name": "Run Completions-Core Extension Tests",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--extensionTestsPath=${workspaceFolder}/src/extension/completions-core/vscode-node/extension/test/run",
+				"--disable-extensions"
+			],
+			"env": {
+				"TSX_TSCONFIG_PATH": "${workspaceFolder}/tsconfig.json",
+				"VITEST": "true"
+			},
+			"internalConsoleOptions": "openOnSessionStart",
+			"outFiles": [
+				"${workspaceFolder}/**/*.ts",
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"autoAttachChildProcesses": true,
+			"presentation": {
+				"group": "1_launch"
+			}
+		},
 	],
 	"compounds": [
 		{

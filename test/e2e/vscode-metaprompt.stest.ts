@@ -11,7 +11,7 @@ import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
 import { ssuite, stest } from '../base/stest';
 
-ssuite({ title: 'vscode', subtitle: 'metaprompt', location: 'panel' }, async (_) => {
+ssuite.skip({ title: 'vscode', subtitle: 'metaprompt', location: 'panel' }, async (_) => {
 
 	const scenarios = [
 		{

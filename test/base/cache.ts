@@ -13,11 +13,18 @@ import { promisify } from 'util';
 import zlib from 'zlib';
 import { LockMap } from '../../src/util/common/lock';
 import { generateUuid } from '../../src/util/vs/base/common/uuid';
+import { CurrentTestRunInfo } from './simulationContext';
 
 const compress = promisify(zlib.brotliCompress);
 const decompress = promisify(zlib.brotliDecompress);
 
 const DefaultCachePath = process.env.VITEST ? path.resolve(__dirname, '..', 'simulation', 'cache') : path.resolve(__dirname, '..', 'test', 'simulation', 'cache');
+
+async function getGitRoot(cwd: string): Promise<string> {
+	const execAsync = promisify(exec);
+	const { stdout } = await execAsync('git rev-parse --show-toplevel', { cwd });
+	return stdout.trim();
+}
 
 export class Cache extends EventEmitter {
 	private static _Instance: Cache | undefined;
@@ -27,6 +34,7 @@ export class Cache extends EventEmitter {
 
 	private readonly cachePath: string;
 	private readonly layersPath: string;
+	private readonly externalLayersPath?: string;
 
 	private readonly base: Keyv;
 	private readonly layers: Map<string, Keyv>;
@@ -40,18 +48,30 @@ export class Cache extends EventEmitter {
 
 		this.cachePath = cachePath;
 		this.layersPath = path.join(this.cachePath, 'layers');
+		this.externalLayersPath = process.env.EXTERNAL_CACHE_LAYERS_PATH;
 
 		if (!fs.existsSync(path.join(this.cachePath, 'base.sqlite'))) {
 			throw new Error(`Base cache file does not exist as ${path.join(this.cachePath, 'base.sqlite')}.`);
+		}
+
+		if (this.externalLayersPath && !fs.existsSync(this.externalLayersPath)) {
+			throw new Error(`External layers cache directory provided but it does not exist at ${this.externalLayersPath}.`);
 		}
 
 		fs.mkdirSync(this.layersPath, { recursive: true });
 		this.base = new Keyv(new KeyvSqlite(path.join(this.cachePath, 'base.sqlite')));
 
 		this.layers = new Map();
-		const layerFiles = fs.readdirSync(this.layersPath)
+		let layerFiles = fs.readdirSync(this.layersPath)
 			.filter(file => file.endsWith('.sqlite'))
 			.map(file => path.join(this.layersPath, file));
+
+		if (this.externalLayersPath !== undefined) {
+			const externalLayerFiles = fs.readdirSync(this.externalLayersPath)
+				.filter(file => file.endsWith('.sqlite'))
+				.map(file => path.join(this.externalLayersPath!, file));
+			layerFiles = layerFiles.concat(externalLayerFiles);
+		}
 
 		for (const layerFile of layerFiles) {
 			const name = path.basename(layerFile, path.extname(layerFile));
@@ -216,25 +236,33 @@ export class Cache extends EventEmitter {
 			this.activeLayer = (async () => {
 				const execAsync = promisify(exec);
 
+				const activeLayerPath = this.externalLayersPath ?? this.layersPath;
+				const gitStatusPath = this.externalLayersPath
+					? `${path.relative(await getGitRoot(activeLayerPath), activeLayerPath)}/*`
+					: 'test/simulation/cache/layers/*';
+
 				// Check git for an uncommitted layer database file
-				const { stdout: revParseStdout } = await execAsync('git rev-parse --show-toplevel');
-				const { stdout: statusStdout } = await execAsync('git status -z test/simulation/cache/layers/*', { cwd: revParseStdout.trim() });
-				if (statusStdout !== '') {
-					const layerDatabaseEntries = statusStdout.split('\0').filter(entry => entry.endsWith('.sqlite'));
-					if (layerDatabaseEntries.length > 0) {
-						const regex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/;
-						const match = layerDatabaseEntries[0].match(regex);
-						if (match && this.layers.has(match[1])) {
-							return this.layers.get(match[1])!;
+				try {
+					const gitRoot = await getGitRoot(activeLayerPath);
+					const { stdout: statusStdout } = await execAsync(`git status -z ${gitStatusPath}`, { cwd: gitRoot });
+					if (statusStdout !== '') {
+						const layerDatabaseEntries = statusStdout.split('\0').filter(entry => entry.endsWith('.sqlite'));
+						if (layerDatabaseEntries.length > 0) {
+							const regex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/;
+							const match = layerDatabaseEntries[0].match(regex);
+							if (match && this.layers.has(match[1])) {
+								return this.layers.get(match[1])!;
+							}
 						}
 					}
+				} catch (error) {
+					// If git operations fail, continue to create new layer
 				}
 
 				// Create a new layer database
 				const uuid = generateUuid();
-				const activeLayer = new Keyv(new KeyvSqlite(path.join(this.layersPath, `${uuid}.sqlite`)));
+				const activeLayer = new Keyv(new KeyvSqlite(path.join(activeLayerPath, `${uuid}.sqlite`)));
 				this.layers.set(uuid, activeLayer);
-
 				return activeLayer;
 			})();
 		}
@@ -268,7 +296,7 @@ export class SQLiteCache<TRequest extends CacheableRequest, TResponse> implement
 	private readonly namespace: string;
 	private readonly locks = new LockMap();
 
-	constructor(name: string, salt?: string) {
+	constructor(name: string, salt?: string, info?: CurrentTestRunInfo) {
 		this.namespace = `${name}${salt ? `|${salt}` : ''}`;
 	}
 
@@ -315,7 +343,7 @@ export class SQLiteSlottedCache<TRequest extends CacheableRequest, TResponse> im
 	private readonly namespace: string;
 	private readonly locks = new LockMap();
 
-	constructor(name: string, salt: string) {
+	constructor(name: string, salt: string, info?: CurrentTestRunInfo) {
 		this.namespace = `${name}|${salt}`;
 	}
 

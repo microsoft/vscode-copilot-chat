@@ -3,15 +3,24 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
+import { CancellationToken, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { AzureAuthMode, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType } from '../common/byokProvider';
-import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
+import { resolveModelInfo } from '../common/byokProvider';
+import { AzureOpenAIEndpoint } from '../node/azureOpenAIEndpoint';
+import { OpenAICompatibleLanguageModelChatInformation } from './abstractLanguageModelChatProvider';
+import { IBYOKStorageService } from './byokStorageService';
+import { AbstractCustomOAIBYOKModelProvider, CustomOAIModelProviderConfig, hasExplicitApiPath } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
+	if (hasExplicitApiPath(url)) {
 		return url;
 	}
 
@@ -24,42 +33,106 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 		url = url.slice(0, -3);
 	}
 
+	// Default to chat completions for base URLs
+	const defaultApiPath = '/chat/completions';
+
 	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1/chat/completions`;
+		return `${url}/v1${defaultApiPath}`;
 	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+		return `${url}/openai/deployments/${modelId}${defaultApiPath}?api-version=2025-01-01-preview`;
 	} else {
 		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
 	}
 }
 
-/**
- * BYOK registry for Azure OpenAI deployments
- *
- * Azure is different from other providers because each model has its own deployment URL and key,
- * and there's no central listing API. The user needs to manually register each model they want to use.
- */
+export class AzureBYOKModelProvider extends AbstractCustomOAIBYOKModelProvider {
 
-export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
+	static readonly providerName = 'Azure';
 
 	constructor(
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
+		byokStorageService: IBYOKStorageService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@ILogService logService: ILogService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IExperimentationService expService: IExperimentationService,
+		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext
 	) {
 		super(
-			BYOKAuthType.PerModelDeployment,
-			'Azure',
-			'',
-			_fetcherService,
-			_logService,
-			_instantiationService
+			AzureBYOKModelProvider.providerName.toLowerCase(),
+			AzureBYOKModelProvider.providerName,
+			byokStorageService,
+			logService,
+			fetcherService,
+			instantiationService,
+			configurationService,
+			expService,
+			extensionContext
 		);
+		this.migrateExistingConfigs();
 	}
 
-	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
-		// Azure doesn't have a central API for listing models
-		// Each model has a unique deployment URL
-		return [];
+	// TODO: Remove this after 6 months
+	private async migrateExistingConfigs(): Promise<void> {
+		await this.migrateConfig(ConfigKey.Deprecated.AzureModels, AzureBYOKModelProvider.providerName, AzureBYOKModelProvider.providerName);
+		await this._configurationService.setConfig(ConfigKey.Deprecated.AzureAuthType, undefined);
+	}
+
+	protected override resolveUrl(modelId: string, url: string): string {
+		return resolveAzureUrl(modelId, url);
+	}
+
+	override async provideLanguageModelChatResponse(
+		model: OpenAICompatibleLanguageModelChatInformation<CustomOAIModelProviderConfig>,
+		messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>,
+		options: ProvideLanguageModelChatResponseOptions,
+		progress: Progress<LanguageModelResponsePart2>,
+		token: CancellationToken
+	): Promise<void> {
+		if (model.configuration?.apiKey) {
+			return super.provideLanguageModelChatResponse(model, messages, options, progress, token);
+		}
+
+		const session: vscode.AuthenticationSession = await vscode.authentication.getSession(
+			AzureAuthMode.MICROSOFT_AUTH_PROVIDER,
+			[AzureAuthMode.COGNITIVE_SERVICES_SCOPE],
+			{
+				createIfNone: true,
+				silent: false
+			}
+		);
+
+		const url = this.resolveUrl(model.id, model.url);
+		const modelConfiguration = model.configuration?.models?.find(m => m.id === model.id);
+		const modelCapabilities = {
+			maxInputTokens: model.maxInputTokens,
+			maxOutputTokens: model.maxOutputTokens,
+			toolCalling: !!model.capabilities?.toolCalling || false,
+			vision: !!model.capabilities?.imageInput || false,
+			name: model.name,
+			url,
+			thinking: modelConfiguration?.thinking,
+			streaming: modelConfiguration?.streaming,
+			requestHeaders: modelConfiguration?.requestHeaders,
+			editTools: model.capabilities?.editTools?.filter(isEndpointEditToolName),
+			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
+		};
+		const modelInfo = resolveModelInfo(model.id, this._name, undefined, modelCapabilities);
+
+		const openAIChatEndpoint = this._instantiationService.createInstance(
+			AzureOpenAIEndpoint,
+			modelInfo,
+			session.accessToken,  // Pass Entra ID token
+			url
+		);
+
+		return this._lmWrapper.provideLanguageModelResponse(
+			openAIChatEndpoint,
+			messages,
+			options,
+			options.requestInitiator,
+			progress,
+			token
+		);
 	}
 }

@@ -5,12 +5,13 @@
 
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelPrefersInstructionsAfterHistory } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { modelNeedsStrongReplaceStringHint, modelPrefersInstructionsAfterHistory } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { isLocation, isUri } from '../../../../util/common/types';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
-import { AgentPromptProps, getEditingReminder } from '../agent/agentPrompt';
+import { AgentPromptProps } from '../agent/agentPrompt';
+import { getEditingReminder } from '../agent/defaultAgentInstructions';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -40,12 +41,12 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 			{hasFilesInWorkingSet
 				? <>The user has a request for modifying one or more files.</>
 				: <>If the user asks a question, then answer it.<br />
-					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Internal.CodeSearchAgentEnabled)) ? ", or use `#codebase` in your request to automatically discover working set files." : ""}".<br />
+					If you need to change existing files and it's not clear which files should be changed, then refuse and answer with "Please add the files to be modified to the working set{(this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled) || this.configurationService.getConfig(ConfigKey.Advanced.CodeSearchAgentEnabled)) ? ', or use `#codebase` in your request to automatically discover working set files.' : ''}".<br />
 					The only exception is if you need to create new files. In that case, follow the following instructions.</>}
 		</>;
 		const hasReplaceStringTool = this.toolsService.getTool(ToolName.ReplaceString) !== undefined;
 		const instructions = <InstructionMessage priority={900}>
-			<Tag name="instructions">
+			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				You are capable of making complex code edits across multiple files, and you can also create new files.<br />
 				You have a tool that you can use to edit and create files.<br />
@@ -102,7 +103,7 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 			</Tag>
 			<ResponseTranslationRules />
 			Here is an example of how you should reply to edit the file example.ts. Notice that the response is very short and to the point:<br />
-			<Tag name="example">
+			<Tag name='example'>
 				I will add a new property 'age' and a new method 'getAge' to the class Person.<br />
 				(Then you use {ToolName.EditFile} in the proper format.)
 			</Tag>
@@ -124,7 +125,7 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 	}
 }
 
-export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
+class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 	constructor(
 		props: AgentPromptProps,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
@@ -135,9 +136,10 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsChat, this.experimentationService);
+		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const hasReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.EditFile);
+		const hasMultiReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.MultiReplaceString);
 
 		return (
 			<>
@@ -148,7 +150,7 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<Tag name='reminder'>
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>

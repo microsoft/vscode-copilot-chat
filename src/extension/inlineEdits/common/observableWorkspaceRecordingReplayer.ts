@@ -118,26 +118,26 @@ export class ObservableWorkspaceRecordingReplayer {
 			}
 
 			switch (entry.kind) {
-				case "opened": {
+				case 'opened': {
 					break;
 				}
-				case "header": {
+				case 'header': {
 					if (entry.repoRootUri !== undefined) {
 						this._repoRootUri = entry.repoRootUri;
 					}
 					break;
 				}
-				case "meta": {
+				case 'meta': {
 					this._repoRootUri = (entry.data as any).repoRootUri;
 					break;
 				}
-				case "documentEncountered": {
+				case 'documentEncountered': {
 					const pathUri = joinUriWithRelativePath(assertReturnsDefined(this._repoRootUri), entry.relativePath);
 					const id = DocumentId.create(pathUri);
 					this._documents.set(entry.id, { id: id, workspaceRoot: this._repoRootUri, initialized: false });
 					break;
 				}
-				case "setContent": {
+				case 'setContent': {
 					const doc = this._documents.get(entry.id);
 					if (!doc) { throw new BugIndicatingError(); }
 
@@ -156,7 +156,7 @@ export class ObservableWorkspaceRecordingReplayer {
 					}
 					break;
 				}
-				case "changed": {
+				case 'changed': {
 					const doc = this._documents.get(entry.id);
 					if (!doc || !doc.initialized) { throw new BugIndicatingError(); }
 
@@ -165,30 +165,30 @@ export class ObservableWorkspaceRecordingReplayer {
 					this._lastId = doc.id;
 					break;
 				}
-				case "selectionChanged": {
+				case 'selectionChanged': {
 					const doc = this._documents.get(entry.id);
 					if (!doc || !doc.initialized) { throw new BugIndicatingError(); }
 
 					const selection = entry.selection;
 					const docFromWorkspace = this._workspace.getDocument(doc.id);
-					assert(docFromWorkspace !== undefined, "Document should be in workspace");
+					assert(docFromWorkspace !== undefined, 'Document should be in workspace');
 					docFromWorkspace.updateSelection(selection.map(s => deserializeOffsetRange(s)), undefined);
 
 					this._lastId = doc.id;
 
 					break;
 				}
-				case "focused":
-				case "applicationStart": {
+				case 'focused':
+				case 'applicationStart': {
 					break;
 				}
 
-				case "storeContent": {
+				case 'storeContent': {
 					const doc = this._documents.get(entry.id)!;
 					this._states.set(entry.contentId, this._workspace.getDocument(doc.id)!.value.get().value);
 					break;
 				}
-				case "restoreContent": {
+				case 'restoreContent': {
 					const doc = this._documents.get(entry.id)!;
 					const content = this._states.get(entry.contentId);
 					if (!content) {
@@ -198,14 +198,14 @@ export class ObservableWorkspaceRecordingReplayer {
 					this._workspace.getDocument(doc.id)!.setValue(new StringText(content), undefined, entry.v);
 					break;
 				}
-				case "documentEvent": {
+				case 'documentEvent': {
 					const docId = this._documents.get(entry.id)!;
 					const doc = this._workspace.getDocument(docId.id)!;
 					const data = entry.data as DocumentEventLogEntryData;
 					this._onDocumentEvent.fire({ logEntry: entry, data, doc });
 					break;
 				}
-				case "event": {
+				case 'event': {
 					break;
 				}
 				default:

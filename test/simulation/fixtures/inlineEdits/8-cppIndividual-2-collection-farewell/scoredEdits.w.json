@@ -127,6 +127,18 @@
             ],
             "scoreCategory": "nextEdit",
             "score": 0
+        },
+        {
+            "documentUri": "file:///d%3a/dev/microsoft/edit-projects/8-cppIndividual/2-collection.cpp",
+            "edit": [
+                [
+                    124,
+                    131,
+                    "oodbyeMessage"
+                ]
+            ],
+            "scoreCategory": "nextEdit",
+            "score": 0
         }
     ],
     "scoringContext": {

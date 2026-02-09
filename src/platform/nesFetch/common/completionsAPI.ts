@@ -3,21 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CopilotAnnotation } from '../../completions-core/common/openai/copilotAnnotations';
+
 /**
  * Represents a completion response from the API. Note: both the streamed and non-streamed response objects share the same shape (unlike the chat endpoint).
  *
  * Based (updated 31.10.2024) on https://platform.openai.com/docs/api-reference/completions/object
  * 		(! except `Choice#finish_reason` can be a null during streaming)
+ *      (! omits `id`, `model`, and `created` for performance)
  */
 export interface Completion {
-	/** A unique identifier for the completion. */
-	id: string;
 	/** The list of completion choices the model generated for the input prompt. */
 	choices: Completion.Choice[];
-	/** The Unix timestamp (in seconds) of when the completion was created. */
-	created: number;
-	/** The model used for completion. */
-	model: string;
 	/** This fingerprint represents the backend configuration that the model runs with. */
 	system_fingerprint: string;
 	/** The object type, which is always "text_completion". */
@@ -33,9 +30,11 @@ export namespace Completion {
 		/** The reason the model stopped generating tokens. */
 		finish_reason: FinishReason | null;
 		/** The log probabilities of the tokens. */
-		logprobs: LogProbs | null;
+		logprobs?: LogProbs | null;
 		/** The generated text. */
 		text: string | undefined;
+		/** Copilot-specific annotations */
+		copilot_annotations?: { [key: string]: CopilotAnnotation[] };
 	}
 
 	/**

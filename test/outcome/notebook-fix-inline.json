@@ -2,115 +2,115 @@
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-29) instance of bool has no to_string member",
 		"requests": [
-			"6119da22c3d53ac3e50529600b470e969c49c32e38e14727a8e4d5cba4c78780"
+			"a196dfe0e0e11a83f589d90b0da6739cb44f1cbfbe8bfa87868ee07e8479a06e"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-35) can not access member",
 		"requests": [
-			"7ed2736c22a9b280015ee9a6757698d559cc9c5899ad177894641e54b5b1d49e"
+			"3436e31f3e55be75230d937b5793bcb2ecabd3c914729d673a4b878759a76b74"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-36) can not be assigned 2",
 		"requests": [
-			"f1fa3ebaa3abfed951a1e9a0613c5569a1be1b5c52f4eb3f31f30e004b9f8d60"
+			"325e288a1c341d0f794caf890df50961110f3dd75425dbcdba0dc010dd7d41d5"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-4) parameter already assigned",
 		"requests": [
-			"2859c35ff38bb3a94be3438207a37e85828aab2eefdf681112cedeb391b13f72"
+			"ea9788f4b5ee205914ff89bd2d317b138299b67d830578078cefe6a8935e2f35"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-48) can not be assigned 3",
 		"requests": [
-			"75ea68a45ccf835a0d771b983dfd02c4aa1fb1e948eb30dbef276dda48b00ecf"
+			"6719e078fd9ce1dfd9d15eb4c60fc344ee9de993db668c45bc11aac067785a11"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-10-58) not defined",
 		"requests": [
-			"0796199345dff94962b0a9c1553fc505bcd7c5d0e18e31289c47d468fbd04855"
+			"a1a589c406edbdb136355b1cbf62b1547f70ad287a59994d3c93e780637b64d2"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-8-110) not defined",
 		"requests": [
-			"c3ffa1ee2aef24e9d483c5024da50dfb7f44938f1782faf945ebfaba092aaa56"
+			"79510622ec93c0d3f36feda7b148db4421b76cfd9b986e9a9d153d3b14349118"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - (AML-8-73) no value for argument in function call",
 		"requests": [
-			"8a8c955f238f4235560ada1e43ba91a5bc68e082ef4330ace4d576fb6a10bf6d"
+			"75e64373c6efe0c600fa5db76143eeb530bb8bea4dce5291c918fb24bb1da0f5"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - all Annotated types should include at least two type arguments",
 		"requests": [
-			"a8bec3b49de718e97192faa46e9d6f3694a3efd2b2226066d3a2922e30a8fcca"
+			"488810cb5046488e312aabeab524c34c5a4f943719bcb9a2400665b43769b480"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - async cannot be used in a non-async function",
 		"requests": [
-			"21a9cf42c50bc35a5b0ef02eda98e4f3c10b724e29c4f6580868347e2d55595b"
+			"534833c2fdcc0e003db3a845a6a4750f8a54ab7b65cbfec8b7658b6d153e7836"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - await cannot be used in a non-async function",
 		"requests": [
-			"079b1b79306af62c7f0199a2534732241d72736a0859375380fa43791a73e45e"
+			"b988a1c87f9ba3bc99ed7c3b76e3364e77b23df106f026ef6c8ac2c35b209567"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - bad token",
 		"requests": [
-			"aaef462c05402fd0e74d85b734ad771110930d5fe2289bf8655ed0615b898be2"
+			"e8b9ea036e2b4d5c26e203ce0d01a0d0cde761f5f9818e368b2e98fd0cb85685"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - Bar does not define a do_something2 method",
 		"requests": [
-			"b5711fc6c8ee11ccc549763ec2a670429395ac32aea3da91c55160eb0c72bec9"
+			"65b103ef232c9d493cd81cb750a052c7b946455eebf515ccdd3d98f57621ce8f"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - cannot instantiate abstract class",
 		"requests": [
-			"a3f5b9d4f481b224faa79c145969d44474a5a505c729963bf4d6c66d80f9e9aa"
+			"f124dad659d9f4b6b38edf79cef1718d21ea627187cfb18051a8f6a53d408b91"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - general type issue",
 		"requests": [
-			"a8f4b8a6f66fec2e7f869b4efa3adf69fe83dcaa65ec76cfb2b18c37df6989fc"
+			"f545747bb8383a0ac5bc64cfcfdeee612c6421dd18e465d909fd69436bb80b9f"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - optional member access",
 		"requests": [
-			"e320186f64fecbb3bc80e3819494c7f7b72dcd96414c540543f3c0d6e2524ef3"
+			"f4af1bca901d907813d769697b18b5439009de2d17bb07427babe10643f1c21b"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - should not generate an error for variables declared in outer scopes",
 		"requests": [
-			"0e2edf5d3117c7896a86272c4699c3ee7837577213754cbf436383d9a0967394"
+			"f640fbc834bea033392668ca0dc6e545c58cf86b46e38e9f752d2e5f88da885a"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - unbound variable",
 		"requests": [
-			"3e6bea746acad96f860c75e44df781273f80c74b971eb62cf8af618a8267d06f"
+			"41c7f37314c8761a84cbc57a86093d775fd93fbfebba066dc1dffadb3bd52dc0"
 		]
 	},
 	{
 		"name": "notebook (fix) [inline] [python] - undefined variable",
 		"requests": [
-			"af9a91d25f4d764f817add02ebf87bc6b77569eea46debd0c51437b375e6277b"
+			"f67688c2dacf6e2243b3c8b450f3304e42edf9d0ba3c2dec17f75b3f126da095"
 		]
 	}
 ]

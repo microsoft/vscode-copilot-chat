@@ -92,7 +92,7 @@ export class SnippyService implements ISnippyService {
 				.replace(/[\r\n\t]+|^[ \t]+/gm, ' ')
 				.trim()}...`;
 
-			this.logService.logger.info([
+			this.logService.info([
 				'[CODE REFERENCING]',
 				documentUri,
 				`Similar code with ${pluralize(allLicenses.length, 'license type')}`,

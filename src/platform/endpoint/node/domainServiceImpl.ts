@@ -58,7 +58,8 @@ export class DomainService extends Disposable implements IDomainService {
 				proxy: proxyConfigUrl || token?.endpoints?.proxy,
 				telemetry: token?.endpoints?.telemetry,
 				'origin-tracker': token?.endpoints?.['origin-tracker']
-			}
+			},
+			sku: token?.sku || 'unknown',
 		};
 		const domainsChanged = this._capiClientService.updateDomains(moduleToken, enterpriseValue);
 		if (domainsChanged.capiUrlChanged || domainsChanged.proxyUrlChanged || domainsChanged.telemetryUrlChanged || domainsChanged.dotcomUrlChanged) {

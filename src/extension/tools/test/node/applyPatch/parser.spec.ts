@@ -282,10 +282,220 @@ suite('applyPatch parser', () => {
 					}
 				}
 			},
-			4
+			6
 		]);
 	});
 
+	it('preserves tab chars in tex files', () => {
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.tex',
+			'@@',
+			'hello',
+			'-\tworld',
+			'+\t\\textbf{world}',
+			'*** End Patch'
+		].join('\n');
+
+		expect(text_to_patch(input, {
+			'a.tex': new StringTextDocumentWithLanguageId('prefix\nhello\n\tworld\nwoo\nsuffix', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.tex": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "	world",
+			            ],
+			            "insLines": [
+			              "	\\textbf{world}",
+			            ],
+			            "origIndex": 2,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
+	});
+
+	it('matches explicit \\n and \\t tab chars', () => {
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.txt',
+			'@@',
+			'-hello\\n\\tworld\\nwoo',
+			'+hello\\n\\tcode!\\nwoo',
+			'*** End Patch'
+		].join('\n');
+
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('prefix\nhello\n\tworld\nwoo\nsuffix', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "hello
+				world
+			woo",
+			            ],
+			            "insLines": [
+			              "hello
+				code!
+			woo",
+			            ],
+			            "origIndex": 1,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  134,
+			]
+		`);
+	});
+
+	it('always normalizes explicit \\t tab chars in replacement', () => {
+		// 4.1 likes to explicitly put tabs as `\\t` in its patches
+		const input = `*** Begin Patch\n*** Update File: a.txt\n@@\n-hello\n+\\t\\tworld\n*** End Patch`;
+
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('hello', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "hello",
+			            ],
+			            "insLines": [
+			              "		world",
+			            ],
+			            "origIndex": 0,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
+	});
+
+	it('issue#262549', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/262549-input.txt`, 'utf-8');
+		const patchFmt = await fs.readFile(`${__dirname}/corpus/262549-call.txt`, 'utf-8');
+		const patch = JSON.parse('"' + patchFmt.replaceAll('\n', '\\n').replaceAll('\t', '\\t') + '"');
+
+		const docs = {
+			'/Users/omitted/projects/flagship/edge-ai/scripts/Fix-VisuallySimilarUnicode.ps1': new StringTextDocumentWithLanguageId(input, 'text/plain')
+		};
+		const [parsed] = text_to_patch(patch, docs);
+		const commit = patch_to_commit(parsed, docs);
+		await expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
+	});
+
+	it('reindents unindented code', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/reindent-input.txt`, 'utf-8');
+		const patch = await fs.readFile(`${__dirname}/corpus/reindent-call.txt`, 'utf-8');
+
+		const docs = {
+			'/Users/connor/Downloads/hello.yml': new StringTextDocumentWithLanguageId(input, 'text/plain')
+		};
+		const [parsed] = text_to_patch(patch, docs);
+		const commit = patch_to_commit(parsed, docs);
+		expect(Object.values(commit.changes).at(0)?.newContent).toMatchInlineSnapshot(`
+			"- hello
+			- world
+			- list:
+			    - item1
+			    - item2
+			    - item3
+			    - item1a
+			    - item2a
+			    - item3a
+			    - item1b
+			    - item20b
+			      - nested3
+			      - nested2
+			    - item3b
+			    - item1c
+			    - item2c
+			    - item3c
+			    - item1d
+			    - item2d
+			    - item3d
+			"
+		`);
+	});
+
+	it('issue#267547', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/267547-input.txt`, 'utf-8');
+		let patchFmt = await fs.readFile(`${__dirname}/corpus/267547-call.txt`, 'utf-8');
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
+		const expectedOutput = await fs.readFile(`${__dirname}/corpus/267547-output.txt`, 'utf-8');
+
+		const docs = {
+			'267547.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
+		};
+		const [parsed] = text_to_patch(patchFmt, docs);
+		const commit = patch_to_commit(parsed, docs);
+		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
+
+		// Normalize line endings for consistent comparison
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
+	});
+
+	it('indent when multiple sections are updated', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/multipleSections-input.txt`, 'utf-8');
+		let patchFmt = await fs.readFile(`${__dirname}/corpus/multipleSections-call.txt`, 'utf-8');
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
+		const expectedOutput = await fs.readFile(`${__dirname}/corpus/multipleSections-output.txt`, 'utf-8');
+
+		const docs = {
+			'multipleSections.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
+		};
+		const [parsed] = text_to_patch(patchFmt, docs);
+		const commit = patch_to_commit(parsed, docs);
+		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
+
+		// Normalize line endings for consistent comparison
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
+	});
+
+	it('multiple indented lines update', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-input.txt`, 'utf-8');
+		let patchFmt = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-call.txt`, 'utf-8');
+		patchFmt = patchFmt.replaceAll('\r\n', '\n');
+		const expectedOutput = await fs.readFile(`${__dirname}/corpus/multipleIndentedLines-output.txt`, 'utf-8');
+
+		const docs = {
+			'multipleIndentedLines.txt': new StringTextDocumentWithLanguageId(input.replaceAll('\r\n', '\n'), 'text/plain')
+		};
+		const [parsed] = text_to_patch(patchFmt, docs);
+		const commit = patch_to_commit(parsed, docs);
+		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
+
+		// Normalize line endings for consistent comparison
+		expect(actualOutput?.replaceAll('\r\n', '\n')).toBe(expectedOutput.replaceAll('\r\n', '\n'));
+	});
 
 	suite('corpus', () => {
 		const corpusPath = path.join(__dirname, 'corpus');

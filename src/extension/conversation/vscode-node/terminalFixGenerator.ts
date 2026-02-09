@@ -158,7 +158,7 @@ class TerminalQuickFixGenerator {
 			}
 		}
 
-		const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
 
 		const promptRenderer = PromptRenderer.create(this._instantiationService, endpoint, TerminalQuickFixPrompt, {
 			commandLine: commandMatchResult.commandLine,
@@ -177,14 +177,14 @@ class TerminalQuickFixGenerator {
 			token,
 			ChatLocation.Other
 		);
-		this._logService.logger.info('Terminal QuickFix FetchResult ' + fetchResult);
+		this._logService.info('Terminal QuickFix FetchResult ' + fetchResult);
 		if (token.isCancellationRequested) {
 			return;
 		}
 		if (fetchResult.type !== 'success') {
 			throw new Error(vscode.l10n.t('Encountered an error while determining terminal quick fixes: {0}', fetchResult.type));
 		}
-		this._logService.logger.debug('generalTerminalQuickFix fetchResult.value ' + fetchResult.value);
+		this._logService.debug('generalTerminalQuickFix fetchResult.value ' + fetchResult.value);
 
 		// Parse result json
 		const parsedResults: ICommandSuggestion[] = [];
@@ -209,14 +209,14 @@ class TerminalQuickFixGenerator {
 				}
 			}
 		} catch (e) {
-			this._logService.logger.error('Error parsing terminal quick fix results: ' + e);
+			this._logService.error('Error parsing terminal quick fix results: ' + e);
 		}
 
 		return parsedResults;
 	}
 
 	private async _generateTerminalQuickFixFileContext(commandMatchResult: vscode.TerminalCommandMatchResult, token: CancellationToken) {
-		const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this._endpointProvider.getChatEndpoint('copilot-fast');
 
 		const promptRenderer = PromptRenderer.create(this._instantiationService, endpoint, TerminalQuickFixFileContextPrompt, {
 			commandLine: commandMatchResult.commandLine,
@@ -224,7 +224,7 @@ class TerminalQuickFixGenerator {
 		});
 
 		const prompt = await promptRenderer.render(undefined, undefined);
-		this._logService.logger.debug('_generalTerminalQuickFixFileContext prompt.messages: ' + prompt.messages);
+		this._logService.debug('_generalTerminalQuickFixFileContext prompt.messages: ' + prompt.messages);
 
 		const fetchResult = await endpoint.makeChatRequest(
 			'terminalQuickFixGenerator',
@@ -233,7 +233,7 @@ class TerminalQuickFixGenerator {
 			token,
 			ChatLocation.Other
 		);
-		this._logService.logger.info('Terminal Quick Fix Fetch Result: ' + fetchResult);
+		this._logService.info('Terminal Quick Fix Fetch Result: ' + fetchResult);
 		if (token.isCancellationRequested) {
 			return;
 		}
@@ -241,7 +241,7 @@ class TerminalQuickFixGenerator {
 			throw new Error(vscode.l10n.t('Encountered an error while fetching quick fix file context: {0}', fetchResult.type));
 		}
 
-		this._logService.logger.debug('_generalTerminalQuickFixFileContext fetchResult.value' + fetchResult.value);
+		this._logService.debug('_generalTerminalQuickFixFileContext fetchResult.value' + fetchResult.value);
 
 		// Parse result json
 		const parsedResults: { fileName: string }[] = [];
@@ -277,7 +277,7 @@ class TerminalQuickFixGenerator {
 		};
 
 		for (const { fileName } of parsedResults) {
-			if (fileName.endsWith(".exe") || (fileName.includes("/bin/") && !fileName.endsWith("activate"))) {
+			if (fileName.endsWith('.exe') || (fileName.includes('/bin/') && !fileName.endsWith('activate'))) {
 				continue;
 			}
 			if (isAbsolute(fileName)) {

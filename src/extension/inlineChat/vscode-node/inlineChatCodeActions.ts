@@ -5,20 +5,11 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { TreeSitterOffsetRange } from '../../../platform/parser/node/nodes';
-import { IParserService, treeSitterOffsetRangeToVSCodeRange } from '../../../platform/parser/node/parserService';
-import { TestableNode } from '../../../platform/parser/node/testGenParsing';
 import { IReviewService } from '../../../platform/review/common/reviewService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { extractImageAttributes } from '../../../util/common/imageUtils';
-import * as arrays from '../../../util/vs/base/common/arrays';
 import * as path from '../../../util/vs/base/common/path';
-import { Range } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
-import { workspaceIntentId } from '../../intents/node/workspaceIntent';
 
 class AICodeAction extends vscode.CodeAction {
 	override readonly isAI = true;
@@ -49,21 +40,15 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		this.reviewKind,
 	];
 
-	static getSevereDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
-		const severeDiagnostics = diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
-
-		if (severeDiagnostics.length === 0) {
-			return [];
-		}
-
-		return severeDiagnostics;
+	static getWarningOrErrorDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
+		return diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
 	}
 
 	static getDiagnosticsAsText(diagnostics: ReadonlyArray<vscode.Diagnostic>): string {
 		return diagnostics.map(d => d.message).join(', ');
 	}
 
-	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext) {
+	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
@@ -73,6 +58,9 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
 
 		const codeActions: vscode.CodeAction[] = [];
 		const activeTextEditor = vscode.window.activeTextEditor;
@@ -80,7 +68,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			return codeActions;
 		}
 
-		const altTextQuickFixes = await this.provideAltTextQuickFix(doc, range);
+		const altTextQuickFixes = this.provideAltTextQuickFix(doc, range);
 		if (altTextQuickFixes) {
 			altTextQuickFixes.command = {
 				title: altTextQuickFixes.title,
@@ -97,7 +85,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		}
 
 		if (this.reviewService.isCodeFeedbackEnabled() && !activeTextEditor.selection.isEmpty) {
-			const reviewAction = new AICodeAction(vscode.l10n.t('Review using Copilot'), QuickFixesProvider.reviewKind);
+			const reviewAction = new AICodeAction(vscode.l10n.t('Review'), QuickFixesProvider.reviewKind);
 			reviewAction.command = {
 				title: reviewAction.title,
 				command: 'github.copilot.chat.review',
@@ -105,7 +93,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			codeActions.push(reviewAction);
 		}
 
-		const severeDiagnostics = QuickFixesProvider.getSevereDiagnostics(context.diagnostics);
+		const severeDiagnostics = QuickFixesProvider.getWarningOrErrorDiagnostics(context.diagnostics);
 		if (severeDiagnostics.length === 0) {
 			return codeActions;
 		}
@@ -114,7 +102,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		const initialSelection = new vscode.Selection(initialRange.start, initialRange.end);
 		const diagnostics = QuickFixesProvider.getDiagnosticsAsText(severeDiagnostics);
 
-		const fixAction = new AICodeAction(vscode.l10n.t('Fix using Copilot'), QuickFixesProvider.fixKind);
+		const fixAction = new AICodeAction(vscode.l10n.t('Fix'), QuickFixesProvider.fixKind);
 		fixAction.diagnostics = severeDiagnostics;
 		fixAction.command = {
 			title: fixAction.title,
@@ -130,9 +118,9 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			],
 		};
 
-		const explainAction = new AICodeAction(vscode.l10n.t('Explain using Copilot'), QuickFixesProvider.explainKind);
+		const explainAction = new AICodeAction(vscode.l10n.t('Explain'), QuickFixesProvider.explainKind);
 		explainAction.diagnostics = severeDiagnostics;
-		const query = `@${workspaceIntentId} /${Intent.Explain} ${diagnostics}`;
+		const query = `/${Intent.Explain} ${diagnostics}`;
 		explainAction.command = {
 			title: explainAction.title,
 			command: 'github.copilot.chat.explain',
@@ -143,7 +131,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		return codeActions;
 	}
 
-	async provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): Promise<ImageCodeAction | undefined> {
+	private provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): ImageCodeAction | undefined {
 		const currentLine = document.lineAt(range.start.line).text;
 		const generateImagePath = extractImageAttributes(currentLine);
 		const refineImagePath = extractImageAttributes(currentLine, true);
@@ -191,42 +179,39 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 
 export class RefactorsProvider implements vscode.CodeActionProvider {
 
+
 	private static readonly generateOrModifyKind = vscode.CodeActionKind.RefactorRewrite.append('copilot');
-	private static readonly generateDocsKind = vscode.CodeActionKind.RefactorRewrite.append('generateDocs').append('copilot');
-	private static readonly generateTestsKind = vscode.CodeActionKind.RefactorRewrite.append('generateTests').append('copilot');
 
 	static readonly providedCodeActionKinds = [
 		this.generateOrModifyKind,
-		this.generateDocsKind,
-		this.generateTestsKind,
 	];
 
 	constructor(
-		@ILogService private readonly logger: ILogService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
-		@IParserService private readonly parserService: IParserService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService,
-	) {
-	}
+	) { }
 
 	async provideCodeActions(
 		doc: vscode.TextDocument,
 		range: vscode.Range,
-		_ctx: vscode.CodeActionContext
+		_ctx: vscode.CodeActionContext,
+		cancellationToken: vscode.CancellationToken
 	): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
 			return;
 		}
+
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
-		const generateUsingCopilotCodeAction = this.provideGenerateUsingCopilotCodeAction(doc, range);
-		const documentUsingCopilotCodeAction = await this.provideDocGenCodeAction(doc, range);
-		const testUsingCopilotCodeAction = await this.provideTestGenCodeAction(doc, range);
-		return arrays.coalesce([documentUsingCopilotCodeAction, generateUsingCopilotCodeAction, testUsingCopilotCodeAction]);
+
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
+
+		return this.provideGenerateUsingCopilotCodeAction(doc, range);
 	}
 
 	/**
@@ -234,19 +219,23 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 * - `Generate using Copilot` is shown when the selection is empty and the line of the selection contains only white-space characters or tabs.
 	 * - `Modify using Copilot` is shown when the selection is not empty and the selection does not contain only white-space characters or tabs.
 	 */
-	private provideGenerateUsingCopilotCodeAction(doc: vscode.TextDocument, range: vscode.Range): vscode.CodeAction | undefined {
+	private provideGenerateUsingCopilotCodeAction(doc: vscode.TextDocument, range: vscode.Range): vscode.CodeAction[] | undefined {
+
+		if (vscode.workspace.getConfiguration('inlineChat').get('affordance') !== 'off') {
+			return undefined;
+		}
 
 		let codeActionTitle: string | undefined;
 
 		if (range.isEmpty) {
 			const textAtLine = doc.lineAt(range.start.line).text;
 			if (range.end.character === textAtLine.length && /^\s*$/g.test(textAtLine)) {
-				codeActionTitle = vscode.l10n.t('Generate using Copilot');
+				codeActionTitle = vscode.l10n.t('Generate');
 			}
 		} else {
 			const textInSelection = doc.getText(range);
 			if (!/^\s*$/g.test(textInSelection)) {
-				codeActionTitle = vscode.l10n.t('Modify using Copilot');
+				codeActionTitle = vscode.l10n.t('Modify');
 			}
 		}
 
@@ -268,99 +257,6 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			],
 		};
 
-		return codeAction;
-	}
-
-	/**
-	 * Provides code action `Document using Copilot: '${documentableNode.identifier}'` if:
-	 * - the document languageId is supported by tree-sitter parsers we have
-	 * - the range is on an identifier AND the identifier is a child of a documentable node
-	 *
-	 * The code action invokes the inline chat, expanding the inline chat's "wholeRange" (blue region)
-	 * to the whole documentable node.
-	 */
-	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
-
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
-
-		let documentableNode: { identifier: string; nodeRange?: TreeSitterOffsetRange } | undefined;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-			}
-		}
-
-		if (documentableNode === undefined) {
-			return undefined;
-		}
-
-		const title = vscode.l10n.t('Generate Documentation using Copilot');
-
-		const codeAction = new AICodeAction(title, RefactorsProvider.generateDocsKind);
-
-		// to expand the inline chat to the whole documentable node
-		const initialRange =
-			documentableNode.nodeRange === undefined
-				? undefined
-				: new Range(
-					doc.positionAt(documentableNode.nodeRange.startIndex),
-					doc.positionAt(documentableNode.nodeRange.endIndex));
-
-		codeAction.command = {
-			title,
-			command: 'vscode.editorChat.start',
-			arguments: [
-				{
-					autoSend: true,
-					message: `/doc`,
-					initialRange,
-				},
-			],
-		};
-
-		return codeAction;
-	}
-
-	private async provideTestGenCodeAction(_doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
-		const doc = TextDocumentSnapshot.create(_doc);
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
-
-		let testableNode: TestableNode | null = null;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				testableNode = await treeSitterAST.getTestableNode(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
-			}
-		}
-
-		if (!testableNode) {
-			return undefined;
-		}
-
-		const identifierRange = treeSitterOffsetRangeToVSCodeRange(doc, testableNode.identifier.range);
-		if (!identifierRange.contains(range)) {
-			return undefined;
-		}
-
-		const title = vscode.l10n.t('Generate Tests using Copilot');
-		const codeAction = new AICodeAction(title, RefactorsProvider.generateTestsKind);
-
-		codeAction.command = {
-			title,
-			command: 'github.copilot.chat.generateTests',
-		};
-
-		return codeAction;
+		return [codeAction];
 	}
 }

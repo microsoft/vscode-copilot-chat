@@ -5,14 +5,12 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { AbstractChatMLFetcher } from '../../src/extension/prompt/node/chatMLFetcher';
-import { IChatMLFetcher, IntentParams, Source } from '../../src/platform/chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponses } from '../../src/platform/chat/common/commonTypes';
+import { IChatMLFetcher, IFetchMLOptions } from '../../src/platform/chat/common/chatMLFetcher';
+import { ChatResponses } from '../../src/platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../src/platform/chat/common/conversationOptions';
 import { roleToString } from '../../src/platform/chat/common/globalStringUtils';
-import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../src/platform/networking/common/fetch';
-import { IChatEndpoint } from '../../src/platform/networking/common/networking';
+import { FinishedCallback, ICopilotToolCall } from '../../src/platform/networking/common/fetch';
 import { APIUsage } from '../../src/platform/networking/common/openai';
-import { TelemetryProperties } from '../../src/platform/telemetry/common/telemetry';
 import { TaskQueue } from '../../src/util/common/async';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
 import { isDisposable } from '../../src/util/vs/base/common/lifecycle';
@@ -21,6 +19,7 @@ import { IInstantiationService } from '../../src/util/vs/platform/instantiation/
 import { InterceptedRequest, ISerialisedChatResponse } from '../simulation/shared/sharedTypes';
 import { CacheInfo, TestRunCacheInfo } from '../testExecutor';
 import { ResponseWithMeta } from './cachingChatMLFetcher';
+import { StopWatch } from '../../src/util/vs/base/common/stopwatch';
 
 export class FetchRequestCollector {
 	public readonly _interceptedRequests: InterceptedRequest[] = [];
@@ -55,6 +54,8 @@ export class FetchRequestCollector {
 	}
 
 	public get usage(): APIUsage {
+		// Have to extract this to give it an explicit type or TS is confused
+		const initial: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 		return this.interceptedRequests.reduce((p, c): APIUsage => {
 			const initialUsage: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 			const cUsage = c.response.usage || initialUsage;
@@ -63,10 +64,10 @@ export class FetchRequestCollector {
 				prompt_tokens: p.prompt_tokens + cUsage.prompt_tokens,
 				total_tokens: p.total_tokens + cUsage.total_tokens,
 				prompt_tokens_details: {
-					cached_tokens: p.prompt_tokens_details.cached_tokens + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
+					cached_tokens: (p.prompt_tokens_details?.cached_tokens ?? 0) + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
 				}
 			};
-		}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
+		}, initial);
 	}
 
 	public get averageRequestDuration(): number {
@@ -111,51 +112,28 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 		}
 	}
 
-	override async fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source: Source | undefined,
-		requestOptions: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties | undefined,
-		intentParams?: IntentParams | undefined
-	): Promise<ChatResponses> {
+	override async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
 
 		const toolCalls: ICopilotToolCall[] = [];
 		const captureToolCallsCb: FinishedCallback = async (text, idx, delta) => {
 			if (delta.copilotToolCalls) {
 				toolCalls.push(...delta.copilotToolCalls);
 			}
-			if (finishedCb) {
-				return finishedCb(text, idx, delta);
+			if (opts.finishedCb) {
+				return opts.finishedCb(text, idx, delta);
 			}
 		};
 
-		const respPromise = this.fetcher.fetchMany(
-			debugName,
-			messages,
-			captureToolCallsCb,
-			token,
-			location,
-			endpoint,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+		const respPromise = this.fetcher.fetchMany({ ...opts, finishedCb: captureToolCallsCb }, token);
 
+		const sw = new StopWatch(false);
 		this.requestCollector.addInterceptedRequest(respPromise.then(resp => {
 			let cacheKey: string | undefined;
 			if (typeof (resp as ResponseWithMeta).cacheKey === 'string') {
 				cacheKey = (resp as ResponseWithMeta).cacheKey;
 			}
 			(resp as ISerialisedChatResponse).copilotFunctionCalls = toolCalls;
-			return new InterceptedRequest(messages.map(message => {
+			return new InterceptedRequest(opts.messages.map(message => {
 				return {
 					role: roleToString(message.role),
 					content: message.content,
@@ -163,7 +141,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 					tool_calls: message.role === Raw.ChatRole.Assistant ? message.toolCalls : undefined,
 					name: message.name,
 				};
-			}), requestOptions, resp, cacheKey, endpoint.model);
+			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model, sw.elapsed());
 		}));
 
 		return await respPromise;

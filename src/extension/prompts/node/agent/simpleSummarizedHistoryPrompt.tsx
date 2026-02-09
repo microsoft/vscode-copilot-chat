@@ -9,7 +9,7 @@ import { truncate } from '../../../../util/vs/base/common/strings';
 import { IToolCall, IToolCallRound } from '../../../prompt/common/intents';
 import { Tag } from '../base/tag';
 import { ToolResult } from '../panel/toolCalling';
-import { getKeepGoingReminder } from './agentPrompt';
+import { DefaultOpenAIKeepGoingReminder } from './openai/defaultOpenAIPrompt';
 import { SummarizedAgentHistoryProps } from './summarizedConversationHistory';
 
 /**
@@ -81,11 +81,10 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		}
 
 		if (entry.round.summary) {
-			const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family);
 			return <ChunkTag name='conversation-summary' priority={priorityOverride}>
 				{entry.round.summary}
-				{keepGoingReminder && <Tag name='reminderInstructions'>
-					{keepGoingReminder}
+				{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
+					<DefaultOpenAIKeepGoingReminder />
 				</Tag>}
 			</ChunkTag>;
 		}
@@ -109,15 +108,15 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		return <ChunkTag name='tool'>
 			Used tool "{toolCall.name}" with arguments: {truncate(toolCall.arguments, 200)}<br />
 			{result ?
-				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} /> :
+				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} toolCallId={toolCall.id} sessionId={this.props.promptContext.request?.sessionId} /> :
 				<>Tool result empty</>}
 		</ChunkTag>;
 	}
 }
 
 type ChunkTagProps = PromptElementProps<{
-	name: string;
-	attrs?: Record<string, string | undefined | boolean | number>;
+	readonly name: string;
+	readonly attrs?: Record<string, string | undefined | boolean | number>;
 }>;
 
 class ChunkTag extends PromptElement<ChunkTagProps> {
@@ -133,6 +132,6 @@ class ChunkTag extends PromptElement<ChunkTagProps> {
 }
 
 interface IRoundHistoryEntry {
-	round: IToolCallRound;
-	results?: Record<string, LanguageModelToolResult>;
+	readonly round: IToolCallRound;
+	readonly results?: Record<string, LanguageModelToolResult>;
 }

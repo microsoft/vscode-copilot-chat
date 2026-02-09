@@ -21,14 +21,19 @@ export function workspaceFile(path: string) {
 }
 
 export function createMockFsService(listOfFiles: readonly (string | URI)[]): IFileSystemService {
-	const workspaceFiles = listOfFiles.map(f => URI.isUri(f) ? f : workspaceFile(f));
+	const workspaceEntries = listOfFiles.map(f => URI.isUri(f) ? f : workspaceFile(f));
 	return new class implements Partial<IFileSystemService> {
 		async stat(path: URI): Promise<FileStat> {
-			const entry = workspaceFiles.find(f => f.toString() === path.toString() || f.toString() === path.toString() + '/');
+			if (path.path === '/' || path.path === workspace.path) {
+				return { ctime: 0, mtime: 0, size: 0, type: FileType.File };
+			}
+
+			const entry = workspaceEntries.find(f => f.toString() === path.toString() || f.toString() === `${path.toString()}/`);
 			if (!entry) {
 				throw new Error(`File not found: ${path}`);
 			}
-			return { ctime: 0, mtime: 0, size: 0, type: FileType.File };
+			const isDirectory = entry.path.endsWith('/');
+			return { ctime: 0, mtime: 0, size: 0, type: isDirectory ? FileType.Directory : FileType.File };
 		}
 	} as any;
 }
@@ -37,6 +42,14 @@ export function createMockWorkspaceService(): IWorkspaceService {
 	return new class implements Partial<IWorkspaceService> {
 		getWorkspaceFolders(): URI[] {
 			return [workspace];
+		}
+
+		getWorkspaceFolder(): URI | undefined {
+			return workspace;
+		}
+
+		getWorkspaceFolderName(): string {
+			return 'workspace';
 		}
 	} as any;
 }
@@ -73,11 +86,11 @@ export function assertPartsEqual(actualParts: readonly LinkifiedPart[], expected
 		if (typeof actual === 'string') {
 			assert.strictEqual(actual, expected);
 		} else if (actual instanceof LinkifyLocationAnchor) {
-			assert(expected instanceof LinkifyLocationAnchor, "Expected LinkifyLocationAnchor");
+			assert(expected instanceof LinkifyLocationAnchor, 'Expected LinkifyLocationAnchor');
 			assert.strictEqual(actual.value.toString(), expected.value.toString());
 		} else {
 			assert(actual instanceof LinkifySymbolAnchor);
-			assert(expected instanceof LinkifySymbolAnchor, "Expected LinkifySymbolAnchor");
+			assert(expected instanceof LinkifySymbolAnchor, 'Expected LinkifySymbolAnchor');
 			assert.strictEqual(actual.symbolInformation.name, expected.symbolInformation.name);
 		}
 	}

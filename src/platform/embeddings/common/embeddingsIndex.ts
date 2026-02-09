@@ -7,14 +7,12 @@ import type { Memento, Uri } from 'vscode';
 import { VSBuffer } from '../../../util/vs/base/common/buffer';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { fileSystemServiceReadAsJSON, IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { IEmbeddingEndpoint } from '../../networking/common/networking';
 import { IWorkbenchService } from '../../workbench/common/workbenchService';
-import { Embedding, EmbeddingType, EmbeddingVector, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer, rankEmbeddings } from './embeddingsComputer';
+import { Embedding, EmbeddingType, EmbeddingVector, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer, LEGACY_EMBEDDING_MODEL_ID, rankEmbeddings } from './embeddingsComputer';
 
 interface EmbeddingsIndex<K, V> {
 	hasItem(value: K): boolean;
@@ -34,16 +32,21 @@ export enum RemoteCacheType {
 	Api = 'api',
 	Extensions = 'extensions',
 	ProjectTemplates = 'project-templates',
+	Tools = 'tools'
 }
 
 // These values are the blob storage container names where we publish computed embeddings
 enum RemoteEmbeddingsContainer {
-	TEXT3SMALL = "text-3-small",
+	TEXT3SMALL = 'text-3-small',
+	METIS_1024_I16_BINARY = 'metis-1024-I16-Binary'
 }
 
 function embeddingsModelToRemoteContainer(embeddingType: EmbeddingType): RemoteEmbeddingsContainer {
 	switch (getWellKnownEmbeddingTypeInfo(embeddingType)?.model) {
-		case EMBEDDING_MODEL.TEXT3SMALL:
+		case LEGACY_EMBEDDING_MODEL_ID.Metis_I16_Binary:
+			return RemoteEmbeddingsContainer.METIS_1024_I16_BINARY;
+
+		case LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL:
 		default:
 			return RemoteEmbeddingsContainer.TEXT3SMALL;
 	}
@@ -467,7 +470,6 @@ export class RemoteEmbeddingsExtensionCache extends RemoteEmbeddingsCache {
 export abstract class BaseEmbeddingsIndex<V extends { key: string; embedding?: EmbeddingVector }>
 	implements EmbeddingsIndex<string, V> {
 	protected _items: Map<string, V>;
-	protected _embeddingEndpoint: IEmbeddingEndpoint | undefined;
 	private _isIndexLoaded = false;
 	private _calculationPromise: Promise<void> | undefined;
 
@@ -547,7 +549,7 @@ export abstract class BaseEmbeddingsIndex<V extends { key: string; embedding?: E
 
 		this._items = latestEmbeddingsIndex;
 
-		this.logService.logger.debug(`Embeddings for ${this.cacheKey} calculated in ${Date.now() - startTime}ms`);
+		this.logService.debug(`Embeddings for ${this.cacheKey} calculated in ${Date.now() - startTime}ms`);
 		this.isIndexLoaded = true;
 	}
 

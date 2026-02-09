@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createServiceIdentifier } from '../../../util/common/services';
-import { URI } from '../../../util/vs/base/common/uri';
 import * as l10n from '@vscode/l10n';
+import { createServiceIdentifier } from '../../../util/common/services';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { URI } from '../../../util/vs/base/common/uri';
 
 export const HAS_IGNORED_FILES_MESSAGE = l10n.t('\n\n**Note:** Some files were excluded from the context due to content exclusion rules. Click [here](https://docs.github.com/en/copilot/managing-github-copilot-in-your-organization/configuring-content-exclusions-for-github-copilot) to learn more.');
 
@@ -28,7 +29,7 @@ export interface IIgnoreService {
 
 	init(): Promise<void>;
 
-	isCopilotIgnored(file: URI): Promise<boolean>;
+	isCopilotIgnored(file: URI, token?: CancellationToken): Promise<boolean>;
 
 	asMinimatchPattern(): Promise<string | undefined>;
 }

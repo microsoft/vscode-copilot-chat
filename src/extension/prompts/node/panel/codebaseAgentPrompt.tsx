@@ -29,7 +29,7 @@ export class CodebaseAgentPrompt extends PromptElement<GenericBasePromptElementP
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables, history, toolCallRounds, toolCallResults } = this.props.promptContext;
-		const isCodesearchFast = await this.workspaceChunkSearch.hasFastSearch({ endpoint: this.promptEndpoint, tokenBudget: sizing.tokenBudget, maxResultCountHint: MAX_CHUNKS_RESULTS });
+		const isCodesearchFast = await this.workspaceChunkSearch.hasFastSearch({ endpoint: this.promptEndpoint, tokenBudget: sizing.tokenBudget, fullWorkspaceTokenBudget: sizing.tokenBudget, maxResultCountHint: MAX_CHUNKS_RESULTS });
 		return (
 			<>
 				<HistoryWithInstructions flexGrow={1} passPriority historyPriority={700} history={history}>

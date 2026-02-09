@@ -5,7 +5,7 @@
 
 import { InlineDocIntent } from '../../src/extension/intents/node/docIntent';
 import { ssuite, stest } from '../base/stest';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
+import { forInline, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
 import { assertInlineEdit, fromFixture } from '../simulation/stestUtil';
 import { assertDocLinesForInlineComments } from './slashDoc.util';
 
@@ -13,7 +13,7 @@ function assertRubyDocComments(fileContents: string | string[], line: string) {
 	assertDocLinesForInlineComments(fileContents, line, '#');
 }
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInline((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `/doc${suffix}`, language: 'ruby', location: 'inline' }, () => {
 

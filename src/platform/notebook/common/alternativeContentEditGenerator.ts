@@ -61,6 +61,17 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 	}
 
 	/**
+	 * Given a NotebookDocument or Uri, and a cell kind, return the EOL for the new cell.
+	 * If the notebook is empty, then return the default EOL.
+	 * Else default to the EOL of the first cell of the given kind.
+	 * This way we have a consistent EOL for new cells (matching existing cells).
+	 */
+	private getEOLForNewCell(notebookOrUri: NotebookDocument | Uri, cellKind: NotebookCellKind): string | undefined {
+		const eolInExistingCodeCell = isUri(notebookOrUri) ? undefined : (notebookOrUri.getCells().find(c => c.kind === cellKind)?.document.eol ?? undefined);
+		return eolInExistingCodeCell ? eolInExistingCodeCell === EndOfLine.LF ? '\n' : '\r\n' : EOL;
+	}
+
+	/**
 	 * Given a stream of lines for the alternative content, generate the corresponding edits to apply to the notebook document.
 	 * We accept a NotebookDocument or a Uri.
 	 * This is because its possible the Notebook may not have been created/loaded as of yet.
@@ -94,11 +105,12 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 			if (!notebookEditEmitted && format === 'text' && linesCollected.length && !lineMightHaveCellMarker(firstNonEmptyLine)) {
 				const uri = isUri(notebookOrUri) ? notebookOrUri : notebookOrUri.uri;
 				if (isJupyterNotebookUri(uri)) {
-					const cellData = new NotebookCellData(NotebookCellKind.Code, linesCollected.join(EOL), 'python');
+					const eolForNewCell = this.getEOLForNewCell(notebookOrUri, NotebookCellKind.Code);
+					const cellData = new NotebookCellData(NotebookCellKind.Code, linesCollected.join(eolForNewCell), 'python');
 					yield NotebookEdit.insertCells(0, [cellData]);
-					this.logger.logger.info(`No new cells were emitted for ${uri.toString()}. Emitting a new cell with the contents of the code.`);
+					this.logger.info(`No new cells were emitted for ${uri.toString()}. Emitting a new cell with the contents of the code.`);
 				} else {
-					this.logger.logger.warn(`No new cells were emitted for ${uri.toString()}`);
+					this.logger.warn(`No new cells were emitted for ${uri.toString()}`);
 				}
 			}
 		}
@@ -247,7 +259,8 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 					}
 					editsEmitted = true;
 				} else if (cellInfo.insertEdit) {
-					cellInfo.insertEdit.newCells[0].value = cellInfo.lines.join(EOL);
+					const eolForNewCell = this.getEOLForNewCell(notebookOrUri, cellInfo.insertEdit.newCells[0].kind);
+					cellInfo.insertEdit.newCells[0].value = cellInfo.lines.join(eolForNewCell);
 				} else {
 					// Insert the new cell.
 					const cellData = new NotebookCellData(cellInfo.language === 'markdown' ? NotebookCellKind.Markup : NotebookCellKind.Code, line.line, cellInfo.language);
@@ -266,7 +279,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		// If the format is correct, then we should have emitted some edits.
 		// If we don't exit here we end up deleting all the cells in the notebook.
 		if (!editsEmitted && allLines.length) {
-			this.logger.logger.warn(`No edits generated for notebook ${notebookOrUri.uri.toString()}. This is likely due to an invalid format. Expected format: ${format}. Provided content as follows:\n\n${allLines.join(EOL)}`);
+			this.logger.warn(`No edits generated for notebook ${notebookOrUri.uri.toString()}. This is likely due to an invalid format. Expected format: ${format}. Provided content as follows:\n\n${allLines.join('\n')}`);
 			return;
 		}
 
@@ -297,8 +310,9 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		// insert items
 		for (const change of diffResult.filter(d => d.type === 'insert')) {
 			const expectedCell = expectedCells[change.modifiedCellIndex];
-			const source = expectedCell.lines.join(EOL);
 			const kind = expectedCell.language === 'markdown' ? NotebookCellKind.Markup : NotebookCellKind.Code;
+			const eolForNewCell = this.getEOLForNewCell(notebookOrUri, kind);
+			const source = expectedCell.lines.join(eolForNewCell);
 			const cellData = new NotebookCellData(kind, source, expectedCell.language);
 			yield NotebookEdit.insertCells(expectedCell.index, [cellData]);
 		}

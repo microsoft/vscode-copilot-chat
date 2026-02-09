@@ -10,8 +10,9 @@ import { splitLines } from '../../../../base/common/strings';
 import { Position } from '../position';
 import { Range } from '../range';
 import { LineRange } from '../ranges/lineRange';
-import { PositionOffsetTransformer } from './positionToOffset';
+import { OffsetRange } from '../ranges/offsetRange';
 import { TextLength } from './textLength';
+import { PositionOffsetTransformer } from './positionToOffsetImpl';
 
 export abstract class AbstractText {
 	abstract getValueOfRange(range: Range): string;
@@ -27,6 +28,10 @@ export abstract class AbstractText {
 
 	getValue(): string {
 		return this.getValueOfRange(this.length.toRange());
+	}
+
+	getValueOfOffsetRange(range: OffsetRange): string {
+		return this.getValueOfRange(this.getTransformer().getRange(range));
 	}
 
 	getLineLength(lineNumber: number): number {
@@ -49,6 +54,10 @@ export abstract class AbstractText {
 	getLines(): string[] {
 		const value = this.getValue();
 		return splitLines(value);
+	}
+
+	getLinesOfRange(range: LineRange): string[] {
+		return range.mapToLineArray(lineNumber => this.getLineAt(lineNumber));
 	}
 
 	equals(other: AbstractText): boolean {
@@ -114,5 +123,10 @@ export class StringText extends AbstractText {
 
 	get length(): TextLength {
 		return this._t.textLength;
+	}
+
+	// Override the getTransformer method to return the cached transformer
+	override getTransformer() {
+		return this._t;
 	}
 }

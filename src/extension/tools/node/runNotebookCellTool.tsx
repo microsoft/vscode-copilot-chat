@@ -10,7 +10,7 @@ import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
-import { parseAndCleanStack } from '../../../platform/notebook/common/helpers';
+import { getCellIdMap, parseAndCleanStack } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -20,7 +20,7 @@ import { findNotebook, isJupyterNotebookUri } from '../../../util/common/noteboo
 import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
 import { dispose } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatImageMimeType, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -29,6 +29,7 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IInstallExtensionToolInput } from './installExtensionTool';
+import { ChatImageMimeType } from '../../conversation/common/languageModelChatMessageHelpers';
 
 class RunNotebookTelemetryEvent {
 	public result: 'success' | 'failure' | 'skipped' = 'failure';
@@ -235,8 +236,7 @@ export class RunNotebookCellTool implements ICopilotTool<IRunNotebookCellToolPar
 			throw new Error(`Notebook ${resolvedUri} not found.`);
 		}
 
-		const altDocProvider = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
-		const cell = altDocProvider.getCell(notebook, cellId);
+		const cell = getCellIdMap(notebook).get(cellId);
 		if (!cell) {
 			throw new Error(`Cell ${cellId} not found in the notebook, use the ${ToolName.ReadFile} file tool to get the latest content of the notebook file`);
 		}
@@ -402,7 +402,7 @@ export class RunNotebookCellOutput extends PromptElement<IRunNotebookCellOutputP
 			</Tag>;
 		}
 
-		return <Tag name="cell-output">
+		return <Tag name='cell-output'>
 			Output with mimeTypes: {output.items.map((item) => item.mime).join(', ')}<br />
 			{`Output ${index}: ${this.renderOutputFallback(output, sizing.tokenBudget / 8)}`}
 		</Tag>;

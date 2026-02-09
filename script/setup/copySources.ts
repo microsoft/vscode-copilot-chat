@@ -51,13 +51,17 @@ async function doIt(filepaths: string[]) {
 
 	type Edit = ts.TextRange & { newText: string };
 	type File = { sourceFilePath: string; targetFilePath: string; contents: string };
+	type StackElement = { filepath: string; importTrajectory: string[] };
 
 	const seen = new Map<string, File>(); // indexed by sourceFilePath
-	const stack = [...filepaths.map(p => join(VS_ROOT, p))];
+	const stack: StackElement[] = [...filepaths.map(p => ({ filepath: join(VS_ROOT, p), importTrajectory: [] }))];
 
 	while (stack.length > 0) {
+		const stackElement = stack.pop()!;
+		const importTrajectory = stackElement.importTrajectory.slice(0);
+		importTrajectory.push(stackElement.filepath);
 
-		let filepath = stack.pop()!;
+		let filepath = stackElement.filepath;
 		if (seen.has(filepath)) {
 			continue;
 		}
@@ -67,9 +71,14 @@ async function doIt(filepaths: string[]) {
 		try {
 			source = String(await fs.promises.readFile(filepath));
 		} catch (e) {
-			// .ts doesn't exist, try, .d.ts
-			filepath = filepath.replace(/\.ts$/, '.d.ts');
-			source = String(await fs.promises.readFile(filepath));
+			try {
+				// .ts doesn't exist, try, .d.ts
+				filepath = filepath.replace(/\.ts$/, '.d.ts');
+				source = String(await fs.promises.readFile(filepath));
+			} catch (e) {
+				console.error(`❌ Error reading file ${filepath}. Trajectory:\n${stackElement.importTrajectory.reverse().map(el => `- ${el}`).join('\n')}:`);
+				throw e;
+			}
 		}
 
 		const destinationFilePath = determineTargetPath(filepath);
@@ -84,7 +93,7 @@ async function doIt(filepaths: string[]) {
 			}
 
 			if (absolutePath) {
-				stack.push(absolutePath);
+				stack.push({ filepath: absolutePath, importTrajectory });
 
 				edits.push({
 					...importedFile,
@@ -101,9 +110,6 @@ async function doIt(filepaths: string[]) {
 			newSource = newSource.slice(0, edit.pos + 1) + edit.newText + newSource.slice(edit.end + 1);
 		}
 
-		if (filepath.endsWith('src/vs/nls.ts')) {
-			newSource = 'declare var document: any;\n\n' + newSource;
-		}
 		newSource = '//!!! DO NOT modify, this file was COPIED from \'microsoft/vscode\'\n\n' + newSource;
 
 		seen.set(filepath, {
@@ -136,6 +142,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/cache.ts',
 			'vs/base/common/cancellation.ts',
 			'vs/base/common/charCode.ts',
+			'vs/base/common/date.ts',
 			'vs/base/common/errors.ts',
 			'vs/base/common/event.ts',
 			'vs/base/common/functional.ts',
@@ -154,6 +161,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/themables.ts',
 			'vs/base/common/uri.ts',
 			'vs/base/common/uuid.ts',
+			'vs/base/common/yaml.ts',
 			'vs/editor/common/core/ranges/offsetRange.ts',
 			'vs/editor/common/core/wordHelper.ts',
 			'vs/editor/common/model/prefixSumComputer.ts',
@@ -163,6 +171,27 @@ async function doIt(filepaths: string[]) {
 			'vs/base/node/ports.ts',
 
 			'vs/platform/instantiation/common/instantiationService.ts',
+			'vs/editor/common/core/edits/lineEdit.ts',
+			'vs/editor/common/core/edits/lengthEdit.ts',
+			'vs/editor/common/core/edits/arrayEdit.ts',
+			'vs/editor/common/core/text/positionToOffset.ts',
+			'vs/editor/common/model/mirrorTextModel.ts',
+
+			'vs/workbench/api/common/extHostTypes/diagnostic.ts',
+			'vs/workbench/api/common/extHostTypes/location.ts',
+			'vs/workbench/api/common/extHostTypes/markdownString.ts',
+			'vs/workbench/api/common/extHostTypes/notebooks.ts',
+			'vs/workbench/api/common/extHostTypes/position.ts',
+			'vs/workbench/api/common/extHostTypes/range.ts',
+			'vs/workbench/api/common/extHostTypes/selection.ts',
+			'vs/workbench/api/common/extHostTypes/snippetString.ts',
+			'vs/workbench/api/common/extHostTypes/snippetTextEdit.ts',
+			'vs/workbench/api/common/extHostTypes/textEdit.ts',
+			'vs/workbench/api/common/extHostTypes/symbolInformation.ts',
+			'vs/workbench/api/common/extHostDocumentData.ts',
+			'vs/workbench/contrib/chat/common/promptSyntax/promptFileParser.ts',
+
+			'vs/base/common/sseParser.ts',
 
 			// SPECIAL IMPLICIT DEPENDENCIES
 			'typings/vscode-globals-nls.d.ts',

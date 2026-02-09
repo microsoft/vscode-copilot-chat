@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import { Diagnostic } from '../../../../vscodeTypes';
 
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { pythonRuffCookbooks } from './pythonCookbookData';
@@ -31,17 +30,13 @@ export type ManualSuggestedFix = {
 	additionalContext?: ContextLocation;
 };
 
-export class FixCookbookService {
+export class FixCookbookService implements IFixCookbookService {
 	readonly _serviceBrand: undefined;
 	constructor(
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) {
-		// Ruff is a special case, as it is not a built-in provider.
-		const includeRuffCookbooks = this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.ruffDiagnosticsCookbook') ?? true;
-		if (includeRuffCookbooks) {
-			errorPrompts.Ruff = pythonRuffCookbooks;
-		}
+		// Always enable the Ruff cookbook by default
+		errorPrompts.Ruff = pythonRuffCookbooks;
 	}
 
 	getCookbook(language: string, diagnostic: Diagnostic): Cookbook {
@@ -122,23 +117,23 @@ type CookbookInternal = Record<Provider, Record<string, Prompt>>;
 
 
 const errorPrompts: CookbookInternal = {
-	"Ruff": {},  // default to empty during experimentation
+	'Ruff': {},  // default to empty during experimentation
 
-	"pylint": {
+	'pylint': {
 		'C0301': [
-			"Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.",
+			'Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.',
 		]
 	},
-	"Pylint": {
+	'Pylint': {
 		'C0301:line-too-long': [
-			"Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.",
+			'Split into many short lines to make sure each line is less than 20 tokens; split into many more lines than you normally would. Make sure to do the following: You must split all long strings, comments, and dictionary arguments and lists into shorter lines.',
 		]
 	},
-	"ts": {
-		2345: { title: "Use this declaration and other usages as examples.", message: "", additionalContext: ContextLocation.ParentCallDefinition },
-		2554: { title: "Use this declaration and other usages as examples.", message: "", additionalContext: ContextLocation.ParentCallDefinition },
+	'ts': {
+		2345: { title: 'Use this declaration and other usages as examples.', message: '', additionalContext: ContextLocation.ParentCallDefinition },
+		2554: { title: 'Use this declaration and other usages as examples.', message: '', additionalContext: ContextLocation.ParentCallDefinition },
 	},
-	"eslint": {
+	'eslint': {
 		'class-methods-use-this': [
 			'Make the method static.',
 			'Move the method outside of the class.',

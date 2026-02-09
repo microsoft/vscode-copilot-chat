@@ -22,8 +22,9 @@ export class FeedbackCommandContribution extends Disposable {
 			await vscode.commands.executeCommand('workbench.action.openIssueReporter', {
 				issueTitle: title,
 				extensionId: EXTENSION_ID,
-				uri: isTeamMember ? vscode.Uri.parse('https://github.com/microsoft/vscode-copilot-issues') : vscode.Uri.parse('https://github.com/microsoft/vscode'),
+				uri: vscode.Uri.parse('https://github.com/microsoft/vscode'),
 				data: output.join('\n'),
+				privateUri: isTeamMember ? vscode.Uri.parse('https://github.com/microsoft/vscode-internalbacklog') : undefined,
 			});
 		}));
 	}

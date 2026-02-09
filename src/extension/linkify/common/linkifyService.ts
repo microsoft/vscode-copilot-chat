@@ -13,6 +13,7 @@ import { PromptReference } from '../../prompt/common/conversation';
 import { FilePathLinkifier } from './filePathLinkifier';
 import { LinkifiedText } from './linkifiedText';
 import { Linkifier } from './linkifier';
+import { ModelFilePathLinkifier } from './modelFilePathLinkifier';
 
 /**
  * A stateful linkifier.
@@ -86,6 +87,8 @@ export class LinkifyService implements ILinkifyService {
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 	) {
+		// Model-generated links first (anchors), fallback legacy path linkifier afterwards
+		this.registerGlobalLinkifier({ create: () => new ModelFilePathLinkifier(fileSystem, workspaceService) });
 		this.registerGlobalLinkifier({ create: () => new FilePathLinkifier(fileSystem, workspaceService) });
 	}
 

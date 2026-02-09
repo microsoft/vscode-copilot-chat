@@ -21,14 +21,15 @@ export interface IExtensionContribution {
 	 * A promise that the extension `activate` method will wait on before completing.
 	 * USE this carefully as it will delay startup of our extension.
 	 */
-	activationBlocker?: Promise<any>;
+	activationBlocker?: Promise<void>;
 }
 
 export interface IExtensionContributionFactory {
 	create(accessor: ServicesAccessor): IExtensionContribution | void;
 }
 
-export function asContributionFactory(ctor: { new(...args: any[]): any }): IExtensionContributionFactory {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function asContributionFactory(ctor: { new(...args: any): any }): IExtensionContributionFactory {
 	return {
 		create(accessor: ServicesAccessor): IExtensionContribution {
 			const instantiationService = accessor.get(IInstantiationService);
@@ -38,7 +39,7 @@ export function asContributionFactory(ctor: { new(...args: any[]): any }): IExte
 }
 
 export class ContributionCollection extends Disposable {
-	private readonly allActivationBlockers: Promise<any>[] = [];
+	private readonly allActivationBlockers: Promise<void>[] = [];
 
 	constructor(
 		contribs: IExtensionContributionFactory[],
@@ -60,11 +61,11 @@ export class ContributionCollection extends Disposable {
 					const sw = StopWatch.create();
 					const id = instance.id || 'UNKNOWN';
 					this.allActivationBlockers.push(instance.activationBlocker.finally(() => {
-						logService.logger.info(`activationBlocker from '${id}' took for ${Math.round(sw.elapsed())}ms`);
+						logService.info(`activationBlocker from '${id}' took for ${Math.round(sw.elapsed())}ms`);
 					}));
 				}
 			} catch (error) {
-				logService.logger.error(error, `Error while loading contribution`);
+				logService.error(error, `Error while loading contribution`);
 			}
 		}
 	}

@@ -3,109 +3,126 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
-import type { CancellationToken } from 'vscode';
-import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IAuthenticationService } from '../../authentication/common/authentication';
+import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
+import { IConfigurationService } from '../../configuration/common/configurationService';
+import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
-import { Response } from '../../networking/common/fetcherService';
+import { IFetcherService } from '../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../networking/common/networking';
-import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
-import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
-import { IEndpointProvider } from '../common/endpointProvider';
+import { ICAPIClientService } from '../common/capiClient';
+import { IDomainService } from '../common/domainService';
+import { IChatModelInformation } from '../common/endpointProvider';
+import { ChatEndpoint } from './chatEndpoint';
+import { CopilotChatEndpoint } from './copilotChatEndpoint';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
- * It is just a shell class used to register with the `lm` API so it shows up in the model picker.
- * The actual model resolution is done in `src/extension/prompt/vscode-node/endpointProviderImpl.ts`.
+ * It just effectively wraps a different endpoint and adds the auto stuff on top
  */
-export class AutoChatEndpoint implements IChatEndpoint {
-	public static readonly id = 'auto';
-	maxOutputTokens: number = 4096;
-	model: string = AutoChatEndpoint.id;
-	supportsToolCalls: boolean = true;
-	supportsVision: boolean = true;
-	supportsPrediction: boolean = true;
-	showInModelPicker: boolean = true;
-	isPremium?: boolean | undefined = false;
-	multiplier?: number | undefined = undefined;
-	restrictedToSkus?: string[] | undefined = undefined;
-	isDefault: boolean = false;
-	isFallback: boolean = false;
-	policy: 'enabled' | { terms: string } = 'enabled';
-	urlOrRequestMetadata: string = '';
-	modelMaxPromptTokens: number = 64000;
-	name: string = 'Auto';
-	version: string = 'auto';
-	family: string = 'auto';
-	tokenizer: TokenizerType = TokenizerType.O200K;
+export class AutoChatEndpoint extends CopilotChatEndpoint {
+	public static readonly pseudoModelId = 'auto';
 
 	constructor(
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
-		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
-		@IExperimentationService private readonly _expService: IExperimentationService,
+		_wrappedEndpoint: IChatEndpoint,
+		_sessionToken: string,
+		_discountPercent: number,
+		public readonly discountRange: { low: number; high: number },
+		@IDomainService _domainService: IDomainService,
+		@ICAPIClientService _capiClientService: ICAPIClientService,
+		@IFetcherService _fetcherService: IFetcherService,
+		@IEnvService _envService: IEnvService,
+		@ITelemetryService _telemetryService: ITelemetryService,
+		@IAuthenticationService _authService: IAuthenticationService,
+		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
+		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
+		@IInstantiationService _instantiationService: IInstantiationService,
+		@IConfigurationService _configurationService: IConfigurationService,
+		@IExperimentationService _expService: IExperimentationService,
+		@ILogService _logService: ILogService,
 	) {
-	}
-
-	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
-		throw new Error('Method not implemented.');
-	}
-	acceptChatPolicy(): Promise<boolean> {
-		throw new Error('Method not implemented.');
-	}
-	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
-		throw new Error('Method not implemented.');
-	}
-	acquireTokenizer(): ITokenizer {
-		return this._tokenizerProvider.acquireTokenizer({ tokenizer: TokenizerType.O200K });
-	}
-
-	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties, intentParams?: IntentParams): Promise<ChatResponse> {
-		// This is only ever called from LM chat extensions.
-		//  Copilot Chat 1st party requests instead get the endpoint much earlier and never call `makeChatRequest` on this endpoint but instead the actual one
-		// What copilot Chat does is more correct, but it's difficult to do this in the LM API
-		const endpoint = await resolveAutoChatEndpoint(this._endpointProvider, this._expService, undefined);
-		return endpoint.makeChatRequest(
-			debugName,
-			messages,
-			finishedCb,
-			token,
-			location,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams,
+		super(
+			calculateAutoModelInfo(_wrappedEndpoint, _sessionToken, _discountPercent),
+			_domainService,
+			_capiClientService,
+			_fetcherService,
+			_envService,
+			_telemetryService,
+			_authService,
+			_chatMLFetcher,
+			_tokenizerProvider,
+			_instantiationService,
+			_configurationService,
+			_expService,
+			_logService
 		);
 	}
 }
 
-/**
- * Checks if the auto chat mode is enabled.
- * @param expService The experimentation service to use to check if the auto mode is enabled
- * @returns True if the auto mode is enabled, false otherwise
- */
-export function isAutoModeEnabled(expService: IExperimentationService): boolean {
-	return !!expService.getTreatmentVariable<string>('vscode', 'copilotchatautomodel');
+function calculateAutoModelInfo(endpoint: IChatEndpoint, sessionToken: string, discountPercent: number): IChatModelInformation {
+	let originalModelInfo: IChatModelInformation;
+	if (endpoint instanceof ChatEndpoint) {
+		originalModelInfo = endpoint.modelMetadata;
+	} else {
+		originalModelInfo = {
+			id: endpoint.model,
+			name: endpoint.name,
+			version: endpoint.version,
+			model_picker_enabled: endpoint.showInModelPicker,
+			is_chat_default: true,
+			is_chat_fallback: endpoint.isFallback,
+			capabilities: {
+				type: 'chat',
+				family: endpoint.family,
+				tokenizer: endpoint.tokenizer,
+				limits: {
+					max_prompt_tokens: endpoint.modelMaxPromptTokens,
+					max_output_tokens: endpoint.maxOutputTokens,
+				},
+				supports: {
+					tool_calls: endpoint.supportsToolCalls,
+					vision: endpoint.supportsVision,
+					prediction: endpoint.supportsPrediction,
+					streaming: true, // Assume streaming support for non-ChatEndpoint instances
+				},
+			},
+			billing: endpoint.isPremium !== undefined || endpoint.multiplier !== undefined || endpoint.restrictedToSkus !== undefined
+				? {
+					is_premium: endpoint.isPremium ?? false,
+					multiplier: endpoint.multiplier ?? 0,
+					restricted_to: endpoint.restrictedToSkus,
+				}
+				: undefined,
+			custom_model: endpoint.customModel,
+		};
+	}
+	// Calculate the multiplier including the discount percent, rounding to two decimal places
+	const newMultiplier = Math.round((endpoint.multiplier ?? 0) * (1 - discountPercent) * 100) / 100;
+	const newModelInfo: IChatModelInformation = {
+		...originalModelInfo,
+		warning_messages: undefined,
+		model_picker_enabled: true,
+		info_messages: undefined,
+		billing: {
+			is_premium: originalModelInfo.billing?.is_premium ?? false,
+			multiplier: newMultiplier,
+			restricted_to: originalModelInfo.billing?.restricted_to
+		},
+		requestHeaders: {
+			...(originalModelInfo.requestHeaders || {}),
+			'Copilot-Session-Token': sessionToken
+		}
+	};
+	return newModelInfo;
 }
 
-/**
- * Resolves the auto chat endpoint to hte backing chat endpoint.
- * @param endpointProvider The endpoint provider to use to get the chat endpoints
- * @returns The endpoint that should be used for the auto chat model
- */
-export async function resolveAutoChatEndpoint(
-	endpointProvider: IEndpointProvider,
-	expService: IExperimentationService,
-	userPrompt: string | undefined,
-): Promise<IChatEndpoint> {
-	const modelId = expService.getTreatmentVariable<string>('vscode', 'copilotchatautomodel');
-	const endpoint = (await endpointProvider.getAllChatEndpoints()).find(e => e.model === modelId) || await endpointProvider.getChatEndpoint('copilot-base');
-	return endpoint;
+export function isAutoModel(endpoint: IChatEndpoint | undefined): number {
+	if (!endpoint) {
+		return -1;
+	}
+	return endpoint.model === AutoChatEndpoint.pseudoModelId || (endpoint instanceof AutoChatEndpoint) ? 1 : -1;
 }

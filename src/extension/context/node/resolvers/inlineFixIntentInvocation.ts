@@ -24,7 +24,7 @@ export class InlineFixIntentInvocation implements IIntentInvocation {
 		readonly intent: IIntent,
 		readonly location: ChatLocation,
 		readonly endpoint: IChatEndpoint,
-		private readonly prompt: PromptElementCtor<InlineFixProps, any>,
+		private readonly prompt: PromptElementCtor<InlineFixProps, unknown>,
 		private readonly documentContext: IDocumentContext,
 		private readonly features: IInlineFixFeatures,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,

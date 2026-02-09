@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RenderPromptResult } from '@vscode/prompt-tsx';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -30,8 +31,9 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) {
-		this.logService.logger.info('[githubTitleAndDescriptionProvider] Initializing GitHub PR title and description provider provider.');
+		this.logService.info('[githubTitleAndDescriptionProvider] Initializing GitHub PR title and description provider provider.');
 	}
 
 	dispose() {
@@ -71,16 +73,17 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		return patches;
 	}
 
-	async provideTitleAndDescription(context: { commitMessages: string[]; patches: string[] | { patch: string; fileUri: string; previousFileUri?: string }[]; issues?: { reference: string; content: string }[] }, token: CancellationToken): Promise<{ title: string; description?: string } | undefined> {
+	async provideTitleAndDescription(context: { commitMessages: string[]; patches: string[] | { patch: string; fileUri: string; previousFileUri?: string }[]; issues?: { reference: string; content: string }[]; template?: string }, token: CancellationToken): Promise<{ title: string; description?: string } | undefined> {
 		const commitMessages: string[] = context.commitMessages;
 		const allPatches: { patch: string; fileUri?: string; previousFileUri?: string }[] = isStringArray(context.patches) ? context.patches.map(patch => ({ patch })) : context.patches;
 		const patches = await this.excludePatches(allPatches);
 		const issues: { reference: string; content: string }[] | undefined = context.issues;
+		const template: string | undefined = context.template;
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
 		const charLimit = Math.floor((endpoint.modelMaxPromptTokens * 4) / 3);
 
-		const prompt = await this.createPRTitleAndDescriptionPrompt(commitMessages, patches, issues, charLimit);
+		const prompt = await this.createPRTitleAndDescriptionPrompt(commitMessages, patches, issues, template, charLimit);
 		const fetchResult = await endpoint
 			.makeChatRequest(
 				'githubPullRequestTitleAndDescriptionGenerator',
@@ -95,18 +98,18 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 			);
 
 		this.lastContext = { commitMessages, patches };
-		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-			await this.notificationService.showQuotaExceededDialog();
+		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this.authService.copilotToken?.isNoAuthUser)) {
+			await this.notificationService.showQuotaExceededDialog({ isNoAuthUser: this.authService.copilotToken?.isNoAuthUser ?? false });
 		}
 
 		if (fetchResult.type !== ChatFetchResponseType.Success) {
 			return undefined;
 		}
 
-		return GitHubPullRequestTitleAndDescriptionGenerator.parseFetchResult(fetchResult.value);
+		return GitHubPullRequestTitleAndDescriptionGenerator.parseFetchResult(fetchResult.value, !!template);
 	}
 
-	public static parseFetchResult(value: string, retry: boolean = true): { title: string; description?: string } | undefined {
+	public static parseFetchResult(value: string, hasTemplate: boolean = false, retry: boolean = true): { title: string; description?: string } | undefined {
 		value = value.trim();
 		let workingValue = value;
 		let delimiter = '+++';
@@ -128,8 +131,13 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 			// If there's only one line, split on newlines as the model has left out some +++ delimiters
 			splitOnLines = splitOnPlus[0].split('\n');
 		} else if (splitOnPlus.length > 1) {
-			const descriptionLines = splitOnPlus.slice(1).map(line => line.split('\n')).flat().filter(s => s.trim().length > 0);
-			splitOnLines = [splitOnPlus[0], ...descriptionLines];
+			if (hasTemplate) {
+				// When using a template, keep description whitespace as-is.
+				splitOnLines = splitOnPlus;
+			} else {
+				const descriptionLines = splitOnPlus.slice(1).map(line => line.split('\n')).flat().filter(s => s.trim().length > 0);
+				splitOnLines = [splitOnPlus[0], ...descriptionLines];
+			}
 		} else {
 			return undefined;
 		}
@@ -139,7 +147,7 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		if (splitOnLines.length === 1) {
 			title = splitOnLines[0].trim();
 			if (retry && value.includes('\n') && (value.split(delimiter).length === 3)) {
-				return this.parseFetchResult(value + delimiter, false);
+				return this.parseFetchResult(value + delimiter, hasTemplate, false);
 			}
 		} else if (splitOnLines.length > 1) {
 			title = splitOnLines[0].trim();
@@ -157,14 +165,14 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		if (title) {
 			title = title.replace(/Title\:\s/, '').trim();
 			title = title.replace(/^\"(?<title>.+)\"$/, (_match, title) => title);
-			if (description) {
+			if (description && !hasTemplate) {
 				description = description.replace(/Description\:\s/, '').trim();
 			}
 			return { title, description };
 		}
 	}
 
-	private async createPRTitleAndDescriptionPrompt(commitMessages: string[], patches: string[], issues: { reference: string; content: string }[] | undefined, charLimit: number): Promise<RenderPromptResult> {
+	private async createPRTitleAndDescriptionPrompt(commitMessages: string[], patches: string[], issues: { reference: string; content: string }[] | undefined, template: string | undefined, charLimit: number): Promise<RenderPromptResult> {
 		// Reserve 20% of the character limit for the safety rules and instructions
 		const availableChars = charLimit - Math.floor(charLimit * 0.2);
 
@@ -181,8 +189,8 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 			}
 		}
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
-		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitHubPullRequestPrompt, { commitMessages, issues, patches });
+		const endpoint = await this.endpointProvider.getChatEndpoint('copilot-fast');
+		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitHubPullRequestPrompt, { commitMessages, issues, patches, template });
 		return promptRenderer.render(undefined, undefined);
 	}
 }

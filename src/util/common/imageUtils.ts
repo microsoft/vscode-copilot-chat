@@ -6,7 +6,7 @@
 
 export function getImageDimensions(base64: string) {
 	if (!base64.startsWith('data:image/')) {
-		throw new Error("Could not read image: invalid base64 image string");
+		throw new Error('Could not read image: invalid base64 image string');
 	}
 	const rawString = base64.split(',')[1];
 	switch (getMimeType(rawString)) {
@@ -20,7 +20,7 @@ export function getImageDimensions(base64: string) {
 		case 'image/webp':
 			return getWebPDimensions(rawString);
 		default:
-			throw new Error("Unsupported image format");
+			throw new Error('Unsupported image format');
 	}
 }
 
@@ -67,7 +67,7 @@ export function getJpegDimensions(base64: string) {
 		offset += 2 + segmentLength;
 	}
 
-	throw new Error("JPEG dimensions not found");
+	throw new Error('JPEG dimensions not found');
 }
 
 export function getWebPDimensions(base64String: string) {
@@ -77,30 +77,30 @@ export function getWebPDimensions(base64String: string) {
 		binaryData[i] = binaryString.charCodeAt(i);
 	}
 
-	if (binaryString.slice(0, 4) !== "RIFF" || binaryString.slice(8, 12) !== "WEBP") {
-		throw new Error("Not a valid WebP image.");
+	if (binaryString.slice(0, 4) !== 'RIFF' || binaryString.slice(8, 12) !== 'WEBP') {
+		throw new Error('Not a valid WebP image.');
 	}
 
 	const chunkHeader = binaryString.slice(12, 16);
 
-	if (chunkHeader === "VP8 ") {
+	if (chunkHeader === 'VP8 ') {
 		const width = (binaryData[26] | (binaryData[27] << 8)) & 0x3FFF;
 		const height = (binaryData[28] | (binaryData[29] << 8)) & 0x3FFF;
 		return { width, height };
-	} else if (chunkHeader === "VP8L") {
+	} else if (chunkHeader === 'VP8L') {
 		const width = (binaryData[21] | (binaryData[22] << 8)) & 0x3FFF;
 		const height = (binaryData[23] | (binaryData[24] << 8)) & 0x3FFF;
 		return { width, height };
-	} else if (chunkHeader === "VP8X") {
+	} else if (chunkHeader === 'VP8X') {
 		const width = ((binaryData[24] | (binaryData[25] << 8) | (binaryData[26] << 16)) & 0xFFFFFF) + 1;
 		const height = ((binaryData[27] | (binaryData[28] << 8) | (binaryData[29] << 16)) & 0xFFFFFF) + 1;
 		return { width, height };
 	} else {
-		throw new Error("Unsupported WebP format.");
+		throw new Error('Unsupported WebP format.');
 	}
 }
 
-function getMimeType(base64String: string): string | undefined {
+export function getMimeType(base64String: string): string | undefined {
 	const mimeTypes: { [key: string]: string } = {
 		'/9j/': 'image/jpeg',
 		'iVBOR': 'image/png',

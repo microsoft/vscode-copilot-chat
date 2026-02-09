@@ -57,6 +57,15 @@ export interface ITasksService {
 	 * @returns true if the task is active, false otherwise
 	 */
 	isTaskActive(definition: vscode.TaskDefinition): boolean;
+
+
+	/**
+	 * Gets the terminal for a given task definition.
+	 * This is needed because when tasks are stopped, they're removed from the taskExecutions.
+	 * @param task The task definition to get the terminal for
+	 * @returns The terminal for the task, or undefined if no terminal is found
+	 */
+	getTerminalForTask(task: vscode.TaskDefinition): vscode.Terminal | undefined;
 }
 
 export const ITasksService = createServiceIdentifier<ITasksService>('ITasksService');

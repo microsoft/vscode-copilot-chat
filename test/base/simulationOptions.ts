@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import minimist from 'minimist';
-import { EMBEDDING_MODEL } from '../../src/platform/configuration/common/configurationService';
+import { EmbeddingType } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { CacheMode } from './simulationContext';
 
 /** Number of runs that are stored in baseline.json */
@@ -32,10 +32,11 @@ export class SimulationOptions {
 	public readonly fastRewriteModel: string | undefined;
 	public readonly summarizeHistory: boolean;
 	public readonly swebenchPrompt: boolean;
-	public readonly embeddingModel: EMBEDDING_MODEL | undefined;
+	public readonly embeddingType: EmbeddingType | undefined;
 	public readonly boost: boolean;
 	public readonly parallelism: number;
 	public readonly lmCacheMode: CacheMode;
+	public readonly modelCacheMode: CacheMode;
 	public readonly resourcesCacheMode: CacheMode;
 	public readonly cachePath: string | undefined;
 	public readonly externalBaseline: string | undefined;
@@ -47,6 +48,7 @@ export class SimulationOptions {
 	public readonly stageCacheEntries: boolean;
 	public readonly ci: boolean;
 	public readonly gc: boolean;
+	public readonly externalCacheLayersPath: string | undefined;
 	public readonly verbose: number | boolean | undefined;
 	public readonly grep: string[] | string | undefined;
 	public readonly omitGrep: string | undefined;
@@ -65,8 +67,6 @@ export class SimulationOptions {
 	public readonly nesUrl: string | undefined;
 	public readonly nesApiKey: string | undefined;
 
-	public readonly nesUnifiedModel: boolean;
-
 	public readonly disabledTools: Set<string>;
 
 	/** If true, all tests are run in the extension host */
@@ -84,6 +84,8 @@ export class SimulationOptions {
 	public readonly useExperimentalCodeSearchService: boolean;
 
 	public readonly configFile: string | undefined;
+
+	public readonly modelConfigFile: string | undefined;
 
 	protected constructor(processArgv: readonly string[]) {
 		const argv = minimist(processArgv.slice(2));
@@ -106,8 +108,9 @@ export class SimulationOptions {
 		this.fastRewriteModel = this.argv['fast-rewrite-model'];
 		this.summarizeHistory = boolean(argv['summarize-history'], true);
 		this.swebenchPrompt = boolean(argv['swebench-prompt'], false);
-		this.embeddingModel = cliOptionsToEmbeddingsModel(this.argv['embedding-model']);
+		this.embeddingType = cliOptionsToWellKnownEmbeddingsType(this.argv['embedding-model']);
 		this.parallelism = this.argv['parallelism'] ?? this.argv['p'] ?? 20;
+		this.modelCacheMode = this.argv['skip-model-cache'] ? CacheMode.Disable : CacheMode.Default;
 		this.lmCacheMode = (
 			this.argv['skip-cache'] ? CacheMode.Disable
 				: (this.argv['require-cache'] ? CacheMode.Require : CacheMode.Default)
@@ -126,6 +129,7 @@ export class SimulationOptions {
 		this.stageCacheEntries = boolean(this.argv['stage-cache-entries'], false);
 		this.ci = boolean(this.argv['ci'], false);
 		this.gc = boolean(this.argv['gc'], false);
+		this.externalCacheLayersPath = argv['external-cache-layers-path'];
 		this.verbose = this.argv['verbose'];
 		this.grep = argv['grep'];
 		this.omitGrep = argv['omit-grep'];
@@ -147,14 +151,13 @@ export class SimulationOptions {
 		this.nesApiKey = argv['nes-api-key'];
 		SimulationOptions.validateNesUrlOverride(this.nesUrl, this.nesApiKey);
 
-		this.nesUnifiedModel = boolean(argv['nes-unified-model'], false);
-
 		this.disabledTools = argv['disable-tools'] ? new Set(argv['disable-tools'].split(',')) : new Set();
 		this.useScenarioWorkspace = boolean(argv['scenario-workspace-folder'], false);
 
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
 		this.configFile = argv['config-file'];
+		this.modelConfigFile = argv['model-config-file'];
 	}
 
 	public printHelp(): void {
@@ -175,6 +178,7 @@ export class SimulationOptions {
 			`  --n                                Run each scenario N times`,
 			`  --ci                               Equivalent to --n=${BASELINE_RUN_COUNT} but throws if the baseline is not up-to-date`,
 			`  --gc                               Used with --require-cache to compact cache layers into the baseline cache`,
+			`  --external-cache-layers-path       Used to specify the path to the external cache layers`,
 			`  --grep                             Run a test which contains the passed-in string`,
 			`  --omit-grep                        Run a test which does not contain the passed-in string`,
 			`  --embedding-model                  Specify the model to use for the embedding endpoint (default: ada)`,
@@ -189,6 +193,7 @@ export class SimulationOptions {
 			`  --require-cache                    [experimental] Require cache hits, fail on cache misses`,
 			`  --regenerate-cache                 [experimental] Fetch all responses and refresh the cache`,
 			`  --skip-resources-cache             [experimental] Do not use the cache for computed resources`,
+			`  --skip-model-cache                 [experimental] Do not use the cache for model metadata`,
 			`  --stage-cache-entries              [experimental] Stage cache files that were used in current simulation run`,
 			`  --list-tests                       List tests without running them`,
 			`  --json                             Print output in JSONL format`,
@@ -204,15 +209,15 @@ export class SimulationOptions {
 			`  --swebench-prompt                  Use the headless swebench prompt for agent mode`,
 			`  --summarize-history                Enable experimental conversation history summarization in agent mode`,
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
-			`  --nes-unified-model                Use the unified model for NES`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
+			`  --model-config-file                Path to a JSON file containing model configuration options`,
 			``,
 		].join('\n'));
 	}
 
 	private validateExternalBaseline() {
 		if (this.externalBaseline && !this.externalScenarios) {
-			throw new Error("External scenarios must be provided for external baseline to work.");
+			throw new Error('External scenarios must be provided for external baseline to work.');
 		}
 	}
 
@@ -245,21 +250,22 @@ export class SimulationOptions {
 	}
 }
 
-export function cliOptionsToEmbeddingsModel(model: string | undefined): EMBEDDING_MODEL | undefined {
-	let embeddingModel: EMBEDDING_MODEL | undefined;
+function cliOptionsToWellKnownEmbeddingsType(model: string | undefined): EmbeddingType | undefined {
 	switch (model) {
 		case 'text3small':
-			embeddingModel = EMBEDDING_MODEL.TEXT3SMALL;
-			break;
+		case EmbeddingType.text3small_512.id:
+			return EmbeddingType.text3small_512;
+
+		case 'metis':
+		case EmbeddingType.metis_1024_I16_Binary.id:
+			return EmbeddingType.metis_1024_I16_Binary;
+
 		case undefined:
-			embeddingModel = undefined;
-			break;
+			return undefined;
+
 		default:
 			throw new Error(`Unknown embedding model: ${model}`);
 	}
-
-	return embeddingModel;
-
 }
 
 function boolean(value: any, defaultValue: boolean): boolean {

@@ -6,6 +6,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { shuffle } from './arrays';
+import { assert } from './assert';
 import { CharCode } from './charCode';
 import { compare, compareIgnoreCase, compareSubstring, compareSubstringIgnoreCase } from './strings';
 import { URI } from './uri';
@@ -259,18 +260,18 @@ abstract class Undef {
 	}
 
 	static unwrap<V>(value: V | typeof Undef.Val): V | undefined {
-		return value === Undef.Val ? undefined : value as V;
+		return value === Undef.Val ? undefined : value;
 	}
 }
 
 class TernarySearchTreeNode<K, V> {
 	height: number = 1;
 	segment!: string;
-	value: V | typeof Undef.Val | undefined;
-	key: K | undefined;
-	left: TernarySearchTreeNode<K, V> | undefined;
-	mid: TernarySearchTreeNode<K, V> | undefined;
-	right: TernarySearchTreeNode<K, V> | undefined;
+	value: V | typeof Undef.Val | undefined = undefined;
+	key: K | undefined = undefined;
+	left: TernarySearchTreeNode<K, V> | undefined = undefined;
+	mid: TernarySearchTreeNode<K, V> | undefined = undefined;
+	right: TernarySearchTreeNode<K, V> | undefined = undefined;
 
 	isEmpty(): boolean {
 		return !this.left && !this.mid && !this.right && this.value === undefined;
@@ -565,13 +566,40 @@ export class TernarySearchTree<K, V> {
 				// full node
 				// replace deleted-node with the min-node of the right branch.
 				// If there is no true min-node leave things as they are
-				const min = this._min(node.right);
+				const stack2: typeof stack = [[Dir.Right, node]];
+				const min = this._min(node.right, stack2);
+
 				if (min.key) {
-					const { key, value, segment } = min;
-					this._delete(min.key, false);
-					node.key = key;
-					node.value = value;
-					node.segment = segment;
+
+					node.key = min.key;
+					node.value = min.value;
+					node.segment = min.segment;
+
+					// remove NODE (inorder successor can only have right child)
+					const newChild = min.right;
+					if (stack2.length > 1) {
+						const [dir, parent] = stack2[stack2.length - 1];
+						switch (dir) {
+							case Dir.Left: parent.left = newChild; break;
+							case Dir.Mid: assert(false);
+							case Dir.Right: assert(false);
+						}
+					} else {
+						node.right = newChild;
+					}
+
+					// balance right branch and UPDATE parent pointer for stack
+					const newChild2 = this._balanceByStack(stack2)!;
+					if (stack.length > 0) {
+						const [dir, parent] = stack[stack.length - 1];
+						switch (dir) {
+							case Dir.Left: parent.left = newChild2; break;
+							case Dir.Mid: parent.mid = newChild2; break;
+							case Dir.Right: parent.right = newChild2; break;
+						}
+					} else {
+						this._root = newChild2;
+					}
 				}
 
 			} else {
@@ -591,6 +619,19 @@ export class TernarySearchTree<K, V> {
 		}
 
 		// AVL balance
+		this._root = this._balanceByStack(stack) ?? this._root;
+	}
+
+	private _min(node: TernarySearchTreeNode<K, V>, stack: [Dir, TernarySearchTreeNode<K, V>][]): TernarySearchTreeNode<K, V> {
+		while (node.left) {
+			stack.push([Dir.Left, node]);
+			node = node.left;
+		}
+		return node;
+	}
+
+	private _balanceByStack(stack: [Dir, TernarySearchTreeNode<K, V>][]) {
+
 		for (let i = stack.length - 1; i >= 0; i--) {
 			const node = stack[i][1];
 
@@ -633,16 +674,11 @@ export class TernarySearchTree<K, V> {
 						break;
 				}
 			} else {
-				this._root = stack[0][1];
+				return stack[0][1];
 			}
 		}
-	}
 
-	private _min(node: TernarySearchTreeNode<K, V>): TernarySearchTreeNode<K, V> {
-		while (node.left) {
-			node = node.left;
-		}
-		return node;
+		return undefined;
 	}
 
 	findSubstr(key: K): V | undefined {
@@ -747,7 +783,7 @@ export class TernarySearchTree<K, V> {
 
 	// for debug/testing
 	_isBalanced(): boolean {
-		const nodeIsBalanced = (node: TernarySearchTreeNode<any, any> | undefined): boolean => {
+		const nodeIsBalanced = (node: TernarySearchTreeNode<unknown, unknown> | undefined): boolean => {
 			if (!node) {
 				return true;
 			}

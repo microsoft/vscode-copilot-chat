@@ -7,50 +7,117 @@
 import { Raw } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
-import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
-import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/node/autoChatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { ModelAliasRegistry } from '../../../platform/endpoint/common/modelAliasRegistry';
+import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
+import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
+import { isAnthropicToolSearchEnabled } from '../../../platform/networking/common/anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
+import { retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
-import { TaskQueue } from '../../../util/common/async';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable, DisposableStore, MutableDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
-import { localize } from '../../../util/vs/nls';
+import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
+import { isBoolean, isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtensionMode } from '../../../vscodeTypes';
-import { EXTENSION_ID } from '../../common/constants';
+import { ChatLocation as ApiChatLocation, ExtensionMode } from '../../../vscodeTypes';
+import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 
-const agentModeDisabledModels = new Set<string>([
-	CHAT_MODEL.O1,
-	CHAT_MODEL.O3MINI,
-	CHAT_MODEL.O1MINI,
-	CHAT_MODEL.GEMINI_20_PRO,
-	CHAT_MODEL.GEMINI_FLASH
-]);
+/**
+ * Returns a description of the model's capabilities and intended use cases.
+ * This is shown in the rich hover when selecting models.
+ */
+function getModelCapabilitiesDescription(endpoint: IChatEndpoint): string | undefined {
+	const name = endpoint.name.toLowerCase();
+	const family = endpoint.family.toLowerCase();
 
-export class LanguageModelAccess implements IExtensionContribution {
+	// Claude models
+	if (family.includes('claude') || name.includes('claude')) {
+		if (name.includes('opus')) {
+			return vscode.l10n.t('Most capable Claude model. Excellent for complex analysis, coding tasks, and nuanced creative writing.');
+		}
+		if (name.includes('sonnet')) {
+			return vscode.l10n.t('Balanced Claude model offering strong performance for everyday coding and chat tasks at faster speeds.');
+		}
+		if (name.includes('haiku')) {
+			return vscode.l10n.t('Fastest and most compact Claude model. Ideal for quick responses and simple tasks.');
+		}
+	}
+
+	// GPT models
+	if (family.includes('gpt') || name.includes('gpt') || family.includes('codex') || name.includes('codex')) {
+		if (name.includes('codex') || family.includes('codex')) {
+			if (name.includes('max')) {
+				return vscode.l10n.t('Maximum capability Codex model optimized for complex multi-file refactoring and large codebase understanding.');
+			}
+			if (name.includes('mini')) {
+				return vscode.l10n.t('Lightweight Codex model for quick code completions and simple edits with low latency.');
+			}
+			return vscode.l10n.t('OpenAI Codex model specialized for code generation, debugging, and software development tasks.');
+		}
+		if (name.includes('4o')) {
+			return vscode.l10n.t('Optimized GPT-4 model with faster responses and multimodal capabilities.');
+		}
+		if (name.includes('4.1') || name.includes('4-1')) {
+			return vscode.l10n.t('Enhanced GPT-4 model with improved instruction following and coding performance.');
+		}
+		if (name.includes('4')) {
+			return vscode.l10n.t('Reliable GPT-4 model suitable for a wide range of coding and general tasks.');
+		}
+	}
+
+	// Gemini models
+	if (family.includes('gemini') || name.includes('gemini')) {
+		if (name.includes('flash')) {
+			return vscode.l10n.t('Fast and efficient Gemini model optimized for quick responses and high throughput.');
+		}
+		if (name.includes('pro')) {
+			return vscode.l10n.t("Google's advanced Gemini Pro model with strong reasoning and coding capabilities.");
+		}
+		return vscode.l10n.t('Google Gemini model with balanced performance for coding and general assistance.');
+	}
+
+	// o1/o3 reasoning models
+	if (family.includes('o1') || family.includes('o3') || name.includes('o1') || name.includes('o3')) {
+		if (name.includes('mini')) {
+			return vscode.l10n.t('Compact reasoning model for quick problem-solving with step-by-step thinking.');
+		}
+		return vscode.l10n.t('Advanced reasoning model that excels at complex problem-solving, math, and coding challenges.');
+	}
+
+	return undefined;
+}
+
+export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
 
-	readonly activationBlocker?: Promise<any>;
+	readonly activationBlocker?: Promise<void>;
 
-	private readonly _store = new DisposableStore();
+	private readonly _onDidChange = this._register(new Emitter<void>());
+	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
+	private _chatEndpoints: IChatEndpoint[] = [];
+	private _lmWrapper: CopilotLanguageModelWrapper;
+	private _promptBaseCountCache: LanguageModelAccessPromptBaseCountCache;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -59,173 +126,230 @@ export class LanguageModelAccess implements IExtensionContribution {
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
+		super();
 
-		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
+		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
+		this._promptBaseCountCache = this._instantiationService.createInstance(LanguageModelAccessPromptBaseCountCache);
+
+		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation) {
+			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
 
 		// initial
 		this.activationBlocker = Promise.all([
-			this._registerLanguageModels(),
+			this._registerChatProvider(),
 			this._registerEmbeddings(),
-		]);
+		]).then(() => { });
 	}
 
-	dispose(): void {
-		this._store.dispose();
+	override dispose(): void {
+		super.dispose();
 	}
 
-	private async _registerLanguageModels(): Promise<void> {
+	get currentModels(): vscode.LanguageModelChatInformation[] {
+		return this._currentModels;
+	}
 
-		// --- language models
-
-		let currentInfo = new Map<string, { endpoint: IChatEndpoint; dispo: vscode.Disposable }>();
-
-		const queue = new TaskQueue();
-
-		const updateChatLanguageModels = async () => {
-
-			const session = await this._getAuthSession();
-			const newInfo: typeof currentInfo = new Map();
-			const seenFamilies = new Set<string>();
-			this._logService.logger.debug('[LanguageModelAccess] UPDATING language models');
-
-			if (session) {
-				const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-				if (isAutoModeEnabled(this._expService)) { // Only push auto mode to the model picker if enabled
-					chatEndpoints.push(this._instantiationService.createInstance(AutoChatEndpoint));
-				}
-				const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
-				for (const endpoint of chatEndpoints) {
-
-					if (this._store.isDisposed) {
-						break;
-					}
-
-					if (seenFamilies.has(endpoint.family) && !endpoint.showInModelPicker) {
-						// Register the first model of each family, and all models that are shown in the model picker.
-						continue;
-					}
-
-					seenFamilies.add(endpoint.family);
-
-					const current = currentInfo.get(endpoint.model);
-					if (current) {
-						// trust uniqueness of model ids and skip if we already have this model
-						newInfo.set(endpoint.model, current);
-						continue;
-					}
-					let modelDescription: string | undefined;
-					// Remove (Preview) from the model name
-					const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
-					if (endpoint.multiplier) {
-						modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
-					} else if (endpoint.isFallback && endpoint.multiplier === 0) {
-						modelDescription = localize('languageModel.baseTooltip', '{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
-					} else if (endpoint.model === AutoChatEndpoint.id) {
-						modelDescription = localize('languageModel.autoTooltip', 'Auto is a model that automatically selects the best model for your request.');
-					} else {
-						modelDescription = `${sanitizedModelName} (${endpoint.version})`;
-					}
-
-					let modelCategory: { label: string; order: number } | undefined;
-					if (endpoint.model === AutoChatEndpoint.id) {
-						modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
-					} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
-						modelCategory = { label: localize('languageModelHeader.copilot', "Copilot Models"), order: 0 };
-					} else if (endpoint.isPremium) {
-						modelCategory = { label: localize('languageModelHeader.premium', "Premium Models"), order: 1 };
-					} else {
-						modelCategory = { label: localize('languageModelHeader.standard', "Standard Models"), order: 0 };
-					}
-
-					const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
-					const metadata: vscode.ChatResponseProviderMetadata = {
-						vendor: 'copilot',
-						name: endpoint.name,
-						description: modelDescription,
-						cost: endpoint.multiplier !== undefined && endpoint.multiplier !== 0 ? `${endpoint.multiplier}x` : endpoint.multiplier === 0 ? localize('languageModel.costIncluded', 'Included') : undefined,
-						category: modelCategory,
-						family: endpoint.family,
-						version: endpoint.version,
-						maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
-						maxOutputTokens: endpoint.maxOutputTokens,
-						auth: session && { label: session.account.label },
-						isDefault: endpoint === defaultChatEndpoint,
-						isUserSelectable: endpoint.showInModelPicker,
-						capabilities: {
-							vision: endpoint.supportsVision,
-							toolCalling: endpoint.supportsToolCalls,
-							agentMode: endpoint.supportsToolCalls && endpoint.modelMaxPromptTokens > 40000 && !agentModeDisabledModels.has(endpoint.model)
-						}
-					};
-
-					const store = new DisposableStore();
-					const provider = store.add(this._instantiationService.createInstance(CopilotLanguageModelWrapper, endpoint, metadata));
-
-					store.add(vscode.lm.registerChatModelProvider(
-						endpoint.model,
-						provider,
-						metadata
-					));
-					newInfo.set(endpoint.model, { endpoint: endpoint, dispo: store });
-					this._logService.logger.debug(`[LanguageModelAccess] ADDED language model ${endpoint.model}`);
-				}
-			}
-
-			// remove models that we havn't seen again
-			for (const [id, value] of currentInfo) {
-				if (!newInfo.has(id)) {
-					value.dispo.dispose();
-					this._logService.logger.debug('[LanguageModelAccess] REMOVED language model ' + id);
-				}
-			}
-
-			currentInfo = newInfo;
-
-			// keep refreshing until disposed
-			if (!this._store.isDisposed) {
-				clearTimeout(updateTimeout);
-				updateTimeout = setTimeout(updateChatLanguageModelsWithQueue, 1000 * 60 * 15); // update every 15 minutes
-			}
+	private async _registerChatProvider(): Promise<void> {
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
+			provideLanguageModelChatInformation: this._provideLanguageModelChatInfo.bind(this),
+			provideLanguageModelChatResponse: this._provideLanguageModelChatResponse.bind(this),
+			provideTokenCount: this._provideTokenCount.bind(this)
 		};
-
-		const updateChatLanguageModelsWithQueue = async () => {
-			try {
-				queue.clearPending();
-				await queue.scheduleSkipIfCleared(updateChatLanguageModels);
-				this._logService.logger.debug('[LanguageModelAccess] DID UPDATE language models');
-			} catch (err) {
-				this._logService.logger.error(err, '[LanguageModelAccess] FAILED to update language models');
+		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			if (!this._authenticationService.anyGitHubSession) {
+				this._currentModels = [];
 			}
-		};
-
-		let updateTimeout: NodeJS.Timeout | undefined;
-		updateChatLanguageModelsWithQueue();
-		this._store.add(this._authenticationService.onDidAuthenticationChange(updateChatLanguageModelsWithQueue));
-
-		this._store.add(toDisposable(() => {
-
-			clearTimeout(updateTimeout);
-			queue.clearPending();
-
-			for (const item of currentInfo.values()) {
-				item.dispo.dispose();
-			}
+			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
 		}));
+		this._register(this._endpointProvider.onDidModelsRefresh(() => {
+			// Models have been refreshed from CAPI so we should requery them
+			this._onDidChange.fire();
+		}));
+	}
+
+	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
+		const session = await this._getToken();
+		if (!session) {
+			// Return cached models until we have auth reacquired
+			// We clear this list in onDidAuthenticationChange so signed out should still have model picker clear
+			return this._currentModels;
+		}
+
+		const models: vscode.LanguageModelChatInformation[] = [];
+		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
+		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
+		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
+		chatEndpoints.push(autoEndpoint);
+		let defaultChatEndpoint: IChatEndpoint;
+		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
+		if (this._authenticationService.copilotToken?.isNoAuthUser || !defaultExpModel || defaultExpModel === AutoChatEndpoint.pseudoModelId) {
+			// No auth, no experiment, and exp that sets auto to default all get default model
+			defaultChatEndpoint = autoEndpoint;
+		} else {
+			// Find exp default
+			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel) || autoEndpoint;
+		}
+
+		const seenFamilies = new Set<string>();
+
+		for (const endpoint of chatEndpoints) {
+			if (seenFamilies.has(endpoint.family) && !endpoint.showInModelPicker) {
+				continue;
+			}
+			seenFamilies.add(endpoint.family);
+
+			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
+			let modelTooltip: string | undefined;
+			if (endpoint.degradationReason) {
+				modelTooltip = endpoint.degradationReason;
+			} else if (endpoint instanceof AutoChatEndpoint) {
+				if (this._authenticationService.copilotToken?.isNoAuthUser || (endpoint.discountRange.low === 0 && endpoint.discountRange.high === 0)) {
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance.');
+				} else if (endpoint.discountRange.low === endpoint.discountRange.high) {
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% discount.', endpoint.discountRange.low * 100);
+				} else {
+					modelTooltip = vscode.l10n.t('Auto selects the best model for your request based on capacity and performance. Auto is given a {0}% to {1}% discount.', endpoint.discountRange.low * 100, endpoint.discountRange.high * 100);
+				}
+			} else {
+				modelTooltip = getModelCapabilitiesDescription(endpoint);
+			}
+
+			let modelCategory: { label: string; order: number } | undefined;
+			if (endpoint instanceof AutoChatEndpoint) {
+				modelCategory = { label: '', order: Number.MIN_SAFE_INTEGER };
+			} else if (endpoint.isPremium === undefined || this._authenticationService.copilotToken?.isFreeUser) {
+				modelCategory = { label: vscode.l10n.t("Copilot Models"), order: 0 };
+			} else if (endpoint.isPremium) {
+				modelCategory = { label: vscode.l10n.t("Premium Models"), order: 1 };
+			} else {
+				modelCategory = { label: vscode.l10n.t("Standard Models"), order: 0 };
+			}
+
+			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
+			// Let's cache the results across extension activations
+			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
+			const multiplier = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			let modelDetail: string | undefined;
+
+			// Append rate info to tooltip for all non-Auto models with a multiplier
+			if (endpoint.multiplier !== undefined && !(endpoint instanceof AutoChatEndpoint)) {
+				if (modelTooltip) {
+					modelTooltip = vscode.l10n.t('{0} Rate is counted at {1}x.', modelTooltip, endpoint.multiplier);
+				} else {
+					modelTooltip = vscode.l10n.t('Rate is counted at {0}x.', endpoint.multiplier);
+				}
+			}
+
+			if (endpoint instanceof AutoChatEndpoint) {
+				if (endpoint.discountRange.high === endpoint.discountRange.low && endpoint.discountRange.low !== 0) {
+					modelDetail = `${endpoint.discountRange.low * 100}% discount`;
+				} else if (endpoint.discountRange.high !== endpoint.discountRange.low) {
+					modelDetail = `${endpoint.discountRange.low * 100}% to ${endpoint.discountRange.high * 100}% discount`;
+				}
+			}
+			if (endpoint.customModel) {
+				const customModel = endpoint.customModel;
+				modelDetail = customModel.owner_name;
+				modelTooltip = vscode.l10n.t('{0} is contributed by {1} using {2}.', sanitizedModelName, customModel.owner_name, customModel.key_name);
+				modelCategory = { label: vscode.l10n.t("Custom Models"), order: 2 };
+			}
+
+			const session = this._authenticationService.anyGitHubSession;
+			const isDefault = endpoint === defaultChatEndpoint;
+
+			const model: vscode.LanguageModelChatInformation = {
+				id: endpoint instanceof AutoChatEndpoint ? AutoChatEndpoint.pseudoModelId : endpoint.model,
+				name: endpoint instanceof AutoChatEndpoint ? 'Auto' : endpoint.name,
+				family: endpoint.family,
+				tooltip: modelTooltip,
+				multiplier: endpoint instanceof AutoChatEndpoint ? modelDetail : multiplier,
+				multiplierNumeric: endpoint instanceof AutoChatEndpoint ? undefined : endpoint.multiplier,
+				detail: modelDetail,
+				category: modelCategory,
+				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
+				version: endpoint.version,
+				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
+				maxOutputTokens: endpoint.maxOutputTokens,
+				requiresAuthorization: session && { label: session.account.label },
+				isDefault: {
+					[ApiChatLocation.Panel]: isDefault,
+					[ApiChatLocation.Terminal]: isDefault,
+					[ApiChatLocation.Notebook]: isDefault,
+					[ApiChatLocation.Editor]: endpoint instanceof AutoChatEndpoint, // inline chat gets 'Auto' by default
+				},
+				isUserSelectable: endpoint.showInModelPicker,
+				capabilities: {
+					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
+					toolCalling: endpoint.supportsToolCalls,
+				}
+			};
+
+			models.push(model);
+
+			// Register aliases for this model
+			const aliases = ModelAliasRegistry.getAliases(model.id);
+			for (const alias of aliases) {
+				models.push({
+					...model,
+					id: alias,
+					family: alias,
+					isUserSelectable: false,
+				});
+			}
+		}
+
+		this._currentModels = models;
+		this._chatEndpoints = chatEndpoints;
+		return models;
+	}
+
+	private async _provideLanguageModelChatResponse(
+		model: vscode.LanguageModelChatInformation,
+		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
+		options: vscode.ProvideLanguageModelChatResponseOptions,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
+		token: vscode.CancellationToken
+	): Promise<void> {
+		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		if (!endpoint) {
+			throw new Error(`Endpoint not found for model ${model.id}`);
+		}
+
+		return this._lmWrapper.provideLanguageModelResponse(endpoint, messages, {
+			...options,
+			modelOptions: options.modelOptions
+		}, options.requestInitiator, progress, token);
+	}
+
+	private async _provideTokenCount(
+		model: vscode.LanguageModelChatInformation,
+		text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2,
+		token: vscode.CancellationToken
+	): Promise<number> {
+		const endpoint = this._chatEndpoints.find(e => e.model === ModelAliasRegistry.resolveAlias(model.id));
+		if (!endpoint) {
+			throw new Error(`Endpoint not found for model ${model.id}`);
+		}
+
+		return this._lmWrapper.provideTokenCount(endpoint, text);
 	}
 
 	private async _registerEmbeddings(): Promise<void> {
 
-		const dispo = this._store.add(new MutableDisposable());
+		const dispo = this._register(new MutableDisposable());
 
 
 		const update = async () => {
 
-			if (!await this._getAuthSession()) {
+			if (!await this._getToken()) {
 				dispo.clear();
 				return;
 			}
@@ -240,69 +364,83 @@ export class LanguageModelAccess implements IExtensionContribution {
 			dispo.clear();
 			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
 				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, token);
-					if (!result) {
-						throw new Error('Failed to compute embeddings');
-					}
+					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
 					return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
 				}
 			});
 		};
 
-		this._store.add(this._authenticationService.onDidAuthenticationChange(() => update()));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => update()));
 		await update();
 	}
 
-	private async _getAuthSession(): Promise<vscode.AuthenticationSession | undefined> {
+	private async _getToken(): Promise<CopilotToken | undefined> {
 		try {
-			await this._authenticationService.getCopilotToken();
+			const copilotToken = await this._authenticationService.getCopilotToken();
+			return copilotToken;
 		} catch (e) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
-			this._logService.logger.error(e);
+			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
+			this._logService.error(e);
 			return undefined;
 		}
-
-		const session = this._authenticationService.anyGitHubSession;
-		if (!session) {
-			// At this point, we should have auth, but log just in case we don't so we have record of it
-			this._logService.logger.error('[LanguageModelAccess] Auth token not present when we expected it to be');
-			return undefined;
-		}
-
-		return session;
 	}
+}
+
+class LanguageModelAccessPromptBaseCountCache {
+	constructor(
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEnvService private readonly _envService: IEnvService
+	) { }
+
+	public async getBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const key = `lmBaseCount/${endpoint.model}`;
+		const cached = this._extensionContext.globalState.get<{ extensionVersion: string; baseCount: number }>(key);
+		if (cached && cached.extensionVersion === this._envService.getVersion() && typeof cached.baseCount === 'number') {
+			return cached.baseCount;
+		}
+
+		const baseCount = await this._computeBaseCount(endpoint);
+		// Store the computed value along with the extension version so we can
+		// invalidate the cache when the extension is updated.
+		try {
+			await this._extensionContext.globalState.update(key, { extensionVersion: this._envService.getVersion(), baseCount });
+		} catch (err) {
+			// Best-effort cache update — don't fail the caller if persisting the
+			// cache entry fails for any reason.
+		}
+
+		return baseCount;
+	}
+
+	private async _computeBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+		return baseCount;
+	}
+
 }
 
 /**
  * Exported for test
  */
-export class CopilotLanguageModelWrapper extends Disposable implements vscode.ChatResponseProvider {
-	private readonly _onDidReceiveLanguageModelResponse2 = this._register(new Emitter<{ readonly extensionId: string; readonly participant?: string; readonly tokenCount?: number }>());
-	readonly onDidReceiveLanguageModelResponse2 = this._onDidReceiveLanguageModelResponse2.event;
+export class CopilotLanguageModelWrapper extends Disposable {
 
 	constructor(
-		private readonly _endpoint: IChatEndpoint,
-		private readonly _metadata: vscode.ChatResponseProviderMetadata,
 		@IExperimentationService readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
 		@IBlockedExtensionService private readonly _blockedExtensionService: IBlockedExtensionService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService
+		@IEnvService private readonly _envService: IEnvService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
-		this._register(this._chatMLFetcher.onDidMakeChatMLRequest(({ model, source, tokenCount }) => {
-			if (model === this._endpoint.model) {
-				this._onDidReceiveLanguageModelResponse2.fire({ extensionId: source?.extensionId ?? EXTENSION_ID, tokenCount });
-			}
-		}));
 	}
 
-	private async _provideLanguageModelResponse(_messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.LanguageModelChatRequestOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<any> {
+	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<void> {
 
-		const extensionInfo = vscode.extensions.getExtension(extensionId, true);
+		const extensionInfo = extensionId === 'core' ? { packageJSON: { version: this._envService.vscodeVersion } } : vscode.extensions.getExtension(extensionId, true);
 		if (!extensionInfo || typeof extensionInfo.packageJSON.version !== 'string') {
 			throw new Error('Invalid extension information');
 		}
@@ -313,8 +451,9 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 			throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 		}
 
-		const toolTokenCount = _options.tools ? await this.countToolTokens(_options.tools) : 0;
-		const tokenLimit = this._metadata.maxInputTokens - toolTokenCount;
+		const toolTokenCount = _options.tools ? await this.countToolTokens(_endpoint, _options.tools) : 0;
+		const baseCount = await PromptRenderer.create(this._instantiationService, _endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+		const tokenLimit = _endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion - toolTokenCount;
 
 		this.validateRequest(_messages);
 		if (_options.tools) {
@@ -322,7 +461,7 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 		}
 		// Add safety rules to the prompt if it originates from outside the Copilot Chat extension, otherwise they already exist in the prompt.
 		const { messages, tokenCount } = await PromptRenderer.create(this._instantiationService, {
-			...this._endpoint,
+			..._endpoint,
 			modelMaxPromptTokens: tokenLimit
 		}, LanguageModelAccessPrompt, { noSafety: extensionId === this._envService.extensionId, messages: _messages }).render();
 
@@ -342,7 +481,7 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 			{
 				extensionId,
 				extensionVersion,
-				model: this._endpoint.model
+				model: _endpoint.model
 			},
 			{
 				tokenCount,
@@ -355,15 +494,18 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 			throw new Error('Message exceeds token limit.');
 		}
 
-		if (_options.tools && _options.tools.length > 128) {
+		if (_options.tools && _options.tools.length > 128 && !isAnthropicToolSearchEnabled(_endpoint, this._configurationService, this._expService)) {
 			throw new Error('Cannot have more than 128 tools per request.');
 		}
 
-		const endpoint: IChatEndpoint = new Proxy(this._endpoint, {
+		const endpoint: IChatEndpoint = new Proxy(_endpoint, {
 			get: function (target, prop, receiver) {
 				if (prop === 'getExtraHeaders') {
 					return function () {
 						const extraHeaders = target.getExtraHeaders?.() ?? {};
+						if (extensionId === 'core') {
+							return extraHeaders;
+						}
 						return {
 							...extraHeaders,
 							'x-onbehalf-extension-id': `${extensionId}/${extensionVersion}`,
@@ -399,7 +541,17 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 			{ type: 'function', function: { name: _options.tools[0].name } } :
 			undefined;
 
-		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, true, telemetryProperties, { intent: true });
+		// Restore CapturingToken context if correlation ID was passed through modelOptions.
+		// This handles BYOK providers where the original AsyncLocalStorage context was lost
+		// when crossing the VS Code IPC boundary.
+		const correlationId = (_options as { modelOptions?: { _capturingTokenCorrelationId?: string } }).modelOptions?._capturingTokenCorrelationId;
+		const capturingToken = correlationId ? retrieveCapturingTokenByCorrelation(correlationId) : undefined;
+
+		const makeRequest = () => endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
+
+		const result = capturingToken
+			? await runWithCapturingToken(capturingToken, makeRequest)
+			: await makeRequest();
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {
@@ -409,6 +561,10 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
+				throw err;
+			} else if (result.type === ChatFetchResponseType.RateLimited) {
+				const err = new Error(result.reason);
+				err.name = 'ChatRateLimited';
 				throw err;
 			}
 
@@ -422,7 +578,7 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 				extensionVersion,
 				requestid: result.requestId,
 				query: getTextPart(messages[messages.length - 1].content),
-				model: this._endpoint.model
+				model: _endpoint.model
 			},
 			{
 				tokenCount,
@@ -431,30 +587,50 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 		);
 	}
 
-	async provideLanguageModelResponse(messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<vscode.ChatResponseFragment2>, token: vscode.CancellationToken): Promise<any> {
+	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<void> {
+		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
+			if (delta.thinking) {
+				// Show thinking progress for unencrypted thinking deltas
+				if (!isEncryptedThinkingDelta(delta.thinking)) {
+					const text = delta.thinking.text ?? '';
+					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
+					thinkingActive = true;
+				}
+			} else if (thinkingActive) {
+				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				thinkingActive = false;
+			}
 			if (delta.text) {
-				progress.report({ index, part: new vscode.LanguageModelTextPart(delta.text) });
+				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
 			if (delta.copilotToolCalls) {
 				for (const call of delta.copilotToolCalls) {
 					try {
-						const parameters = JSON.parse(call.arguments);
-						progress.report({ index, part: new vscode.LanguageModelToolCallPart(call.id, call.name, parameters) });
+						// Anthropic models send "" (empty string) for tools with no parameters.
+						const parameters = JSON.parse(call.arguments || '{}');
+						progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, parameters));
 					} catch (err) {
-						this._logService.logger.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
+						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
 					}
 				}
 			}
+
+			if (delta.statefulMarker) {
+				progress.report(
+					new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				);
+			}
+
 			return undefined;
 		};
-		return this._provideLanguageModelResponse(messages, options, extensionId, finishCallback, token);
+		return this._provideLanguageModelResponse(endpoint, messages, options, extensionId, finishCallback, token);
 	}
 
-	async provideTokenCount(message: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2): Promise<number> {
+	async provideTokenCount(endpoint: IEndpoint, message: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2): Promise<number> {
 		if (typeof message === 'string') {
-			return this._endpoint.acquireTokenizer().tokenLength(message);
+			return endpoint.acquireTokenizer().tokenLength(message);
 		} else {
 			let raw: Raw.ChatMessage;
 
@@ -489,11 +665,11 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 					return 0;
 			}
 
-			return this._endpoint.acquireTokenizer().countMessageTokens(raw);
+			return endpoint.acquireTokenizer().countMessageTokens(raw);
 		}
 	}
 
-	private validateTools(tools: vscode.LanguageModelChatTool[]): void {
+	private validateTools(tools: readonly vscode.LanguageModelChatTool[]): void {
 		for (const tool of tools) {
 			if (!tool.name.match(/^[\w-]+$/)) {
 				throw new Error(`Invalid tool name "${tool.name}": only alphanumeric characters, hyphens, and underscores are allowed.`);
@@ -501,8 +677,8 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 		}
 	}
 
-	private async countToolTokens(tools: vscode.LanguageModelChatTool[]): Promise<number> {
-		return await this._endpoint.acquireTokenizer().countToolTokens(tools);
+	private async countToolTokens(endpoint: IChatEndpoint, tools: readonly vscode.LanguageModelChatTool[]): Promise<number> {
+		return await endpoint.acquireTokenizer().countToolTokens(tools);
 	}
 
 	private validateRequest(_messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>): void {
@@ -540,13 +716,13 @@ export class CopilotLanguageModelWrapper extends Disposable implements vscode.Ch
 }
 
 
-function or(...checks: ((value: any) => boolean)[]): (value: any) => boolean {
+function or(...checks: ((value: unknown) => boolean)[]): (value: unknown) => boolean {
 	return (value) => checks.some(check => check(value));
 }
 
 class LanguageModelOptions {
 
-	private static _defaultDesc: Record<string, (value: any) => boolean> = {
+	private static _defaultDesc: Record<string, (value: unknown) => boolean> = {
 		stop: or(isStringArray, isString),
 		temperature: isNumber,
 		max_tokens: isNumber,
@@ -556,15 +732,18 @@ class LanguageModelOptions {
 
 	static Default = new LanguageModelOptions({ ...this._defaultDesc });
 
-	constructor(private _description: Record<string, (value: any) => boolean>) { }
+	constructor(private _description: Record<string, (value: unknown) => boolean>) { }
 
-	convert(options: { [name: string]: any }): Record<string, number | boolean | string> {
+	convert(options: { [name: string]: unknown }): Record<string, number | boolean | string> {
 		const result: Record<string, number | boolean | string> = {};
 		for (const key in this._description) {
 			const isValid = this._description[key];
 			const value = options[key];
 			if (value !== null && value !== undefined && isValid(value)) {
-				result[key] = value;
+				// Type guards ensure we only add values of the correct type
+				if (isNumber(value) || isBoolean(value) || isString(value)) {
+					result[key] = value;
+				}
 			}
 		}
 		return result;

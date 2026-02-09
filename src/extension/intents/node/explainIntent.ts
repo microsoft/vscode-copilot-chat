@@ -69,7 +69,7 @@ export class ExplainIntent implements IIntent {
 
 	static readonly ID = Intent.Explain;
 	readonly id: string = Intent.Explain;
-	readonly locations = [ChatLocation.Panel, ChatLocation.Editor];
+	readonly locations = [ChatLocation.Panel, ChatLocation.Editor, ChatLocation.Notebook];
 	readonly description: string = l10n.t('Explain how the code in your active editor works');
 
 	readonly commandInfo: IIntentSlashCommandInfo | undefined;

@@ -2,117 +2,117 @@
 	{
 		"name": "/doc [inline] [cpp] - doc comment for C++",
 		"requests": [
-			"dba772ea0667ef11fabf33240e184b0c0a01fb37d94d8ca950dae275fcd237f0"
+			"439257c65e5e89e25b95966abdf416352ffd73daf0112b08c27efd42345998a0"
 		]
 	},
 	{
 		"name": "/doc [inline] [cpp] - doc comment for macro",
 		"requests": [
-			"9f55d9157354d076f336d359409878959ae7b18171c1e618d132d2b7a9916ac9"
+			"cb9af182878f0f4244ee64b1f3344983023cae2d4e2b75ab431a27675b913924"
 		]
 	},
 	{
 		"name": "/doc [inline] [cpp] - doc comment for template",
 		"requests": [
-			"cad55794c035f60664c7e45cf028de94333b9d6cc4ba7f2482126da6a85d9062"
+			"697cb3e63ef8dadff28b02e8010dc15d379a18f5e36135fcd93f21ae1a610f95"
 		]
 	},
 	{
 		"name": "/doc [inline] [java] - class",
 		"requests": [
-			"4722feaeed8b24dcd7949b0c1afc6130bae1598c37700f059e4ba2de38787e98"
+			"4c66fc1516c151d27cb974372d78d53a9180a473d0addab6c784393ae1fa9856"
 		]
 	},
 	{
 		"name": "/doc [inline] [java] - method",
 		"requests": [
-			"765a929810274c86987663a9642d9214a8c7f48af549d2adb24a3e4cfc58b82a"
+			"dc1d66ec9cad4f630fa3e1e063c971309c6936b3b01085c5303e59f70ff0fdcf"
 		]
 	},
 	{
 		"name": "/doc [inline] [ruby] - long method",
 		"requests": [
-			"26033e40f4ee03400645f352b12fcb97329081c76baea343a919a37d7e664e85"
+			"abf9fef7e58487f11f16facd239a74ada5817234a0ca038cd416869501dd0ed8"
 		]
 	},
 	{
 		"name": "/doc [inline] [ruby] - method",
 		"requests": [
-			"945b47ea5edd346c76202eee3c777f3a010f3e06c5dc9997609fc8f962b9ed2d"
+			"d00c80ce644229911610dd4a85d12cdea41e271d3910f061554fe3231ce6f9a3"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - able to document whole class, which is larger than context length",
 		"requests": [
-			"d18504e222c7a515c88c07ef003d783a410e1a820f52221950a4d22e1730854f"
+			"09d746c464d91e3850be5232f6572d1cba76223339dea239ab6ba474f30beb7b"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - class",
 		"requests": [
-			"4b19a79151609f7d991c0e8d2d9a06ef5caf6b5453861ad213a981164a9915e0"
+			"5d9f7812f4790e5a2c6a1815cc5467062233bb44dff28b29c5f7670fb7bffc14"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - doc explain ts code",
 		"requests": [
-			"25105e1170529a52f0572ce34add3f2808697832675d9724011bf2de1470759a",
-			"2f5a59999be980f04f6d8fb49411a374a9a3589b1fefc6a152350132b8276492",
-			"54bcf95f2d6d42b12f8e0dc6efcbee18331c231b06eebdc45bf9da5f39cfb7ca",
-			"63b25e43f779de65c7aa01358440b9c179d40e0168db02c3829df6b6569a16af",
-			"64de94ac9167bd5138c18abaf2038c6ff568a982626e72a0493f891b39e1d66e",
-			"782d0d78c8801fddb0870fc86db76a6f583ea1a047ba1c050ed713aff6b0d5b2",
-			"f4acd3c82ebec4584b65503265e182df1916f1c22f768ccd1c54e63ba319d95c"
+			"27cf63dd3f26ebadd14db7b2a8dd89d579db289863f9f3af52370d6a34d8ac26",
+			"5454ec9fdc3d6ae3bac306ff979b156d57ce549e4210df18f0df73c2e44a11de",
+			"573d76cf53b16efb551e6012460eed7e01b189f7095626a93aec5100ebee0ad8",
+			"6986ca9577091076d616804d400055568dfbb59f95de7bc5992fb6de993af3b0",
+			"af282c783dbf9c5a89b34d89bebfaef85f875398de3c26118a8d4ca1df9614a3",
+			"c676c5d4af9b82709dc19dbe2a0729ebf634f4e8b79bd54d0b7341772e5c5a4b",
+			"e753338eb60c95d6dd2ee3a19ab8c7464fecb70379c52fd40fe6bcf0c46733dd"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - does not include types in the documentation comment - function",
 		"requests": [
-			"e22909e982b5a0d0c799b048ffe1bc8057e5e7bb9c742d7181cd50096a5e6bcd"
+			"7a062a823189c341de22d2eebc5746ff7c7ac61b113891e205ceb841da1284b0"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - interface",
 		"requests": [
-			"cbb733b251b92f768ecac5971da47761404e5d10f3fb4efcf533499b8054e54e"
+			"149276ffc63f6ae5b909c34da71383f86626e803fc490d1f80d51ed5b7d93c0c"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - issue #3692: add jsdoc comment - colors.ts",
 		"requests": [
-			"7292254f82728e51fbe17f42cfbc47636a5c5895482c191608857bfb0bcc9025",
-			"a7c944f6eb6dde06ccfdaba18dec65dd029ee322af8786f2ce37318d68c23492"
+			"2137b8033afb4a7fb557f4713856e76f580f2202b380567a967061f1b1237fe0",
+			"6c59d686d0fd07289c6711f49b5bf990d5fd870fb00b19099fd6b5f2327dc42f"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - issue #3692: add jsdoc comment using /doc - colors.ts",
 		"requests": [
-			"497a6ebf56c4b83e82a7776cefa49309faf8cdde24fb52aa8b1832e29ab01403"
+			"b31b8791ce075f2a665ee3cd215068588efe15a7c4d3521db710ce686c47ebf8"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - issue #3763: doc everywhere",
 		"requests": [
-			"5e912c726c42acc96c73e61dbd091b4366d550dea8cee33cb39e50a37ea04bd2",
-			"6943d155ffd9450487bdad5f08cc93c61e2be33aa7f354e886b1558c0544dde3"
+			"34c6feac98ec95dd6f1603183b274d8127b14533b182eb822eede24deae6750f",
+			"8f7bc68446f782b3430375d0494054b77237d57e9d4b044ebd7525a47936f1c5"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - issue #6406",
 		"requests": [
-			"d174f68e4846c6d137cb6ee2a8b8001c5e87b02bbdb0fb7e814a98ad5a7fd899"
+			"3598e9c02ecc433193ace6571b29edf8bbcd2568a28be81f2e6d8c94adaf0de6"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - large function",
 		"requests": [
-			"98488ea3d7921518d787886a61ddeec7643d7f85da225d2f5dbd1e02cccfcfac"
+			"40bd8c2b3d07c47b8c56aab7d7a3ee55fe9bde7ae800307027b12f92490b7888"
 		]
 	},
 	{
 		"name": "/doc [inline] [typescript] - supports chat variables",
 		"requests": [
-			"20c5d0bc86d8080c343f519f1edfb4951378fad27e240729e67bacdadb18bb4f"
+			"2c7eaaa330d710106d2cacb58b7fcb5e01598d15f75c5f2af08089b543f1b2b1"
 		]
 	}
 ]

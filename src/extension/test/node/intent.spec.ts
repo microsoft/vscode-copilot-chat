@@ -10,7 +10,7 @@ import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocum
 import { MockEndpoint } from '../../../platform/endpoint/test/node/mockEndpoint';
 import { ITestingServicesAccessor } from '../../../platform/test/node/services';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
-import { ExtHostDocumentData } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -37,7 +37,7 @@ suite('Intent Streaming', function () {
 	test.skip('[Bug] Stream processing may never terminate if model responds with something other than an edit #2080', async function () {
 
 
-		const data = ExtHostDocumentData.create(URI.from({ scheme: 'test', path: '/path/file.txt' }), 'Hello', 'fooLang');
+		const data = createTextDocumentData(URI.from({ scheme: 'test', path: '/path/file.txt' }), 'Hello', 'fooLang');
 		const doc = TextDocumentSnapshot.create(data.document);
 
 		const context: IDocumentContext = {
@@ -48,7 +48,7 @@ suite('Intent Streaming', function () {
 			selection: new Selection(0, 0, 0, 0),
 		};
 
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatEditCodePrompt, {
 			documentContext: context,
@@ -64,11 +64,10 @@ suite('Intent Streaming', function () {
 			if (value instanceof ChatResponseTextEditPart) {
 				values.push(...value.edits);
 			}
-		});
+		}, () => { }, undefined, undefined, undefined, () => Promise.resolve(undefined));
 		const values: TextEdit[] = [];
 
 		const part: IResponsePart = {
-			text: 'What can be done',
 			delta: {
 				text: 'What can be done'
 			}

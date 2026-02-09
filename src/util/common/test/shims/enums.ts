@@ -34,11 +34,6 @@ export enum TextEditorRevealType {
 	AtTop = 3
 }
 
-export enum EndOfLine {
-	LF = 1,
-	CRLF = 2
-}
-
 export enum DiagnosticSeverity {
 	Error = 0,
 	Warning = 1,
@@ -63,4 +58,17 @@ export enum ChatLocation {
 	Terminal = 2,
 	Notebook = 3,
 	Editor = 4,
+}
+
+export enum ChatSessionStatus {
+	Failed = 0,
+	Completed = 1,
+	InProgress = 2
+}
+
+export enum FileType {
+	Unknown = 0,
+	File = 1,
+	Directory = 2,
+	SymbolicLink = 64
 }

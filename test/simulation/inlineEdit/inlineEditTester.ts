@@ -5,15 +5,13 @@
 
 import { rename } from 'fs/promises';
 import { basename, dirname, join } from 'path';
-import type { InlineCompletionContext } from 'vscode';
 import { VisualizationTestRun } from '../../../src/extension/inlineChat/node/rendererVisualization';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
 import { createNextEditProvider } from '../../../src/extension/inlineEdits/node/createNextEditProvider';
 import { DebugRecorder } from '../../../src/extension/inlineEdits/node/debugRecorder';
-import { NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
+import { NESInlineCompletionContext, NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
 import { NextEditResult } from '../../../src/extension/inlineEdits/node/nextEditResult';
-import { ServerPoweredInlineEditProvider } from '../../../src/extension/inlineEdits/node/serverPoweredInlineEditProvider';
 import { ConfigKey, IConfigurationService } from '../../../src/platform/configuration/common/configurationService';
 import { IGitExtensionService } from '../../../src/platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../src/platform/inlineEdits/common/dataTypes/documentId';
@@ -25,8 +23,10 @@ import { ObservableWorkspace } from '../../../src/platform/inlineEdits/common/ob
 import { IHistoryContextProvider } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { NesHistoryContextProvider } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { INotebookService } from '../../../src/platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../src/platform/telemetry/common/nullExperimentationService';
 import { TestingServiceCollection } from '../../../src/platform/test/node/services';
+import { IWorkspaceService } from '../../../src/platform/workspace/common/workspaceService';
 import { TaskQueue } from '../../../src/util/common/async';
 import { getLanguageForResource } from '../../../src/util/common/languages';
 import { CachedFunction } from '../../../src/util/vs/base/common/cache';
@@ -45,7 +45,6 @@ import { ISerializedFileEdit, ISerializedNesUserEditsHistory, NES_LOG_CONTEXT_TA
 import { ITestInformation } from '../testInformation';
 import { IInlineEditBaseFile, ILoadedFile } from './fileLoading';
 import { inlineEditScoringService } from './inlineEditScoringService';
-import { SpyingServerPoweredNesProvider } from './spyingServerPoweredNesProvider';
 
 export interface IInlineEditTest {
 	recentEdit: IInlineEditTestDocument | IInlineEditTestDocument[];
@@ -129,6 +128,8 @@ export class InlineEditTester {
 		const configService = accessor.get(IConfigurationService);
 		const expService = accessor.get(IExperimentationService);
 		const gitExtensionService = accessor.get(IGitExtensionService);
+		const notebookService = accessor.get(INotebookService);
+		const workspaceService = accessor.get(IWorkspaceService);
 
 		const history = historyContextProvider.getHistoryContext(docId)!;
 		let i = 0;
@@ -141,7 +142,13 @@ export class InlineEditTester {
 			}));
 		}
 
-		const stestRuntime = accessor.getIfExists(ISimulationTestRuntime);
+		const stestRuntime = (() => {
+			try {
+				return accessor.get(ISimulationTestRuntime);
+			} catch {
+				return undefined;
+			}
+		})();
 
 		if (stestRuntime) {
 			const nesUserEditHistory: ISerializedNesUserEditsHistory = {
@@ -156,18 +163,15 @@ export class InlineEditTester {
 			stestRuntime.writeFile('nesUserEditHistory.json', JSON.stringify(nesUserEditHistory, null, 2), NES_USER_EDITS_HISTORY_TAG);
 		}
 
-		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsProviderId, expService);
-		const statelessNextEditProvider =
-			nextEditProviderId === ServerPoweredInlineEditProvider.ID
-				? instaService.createInstance(SpyingServerPoweredNesProvider)
-				: createNextEditProvider(nextEditProviderId, instaService);
+		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsProviderId, expService);
+		const statelessNextEditProvider = createNextEditProvider(nextEditProviderId, instaService);
 		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder);
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid() };
+		const context: NESInlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200, enforceCacheDelay: false };
 		const logContext = new InlineEditRequestLogContext(activeDocument.docId.toString(), 1, context);
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, workspaceService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
 
 		let nextEditResult: NextEditResult;
 		try {
@@ -190,9 +194,9 @@ export class InlineEditTester {
 		const targetDocId = nextEditResult.result?.targetDocumentId;
 		const targetDocument = targetDocId !== undefined ? assertReturnsDefined(historyContext.getDocument(targetDocId)) : activeDocument;
 
-		const aiRootedEdit = new RootedEdit(targetDocument.lastEdit.getEditedState(), nextEditResult.result?.edit.toEdit() ?? StringEdit.empty);
+		const aiRootedEdit = new RootedEdit(targetDocument.lastEdit.getEditedState(), nextEditResult.result?.edit?.toEdit() ?? StringEdit.empty);
 
-		if (!nextEditResult.result) {
+		if (!nextEditResult.result || !nextEditResult.result.edit) {
 			return {
 				aiEditDocumentUri: targetDocument.docId,
 				aiEditDocumentValue: aiRootedEdit.base

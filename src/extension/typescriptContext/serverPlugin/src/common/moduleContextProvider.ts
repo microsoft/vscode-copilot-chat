@@ -3,12 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
-import TS from './typescript';
-const ts = TS();
 
-import { TypeOfExpressionComputeRunnable, TypeOfImportsComputeRunnable, TypeOfLocalsComputeRunnable, TypesOfNeighborFilesComputeRunnable } from './baseContextProviders';
-import { ContextProvider, type ComputeContextSession, type ContextComputeRunnableCollector, type ProviderComputeContext, type RequestContext } from './contextProvider';
-import { CompletionContextKind } from './protocol';
+import { ImportsRunnable, TypeOfExpressionRunnable, TypeOfLocalsRunnable, TypesOfNeighborFilesRunnable } from './baseContextProviders';
+import { ContextProvider, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext } from './contextProvider';
 import tss from './typescripts';
 
 export class ModuleContextProvider extends ContextProvider {
@@ -20,25 +17,27 @@ export class ModuleContextProvider extends ContextProvider {
 	public override readonly isCallableProvider: boolean;
 
 	constructor(declaration: tt.ModuleDeclaration, tokenInfo: tss.TokenInfo, computeInfo: ProviderComputeContext) {
-		super(CompletionContextKind.SourceFile, ts.SymbolFlags.Function);
+		super();
 		this.declaration = declaration;
 		this.tokenInfo = tokenInfo;
 		this.computeInfo = computeInfo;
 		this.isCallableProvider = true;
 	}
 
-	public provide(result: ContextComputeRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
+	public provide(result: ContextRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
 		token.throwIfCancellationRequested();
 		if (!this.computeInfo.isFirstCallableProvider(this)) {
 			return;
 		}
 		const excludes = new Set<tt.Symbol>();
-		result.addPrimary(new TypeOfLocalsComputeRunnable(session, languageService, context, this.tokenInfo, excludes, undefined));
-		const runnable = TypeOfExpressionComputeRunnable.create(session, languageService, context, this.tokenInfo, token);
+		result.addPrimary(new TypeOfLocalsRunnable(session, languageService, context, this.tokenInfo, excludes, undefined));
+		const runnable = TypeOfExpressionRunnable.create(session, languageService, context, this.tokenInfo, token);
 		if (runnable !== undefined) {
 			result.addPrimary(runnable);
 		}
-		result.addSecondary(new TypeOfImportsComputeRunnable(session, languageService, context, this.tokenInfo, excludes, undefined));
-		result.addTertiary(new TypesOfNeighborFilesComputeRunnable(session, languageService, context, this.tokenInfo, undefined));
+		result.addSecondary(new ImportsRunnable(session, languageService, context, this.tokenInfo, excludes, undefined));
+		if (context.neighborFiles.length > 0) {
+			result.addTertiary(new TypesOfNeighborFilesRunnable(session, languageService, context, this.tokenInfo, undefined));
+		}
 	}
 }

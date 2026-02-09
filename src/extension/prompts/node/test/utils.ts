@@ -11,7 +11,7 @@ import { getStructureUsingIndentation } from '../../../../platform/parser/node/i
 import { IParserService } from '../../../../platform/parser/node/parserService';
 import { WASMLanguage } from '../../../../platform/parser/node/treeSitterLanguages';
 import { IPlaygroundRunnerGlobals } from '../../../../util/common/debugValueEditorGlobals';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import * as path from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -103,7 +103,7 @@ export async function generateSummarizedDocument(
 	settings: ISummarizedDocumentSettings = {},
 ): Promise<{ text: string; adjustedSelection: OffsetRange }> {
 	const file = await filePromise;
-	const doc = TextDocumentSnapshot.create(ExtHostDocumentData.create(
+	const doc = TextDocumentSnapshot.create(createTextDocumentData(
 		URI.from({ scheme: 'test', path: '/path/file.txt' }),
 		file.contents,
 		file.languageId
@@ -134,7 +134,7 @@ export async function generateSummarizedDocument(
 	if (playgroundRunnerData) {
 		function getDoc(text: string) {
 			const file = { contents: text, languageId: doc.languageId };
-			const data = ExtHostDocumentData.create(
+			const data = createTextDocumentData(
 				URI.from({ scheme: 'test', path: '/path/file.ts' }),
 				file.contents,
 				file.languageId,
@@ -202,7 +202,7 @@ export async function generateSummarizedDocuments(
 
 
 		const file = await filePromise;
-		const doc = TextDocumentSnapshot.create(ExtHostDocumentData.create(
+		const doc = TextDocumentSnapshot.create(createTextDocumentData(
 			URI.from({ scheme: 'test', path: file.filePath }),
 			file.contents,
 			file.languageId

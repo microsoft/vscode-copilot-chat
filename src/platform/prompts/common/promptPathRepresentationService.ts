@@ -5,10 +5,12 @@
 
 import type { Uri } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
+import { getDriveLetter, hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
+import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 export const IPromptPathRepresentationService = createServiceIdentifier<IPromptPathRepresentationService>('IPromptPathRepresentationService');
 
@@ -40,6 +42,12 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 
 	_serviceBrand: undefined;
 
+	protected isWindows() {
+		return isWindows;
+	}
+
+	constructor(@IWorkspaceService private readonly workspaceService: IWorkspaceService) { }
+
 	getFilePath(uri: Uri): string {
 		if (uri.scheme === Schemas.file || uri.scheme === Schemas.vscodeRemote) {
 			return uri.fsPath;
@@ -58,7 +66,32 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 	resolveFilePath(filepath: string, predominantScheme = Schemas.file): Uri | undefined {
 		// Always check for posix-like absolute paths, and also for platform-like
 		// (i.e. Windows) absolute paths in case the model generates them.
-		if (filepath.startsWith('/') || (isWindows && (hasDriveLetter(filepath) || filepath.startsWith('\\')))) {
+		const isPosixPath = filepath.startsWith('/');
+		const isWindowsPath = this.isWindows() && (hasDriveLetter(filepath) || filepath.startsWith('\\'));
+		if (isPosixPath || isWindowsPath) {
+			// Some models double-escape backslashes, which causes problems down the line.
+			// Remove repeated backslashes from windows path (but preserve UNC paths)
+			if (isWindowsPath) {
+				const isUncPath = filepath.startsWith('\\\\');
+				filepath = filepath.replace(/\\+/g, '\\');
+				if (isUncPath) { filepath = '\\' + filepath; }
+			}
+
+			// Some models see an example of a unix path in tool calls and try to
+			// represent unix paths on windows without a drive letter, which causes
+			// issues. Try to rectify this.
+			if (isPosixPath && this.isWindows() && predominantScheme === Schemas.file) {
+				const lowerCandidates = this.workspaceService.getWorkspaceFolders()
+					.filter(folder => folder.scheme === Schemas.file)
+					.map(folder => getDriveLetter(folder.fsPath, true))
+					.filter(isDefined);
+
+				const matchingDriveLetter = lowerCandidates.find(c => this.workspaceService.getWorkspaceFolder(URI.file(`${c}:${filepath}`)));
+				if (matchingDriveLetter) {
+					filepath = `${matchingDriveLetter}:${filepath}`;
+				}
+			}
+
 			const fileUri = URI.file(filepath);
 			return predominantScheme === Schemas.file ? fileUri : URI.from({ scheme: predominantScheme, path: fileUri.path });
 		}
@@ -73,7 +106,7 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 	}
 
 	getExampleFilePath(absolutePosixFilePath: string): string {
-		if (isWindows) {
+		if (this.isWindows()) {
 			return this.getFilePath(URI.parse(`file:///C:${absolutePosixFilePath}`));
 		} else {
 			return this.getFilePath(URI.parse(`file://${absolutePosixFilePath}`));

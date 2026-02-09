@@ -5,11 +5,11 @@
 
 import type * as vscode from 'vscode';
 import { ReadonlyError, illegalArgument } from '../../../vs/base/common/errors';
-import { SnippetString } from './editing';
-import { EndOfLine } from './enums';
-import { Position } from './position';
-import { Range } from './range';
-import { Selection } from './selection';
+import { Position } from '../../../vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
+import { Selection } from '../../../vs/workbench/api/common/extHostTypes/selection';
+import { SnippetString } from '../../../vs/workbench/api/common/extHostTypes/snippetString';
+import { EndOfLine } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 
 interface ITextEditOperation {
 	range: vscode.Range;

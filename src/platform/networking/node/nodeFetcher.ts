@@ -5,11 +5,15 @@
 
 import * as http from 'http';
 import * as https from 'https';
+import { Readable } from 'stream';
 import { IEnvService } from '../../env/common/envService';
-import { FetchOptions, IAbortController, IHeaders, Response } from '../common/fetcherService';
+import { collectSingleLineErrorMessage } from '../../log/common/logService';
+import { FetchOptions, IAbortController, IHeaders, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export class NodeFetcher implements IFetcher {
+
+	static readonly ID = 'node-http' as const;
 
 	constructor(
 		private readonly _envService: IEnvService,
@@ -19,12 +23,14 @@ export class NodeFetcher implements IFetcher {
 	}
 
 	getUserAgentLibrary(): string {
-		return 'node-http';
+		return NodeFetcher.ID;
 	}
 
-	fetch(url: string, options: FetchOptions): Promise<Response> {
+	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
-		headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		if (!headers['User-Agent']) {
+			headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		}
 		headers[userAgentLibraryHeader] = this._userAgentLibraryUpdate ? this._userAgentLibraryUpdate(this.getUserAgentLibrary()) : this.getUserAgentLibrary();
 
 		let body = options.body;
@@ -37,8 +43,8 @@ export class NodeFetcher implements IFetcher {
 		}
 
 		const method = options.method || 'GET';
-		if (method !== 'GET' && method !== 'POST') {
-			throw new Error(`Illegal arguments! 'method' must be either 'GET' or 'POST'!`);
+		if (method !== 'GET' && method !== 'POST' && method !== 'PUT') {
+			throw new Error(`Illegal arguments! 'method' must be 'GET', 'POST', or 'PUT'!`);
 		}
 
 		const signal = options.signal ?? new AbortController().signal;
@@ -46,10 +52,41 @@ export class NodeFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
-		return this._fetch(url, method, headers, body, signal);
+		try {
+			return await this._fetch(url, method, headers, body, signal);
+		} catch (e) {
+			e.fetcherId = NodeFetcher.ID;
+			throw e;
+		}
 	}
 
-	private _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
+	}
+
+	private _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
 		return new Promise((resolve, reject) => {
 			const module = url.startsWith('https:') ? https : http;
 			const req = module.request(url, { method, headers }, res => {
@@ -65,9 +102,8 @@ export class NodeFetcher implements IFetcher {
 					res.statusCode || 0,
 					res.statusMessage || '',
 					nodeFetcherResponse.headers,
-					async () => nodeFetcherResponse.text(),
-					async () => nodeFetcherResponse.json(),
-					async () => nodeFetcherResponse.body(),
+					nodeFetcherResponse.body(),
+					NodeFetcher.ID
 				));
 			});
 			req.setTimeout(60 * 1000); // time out after 60s of receiving no data
@@ -95,7 +131,7 @@ export class NodeFetcher implements IFetcher {
 		return e && ['EADDRINUSE', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'ETIMEDOUT'].includes(e.code);
 	}
 	getUserMessageForFetcherError(err: any): string {
-		return `Please check your firewall rules and network connection then try again. Error Code: ${err.code}.`;
+		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
 }
 
@@ -105,7 +141,7 @@ function makeAbortError(signal: AbortSignal): Error {
 }
 function isAbortError(e: any): boolean {
 	// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-	return e && e.name === "AbortError";
+	return e && e.name === 'AbortError';
 }
 
 class NodeFetcherResponse {
@@ -157,12 +193,12 @@ class NodeFetcherResponse {
 		return JSON.parse(text);
 	}
 
-	public async body(): Promise<NodeJS.ReadableStream | null> {
+	public body(): ReadableStream<Uint8Array> {
 		this.signal.addEventListener('abort', () => {
 			this.res.emit('error', makeAbortError(this.signal));
 			this.res.destroy();
 			this.req.destroy();
 		});
-		return this.res;
+		return Readable.toWeb(this.res);
 	}
 }

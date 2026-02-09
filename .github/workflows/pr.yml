@@ -3,7 +3,6 @@ name: PR Checks
 on:
   push:
     branches:
-      - main
       - 'gh-readonly-queue/main/*'
   pull_request:
     branches:
@@ -14,22 +13,19 @@ permissions:
   contents: read
   pull-requests: read
 
-env:
-  IS_MAIN: ${{ github.ref == 'refs/heads/main' }}
-
 jobs:
   check-test-cache:
     name: Check test cache
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version-file: .nvmrc
 
       - name: Restore build cache
         uses: actions/cache/restore@v4
@@ -60,16 +56,15 @@ jobs:
   check-telemetry:
     name: Check telemetry events
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
-    if: github.ref != 'refs/heads/main'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Validate telemetry events
         run: npx --package=@vscode/telemetry-extractor --yes vscode-telemetry-extractor -s . > /dev/null
@@ -79,34 +74,38 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           architecture: 'x64'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0'
+
       - name: Install setuptools
-        if: env.IS_MAIN != 'true'
         run: pip install setuptools
 
       - name: Restore build cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         id: build-cache
         with:
           key: build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
           path: .build/build_cache
 
       - name: Extract build cache
-        if: env.IS_MAIN != 'true' && steps.build-cache.outputs.cache-hit == 'true'
+        if: steps.build-cache.outputs.cache-hit == 'true'
         run: tar -xzf .build/build_cache/cache.tgz
 
       - name: Install dependencies
@@ -122,44 +121,40 @@ jobs:
           mkdir -p .build/build_cache
           tar -czf .build/build_cache/cache.tgz --files-from .build/build_cache_list.txt
 
-      - name: Install dotnet cli
-        if: env.IS_MAIN != 'true'
-        run: npm run setup:dotnet
-
       - name: TypeScript type checking
-        if: env.IS_MAIN != 'true'
         run: npm run typecheck
 
       - name: Lint
-        if: env.IS_MAIN != 'true'
         run: npm run lint
 
       - name: Compile
-        if: env.IS_MAIN != 'true'
         run: npm run compile
 
       - name: Run vitest unit tests
-        if: env.IS_MAIN != 'true'
         run: npm run test:unit
 
       - name: Run simulation tests with cache
-        if: env.IS_MAIN != 'true'
         run: npm run simulate-ci
 
       - name: Run extension tests using VS Code
-        if: env.IS_MAIN != 'true'
         run: xvfb-run -a npm run test:extension
 
+      - name: Run Completions Core prompt tests
+        run: npm run test:prompt
+
+      - name: Run Completions Core lib tests using VS Code
+        run: xvfb-run -a npm run test:completions-core
+
       - name: Archive simulation output
-        if: always() && env.IS_MAIN != 'true'
+        if: always()
         run: |
           set -e
           mkdir -p .simulation-archive
           tar -czf .simulation-archive/simulation.tgz -C .simulation .
 
       - name: Upload simulation output
-        if: always() && env.IS_MAIN != 'true'
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v5
         with:
           name: simulation-output-linux-${{ github.run_attempt }}
           path: .simulation-archive/simulation.tgz
@@ -169,34 +164,38 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           lfs: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '22.14.x'
+          node-version: '22.21.x'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           architecture: 'x64'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0'
+
       - name: Install setuptools
-        if: env.IS_MAIN != 'true'
         run: pip install setuptools
 
       - name: Restore build cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         id: build-cache
         with:
           key: windows-build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
           path: .build/build_cache
 
       - name: Extract build cache
-        if: env.IS_MAIN != 'true' && steps.build-cache.outputs.cache-hit == 'true'
+        if: steps.build-cache.outputs.cache-hit == 'true'
         run: 7z.exe x .build/build_cache/cache.7z -aoa
 
       - name: Install dependencies
@@ -206,31 +205,31 @@ jobs:
       - name: Create build cache archive
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
-          mkdir .build
+          mkdir -Force .build
           node build/listBuildCacheFiles.js .build/build_cache_list.txt
-          mkdir .build/build_cache
+          mkdir -Force .build/build_cache
           7z.exe a .build/build_cache/cache.7z -mx3 `@.build/build_cache_list.txt
 
       - name: TypeScript type checking
-        if: env.IS_MAIN != 'true'
         run: npm run typecheck
 
       - name: Lint
-        if: env.IS_MAIN != 'true'
         run: npm run lint
 
       - name: Compile
-        if: env.IS_MAIN != 'true'
         run: npm run compile
 
       - name: Run vitest unit tests
-        if: env.IS_MAIN != 'true'
         run: npm run test:unit
 
       - name: Run simulation tests with cache
-        if: env.IS_MAIN != 'true'
         run: npm run simulate-ci
 
       - name: Run extension tests using VS Code
-        if: env.IS_MAIN != 'true'
         run: npm run test:extension
+
+      - name: Run Completions Core prompt tests
+        run: npm run test:prompt
+
+      - name: Run Completions Core lib tests using VS Code
+        run: npm run test:completions-core

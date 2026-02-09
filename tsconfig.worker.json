@@ -11,7 +11,10 @@
 		"lib": ["ES2022", "WebWorker"],
 		"types": [],
 		"noEmit": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"jsx": "react",
+		"jsxFactory": "vscpp",
+		"jsxFragmentFactory": "vscppf"
 	},
 	"include": [
 		"src/**/common/**/*.ts",
@@ -20,5 +23,5 @@
 		"src/**/vscode-worker/**/*.ts",
 		"src/**/*.d.ts"
 	],
-	"exclude": ["src/**/test/**", "src/**/fixtures/**"]
+	"exclude": ["src/**/test/**", "src/**/fixtures/**", "src/extension/completions-core/**/*.test.ts"]
 }

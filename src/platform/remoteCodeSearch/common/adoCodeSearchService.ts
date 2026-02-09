@@ -4,26 +4,31 @@
  *--------------------------------------------------------------------------------------------*/
 import { shouldInclude } from '../../../util/common/glob';
 import { Result } from '../../../util/common/result';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
+import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtils';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
+import { measureExecTime } from '../../log/common/logExecTime';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest, postRequest } from '../../networking/common/networking';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
+import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
 
 interface ResponseShape {
@@ -63,24 +68,26 @@ export const IAdoCodeSearchService = createDecorator('IAdoCodeSearchService');
 export interface IAdoCodeSearchService {
 	readonly _serviceBrand: undefined;
 
+	readonly onDidChangeIndexState: Event<void>;
+
 	/**
 	 * Gets the state of the remote index for a given repo.
 	 */
 	getRemoteIndexState(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		repoId: AdoRepoId,
 		token: CancellationToken,
-	): Promise<Result<RemoteCodeSearchIndexState, Error>>;
+	): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>>;
 
 	/**
 	 * Requests that a given repo be indexed.
 	 */
 	triggerIndexing(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		triggerReason: 'auto' | 'manual' | 'tool',
 		repoId: AdoRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean>;
+	): Promise<Result<true, RemoteCodeSearchError>>;
 
 	/**
 	 * Semantic searches a given repo for relevant code snippets
@@ -88,7 +95,7 @@ export interface IAdoCodeSearchService {
 	 * The repo must have been indexed first. Make sure to check {@link getRemoteIndexState} or call {@link triggerIndexing}.
 	 */
 	searchRepo(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		repo: AdoCodeSearchRepoInfo,
 		query: string,
 		maxResults: number,
@@ -103,20 +110,25 @@ export interface IAdoCodeSearchService {
  */
 const adoCustomEmbeddingScoreType = new EmbeddingType('adoCustomEmbeddingScore');
 
-export class AdoCodeSearchService implements IAdoCodeSearchService {
+export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchService {
 
 	declare readonly _serviceBrand: undefined;
 
+	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
+	public readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
+
 	constructor(
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IExperimentationService private readonly _expService: IExperimentationService,
+		@ILogService private readonly _logService: ILogService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-	) { }
+	) {
+		super();
+	}
 
 	private getAdoAlmStatusUrl(repoId: AdoRepoId): string {
 		return `https://almsearch.dev.azure.com/${repoId.org}/${repoId.project}/_apis/search/semanticsearchstatus/${repoId.repo}?api-version=7.1-preview`;
@@ -126,11 +138,33 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 		return `https://almsearch.dev.azure.com/${repo.org}/${repo.project}/_apis/search/embeddings?api-version=7.1-preview`;
 	}
 
-	async getRemoteIndexState(authToken: string, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, Error>> {
-		if (!this.isEnabled()) {
-			return Result.ok<RemoteCodeSearchIndexState>({
-				status: RemoteCodeSearchIndexStatus.NotIndexable,
+	async getRemoteIndexState(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+		return measureExecTime(() => this.getRemoteIndexStateImpl(auth, repoId, token), (execTime, status, result) => {
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
+					"ok": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on successful calls" },
+					"err": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on failed calls" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState', {
+				status,
+				ok: result?.isOk() ? result.val.status : undefined,
+				error: result?.isError() ? result.err.type : undefined,
+			}, {
+				execTime
 			});
+		});
+	}
+
+	private async getRemoteIndexStateImpl(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+		const authToken = await this.getAdoAuthToken(auth.silent);
+		if (!authToken) {
+			this._logService.error(`AdoCodeSearchService::getRemoteIndexState(${repoId}). Failed to fetch indexing status. No valid ADO auth token.`);
+			return Result.error<RemoteCodeSearchError>({ type: 'not-authorized' });
 		}
 
 		const endpoint = this.getAdoAlmStatusUrl(repoId);
@@ -139,14 +173,13 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			Accept: 'application/json',
 			Authorization: `Basic ${authToken}`,
 			'Content-Type': 'application/json',
+			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::getRemoteIndexState'), this._envService)
 		};
 
 		const result = await raceCancellationError(
 			getRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,
@@ -159,10 +192,20 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			token);
 
 		if (!result.ok) {
-			// TODO: how can we tell the difference between no access to repo and semantic search not being enabled?
-			return Result.error(new Error(`Ado code search index status request failed with status: ${result.status}`));
-		}
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState.requestError" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState.requestError', {}, {
+				statusCode: result.status,
+			});
 
+			// TODO: how can we tell the difference between no access to repo and semantic search not being enabled?
+			return Result.error<RemoteCodeSearchError>({ type: 'generic-error', error: new Error(`ADO code search index status request failed with status: ${result.status}`) });
+		}
 		type AdoIndexStatusResponse = {
 			semanticSearchEnabled: boolean;
 			id: string;
@@ -190,18 +233,22 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 	}
 
 	public async triggerIndexing(
-		authToken: string,
-		triggerReason: 'auto' | 'manual' | 'tool',
+		auth: { readonly silent: boolean },
+		_triggerReason: 'auto' | 'manual' | 'tool',
 		repoId: AdoRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean> {
+	): Promise<Result<true, RemoteCodeSearchError>> {
 		// ADO doesn't support explicit indexing. Just use the status and assume it's always ready
-		const status = await this.getRemoteIndexState(authToken, repoId, CancellationToken.None);
-		return status.isOk();
+		const status = await this.getRemoteIndexState(auth, repoId, CancellationToken.None);
+		if (status.isOk()) {
+			return Result.ok(true);
+		}
+
+		return status;
 	}
 
 	async searchRepo(
-		authToken: string,
+		auth: { readonly silent: boolean },
 		repo: AdoCodeSearchRepoInfo,
 		searchQuery: string,
 		maxResults: number,
@@ -209,11 +256,15 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
-		if (!this.isEnabled()) {
-			return { chunks: [], outOfSync: false };
+		const totalSw = new StopWatch();
+
+		const authToken = await this.getAdoAuthToken(auth.silent);
+		if (!authToken) {
+			this._logService.error(`AdoCodeSearchService::searchRepo(${repo.adoRepoId}). Failed to search repo. No valid ADO auth token.`);
+			throw new Error('No valid auth token');
 		}
 
-		let endpoint = this._configurationService.getConfig(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEndpointOverride);
+		let endpoint = this._configurationService.getConfig(ConfigKey.Advanced.WorkspacePrototypeAdoCodeSearchEndpointOverride);
 		if (!endpoint) {
 			endpoint = this.getAdoAlmSearchUrl(repo.adoRepoId);
 		}
@@ -221,14 +272,14 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			Accept: 'application/json',
 			Authorization: `Basic ${authToken}`,
 			'Content-Type': 'application/json',
+			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::searchRepo'), this._envService)
 		};
 
+		const requestSw = new StopWatch();
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,
@@ -249,6 +300,8 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 				token),
 			token);
 
+		const requestExecTime = requestSw.elapsed();
+
 		if (!response.ok) {
 			/* __GDPR__
 				"adoCodeSearch.searchRepo.error" : {
@@ -256,7 +309,9 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 					"comment": "Information about failed code ado searches",
 					"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+					"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.error', {
@@ -264,7 +319,11 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 				workspaceSearchCorrelationId: telemetryInfo.correlationId,
 			}, {
 				statusCode: response.status,
+				execTime: totalSw.elapsed(),
+				requestExecTime: requestExecTime,
 			});
+
+			this._logService.trace(`AdoCodeSearchService::searchRepo: Failed. Status code: ${response.status}`);
 
 			throw new Error(`Ado code search semantic search failed with status: ${response.status}`);
 		}
@@ -273,6 +332,7 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 		if (!Array.isArray(body.results)) {
 			throw new Error(`Code search semantic search unexpected response json shape`);
 		}
+		const rawResultCount = body.results.length;
 
 		const returnedEmbeddingsType = body.embedding_model ? new EmbeddingType(body.embedding_model) : adoCustomEmbeddingScoreType;
 
@@ -320,8 +380,11 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 				"comment": "Information about successful ado code search searches",
 				"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 				"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search" },
-				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" }
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search after filtering" },
+				"rawResultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Original number of returned chunks from the search before filtering" },
+				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" },
+				"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+				"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.success', {
@@ -329,13 +392,17 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			workspaceSearchCorrelationId: telemetryInfo.correlationId,
 		}, {
 			resultCount: body.results.length,
+			rawResultCount,
 			resultOutOfSync: outOfSync ? 1 : 0,
+			execTime: totalSw.elapsed(),
+			requestExecTime: requestExecTime,
 		});
 
+		this._logService.trace(`AdoCodeSearchService::searchRepo: Returning ${outChunks.length} chunks. Raw result count: ${rawResultCount}`);
 		return { chunks: outChunks, outOfSync };
 	}
 
-	private isEnabled(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEnabled, this._expService);
+	private getAdoAuthToken(silent: boolean): Promise<string | undefined> {
+		return this._authenticationService.getAdoAccessTokenBase64({ silent });
 	}
 }

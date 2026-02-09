@@ -15,7 +15,7 @@ export interface TelemetryEventMeasurements {
 }
 
 export interface TelemetryEventProperties {
-	readonly [key: string]: string | import("vscode").TelemetryTrustedValue<string> | undefined;
+	readonly [key: string]: string | import('vscode').TelemetryTrustedValue<string> | undefined;
 }
 
 // Interfaces taken from and should match `vscode-tas-client`
@@ -41,6 +41,7 @@ export interface ITelemetryUserConfig {
 	readonly _serviceBrand: undefined;
 	trackingId: string | undefined;
 	organizationsList: string | undefined;
+	enterpriseList: string | undefined;
 	optedIn: boolean;
 }
 
@@ -49,6 +50,7 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 	// tracking id from auth token
 	public trackingId: string | undefined;
 	public organizationsList: string | undefined;
+	public enterpriseList: string | undefined;
 	public optedIn: boolean;
 
 	constructor(
@@ -72,6 +74,7 @@ export class TelemetryUserConfigImpl implements ITelemetryUserConfig {
 			if (trackingId !== undefined) {
 				this.trackingId = trackingId;
 				this.organizationsList = token.organizationList.toString();
+				this.enterpriseList = token.enterpriseList.toString();
 				this.optedIn = enhancedTelemetry;
 			}
 		});
@@ -107,6 +110,8 @@ export interface ITelemetryService extends IExperimentationTelemetry, IDisposabl
 	sendTelemetryEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void;
 	sendTelemetryEvent<TTelemetryEvent extends ITelemetryEvent>(eventName: TTelemetryEvent['eventName'], destination: TelemetryDestination, properties?: TTelemetryEvent['properties'], measurements?: TTelemetryEvent['measurements']): void;
 	sendTelemetryErrorEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void;
+
+	setAdditionalExpAssignments(expAssignments: string[]): void;
 }
 
 export interface ITelemetryEvent {

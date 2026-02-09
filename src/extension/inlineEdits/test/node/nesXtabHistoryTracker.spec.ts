@@ -20,7 +20,7 @@ describe('NesXtabHistoryTracker', () => {
 	it('1 line, 1 edit', () => {
 		const recording: IRecordingInformation = {
 			log: [
-				{ documentType: "workspaceRecording@1.0", kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
+				{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
 				{ time: 10, id: 0, kind: 'documentEncountered', relativePath: 'src/a.ts' },
 				{ time: 11, id: 0, v: 1, kind: 'setContent', content: 'hemmo world\ngoodbye' },
 				{ time: 11, id: 0, v: 1, kind: 'changed', edit: [[2, 4, 'll']] },
@@ -41,7 +41,7 @@ describe('NesXtabHistoryTracker', () => {
 	it('1 line, 2 edits', () => {
 		const recording: IRecordingInformation = {
 			log: [
-				{ documentType: "workspaceRecording@1.0", kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
+				{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
 				{ time: 10, id: 0, kind: 'documentEncountered', relativePath: 'src/a.ts' },
 				{ time: 11, id: 0, v: 1, kind: 'setContent', content: 'hemmo world\ngoodbye' },
 				{ time: 11, id: 0, v: 1, kind: 'changed', edit: [[2, 4, 'll']] },
@@ -63,7 +63,7 @@ describe('NesXtabHistoryTracker', () => {
 	it('handles simple history', () => {
 		const recording: IRecordingInformation = {
 			log: [
-				{ documentType: "workspaceRecording@1.0", kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
+				{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
 				{ time: 10, id: 0, kind: 'documentEncountered', relativePath: 'src/a.ts' },
 				{ time: 11, id: 0, v: 1, kind: 'setContent', content: 'hemmo' },
 				{ time: 11, id: 0, v: 1, kind: 'changed', edit: [[5, 5, '\n']] },
@@ -93,7 +93,7 @@ describe('NesXtabHistoryTracker', () => {
 	it('handles simple history with small maxHistorySize', () => {
 		const recording: IRecordingInformation = {
 			log: [
-				{ documentType: "workspaceRecording@1.0", kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
+				{ documentType: 'workspaceRecording@1.0', kind: 'header', repoRootUri: 'file:///Users/john/myProject', time: 0, uuid: '' },
 				{ time: 10, id: 0, kind: 'documentEncountered', relativePath: 'src/a.ts' },
 				{ time: 11, id: 0, v: 1, kind: 'setContent', content: 'hemmo' },
 				{ time: 12, id: 0, v: 2, kind: 'changed', edit: [[5, 5, '\n']] },

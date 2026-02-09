@@ -3,11 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CustomFetcher } from '@vscode/extension-telemetry';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
+import { IFetcherService } from '../../networking/common/fetcherService';
+import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
 import { BaseTelemetryService } from '../common/baseTelemetryService';
 import { ITelemetryUserConfig } from '../common/telemetry';
 import { GitHubTelemetrySender } from './githubTelemetrySender';
@@ -27,9 +30,23 @@ export class TelemetryService extends BaseTelemetryService {
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IEnvService envService: IEnvService,
 		@ITelemetryUserConfig telemetryUserConfig: ITelemetryUserConfig,
-		@IDomainService domainService: IDomainService
+		@IDomainService domainService: IDomainService,
+		@IFetcherService fetcherService: IFetcherService
 	) {
-		const microsoftTelemetrySender = new MicrosoftTelemetrySender(internalMSFTAIKey, internalLargeEventMSFTAIKey, externalMSFTAIKey, tokenStore);
+		const customFetcher: CustomFetcher = async (url: string, init?: { method: 'POST'; headers?: Record<string, string>; body?: string }) => {
+			return fetcherService.fetch(url, {
+				method: init?.method,
+				headers: init?.headers,
+				body: init?.body
+			});
+		};
+		const microsoftTelemetrySender = new MicrosoftTelemetrySender(
+			internalMSFTAIKey,
+			internalLargeEventMSFTAIKey,
+			externalMSFTAIKey,
+			tokenStore,
+			customFetcher
+		);
 		const ghTelemetrySender = new GitHubTelemetrySender(
 			configService,
 			envService,
@@ -41,6 +58,10 @@ export class TelemetryService extends BaseTelemetryService {
 			estrictedGHAIKey,
 			tokenStore
 		);
-		super(tokenStore, microsoftTelemetrySender, ghTelemetrySender);
+		super(tokenStore, capiClientService, microsoftTelemetrySender, ghTelemetrySender);
+
+		if (fetcherService instanceof FetcherService) {
+			fetcherService.setTelemetryService(this);
+		}
 	}
 }

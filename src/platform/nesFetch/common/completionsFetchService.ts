@@ -3,66 +3,68 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as l10n from '@vscode/l10n';
-import type { ChatErrorDetails } from 'vscode';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { IHeaders } from '../../networking/common/fetcherService';
 import { ResponseStream } from './responseStream';
 
-export interface ModelParams {
-	prompt: string;
-	stop?: string[];
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	top_p?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	best_of?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	max_tokens?: number;
-	temperature?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	presence_penalty?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	frequency_penalty?: number;
-	// required to access certain experimental models
-	model?: string;
-	logprobs?: number;
+export namespace Completions {
+	interface BaseCompletionsParams {
+		prompt: string;
+		stop?: string[];
+		top_p?: number;
+		best_of?: number;
+		max_tokens?: number;
+		temperature?: number;
+		presence_penalty?: number;
+		frequency_penalty?: number;
+		// required to access certain experimental models
+		model?: string;
+		logprobs?: number;
+		n?: number;
+		stream: true;
+	}
+
+	interface CodexV2Params {
+		suffix?: string;
+		extra?: { [key: string]: any };
+		code_annotations?: boolean;
+	}
+
+	export interface ModelParams extends BaseCompletionsParams, CodexV2Params { }
+
+	export class RequestCancelled {
+		readonly kind = 'cancelled' as const;
+	}
+	export class UnsuccessfulResponse {
+		readonly kind = 'not-200-status' as const;
+		constructor(
+			public readonly status: number,
+			public readonly statusText: string,
+			public readonly headers: IHeaders,
+			public readonly text: () => Promise<string>
+		) { }
+	}
+	export class Unexpected {
+		readonly kind = 'unexpected' as const;
+		constructor(
+			public readonly error: Error
+		) { }
+	}
+	export type CompletionsFetchFailure =
+		| Completions.RequestCancelled
+		| Completions.UnsuccessfulResponse
+		| Completions.Unexpected;
+
+	export namespace Internal {
+		export type FetchOptions = {
+			requestId: string;
+			headers: { [name: string]: string };
+			body: string;
+		};
+	}
 }
-
-export type FetchOptions = {
-	requestId: string;
-	headers: { [name: string]: string };
-	body: any;
-};
-
-export type CompletionsFetchFailure =
-	| { kind: 'cancelled' }
-	| { kind: 'model_overloaded' }
-	| { kind: 'model_error' }
-	| { kind: 'not-registered' }
-	| { kind: 'not-configured' }
-	| { kind: 'quota-exceeded' }
-	| {
-		kind: 'context-window-exceeded';
-		/** Message we get in response body. */
-		message: string;
-	}
-	| {
-		kind: 'invalid-api-key';
-		/** Message we get in response body. */
-		message: string;
-	}
-	| {
-		kind: 'exceeded-rate-limit';
-		/** Message we get in response body. */
-		message: string;
-	}
-	| {
-		kind: 'not-200-status';
-		status: number;
-		statusText: string;
-	}
-	;
 
 export type CompletionsFetchErrorType = 'stop_content_filter' | 'stop_length' | 'unknown';
 
@@ -84,30 +86,14 @@ export const ICompletionsFetchService = createServiceIdentifier<ICompletionsFetc
 export interface ICompletionsFetchService {
 	readonly _serviceBrand: undefined;
 
-	fetch(url: string, secretKey: string, params: ModelParams, requestId: string, ct: CancellationToken, headerOverrides?: Record<string, string>): Promise<Result<ResponseStream, CompletionsFetchFailure>>;
-}
+	fetch(
+		url: string,
+		secretKey: string,
+		params: Completions.ModelParams,
+		requestId: string,
+		ct: CancellationToken,
+		headerOverrides?: Record<string, string>
+	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>>;
 
-export function getErrorDetailsFromFetchError(requestId: string, error: CompletionsFetchFailure): ChatErrorDetails {
-	switch (error.kind) {
-		case 'cancelled':
-			return { message: 'Cancelled' };
-		case 'exceeded-rate-limit':
-			return {
-				message: l10n.t(`Sorry, your request was rate-limited. Please wait and try again.`),
-				responseIsFiltered: true,
-			};
-		case 'quota-exceeded':
-			return {
-				message: l10n.t(`You've reached your monthly chat messages limit. [Upgrade to Copilot Pro]({0}) (30-day Free Trial) or wait for your limit to reset.`, 'https://aka.ms/github-copilot-upgrade-plan'),
-			};
-		case 'model_overloaded':
-		case 'model_error':
-		case 'not-registered':
-		case 'not-200-status':
-		case 'context-window-exceeded':
-		case 'invalid-api-key':
-		case 'not-configured':
-		default:
-			return { message: l10n.t(`Sorry, your request failed. Please try again. Request id: {0}`, requestId) };
-	}
+	disconnectAll(): Promise<unknown>;
 }

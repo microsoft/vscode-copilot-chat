@@ -15,6 +15,7 @@ import { isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { getStructure } from '../../../context/node/resolvers/selectionContextHelpers';
+import { PromptMetadata } from '../../../prompt/common/conversation';
 import { EarlyStopping, LeadingMarkdownStreaming, ReplyInterpreter, ReplyInterpreterMetaData } from '../../../prompt/node/intents';
 import { TextPieceClassifiers } from '../../../prompt/node/streamingEdits';
 import { Tag } from '../../../prompts/node/base/tag';
@@ -73,7 +74,7 @@ export class SummarizedDocumentData {
 		private readonly formattingOptions: vscode.FormattingOptions | undefined,
 		private readonly structure: OverlayNode,
 		private readonly selection: vscode.Range,
-		private readonly offsetSelections: { adjusted: OffsetRange; original: OffsetRange },
+		readonly offsetSelections: { adjusted: OffsetRange; original: OffsetRange },
 		private readonly kind: SelectionSplitKind,
 	) {
 
@@ -140,6 +141,14 @@ export type SummarizedDocumentWithSelectionProps = PromptElementProps<{
 	_allowEmptySelection?: boolean;
 }>;
 
+export class SummarizedDocumentSplitMetadata extends PromptMetadata {
+	constructor(
+		readonly split: SummarizedDocumentSplit,
+	) {
+		super();
+	}
+}
+
 export class SummarizedDocumentWithSelection extends PromptElement<SummarizedDocumentWithSelectionProps> {
 
 	constructor(
@@ -177,7 +186,7 @@ export class SummarizedDocumentWithSelection extends PromptElement<SummarizedDoc
 			splitDoc = documentData.summarizeDocument(tokenBudget);
 		}
 
-		this.logger.logger.info(`Summarized doc to fit token budget (${tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens}): ${splitDoc.codeAbove.length} + ${splitDoc.codeSelected.length} + ${splitDoc.codeBelow.length}`);
+		this.logger.info(`Summarized doc to fit token budget (${tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens}): ${splitDoc.codeAbove.length} + ${splitDoc.codeSelected.length} + ${splitDoc.codeBelow.length}`);
 
 		const { uri, languageId } = documentData.document;
 
@@ -200,6 +209,7 @@ export class SummarizedDocumentWithSelection extends PromptElement<SummarizedDoc
 
 		return (<Tag name='currentDocument'>
 			<meta value={new ReplyInterpreterMetaData(replyInterpreter)} />
+			<meta value={new SummarizedDocumentSplitMetadata(splitDoc)} />
 			{!hasContent && <>I am in an empty file `<Uri value={uri} mode={UriMode.Path} />`.</>}
 			{hasContent && <>I have the following {type} in a file called `<Uri value={uri} mode={UriMode.Path} />`:<br /></>}
 			{(!isMarkdown && hasCodeWithoutSelection) && <><CodeBlock uri={uri} languageId={languageId} code={codeWithoutSelection} shouldTrim={false} /><br /></>}

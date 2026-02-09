@@ -5,6 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptReference, TextChunk } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -30,9 +31,9 @@ export abstract class SafePromptElement<P extends BasePromptElementProps, S = vo
 		// REPORT error telemetry
 		// FAIL when running tests
 		const err = new Error('BAD PROMPT');
-		this._logService.logger.error(err);
+		this._logService.error(err);
 
-		if (this._contextService.extensionMode !== ExtensionMode.Production) {
+		if (this._contextService.extensionMode !== ExtensionMode.Production && !isScenarioAutomation) {
 			throw err;
 		}
 
@@ -67,6 +68,11 @@ export type CodeBlockProps = PromptElementProps<{
 	 * @default true
 	 */
 	readonly shouldTrim?: boolean;
+
+	/**
+	 * Fence style, defaults to '```'. An empty string omits the fence.
+	 */
+	readonly fence?: string;
 }>;
 
 export class CodeBlock extends SafePromptElement<CodeBlockProps> {
@@ -87,7 +93,7 @@ export class CodeBlock extends SafePromptElement<CodeBlockProps> {
 			return this._handleFoulPrompt();
 		}
 		const filePath = this.props.includeFilepath ? this._promptPathRepresentationService.getFilePath(this.props.uri) : undefined;
-		const code = createFencedCodeBlock(this.props.languageId ?? '', this.props.code, this.props.shouldTrim ?? true, filePath);
+		const code = createFencedCodeBlock(this.props.languageId ?? '', this.props.code, this.props.shouldTrim ?? true, filePath, this.props.fence);
 		const reference = this.props.references && <references value={this.props.references} />;
 
 		if (this.props.lineBasedPriority) {

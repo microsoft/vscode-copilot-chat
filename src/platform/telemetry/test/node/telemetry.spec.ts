@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, expect, Mock, suite, test, vi } from 'vitest';
 import type { TelemetryLogger } from 'vscode';
-import { CopilotToken } from '../../../authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IDomainService } from '../../../endpoint/common/domainService';
@@ -37,18 +37,17 @@ suite('Microsoft Telemetry Sender', function () {
 			dispose: vi.fn(),
 		};
 
-		mockToken = new CopilotToken({
+		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'tid=testTid',
 			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			// Make the token part of the GH org so it works for internal people
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'],
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 
 		mockTokenStore = {
 			_serviceBrand: undefined,
@@ -79,7 +78,7 @@ suite('Microsoft Telemetry Sender', function () {
 		expect(mockExternalReporter.sendTelemetryEvent).toHaveBeenCalledOnce();
 		expect(mockExternalReporter.sendTelemetryEvent).toHaveBeenCalledWith(
 			'testEvent',
-			{ foo: 'bar', 'common.tid': 'testTid', 'common.sku': "testSku" },
+			{ foo: 'bar', 'common.tid': 'testTid', 'common.sku': 'testSku' },
 			{ 'common.internal': 1 },
 		);
 	});
@@ -90,7 +89,7 @@ suite('Microsoft Telemetry Sender', function () {
 		expect(mockExternalReporter.sendTelemetryErrorEvent).toHaveBeenCalledOnce();
 		expect(mockExternalReporter.sendTelemetryErrorEvent).toHaveBeenCalledWith(
 			'testErrorEvent',
-			{ stack: 'testStack', 'common.tid': 'testTid', 'common.sku': "testSku" },
+			{ stack: 'testStack', 'common.tid': 'testTid', 'common.sku': 'testSku' },
 			{ statusCode: 502, 'common.internal': 1 },
 		);
 	});
@@ -126,14 +125,14 @@ suite('GitHub Telemetry Sender', function () {
 	// These are all common properties & measurements that the telemetry sender will add to every event
 	const commonTelemetryData = {
 		properties: {
-			copilot_build: new TelemetryTrustedValue("1"),
-			copilot_buildType: new TelemetryTrustedValue("dev"),
-			copilot_trackingId: new TelemetryTrustedValue("testId"),
-			editor_plugin_version: new TelemetryTrustedValue("simulation-tests-plugin/2"),
-			client_machineid: new TelemetryTrustedValue("test-machine"),
-			client_sessionid: new TelemetryTrustedValue("test-session"),
-			common_extname: new TelemetryTrustedValue("simulation-tests-plugin"),
-			common_extversion: new TelemetryTrustedValue("2"),
+			copilot_build: new TelemetryTrustedValue('1'),
+			copilot_buildType: new TelemetryTrustedValue('dev'),
+			copilot_trackingId: new TelemetryTrustedValue('testId'),
+			editor_plugin_version: new TelemetryTrustedValue('simulation-tests-plugin/2'),
+			client_machineid: new TelemetryTrustedValue('test-machine'),
+			client_sessionid: new TelemetryTrustedValue('test-session'),
+			common_extname: new TelemetryTrustedValue('simulation-tests-plugin'),
+			common_extversion: new TelemetryTrustedValue('2'),
 		},
 		measurements: {},
 	};
@@ -141,18 +140,17 @@ suite('GitHub Telemetry Sender', function () {
 	beforeEach(() => {
 		accessor = createPlatformServices().createTestingAccessor();
 
-		mockToken = new CopilotToken({
+		mockToken = new CopilotToken(createTestExtendedTokenInfo({
 			token: 'rt=1;tid=test',
 			sku: 'testSku',
 			expires_at: 9999999999,
 			refresh_in: 180000,
-			chat_enabled: true,
 			// Make the token part of the GH org so it works for internal people
 			organization_list: ['4535c7beffc844b46bb1ed4aa04d759a'],
 			isVscodeTeamMember: true,
 			username: 'testUser',
 			copilot_plan: 'unknown',
-		});
+		}));
 
 		mockTokenStore = {
 			_serviceBrand: undefined,
@@ -191,6 +189,7 @@ suite('GitHub Telemetry Sender', function () {
 			_serviceBrand: undefined,
 			optedIn: true,
 			organizationsList: undefined,
+			enterpriseList: undefined,
 			trackingId: 'testId'
 		};
 		const mockLoggerFactory = (enhanced: boolean) => {

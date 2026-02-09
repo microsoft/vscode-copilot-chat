@@ -5,12 +5,13 @@
 import type { CancellationToken, NotebookCell, NotebookDocument, Position, Uri } from 'vscode';
 import { getLanguage } from '../../../util/common/languages';
 import { isUri } from '../../../util/common/types';
+import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { EndOfLine, NotebookCellKind } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
 import { EOL, getCellIdMap, getDefaultLanguage, LineOfCellText, LineOfText, summarize, SummaryCell } from './helpers';
 
-function generateCellMarker(cell: SummaryCell, lineComment: string): string {
+export function generateCellTextMarker(cell: SummaryCell, lineComment: string): string {
 	const cellIdStr = cell.id ? `[id=${cell.id}] ` : '';
 	return `${lineComment}%% vscode.cell ${cellIdStr}[language=${cell.language}]`;
 }
@@ -20,11 +21,14 @@ export function lineMightHaveCellMarker(line: string) {
 }
 
 class AlternativeTextDocument extends AlternativeNotebookDocument {
-	override fromCellPosition(cellIndex: number, position: Position): Position {
-		const cell = this.notebook.cellAt(cellIndex);
+	constructor(text: string, private readonly cellOffsetMap: { offset: number; sourceOffset: number; cell: NotebookCell }[], notebook: NotebookDocument) {
+		super(text, notebook);
+	}
+
+	override fromCellPosition(cell: NotebookCell, position: Position): Position {
 		const cellSummary = summarize(cell);
 		const lineCommentStart = getLineCommentStart(this.notebook);
-		const cellMarker = generateCellMarker(cellSummary, lineCommentStart);
+		const cellMarker = generateCellTextMarker(cellSummary, lineCommentStart);
 
 		const eolLength = cell.document.eol === EndOfLine.LF ? 1 : 2;
 		const blockComment = getBlockComment(this.notebook);
@@ -33,6 +37,16 @@ class AlternativeTextDocument extends AlternativeNotebookDocument {
 		const markdownOffset = cell.kind === NotebookCellKind.Markup ? blockComment[0].length + eolLength : 0;
 		const offset = alternativeContentText.indexOf(cellMarker) + cellMarker.length + eolLength + markdownOffset + offsetInCell;
 		return this.positionAt(offset);
+	}
+
+	override toCellPosition(position: Position): { cell: NotebookCell; position: Position } | undefined {
+		const offset = this.offsetAt(position);
+		const cell = findLast(this.cellOffsetMap, (cell) => cell.sourceOffset <= offset);
+		if (!cell) {
+			return undefined;
+		}
+		const cellPosition = cell.cell.document.positionAt(offset - cell.sourceOffset);
+		return { cell: cell.cell, position: cellPosition };
 	}
 }
 
@@ -67,7 +81,7 @@ export class AlternativeTextNotebookContentProvider extends BaseAlternativeNoteb
 				} else {
 					cellSummary.source = [existingCodeMarkerWithComment];
 				}
-				lines.push(generateAlternativeCellContent(cellSummary, lineCommentStart, blockComment));
+				lines.push(generateAlternativeCellTextContent(cellSummary, lineCommentStart, blockComment).content);
 			} else if (!lines.length || lines[lines.length - 1] !== existingCodeMarkerWithComment) {
 				lines.push(existingCodeMarkerWithComment);
 			}
@@ -172,29 +186,75 @@ export class AlternativeTextNotebookContentProvider extends BaseAlternativeNoteb
 		}
 	}
 
-	public getAlternativeContent(notebook: NotebookDocument): string {
-		const cells = notebook.getCells().map(cell => summarize(cell));
-
+	public override getAlternativeDocumentFromText(text: string, notebook: NotebookDocument): AlternativeNotebookDocument {
 		const blockComment = getBlockComment(notebook);
 		const lineCommentStart = getLineCommentStart(notebook);
-		return cells.map(cell => generateAlternativeCellContent(cell, lineCommentStart, blockComment)).join(EOL);
+		const cellIdMap = getCellIdMap(notebook);
+		const cellOffsetMap: { offset: number; sourceOffset: number; cell: NotebookCell }[] = [];
+
+		// Parse the text to find cell markers and build the offset map
+		const lines = text.split(EOL);
+		let currentOffset = 0;
+
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
+			const isLineCommentForEmptyCellWithoutCellMarker = line.startsWith(`${lineCommentStart}%% [`) && line.trimEnd().endsWith(']');
+			const isLineCommentWithCellMarker = line.startsWith(`${lineCommentStart}%% vscode.cell`);
+
+			if (isLineCommentWithCellMarker || isLineCommentForEmptyCellWithoutCellMarker) {
+				const cellParts = extractCellParts(line, undefined);
+				if (cellParts) {
+					const cell = cellIdMap.get(cellParts.id) || notebook.getCells().find(c =>
+						c.document.languageId === cellParts.language &&
+						!cellOffsetMap.some(entry => entry.cell === c)
+					);
+
+					if (cell) {
+						const offset = currentOffset;
+						// Calculate sourceOffset: skip the cell marker line and any markdown block comment start
+						const eolLength = EOL.length;
+						const isMarkdown = cellParts.language === 'markdown';
+						const sourceOffset = offset + line.length + eolLength + (isMarkdown ? blockComment[0].length + eolLength : 0);
+
+						cellOffsetMap.push({ offset, sourceOffset, cell });
+					}
+				}
+			}
+
+			currentOffset += line.length + EOL.length;
+		}
+
+		return new AlternativeTextDocument(text, cellOffsetMap, notebook);
 	}
 
-	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
-		const text = this.getAlternativeContent(notebook);
-		return new AlternativeTextDocument(text, notebook);
+	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {
+		const cells = notebook.getCells().filter(cell => excludeMarkdownCells ? cell.kind !== NotebookCellKind.Markup : true).map(cell => summarize(cell));
+		const blockComment = getBlockComment(notebook);
+		const lineCommentStart = getLineCommentStart(notebook);
+		const cellContent = cells.map(cell => ({ ...generateAlternativeCellTextContent(cell, lineCommentStart, blockComment), cell: notebook.cellAt(cell.index) }));
+		const content = cellContent.map(cell => cell.content).join(EOL);
+		const cellOffsetMap = cellContent.map(cellContent => {
+			const offset = content.indexOf(cellContent.content);
+			const sourceOffset = offset + cellContent.prefix.length;
+			return { offset, sourceOffset, cell: notebook.cellAt(cellContent.cell.index) };
+		});
+
+		return new AlternativeTextDocument(content, cellOffsetMap, notebook);
 	}
 
 }
 
-function generateAlternativeCellContent(cell: SummaryCell, lineCommentStart: string, blockComment: [string, string]): string {
-	const cellMarker = generateCellMarker(cell, lineCommentStart);
-	return cell.language === 'markdown'
-		? `${cellMarker}${EOL}${blockComment[0]}${EOL}${cell.source.join(EOL)}${EOL}${blockComment[1]}`
-		: `${cellMarker}${EOL}${cell.source.join(EOL)}`;
+function generateAlternativeCellTextContent(cell: SummaryCell, lineCommentStart: string, blockComment: [string, string]): { content: string; prefix: string } {
+	const cellMarker = generateCellTextMarker(cell, lineCommentStart);
+	const src = cell.source.join(EOL);
+	const prefix = cell.language === 'markdown' ? `${cellMarker}${EOL}${blockComment[0]}${EOL}` : `${cellMarker}${EOL}`;
+	const content = cell.language === 'markdown'
+		? `${prefix}${src}${EOL}${blockComment[1]}`
+		: `${prefix}${src}`;
+	return { content, prefix };
 }
 
-function getBlockComment(notebook?: NotebookDocument): [string, string] {
+export function getBlockComment(notebook?: NotebookDocument): [string, string] {
 	if (!notebook) {
 		return ['"""', '"""'];
 	}
@@ -202,7 +262,7 @@ function getBlockComment(notebook?: NotebookDocument): [string, string] {
 	return language.blockComment ?? ['```', '```'];
 }
 
-function getLineCommentStart(notebook?: NotebookDocument): string {
+export function getLineCommentStart(notebook?: NotebookDocument): string {
 	if (!notebook) {
 		return '#';
 	}

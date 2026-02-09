@@ -3,19 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ThinkingData } from '../../thinking/common/thinking';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
-import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
-import { Response } from '../common/fetcherService';
+import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
+import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
+import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, ICopilotToolCallStreamUpdate, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
+import { DestroyableStream, Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
 
 /** Gathers together many chunks of a single completion choice. */
 class APIJsonDataStreaming {
+
+	constructor(public readonly model: string) { }
 
 	get text(): readonly string[] {
 		return this._text;
@@ -67,7 +68,9 @@ class StreamingToolCall {
 
 	constructor() { }
 
-	update(toolCall: IToolCall) {
+	update(toolCall: IToolCall): boolean {
+		let argumentsChanged = false;
+
 		if (toolCall.id) {
 			this.id = toolCall.id;
 		}
@@ -78,7 +81,10 @@ class StreamingToolCall {
 
 		if (toolCall.function?.arguments) {
 			this.arguments += toolCall.function.arguments;
+			argumentsChanged = true;
 		}
+
+		return argumentsChanged;
 	}
 }
 
@@ -101,23 +107,33 @@ class StreamingToolCalls {
 		return this.toolCalls.length > 0;
 	}
 
-	update(choice: ExtendedChoiceJSON) {
+	update(choice: ExtendedChoiceJSON): ICopilotToolCallStreamUpdate[] {
+		const updates: ICopilotToolCallStreamUpdate[] = [];
 		choice.delta?.tool_calls?.forEach(toolCall => {
-			let currentCall = this.toolCalls.at(-1);
-			if (!currentCall || (toolCall.id && currentCall.id !== toolCall.id)) {
+			let currentCall: StreamingToolCall | undefined;
+			if (toolCall.id) {
+				currentCall = this.toolCalls.find(call => call.id === toolCall.id);
+			}
+			if (!currentCall) {
+				currentCall = this.toolCalls.at(-1);
+			}
+			if (!currentCall || (toolCall.id && currentCall.id && currentCall.id !== toolCall.id)) {
 				currentCall = new StreamingToolCall();
 				this.toolCalls.push(currentCall);
 			}
 
-			currentCall.update(toolCall);
+			const argumentsChanged = currentCall.update(toolCall);
+			if (argumentsChanged && currentCall.name) {
+				updates.push({
+					name: currentCall.name,
+					arguments: currentCall.arguments,
+					id: currentCall.id,
+				});
+			}
 		});
+		return updates;
 	}
 }
-
-function isChainOfThoughtChoice(choice: ExtendedChoiceJSON): boolean {
-	return (choice.delta?.cot_id !== undefined || choice.delta?.cot_summary !== undefined || choice.delta?.reasoning_opaque !== undefined || choice.delta?.reasoning_text !== undefined);
-}
-
 
 // Given a string of lines separated by one or more newlines, returns complete
 // lines and any remaining partial line data. Exported for test only.
@@ -168,7 +184,7 @@ interface ChoiceJSON {
  */
 interface ExtendedChoiceJSON extends ChoiceJSON {
 	content_filter_results?: Record<Exclude<FilterReason, FilterReason.Copyright>, { filtered: boolean; severity: string }>;
-	message?: ThinkingData;
+	message?: RawThinkingDelta;
 	delta?: {
 		content: string | null;
 		copilot_annotations?: {
@@ -187,7 +203,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
 		tool_calls?: IToolCall[];
 		role?: string;
 		name?: string;
-	} & ThinkingData;
+	} & RawThinkingDelta;
 }
 
 /**
@@ -196,7 +212,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
  * soon as it's finished.
  */
 export class SSEProcessor {
-	private requestId: RequestId = getRequestId(this.response);
+	private requestId: RequestId = getRequestId(this.response.headers);
 	/**
 	 * A key & value being here means at least one chunk with that choice index
 	 * has been received. A null value means we've already finished the given
@@ -214,8 +230,7 @@ export class SSEProcessor {
 		private readonly telemetryService: ITelemetryService,
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
-		private readonly body: NodeJS.ReadableStream,
-		private readonly thinkingData: IThinkingDataService,
+		private readonly body: DestroyableStream<string>,
 		private readonly cancellationToken?: CancellationToken
 	) { }
 
@@ -224,18 +239,15 @@ export class SSEProcessor {
 		telemetryService: ITelemetryService,
 		expectedNumChoices: number,
 		response: Response,
-		thinkingData: IThinkingDataService,
 		cancellationToken?: CancellationToken
 	) {
-		const body = (await response.body()) as NodeJS.ReadableStream;
-		body.setEncoding('utf8');
+		const body = response.body.pipeThrough(new TextDecoderStream());
 		return new SSEProcessor(
 			logService,
 			telemetryService,
 			expectedNumChoices,
 			response,
 			body,
-			thinkingData,
 			cancellationToken
 		);
 	}
@@ -278,7 +290,7 @@ export class SSEProcessor {
 					}
 				}
 
-				if (this.maybeCancel('after receiving the completion, but maybe before we got the usage')) {
+				if (await this.maybeCancel('after receiving the completion, but maybe before we got the usage')) {
 					return;
 				}
 
@@ -288,8 +300,8 @@ export class SSEProcessor {
 				}
 			}
 		} finally {
-			this.cancel();
-			this.logService.logger.info(
+			await this.cancel();
+			this.logService.info(
 				`request done: requestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
 		}
@@ -300,22 +312,24 @@ export class SSEProcessor {
 		let extraData = '';
 		// This flag is set when at least for one solution we finished early (via `finishedCb`).
 		let hadEarlyFinishedSolution = false;
+
+		// The platform agent can return a 'function_call' finish_reason, which isn't a real function call
+		// but is echoing internal function call messages back to us. So don't treat them as real function calls
+		// if we received more data after that
+		let allowCompletingSolution = true;
+		let thinkingFound = false;
+
 		// Iterate over arbitrarily sized chunks coming in from the network.
 		for await (const chunk of this.body) {
-			if (this.maybeCancel('after awaiting body chunk')) {
+			if (await this.maybeCancel('after awaiting body chunk')) {
 				return;
 			}
 
-			// this.logService.public.debug(chunk.toString());
+			// this.logService.debug(chunk.toString());
 			const [dataLines, remainder] = splitChunk(extraData + chunk.toString());
 			extraData = remainder;
 
 			// Each dataLine is complete since we've seen at least one \n after it
-
-			// The platform agent can return a 'function_call' finish_reason, which isn't a real function call
-			// but is echoing internal function call messages back to us. So don't treat them as real function calls
-			// if we received more data after that
-			let allowCompletingSolution = true;
 
 			for (const dataLine of dataLines) {
 				// Lines which start with a `:` are SSE Comments per the spec and can be ignored
@@ -331,6 +345,7 @@ export class SSEProcessor {
 				// TODO @lramos15 - This should not be an ugly inlined type like this
 				let json: {
 					choices: ExtendedChoiceJSON[] | undefined | null;
+					model: string;
 					error?: APIErrorResponse;
 					copilot_references?: any;
 					copilot_confirmation?: any;
@@ -340,7 +355,7 @@ export class SSEProcessor {
 				try {
 					json = JSON.parse(lineWithoutData);
 				} catch (e) {
-					this.logService.logger.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
+					this.logService.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:`, dataLine);
 					continue;
 				}
@@ -359,19 +374,19 @@ export class SSEProcessor {
 					// Currently there are messages with a null 'choices' that include copilot_references- ignore these
 					if (!json.copilot_references && !json.copilot_confirmation) {
 						if (json.error !== undefined) {
-							this.logService.logger.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
+							this.logService.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Error in response for request id ${this.requestId.headerRequestId}:`, json.error.message);
 							// Encountered an error mid stream we immediately yield as the response is not usable.
 							yield {
 								index: 0,
 								finishOffset: undefined,
-								solution: new APIJsonDataStreaming(),
+								solution: new APIJsonDataStreaming(json.model || ''),
 								reason: FinishedCompletionReason.ServerError,
 								error: json.error,
 								requestId: this.requestId,
 							};
 						} else {
-							this.logService.logger.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
+							this.logService.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 						}
 					}
@@ -390,10 +405,9 @@ export class SSEProcessor {
 
 				if (this.requestId.created === 0) {
 					// Would only be 0 if we're the first actual response chunk
-					this.requestId = getRequestId(this.response, json);
+					this.requestId = getRequestId(this.response.headers, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
-						this.logService.logger.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
-						sendCommunicationErrorTelemetry(this.telemetryService, `Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)}`, this.requestId);
+						this.requestId.created = Math.floor(Date.now() / 1000);
 					}
 				}
 
@@ -402,28 +416,27 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
-					if (isChainOfThoughtChoice(choice)) {
-						const toolCalls = this.toolCalls.getToolCalls();
-						if (toolCalls.length > 0) {
-							this.thinkingData.update(choice, toolCalls[0].id);
-						} else {
-							this.thinkingData.update(choice);
-						}
-						continue;
-					}
+
+					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
+
+					// Once we observe any thinking text or an id in this batch, keep the flag true
+					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
 
 					if (!(choice.index in this.solutions)) {
-						this.solutions[choice.index] = new APIJsonDataStreaming();
+						this.solutions[choice.index] = new APIJsonDataStreaming(json.model);
 					}
 
 					const solution = this.solutions[choice.index];
 					if (solution === null) {
+						if (thinkingDelta) {
+							await finishedCb('', choice.index, { text: '', thinking: thinkingDelta });
+						}
 						continue; // already finished
 					}
 
 					let finishOffset: number | undefined;
 
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[] }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; toolCallStreamUpdates?: ICopilotToolCallStreamUpdate[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingDelta }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -440,27 +453,40 @@ export class SSEProcessor {
 							ipCitations: delta?.ipCodeCitations,
 							copilotReferences: delta?.references,
 							copilotToolCalls: delta?.toolCalls,
+							copilotToolCallStreamUpdates: delta?.toolCallStreamUpdates,
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
-							copilotErrors: delta?.errors
+							copilotErrors: delta?.errors,
+							thinking: thinkingDelta ?? delta?.thinking,
 						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
 						}
-						return this.maybeCancel('after awaiting finishedCb');
+						return await this.maybeCancel('after awaiting finishedCb');
 					};
 
 					let handled = true;
 					if (choice.delta?.tool_calls) {
-						if (!this.toolCalls.hasToolCalls() && solution.text.length > 0) {
-							const firstToolName = choice.delta.tool_calls.at(0)?.function?.name;
+						const hadExistingToolCalls = this.toolCalls.hasToolCalls();
+						if (!hadExistingToolCalls) {
+							const firstToolCall = choice.delta.tool_calls.at(0);
+							const firstToolName = firstToolCall?.function?.name;
 							if (firstToolName) {
-								// Flush the linkifier stream. See #16465
-								solution.append({ index: 0, delta: { content: ' ' } });
-								await emitSolution({ beginToolCalls: [{ name: firstToolName }] });
+								if (solution.text.length) {
+									// Flush the linkifier stream. See #16465
+									solution.append({ index: 0, delta: { content: ' ' } });
+								}
+								if (await emitSolution({ beginToolCalls: [{ name: firstToolName, id: firstToolCall?.id }] })) {
+									continue;
+								}
 							}
 						}
-						this.toolCalls.update(choice);
+						const toolCallStreamUpdates = this.toolCalls.update(choice);
+						if (toolCallStreamUpdates.length) {
+							if (await emitSolution({ toolCallStreamUpdates })) {
+								continue;
+							}
+						}
 					} else if (choice.delta?.copilot_annotations?.CodeVulnerability || choice.delta?.copilot_annotations?.IPCodeCitations) {
 						if (await emitSolution()) {
 							continue;
@@ -482,13 +508,13 @@ export class SSEProcessor {
 									}
 								}
 							} catch (ex) {
-								this.logService.logger.error(`Error parsing function references: ${JSON.stringify(ex)}`);
+								this.logService.error(`Error parsing function references: ${JSON.stringify(ex)}`);
 							}
 						}
 					} else if (choice.delta?.function_call && (choice.delta.function_call.name || choice.delta.function_call.arguments)) {
 						allowCompletingSolution = false;
 						this.functionCallName ??= choice.delta.function_call.name;
-						this.functionCalls[this.functionCallName] ??= new APIJsonDataStreaming();
+						this.functionCalls[this.functionCallName] ??= new APIJsonDataStreaming(json.model);
 						const functionCall = this.functionCalls[this.functionCallName];
 						functionCall!.append(choice);
 					} else if ((choice.finish_reason === FinishedCompletionReason.FunctionCall || choice.finish_reason === FinishedCompletionReason.Stop) && this.functionCallName) {
@@ -501,7 +527,7 @@ export class SSEProcessor {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 
 						this.functionCalls[this.functionCallName] = null;
@@ -518,12 +544,13 @@ export class SSEProcessor {
 						handled = true;
 						const toolCalls = this.toolCalls.getToolCalls();
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
+						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: { toolId } } : undefined })) {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 					}
 
@@ -555,7 +582,7 @@ export class SSEProcessor {
 						index: choice.index,
 					};
 
-					if (this.maybeCancel('after yielding finished choice')) {
+					if (await this.maybeCancel('after yielding finished choice')) {
 						return;
 					}
 
@@ -581,7 +608,7 @@ export class SSEProcessor {
 				index: solutionIndex,
 			};
 
-			if (this.maybeCancel('after yielding after iteration done')) {
+			if (await this.maybeCancel('after yielding after iteration done')) {
 				return;
 			}
 		}
@@ -597,11 +624,11 @@ export class SSEProcessor {
 			try {
 				const extraDataJson = JSON.parse(extraData);
 				if (extraDataJson.error !== undefined) {
-					this.logService.logger.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
+					this.logService.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error in response: ${extraDataJson.error.message}`, extraDataJson.error);
 				}
 			} catch (e) {
-				this.logService.logger.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
+				this.logService.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 				sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 			}
 		}
@@ -632,7 +659,7 @@ export class SSEProcessor {
 				index: solutionIndex,
 			};
 
-			if (this.maybeCancel('after yielding on DONE')) {
+			if (await this.maybeCancel('after yielding on DONE')) {
 				return;
 			}
 		}
@@ -642,17 +669,17 @@ export class SSEProcessor {
 	 * Returns whether the cancellation token was cancelled and closes the
 	 * stream if it was.
 	 */
-	private maybeCancel(description: string) {
+	private async maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
-			this.logService.logger.debug('Cancelled: ' + description);
-			this.cancel();
+			this.logService.debug('Cancelled: ' + description);
+			await this.cancel();
 			return true;
 		}
 		return false;
 	}
 
-	private cancel() {
-		(this.body as ClientHttp2Stream).destroy();
+	private async cancel() {
+		await this.response.body.destroy();
 	}
 
 	private logChoice(choice: ExtendedChoiceJSON) {
@@ -660,7 +687,7 @@ export class SSEProcessor {
 		delete choiceCopy.index;
 		delete choiceCopy.content_filter_results;
 		delete choiceCopy.content_filter_offsets;
-		this.logService.logger.trace(`choice ${JSON.stringify(choiceCopy)}`);
+		this.logService.trace(`choice ${JSON.stringify(choiceCopy)}`);
 	}
 }
 

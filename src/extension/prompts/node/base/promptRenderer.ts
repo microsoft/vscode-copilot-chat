@@ -5,9 +5,9 @@
 
 import { BasePromptElementProps, PromptRenderer as BasePromptRenderer, HTMLTracer, ITokenizer, JSONTree, MetadataMap, OutputMode, QueueItem, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import type { ChatResponsePart, ChatResponseProgressPart, LanguageModelToolTokenizationOptions, Progress } from 'vscode';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
@@ -66,7 +66,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 		return hydratedInstaService.invokeFunction((accessor) => {
 			const tokenizerProvider = accessor.get(ITokenizerProvider);
-			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(IAuthenticationService), accessor.get(ILogService));
+			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(ILogService), accessor.get(IConfigurationService));
 
 			const visualizations = RendererVisualizations.getIfVisualizationTestIsRunning();
 			if (visualizations) {
@@ -84,15 +84,13 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		props: P,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@IAuthenticationService authenticationService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		const tokenizer = tokenizerProvider.acquireTokenizer(endpoint);
 		super(endpoint, ctor, props, tokenizer);
 
-		const token = authenticationService.copilotToken;
-		const isTeamMember = !!(token?.isInternal && token.isVscodeTeamMember);
-		if (isTeamMember) {
+		if (configurationService.getConfig(ConfigKey.TeamInternal.EnablePromptRendererTracing)) {
 			this.ctorName = ctor.name || '<anonymous>';
 			this.tracer = new HTMLTracer();
 		}
@@ -140,7 +138,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		const validateLocation = (value: Uri | Location) => {
 			const uri = isLocation(value) ? value.uri : value;
 			if (!URI.isUri(uri)) {
-				this._logService.logger.warn(`Invalid PromptReference, uri not an instance of URI: ${uri}. Try to find the code that is creating this reference and fix it.`);
+				this._logService.warn(`Invalid PromptReference, uri not an instance of URI: ${uri}. Try to find the code that is creating this reference and fix it.`);
 				return false;
 			}
 			return true;
@@ -172,11 +170,6 @@ export async function renderPromptElement<P extends BasePromptElementProps>(
 }
 
 // The below all exists to wrap `renderElementJSON` to call our instantiation service
-
-export interface IPromptTsxBudgetInformation {
-	tokenBudget: number;
-	countTokens(text: string, token?: CancellationToken): Thenable<number>;
-}
 
 class PromptRendererForJSON<P extends BasePromptElementProps> extends BasePromptRenderer<P, OutputMode.Raw> {
 	constructor(

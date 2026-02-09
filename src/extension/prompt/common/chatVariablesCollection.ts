@@ -15,8 +15,32 @@ export interface PromptVariable {
 }
 
 export class ChatVariablesCollection {
-
 	private _variables: PromptVariable[] | null = null;
+
+	static merge(...collections: ChatVariablesCollection[]): ChatVariablesCollection {
+		const allReferences: vscode.ChatPromptReference[] = [];
+		const seen = new Set<string>();
+		for (const collection of collections) {
+			for (const variable of collection) {
+				const ref = variable.reference;
+
+				// simple dedupe
+				let key: string;
+				try {
+					key = JSON.stringify(ref.value);
+				} catch {
+					key = ref.id + String(ref.value);
+				}
+
+				if (!seen.has(key)) {
+					seen.add(key);
+					allReferences.push(ref);
+				}
+			}
+		}
+
+		return new ChatVariablesCollection(allReferences);
+	}
 
 	constructor(
 		private readonly _source: readonly vscode.ChatPromptReference[] = []
@@ -84,3 +108,20 @@ export class ChatVariablesCollection {
 export function isPromptInstruction(variable: PromptVariable): boolean {
 	return variable.reference.id.startsWith('vscode.prompt.instructions');
 }
+
+/**
+ * Check if provided variable is a "prompt instruction text" (index file).
+ */
+export function isPromptInstructionText(variable: PromptVariable): variable is PromptVariable & { value: string } {
+	return variable.reference.id === 'vscode.prompt.instructions.text';
+}
+
+
+/**
+ * Check if provided variable is a "prompt file".
+ */
+export function isPromptFile(variable: PromptVariable): boolean {
+	return variable.reference.id.startsWith(PromptFileIdPrefix);
+}
+
+export const PromptFileIdPrefix = 'vscode.prompt.file';

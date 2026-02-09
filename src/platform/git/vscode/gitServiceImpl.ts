@@ -9,17 +9,18 @@ import { Uri } from 'vscode';
 import { BatchedProcessor } from '../../../util/common/async';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
-import { cancelOnDispose } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken, cancelOnDispose } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, IObservable, observableFromEvent, observableSignalFromEvent, observableValue, waitForState } from '../../../util/vs/base/common/observableInternal';
 import * as path from '../../../util/vs/base/common/path';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
 import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
-import { API, APIState, Change, Commit, LogOptions, Repository } from './git';
+import { API, APIState, Change, Commit, CommitOptions, CommitShortStat, DiffChange, LogOptions, Ref, RefQuery, Repository, RepositoryAccessDetails } from './git';
 
 export class GitServiceImpl extends Disposable implements IGitService {
 
@@ -34,7 +35,6 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	private _onDidFinishInitialRepositoryDiscovery = new Emitter<void>();
 	readonly onDidFinishInitialization: Event<void> = this._onDidFinishInitialRepositoryDiscovery.event;
 	private _isInitialized = observableValue(this, false);
-
 	constructor(
 		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
 		@ILogService private readonly logService: ILogService
@@ -91,7 +91,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			this._isInitialized.set(true, undefined);
 			this._onDidFinishInitialRepositoryDiscovery.fire();
 
-			this.logService.logger.trace(`[GitServiceImpl] Initial repository discovery finished: ${this.repositories.length} repositories found.`);
+			this.logService.trace(`[GitServiceImpl] Initial repository discovery finished: ${this.repositories.length} repositories found.`);
 		}));
 	}
 
@@ -99,7 +99,15 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return this._isInitialized.get();
 	}
 
-	async getRepository(uri: URI): Promise<RepoContext | undefined> {
+	public getRecentRepositories(): Iterable<RepositoryAccessDetails> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		if (!gitAPI) {
+			return [];
+		}
+		return gitAPI.recentRepositories;
+	}
+
+	async getRepository(uri: URI, forceOpen = true): Promise<RepoContext | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {
 			return undefined;
@@ -110,11 +118,20 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			uri = vscode.Uri.parse(uri.toString());
 		}
 
+		// Ensure that the initial
+		// repository discovery is
+		// finished
+		await this.initialize();
+
 		// Query opened repositories
 		let repository = gitAPI.getRepository(uri);
 		if (repository) {
 			await this.waitForRepositoryState(repository);
 			return GitServiceImpl.repoToRepoContext(repository);
+		}
+
+		if (!forceOpen) {
+			return undefined;
 		}
 
 		// Open repository
@@ -128,7 +145,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	async getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
-		this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] URI: ${uri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] URI: ${uri.toString()}`);
 
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {
@@ -139,15 +156,13 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const repository = gitAPI.getRepository(uri);
 		if (repository) {
 			await this.waitForRepositoryState(repository);
-			const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
 
-			const remotes = repositoryContext ?
-				{
-					rootUri: repositoryContext.rootUri,
-					remoteFetchUrls: repositoryContext.remoteFetchUrls
-				} : undefined;
+			const remotes = {
+				rootUri: repository.rootUri,
+				remoteFetchUrls: repository.state.remotes.map(r => r.fetchUrl),
+			};
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (open repository): ${JSON.stringify(remotes)}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (open repository): ${JSON.stringify(remotes)}`);
 			return remotes;
 		}
 
@@ -160,11 +175,11 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			// Get repository root
 			const repositoryRoot = await gitAPI.getRepositoryRoot(uri);
 			if (!repositoryRoot) {
-				this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] No repository root found`);
+				this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] No repository root found`);
 				return undefined;
 			}
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Repository root: ${repositoryRoot.toString()}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Repository root: ${repositoryRoot.toString()}`);
 			const buffer = await vscode.workspace.fs.readFile(URI.file(path.join(repositoryRoot.fsPath, '.git', 'config')));
 
 			const remotes = {
@@ -172,12 +187,18 @@ export class GitServiceImpl extends Disposable implements IGitService {
 				remoteFetchUrls: parseGitRemotes(buffer.toString()).map(remote => remote.fetchUrl)
 			};
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (.git/config): ${JSON.stringify(remotes)}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (.git/config): ${JSON.stringify(remotes)}`);
 			return remotes;
 		} catch (error) {
-			this.logService.logger.error(`[GitServiceImpl][getRepositoryFetchUrls] Failed to read remotes from .git/config: ${error.message}`);
+			this.logService.error(`[GitServiceImpl][getRepositoryFetchUrls] Failed to read remotes from .git/config: ${error.message}`);
 			return undefined;
 		}
+	}
+
+	async add(uri: URI, paths: string[]): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		await repository?.add(paths);
 	}
 
 	async log(uri: vscode.Uri, options?: LogOptions): Promise<Commit[] | undefined> {
@@ -198,10 +219,31 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.diffBetween(ref1, ref2);
 	}
 
+	async diffBetweenPatch(uri: vscode.Uri, ref1: string, ref2: string, path?: string): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return repository?.diffBetweenPatch(ref1, ref2, path);
+	}
+
+	async diffBetweenWithStats(uri: vscode.Uri, ref1: string, ref2: string, path?: string): Promise<DiffChange[] | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.diffBetweenWithStats(ref1, ref2, path);
+	}
+
 	async diffWith(uri: vscode.Uri, ref: string): Promise<Change[] | undefined> {
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(uri);
 		return repository?.diffWith(ref);
+	}
+
+	async diffIndexWithHEADShortStats(uri: URI): Promise<CommitShortStat | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		if (!repository?.diffIndexWithHEADShortStats) {
+			return undefined;
+		}
+		return await repository?.diffIndexWithHEADShortStats(uri.fsPath);
 	}
 
 	async fetch(uri: vscode.Uri, remote?: string, ref?: string, depth?: number): Promise<void> {
@@ -210,16 +252,66 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.fetch(remote, ref, depth);
 	}
 
+	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return repository?.getMergeBase(ref1, ref2);
+	}
+
+	async commit(uri: URI, message: string, opts?: CommitOptions): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		if (!repository) {
+			return;
+		}
+
+		await repository.commit(message, opts);
+	}
+
+	async applyPatch(uri: URI, patch: string): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.apply(patch, false);
+	}
+
+	async createWorktree(uri: URI, options?: { path?: string; commitish?: string; branch?: string }): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.createWorktree(options);
+	}
+
+	async deleteWorktree(uri: URI, path: string, options?: { force?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.deleteWorktree(path, options);
+	}
+
+	async migrateChanges(uri: URI, sourceRepositoryUri: URI, options?: { confirmation?: boolean; deleteFromSource?: boolean; untracked?: boolean }): Promise<void> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.migrateChanges(sourceRepositoryUri.fsPath, options);
+	}
+
+	async getRefs(uri: URI, query: RefQuery, cancellationToken?: CancellationToken): Promise<Ref[]> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return await repository?.getRefs(query, cancellationToken) ?? [];
+	}
+
 	async initialize(): Promise<void> {
 		if (this._isInitialized.get()) {
 			return;
 		}
 
 		await waitForState(this._isInitialized, state => state, undefined, cancelOnDispose(this._store));
+
+		if (this.repositories.length > 0) {
+			await waitForState(this.activeRepository, state => state !== undefined, undefined, cancelOnDispose(this._store));
+		}
 	}
 
 	private async doOpenRepository(repository: Repository): Promise<void> {
-		this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Repository: ${repository.rootUri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][doOpenRepository] Repository: ${repository.rootUri.toString()}`);
 
 		// The `gitAPI.onDidOpenRepository` event is fired before `git status` completes and the repository
 		// state is initialized. `IGitService.onDidOpenRepository` will only fire after the repository state
@@ -227,7 +319,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const HEAD = observableFromEvent(this, repository.state.onDidChange as Event<void>, () => repository.state.HEAD);
 		await waitForState(HEAD, state => state !== undefined, undefined, cancelOnDispose(this._store));
 
-		this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Repository initialized: ${JSON.stringify(HEAD.get())}`);
+		this.logService.trace(`[GitServiceImpl][doOpenRepository] Repository initialized: ${JSON.stringify(HEAD.get())}`);
 
 		// Active repository
 		const selectedObs = observableFromEvent(this,
@@ -238,13 +330,14 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		this._register(autorun(reader => {
 			onDidChangeStateSignal.read(reader);
 			const selected = selectedObs.read(reader);
+
 			const activeRepository = this.activeRepository.get();
-			if (activeRepository && !selected) {
+			if (activeRepository && !selected && !isEqual(activeRepository.rootUri, repository.rootUri)) {
 				return;
 			}
 
 			const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
-			this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Active repository: ${JSON.stringify(repositoryContext)}`);
+			this.logService.trace(`[GitServiceImpl][doOpenRepository] Active repository: ${JSON.stringify(repositoryContext)}`);
 			this.activeRepository.set(repositoryContext, undefined);
 		}));
 
@@ -256,7 +349,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	private doCloseRepository(repository: Repository): void {
-		this.logService.logger.trace(`[GitServiceImpl][doCloseRepository] Repository: ${repository.rootUri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][doCloseRepository] Repository: ${repository.rootUri.toString()}`);
 
 		const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
 		if (repositoryContext) {
@@ -265,10 +358,16 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	private async waitForRepositoryState(repository: Repository): Promise<void> {
+		if (repository.state.HEAD) {
+			return;
+		}
+
 		const HEAD = observableFromEvent(this, repository.state.onDidChange as Event<void>, () => repository.state.HEAD);
 		await waitForState(HEAD, state => state !== undefined, undefined, cancelOnDispose(this._store));
 	}
 
+	private static repoToRepoContext(repo: Repository): RepoContext;
+	private static repoToRepoContext(repo: Repository | undefined | null): RepoContext | undefined
 	private static repoToRepoContext(repo: Repository | undefined | null): RepoContext | undefined {
 		if (!repo) {
 			return undefined;
@@ -291,6 +390,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 
 export class RepoContextImpl implements RepoContext {
 	public readonly rootUri = this._repo.rootUri;
+	public readonly kind = this._repo.kind;
 	public readonly headBranchName = this._repo.state.HEAD?.name;
 	public readonly headCommitHash = this._repo.state.HEAD?.commit;
 	public readonly upstreamBranchName = this._repo.state.HEAD?.upstream?.name;
@@ -298,6 +398,7 @@ export class RepoContextImpl implements RepoContext {
 	public readonly isRebasing = this._repo.state.rebaseCommit !== null;
 	public readonly remotes = this._repo.state.remotes.map(r => r.name);
 	public readonly remoteFetchUrls = this._repo.state.remotes.map(r => r.fetchUrl);
+	public readonly worktrees = this._repo.state.worktrees;
 
 	public readonly changes = {
 		mergeChanges: this._repo.state.mergeChanges,

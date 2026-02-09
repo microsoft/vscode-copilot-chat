@@ -77,7 +77,7 @@ export class EditLogService implements IEditLogService {
 	) { }
 
 	private _isEnabled() {
-		return this._configurationService.getConfig(ConfigKey.Internal.EditRecordingEnabled);
+		return this._configurationService.getConfig(ConfigKey.Advanced.EditRecordingEnabled);
 	}
 
 	logEditChatRequest(turnId: string, prompt: ReadonlyArray<Raw.ChatMessage>, response: string): void {
@@ -121,7 +121,7 @@ export class EditLogService implements IEditLogService {
 		}
 		if (edit.edits.length) {
 			const path = URI.joinPath(this.LOG_DIR, `${turnId}.json`);
-			this._logService.logger.debug(`Edit recording: ${path.toString()}`);
+			this._logService.debug(`Edit recording: ${path.toString()}`);
 			await this._fileSystemService.writeFile(path, VSBuffer.fromString(JSON.stringify(edit, undefined, 4)).buffer);
 		}
 		this._edits.delete(turnId);

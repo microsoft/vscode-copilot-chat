@@ -8,16 +8,18 @@ import assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { CopilotToken } from '../../../../platform/authentication/common/copilotToken';
+import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
+import { setCopilotToken, StaticGitHubAuthenticationService } from '../../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { FailingDevContainerConfigurationService, IDevContainerConfigurationService } from '../../../../platform/devcontainer/common/devContainerConfigurationService';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../../platform/embeddings/common/vscodeIndex';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService, NoopGitCommitMessageService } from '../../../../platform/git/common/gitCommitMessageService';
 import { ISettingsEditorSearchService, NoopSettingsEditorSearchService } from '../../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { setCopilotToken } from '../../../../platform/test/node/testAuthenticationService';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IMergeConflictService } from '../../../git/common/mergeConflictService';
+import { TestMergeConflictServiceImpl } from '../../../git/vscode/mergeConflictServiceImpl';
 import { IIntentService, IntentService } from '../../../intents/node/intentService';
 import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerImpl } from '../../../intents/node/newIntent';
 import { createExtensionTestingServices } from '../../../test/vscode-node/services';
@@ -28,7 +30,7 @@ suite('Conversation feature test suite', function () {
 	let instaService: IInstantiationService;
 	let sandbox: sinon.SinonSandbox;
 
-	function createAccessor(vscodeExtensionContext?: IVSCodeExtensionContext) {
+	function createAccessor() {
 		const testingServiceCollection = createExtensionTestingServices();
 		testingServiceCollection.define(ICombinedEmbeddingIndex, new SyncDescriptor(VSCodeCombinedIndexImpl, [/*useRemoteCache*/ false]));
 		testingServiceCollection.define(INewWorkspacePreviewContentManager, new SyncDescriptor(NewWorkspacePreviewContentManagerImpl));
@@ -36,9 +38,9 @@ suite('Conversation feature test suite', function () {
 		testingServiceCollection.define(IDevContainerConfigurationService, new FailingDevContainerConfigurationService());
 		testingServiceCollection.define(IIntentService, new SyncDescriptor(IntentService));
 		testingServiceCollection.define(ISettingsEditorSearchService, new SyncDescriptor(NoopSettingsEditorSearchService));
-		if (vscodeExtensionContext) {
-			testingServiceCollection.define(IVSCodeExtensionContext, vscodeExtensionContext);
-		}
+		testingServiceCollection.define(IMergeConflictService, new SyncDescriptor(TestMergeConflictServiceImpl));
+		// We don't need auth in these tests
+		testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [() => undefined]));
 
 		accessor = testingServiceCollection.createTestingAccessor();
 		instaService = accessor.get(IInstantiationService);
@@ -57,7 +59,7 @@ suite('Conversation feature test suite', function () {
 		extensionContext.subscriptions.forEach(sub => sub.dispose());
 	});
 
-	test.skip("If the 'interactive' namespace is not available, the feature is not enabled and not activated", function () {
+	test.skip(`If the 'interactive' namespace is not available, the feature is not enabled and not activated`, function () {
 		// TODO: The vscode module cannot be stubbed
 		sandbox.stub(vscode, 'interactive').value(undefined);
 
@@ -70,7 +72,7 @@ suite('Conversation feature test suite', function () {
 		}
 	});
 
-	test("If the 'interactive' version does not match, the feature is not enabled and not activated", function () {
+	test(`If the 'interactive' version does not match, the feature is not enabled and not activated`, function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
 			assert.deepStrictEqual(conversationFeature.enabled, false);
@@ -81,16 +83,9 @@ suite('Conversation feature test suite', function () {
 	});
 
 	test('The feature is enabled and activated in test mode', function () {
-		createAccessor({
-			_serviceBrand: undefined,
-			extension: { id: 'GitHub.copilot-chat' },
-			extensionMode: vscode.ExtensionMode.Test,
-			subscriptions: [],
-		} as unknown as IVSCodeExtensionContext);
-
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
+			const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token', username: 'fake', copilot_plan: 'unknown' }));
 			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
 
 			assert.deepStrictEqual(conversationFeature.enabled, true);
@@ -103,22 +98,10 @@ suite('Conversation feature test suite', function () {
 	test('If the token envelope setting is set to true, the feature should be enabled', function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
+			const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token', username: 'fake', copilot_plan: 'unknown' }));
 			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
 
 			assert.deepStrictEqual(conversationFeature.enabled, true);
-		} finally {
-			conversationFeature.dispose();
-		}
-	});
-
-	test('If the value returned by the token envelope is set to false, the feature is not enabled', function () {
-		const conversationFeature = instaService.createInstance(ConversationFeature);
-		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: false, copilot_plan: 'unknown' });
-			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
-
-			assert.deepStrictEqual(conversationFeature.enabled, false);
 		} finally {
 			conversationFeature.dispose();
 		}
@@ -127,53 +110,10 @@ suite('Conversation feature test suite', function () {
 	test('The feature should be activated when it becomes enabled', function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
+			const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token', username: 'fake', copilot_plan: 'unknown' }));
 			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
 			assert.deepStrictEqual(conversationFeature.enabled, true);
 			assert.deepStrictEqual(conversationFeature.activated, true);
-		} finally {
-			conversationFeature.dispose();
-		}
-	});
-
-	test('The feature should listen for token changes', function () {
-		const conversationFeature = instaService.createInstance(ConversationFeature);
-		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
-			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
-
-			assert.deepStrictEqual(conversationFeature.enabled, true);
-			assert.deepStrictEqual(conversationFeature.activated, true);
-
-			const noChatCopilotToken = new CopilotToken({ token: 'token2', expires_at: 0, refresh_in: 0, username: 'fake2', isVscodeTeamMember: false, chat_enabled: false, copilot_plan: 'unknown' });
-			setCopilotToken(accessor.get(IAuthenticationService), noChatCopilotToken);
-
-			assert.deepStrictEqual(conversationFeature.enabled, false);
-		} finally {
-			conversationFeature.dispose();
-		}
-	});
-
-	test('Feature activation should only happen once', function () {
-		if (!vscode.chat.createChatParticipant) {
-			this.skip();
-		}
-
-		const conversationFeature = instaService.createInstance(ConversationFeature);
-		try {
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
-			const noChatCopilotToken = new CopilotToken({ token: 'token2', expires_at: 0, refresh_in: 0, username: 'fake2', isVscodeTeamMember: false, chat_enabled: false, copilot_plan: 'unknown' });
-
-			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
-			assert.deepStrictEqual(conversationFeature.enabled, true);
-			assert.deepStrictEqual(conversationFeature.activated, true);
-
-			setCopilotToken(accessor.get(IAuthenticationService), noChatCopilotToken);
-			assert.deepStrictEqual(conversationFeature.enabled, false);
-			assert.deepStrictEqual(conversationFeature.activated, true);
-
-			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
-			assert.deepStrictEqual(conversationFeature.enabled, true);
 		} finally {
 			conversationFeature.dispose();
 		}
@@ -187,7 +127,7 @@ suite('Conversation feature test suite', function () {
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
 
-			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });
+			const copilotToken = new CopilotToken(createTestExtendedTokenInfo({ token: 'token', username: 'fake', copilot_plan: 'unknown' }));
 			setCopilotToken(accessor.get(IAuthenticationService), copilotToken);
 
 			assert.deepStrictEqual(conversationFeature.activated, true);

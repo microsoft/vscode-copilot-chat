@@ -10,7 +10,7 @@ import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDo
 import { AbstractSearchService } from '../../../../platform/search/common/searchService';
 import { ITabsAndEditorsService, TabChangeEvent, TabInfo } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import * as glob from '../../../../util/common/glob';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
 import { normalize } from '../../../../util/vs/base/common/path';
@@ -212,7 +212,7 @@ suite.skipIf(process.platform === 'win32')('TestFileFinder', function () {
 	}
 
 	function createTextDocument(uri: URI) {
-		const sourceDocumentData = ExtHostDocumentData.create(uri, '', suffix2Language[basename(uri).substring(1)] ?? '');
+		const sourceDocumentData = createTextDocumentData(uri, '', suffix2Language[basename(uri).substring(1)] ?? '');
 		return TextDocumentSnapshot.create(sourceDocumentData.document);
 	}
 

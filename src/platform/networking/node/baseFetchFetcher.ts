@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
-import { ReadableStream } from 'stream/web';
+
 import { IEnvService } from '../../env/common/envService';
-import { FetchOptions, IAbortController, Response } from '../common/fetcherService';
+import { collectSingleLineErrorMessage } from '../../log/common/logService';
+import { FetcherId, FetchOptions, IAbortController, PaginationOptions, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
 
 export abstract class BaseFetchFetcher implements IFetcher {
@@ -14,7 +14,8 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	constructor(
 		private readonly _fetchImpl: typeof fetch | typeof import('electron').net.fetch,
 		private readonly _envService: IEnvService,
-		private readonly userAgentLibraryUpdate?: (original: string) => string,
+		private readonly userAgentLibraryUpdate: ((original: string) => string) | undefined,
+		private readonly _fetcherId: FetcherId,
 	) {
 	}
 
@@ -22,7 +23,9 @@ export abstract class BaseFetchFetcher implements IFetcher {
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
-		headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		if (!headers['User-Agent']) {
+			headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
+		}
 		headers[userAgentLibraryHeader] = this.userAgentLibraryUpdate ? this.userAgentLibraryUpdate(this.getUserAgentLibrary()) : this.getUserAgentLibrary();
 
 		let body = options.body;
@@ -35,8 +38,8 @@ export abstract class BaseFetchFetcher implements IFetcher {
 		}
 
 		const method = options.method || 'GET';
-		if (method !== 'GET' && method !== 'POST') {
-			throw new Error(`Illegal arguments! 'method' must be either 'GET' or 'POST'!`);
+		if (method !== 'GET' && method !== 'POST' && method !== 'PUT') {
+			throw new Error(`Illegal arguments! 'method' must be 'GET', 'POST', or 'PUT'!`);
 		}
 
 		const signal = options.signal ?? new AbortController().signal;
@@ -44,26 +47,48 @@ export abstract class BaseFetchFetcher implements IFetcher {
 			throw new Error(`Illegal arguments! 'signal' must be an instance of AbortSignal!`);
 		}
 
-		return this._fetch(url, method, headers, body, signal);
+		try {
+			return await this._fetch(url, method, headers, body, signal);
+		} catch (e) {
+			e.fetcherId = this._fetcherId;
+			throw e;
+		}
 	}
 
-	private async _fetch(url: string, method: 'GET' | 'POST', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
+	async fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]> {
+		const items: T[] = [];
+		const pageSize = options.pageSize ?? 20;
+		let page = options.startPage ?? 1;
+		let hasNextPage = false;
+
+		do {
+			const url = options.buildUrl(baseUrl, pageSize, page);
+			const response = await this.fetch(url, options);
+
+			if (!response.ok) {
+				// Return what we've collected so far if request fails
+				return items;
+			}
+
+			const data = await response.json();
+			const pageItems = options.getItemsFromResponse(data);
+			items.push(...pageItems);
+
+			hasNextPage = pageItems.length === pageSize;
+			page++;
+		} while (hasNextPage);
+
+		return items;
+	}
+
+	private async _fetch(url: string, method: 'GET' | 'POST' | 'PUT', headers: { [name: string]: string }, body: string | undefined, signal: AbortSignal): Promise<Response> {
 		const resp = await this._fetchImpl(url, { method, headers, body, signal });
 		return new Response(
 			resp.status,
 			resp.statusText,
 			resp.headers,
-			() => resp.text(),
-			() => resp.json(),
-			async () => {
-				if (!resp.body) {
-					return Readable.from([]);
-				}
-				// Careful here! The ReadableStream from undici cannot be passed in
-				// to nodejs utility methods because it confuses them so we need
-				// to create a Readable that is driven manually.
-				return convertReadableStreamToReadable(resp.body);
-			}
+			resp.body,
+			this._fetcherId
 		);
 	}
 
@@ -75,52 +100,11 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	}
 	isAbortError(e: any): boolean {
 		// see https://github.com/nodejs/node/issues/38361#issuecomment-1683839467
-		return e && e.name === "AbortError";
+		return e && e.name === 'AbortError';
 	}
 	abstract isInternetDisconnectedError(e: any): boolean;
 	abstract isFetcherError(e: any): boolean;
 	getUserMessageForFetcherError(err: any): string {
-		return `Please check your firewall rules and network connection then try again. Error Code: ${err.message}.`;
+		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}
-}
-
-/**
- * Converts an undici/Web ReadableStream to a Node.js Readable stream
- * @param readableStream - The undici/Web ReadableStream to convert
- * @returns A Node.js Readable stream
-*/
-function convertReadableStreamToReadable(readableStream: ReadableStream<any>) {
-	// Create a new Node.js Readable stream
-	const nodeStream = new Readable({
-		// Implementation of the _read method is required
-		read() { }
-	});
-	// Create a reader from the stream
-	const reader = readableStream.getReader();
-	// Function to push data from reader to Node stream
-	async function pushData() {
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) {
-					nodeStream.push(null); // Signal end of stream
-					break;
-				}
-				// Push data chunks to the Node stream
-				// If it's a Uint8Array, push it directly
-				if (value instanceof Uint8Array) {
-					nodeStream.push(value);
-				} else {
-					// If it's not a Uint8Array, convert it to Buffer
-					nodeStream.push(Buffer.from(value));
-				}
-			}
-		} catch (error) {
-			nodeStream.emit('error', error);
-		}
-	}
-	// Start pushing data
-	pushData();
-	// Return the Node.js Readable stream
-	return nodeStream;
 }

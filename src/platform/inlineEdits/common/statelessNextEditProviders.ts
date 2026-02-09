@@ -3,79 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
-import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
-import { InlineEditRequestLogContext } from './inlineEditLogContext';
-import { IStatelessNextEditProvider, PushEdit, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from './statelessNextEditProvider';
+import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
+import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
+import { StatelessNextEditDocument } from './statelessNextEditProvider';
 
-export function chainStatelessNextEditProviders(base: IStatelessNextEditProvider, ...decorators: ((provider: IStatelessNextEditProvider) => IStatelessNextEditProvider)[]): IStatelessNextEditProvider {
-	let result: IStatelessNextEditProvider = base;
-	for (const decorator of decorators) {
-		result = decorator(result);
-	}
-	return result;
-}
-
-export abstract class ChainedStatelessNextEditProvider implements IStatelessNextEditProvider {
-	private _impl: IStatelessNextEditProvider;
-
-	constructor(
-		public readonly ID: string,
-		private readonly _providers: ((next: IStatelessNextEditProvider) => IStatelessNextEditProvider)[],
-	) {
-		const self: IStatelessNextEditProvider = {
-			ID: this.ID,
-			provideNextEdit: (request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> => {
-				return this.provideNextEditBase(request, pushEdit, logContext, cancellationToken);
-			}
-		};
-		this._impl = chainStatelessNextEditProviders(self, ...this._providers);
-
-	}
-
-	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
-		return this._impl.provideNextEdit(request, pushEdit, logContext, cancellationToken);
-	}
-
-	abstract provideNextEditBase(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
-}
-
-export abstract class EditFilterAspect implements IStatelessNextEditProvider {
-	get ID(): string { return this._baseProvider.ID; }
-
-	constructor(
-		private readonly _baseProvider: IStatelessNextEditProvider,
-	) {
-	}
-
-	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
-		const filteringPushEdit: PushEdit = (result) => {
-			if (result.isError()) {
-				pushEdit(result);
-				return;
-			}
-			const { edit } = result.val;
-			const filteredEdits = this.filterEdit(request.getActiveDocument(), [edit]);
-			if (filteredEdits.length === 0) { // do not invoke pushEdit
-				return;
-			}
-			pushEdit(result);
-		};
-
-		return this._baseProvider.provideNextEdit(request, filteringPushEdit, logContext, cancellationToken);
-	}
-
-	abstract filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[];
-}
-
-export class IgnoreTriviaWhitespaceChangesAspect extends EditFilterAspect {
-	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
-		const filteredEdits = singleEdits.filter(e => !this._isWhitespaceOnlyChange(e, resultDocument.documentAfterEditsLines));
+export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges {
+	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+		const filteredEdits = singleEdits.filter(e => !IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges._isWhitespaceOnlyChange(e, resultDocument.documentAfterEditsLines));
 		return filteredEdits;
 	}
 
-	private _isWhitespaceOnlyChange(edit: LineReplacement, baseLines: string[]): boolean {
+	private static _isWhitespaceOnlyChange(edit: LineReplacement, baseLines: string[]): boolean {
 		const originalLines = edit.lineRange.toOffsetRange().slice(baseLines);
 		const newLines = edit.newLines;
 
@@ -106,19 +44,66 @@ export class IgnoreTriviaWhitespaceChangesAspect extends EditFilterAspect {
 	}
 }
 
-export class IgnoreEditsAtClippingBorderAspect extends EditFilterAspect {
-	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
-		const filteredEdits = singleEdits.filter(e => !this._isAtClippingBorder(e, resultDocument.clippingRange, resultDocument.lineCountBeforeClipping));
-		return filteredEdits;
+export class IgnoreWhitespaceOnlyChanges {
+	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+		return singleEdits.filter(e => !IgnoreWhitespaceOnlyChanges._isFormattingOnlyChange(resultDocument.documentAfterEditsLines, e));
 	}
 
-	private _isAtClippingBorder(edit: LineReplacement, clippingRange: LineRange, lineCountBeforeClipping: number): boolean {
-		if (clippingRange.startLineNumber > 1 && edit.lineRange.startLineNumber === 1) {
-			return true;
-		}
-		if (clippingRange.endLineNumberExclusive < lineCountBeforeClipping && edit.lineRange.endLineNumberExclusive === clippingRange.length) {
-			return true;
-		}
+	/**
+	 * @remarks public only for testing
+	 */
+	public static _isFormattingOnlyChange(baseLines: string[], singleEdit: LineReplacement): boolean {
+		const originalLines = singleEdit.lineRange.toOffsetRange().slice(baseLines).join('').replace(/\s/g, '');
+		const newLines = singleEdit.newLines.join('').replace(/\s/g, '');
+		return originalLines === newLines;
+	}
+}
+
+export function editWouldDeleteWhatWasJustInserted(activeDocument: StatelessNextEditDocument, lineEdit: LineEdit) {
+	let edit = lineEdit.toEdit(activeDocument.documentAfterEdits);
+	// ! important: reduce it to the minimal set of changes
+	edit = edit.normalizeOnSource(activeDocument.documentAfterEdits.value);
+	if (!editIsDeletion(edit)) {
 		return false;
 	}
+	// We are deleting something. Is it what was just inserted?
+	for (let i = activeDocument.recentEdits.edits.length - 1; i >= 0; i--) {
+		const recentEdit = activeDocument.recentEdits.edits[i];
+		const rebaseResult = edit.tryRebase(recentEdit);
+		if (!rebaseResult) {
+			// the edit we want to do cannot be rebased, which indicates that it would interfere with a recent edit
+			return true;
+		}
+		edit = rebaseResult;
+	}
+	return false;
+}
+export function editIsDeletion(edit: StringEdit): boolean {
+	const deletedChars = edit.replacements.reduce((acc, singleEdit) => acc + singleEdit.replaceRange.length, 0);
+	const insertedChars = edit.replacements.reduce((acc, singleEdit) => acc + singleEdit.newText.length, 0);
+	return insertedChars === 0 && deletedChars > 0;
+}
+
+export function editWouldDeleteWhatWasJustInserted2(activeDocument: StatelessNextEditDocument, lineEdit: LineEdit) {
+	let edit = lineEdit.toEdit(activeDocument.documentAfterEdits);
+	// ! important: reduce it to the minimal set of changes
+	edit = edit.normalizeOnSource(activeDocument.documentAfterEdits.value);
+	if (!editIsDeletion(edit)) {
+		return false;
+	}
+
+	let documentContents = activeDocument.documentAfterEdits.value;
+
+	for (let i = activeDocument.recentEdits.edits.length - 1; i >= 0; i--) {
+		const recentEdit = activeDocument.recentEdits.edits[i];
+		const recentEditInverse = recentEdit.inverse(documentContents);
+
+		if (recentEditInverse.equals(edit)) {
+			return true;
+		}
+
+		documentContents = recentEditInverse.apply(documentContents);
+	}
+
+	return false;
 }

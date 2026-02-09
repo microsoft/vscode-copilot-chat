@@ -19,7 +19,8 @@ import type * as vscodeType from 'vscode';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
 import { ISimulationModelConfig, createExtensionUnitTestingServices } from '../src/extension/test/node/services';
 import { CHAT_MODEL } from '../src/platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../src/platform/endpoint/common/endpointProvider';
+import { IEndpointProvider, ModelSupportedEndpoint } from '../src/platform/endpoint/common/endpointProvider';
+import { IModelConfig } from '../src/platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { fileSystemServiceReadAsJSON } from '../src/platform/filesystem/common/fileSystemService';
 import { LogLevel } from '../src/platform/log/common/logService';
 import { ParserWithCaching } from '../src/platform/parser/node/parserWithCaching';
@@ -35,7 +36,7 @@ import { CompletionsSQLiteCache, ICompletionsCache } from './base/completionsCac
 import { usedEmbeddingsCaches } from './base/embeddingsCache';
 import { TestingCacheSalts } from './base/salts';
 import { ICompleteBaselineComparison, IModifiedScenario, SimulationBaseline } from './base/simulationBaseline';
-import { CacheMode, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
+import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
 import { ProxiedSimulationEndpointHealth, SimulationEndpointHealthImpl } from './base/simulationEndpointHealth';
 import { BASELINE_RUN_COUNT, SimulationOptions } from './base/simulationOptions';
 import { ProxiedSimulationOutcome, SimulationOutcomeImpl } from './base/simulationOutcome';
@@ -51,7 +52,6 @@ import { logger } from './simulationLogger';
 import { IInitParams, IInitResult, IRunTestParams, IRunTestResult } from './testExecutionInExtension';
 import { GroupedScores, ITestResult, SimulationTestContext, executeTestOnce, executeTests } from './testExecutor';
 import { createScoreRenderer, fileExists, printTime } from './util';
-
 const dotSimulationPath = path.join(__dirname, `../${SIMULATION_FOLDER_NAME}`);
 
 async function main() {
@@ -79,10 +79,10 @@ async function main() {
 	}
 
 	if (errors.length > 0) {
-		console.error(`\n${red("⚠️⚠️⚠️  Command failed with:")}\n\n`);
+		console.error(`\n${red('⚠️⚠️⚠️  Command failed with:')}\n\n`);
 
 		for (let i = 0; i < errors.length; i++) {
-			const idx = errors.length === 1 ? '' : `Error ${i + 1}) `;
+			const idx = `Error${errors.length === 1 ? '' : ` ${i + 1})`} `;
 			console.error(`\t${idx}${errors[i]}\n\n`);
 		}
 	}
@@ -95,11 +95,15 @@ type RunResult = void | { errors: unknown[] };
 async function run(opts: SimulationOptions): Promise<RunResult> {
 	const jsonOutputPrinter: IJSONOutputPrinter = opts.jsonOutput ? new ConsoleJSONOutputPrinter() : new CollectingJSONOutputPrinter();
 
+	if (opts.externalCacheLayersPath) {
+		process.env['EXTERNAL_CACHE_LAYERS_PATH'] = opts.externalCacheLayersPath;
+	}
+
 	switch (true) {
 		case opts.help:
 			return opts.printHelp();
 		case opts.listModels:
-			await listChatModels();
+			await listChatModels(opts.modelCacheMode === CacheMode.Disable);
 			return;
 		case opts.listSuites: // intentional fallthrough
 		case opts.listTests: {
@@ -297,6 +301,9 @@ async function runTests(opts: SimulationOptions, jsonOutputPrinter: IJSONOutputP
 	const { simulationEndpointHealth, simulationOutcome, simulationTestContext, testsToRun, baseline, canUseBaseline, outputPath, runningAllTests, hasFilteredTests } = await prepareTestEnvironment(opts, jsonOutputPrinter);
 
 	if (opts.gc) {
+		if (opts.gc && opts.externalCacheLayersPath) {
+			throw new Error('--gc is currently not compatible with --external-cache-layers-path');
+		}
 		Cache.Instance.gcStart();
 	}
 
@@ -488,8 +495,8 @@ function listTests(allSuites: readonly SimulationSuite[], opts: SimulationOption
 	}
 }
 
-async function listChatModels() {
-	const accessor = createExtensionUnitTestingServices().createTestingAccessor();
+async function listChatModels(skipCache: boolean = false) {
+	const accessor = createExtensionUnitTestingServices(undefined, undefined, { skipModelMetadataCache: skipCache }).createTestingAccessor();
 	const endpointProvider = accessor.get(IEndpointProvider);
 	const chatEndpoints = await endpointProvider.getAllChatEndpoints();
 	console.log('Available Chat Models:\n');
@@ -537,21 +544,21 @@ function createSimulationTestContext(
 ) {
 	const simulationEndpointHealth = rpcInExtensionHost ? new ProxiedSimulationEndpointHealth(rpcInExtensionHost) : new SimulationEndpointHealthImpl();
 
-	let chatMLCache: IChatMLCache | undefined;
-	let nesFetchCache: ICompletionsCache | undefined;
+	let createChatMLCache: ((info: CurrentTestRunInfo) => IChatMLCache) | undefined;
+	let createNesFetchCache: ((info: CurrentTestRunInfo) => ICompletionsCache) | undefined;
 
 	if (opts.lmCacheMode === CacheMode.Disable) {
 		console.warn('❗ Not using any cache');
-		chatMLCache = undefined;
-		nesFetchCache = undefined;
+		createChatMLCache = undefined;
+		createNesFetchCache = undefined;
 	} else {
-		chatMLCache = new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt);
-		nesFetchCache = new CompletionsSQLiteCache(TestingCacheSalts.nesFetchCacheSalt);
+		createChatMLCache = (info: CurrentTestRunInfo) => new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt, info);
+		createNesFetchCache = (info: CurrentTestRunInfo) => new CompletionsSQLiteCache(TestingCacheSalts.nesFetchCacheSalt, info);
 	}
 
 	const simulationServicesOptions: SimulationServicesOptions = {
-		chatMLCache,
-		nesFetchCache,
+		createChatMLCache,
+		createNesFetchCache,
 		chatModelThrottlingTaskLaunchers: createSimulationChatModelThrottlingTaskLaunchers(opts.boost),
 		isNoFetchModeEnabled: opts.noFetch,
 		languageModelCacheMode: opts.lmCacheMode,
@@ -563,12 +570,23 @@ function createSimulationTestContext(
 		configs
 	};
 
+	const customModelConfigMap: Map<string, IModelConfig> = new Map();
+	if (opts.modelConfigFile) {
+		console.log('Using model configuration file: ' + opts.modelConfigFile);
+		const customModelConfigs = parseModelConfigFile(opts.modelConfigFile);
+		customModelConfigs.forEach(config => {
+			customModelConfigMap.set(config.id, config);
+		});
+	}
+
 	const modelConfig: ISimulationModelConfig = {
 		chatModel: opts.chatModel,
 		fastChatModel: opts.fastChatModel,
 		smartChatModel: opts.smartChatModel,
-		embeddingModel: opts.embeddingModel,
-		fastRewriteModel: opts.fastRewriteModel
+		embeddingType: opts.embeddingType,
+		fastRewriteModel: opts.fastRewriteModel,
+		skipModelMetadataCache: opts.modelCacheMode === CacheMode.Disable,
+		customModelConfigs: customModelConfigMap,
 	};
 
 
@@ -773,6 +791,187 @@ function toCsv(rows: object[]): string {
 	const rowsStr = rows.map(obj => Object.values(obj).join(',') + '\n').join('');
 
 	return header + rowsStr;
+}
+
+function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
+	const resolvedModelConfigFilePath = path.isAbsolute(modelConfigFilePath) ? modelConfigFilePath : path.join(process.cwd(), modelConfigFilePath);
+	const configFileContents = fs.readFileSync(resolvedModelConfigFilePath, 'utf-8');
+
+	let modelConfig: any;
+	try {
+		modelConfig = JSON.parse(configFileContents);
+	} catch (error) {
+		throw new Error(`Invalid JSON configuration file ${resolvedModelConfigFilePath}: ${error.message}`);
+	}
+
+	if (!modelConfig || typeof modelConfig !== 'object') {
+		throw new Error('Invalid configuration file ' + resolvedModelConfigFilePath);
+	}
+
+	/**
+	 * the modelConfigFile.json should contain objects of the form:
+	```
+		"<model id>": {
+			"name": "<model name>",
+			"version": "<model version>",
+			"type": "<model type>", // 'openai' or 'azureOpenai'
+			"useDeveloperRole": <boolean>, // optional, defaults to false
+			"url": "<endpoint URL>",
+			"capabilities"?: {
+				"supports"?: {
+					"parallel_tool_calls"?: <boolean>,
+					"streaming"?: <boolean>,
+					"tool_calls"?: <boolean>,
+					"vision"?: <boolean>,
+					"prediction"?: <boolean>
+				},
+				"limits"?: {
+					"max_prompt_tokens"?: <number>,
+					"max_output_tokens"?: <number>,
+					"max_context_window_tokens"?: <number>
+				}
+			},
+			"auth?": {
+				"useBearerHeader"?: <boolean>, // Use Bearer token for authentication. Defaults to false
+				"useApiKeyHeader"?: <boolean>, // Use API key for authentication. Defaults to false
+				"apiKeyEnvName": "<environment variable name for API key to be used for the above headers>"
+			},
+			"overrides"?: {
+				"requestHeaders"?: { "<header name>": "<header value>" }, // optional, custom request headers
+				"temperature"?: <number> | null, // optional, if null removes from request body
+				"top_p"?: <number> | null, // optional, if null removes from request body
+				"snippy"?: <boolean> | null, // optional, if null removes from request body
+				"max_tokens"?: <number> | null, // optional, if null removes from request body
+				"max_completion_tokens"?: <number> | null, // optional, if null removes from request body
+				"intent"?: <boolean> | null // optional, if null removes from request body
+			}
+		},
+		...
+	```
+	*/
+
+	const checkProperty = (obj: any, prop: string, type: 'string' | 'boolean' | 'number' | 'object', optional?: boolean, nullable?: boolean) => {
+		if (!(prop in obj)) {
+			if (optional) {
+				return;
+			}
+			throw new Error(`Missing property '${prop}' in model configuration file ${resolvedModelConfigFilePath}`);
+		}
+
+		if (nullable && obj[prop] === null) {
+			return;
+		}
+
+		if (typeof obj[prop] !== type) {
+			throw new Error(`Property '${prop}' in model configuration file ${resolvedModelConfigFilePath} must be of type '${type}', but got '${typeof obj[prop]}'`);
+		}
+	};
+
+	const modelConfigs: IModelConfig[] = [];
+	for (const modelId in modelConfig) {
+		const model = modelConfig[modelId];
+		if (typeof model !== 'object') {
+			throw new Error(`Model configuration for '${modelId}' must be an object`);
+		}
+		checkProperty(model, 'name', 'string');
+		checkProperty(model, 'version', 'string');
+		checkProperty(model, 'type', 'string');
+		if (model.type !== 'openai' && model.type !== 'azureOpenai') {
+			throw new Error(`Model type '${model.type}' is not supported. Only 'openai' and 'azureOpenai' are allowed.`);
+		}
+		checkProperty(model, 'useDeveloperRole', 'boolean', true);
+		checkProperty(model, 'url', 'string');
+
+		checkProperty(model, 'capabilities', 'object', true);
+		checkProperty(model.capabilities, 'supports', 'object', true);
+		if (model.capabilities?.supports) {
+			checkProperty(model.capabilities.supports, 'parallel_tool_calls', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'streaming', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'tool_calls', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'vision', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'prediction', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'thinking', 'boolean', true);
+		}
+
+		checkProperty(model.capabilities, 'limits', 'object', true);
+		if (model.capabilities?.limits) {
+			checkProperty(model.capabilities.limits, 'max_prompt_tokens', 'number', true);
+			checkProperty(model.capabilities.limits, 'max_output_tokens', 'number', true);
+			checkProperty(model.capabilities.limits, 'max_context_window_tokens', 'number', true);
+		}
+
+		checkProperty(model, 'auth', 'object', true);
+		if (model.auth) {
+			checkProperty(model.auth, 'useBearerHeader', 'boolean', true);
+			checkProperty(model.auth, 'useApiKeyHeader', 'boolean', true);
+			checkProperty(model.auth, 'apiKeyEnvName', 'string');
+		}
+
+		checkProperty(model, 'overrides', 'object', true);
+		if (model.overrides) {
+			const overrides = model.overrides;
+			checkProperty(overrides, 'requestHeaders', 'object', true, true);
+			checkProperty(overrides, 'temperature', 'number', true, true);
+			checkProperty(overrides, 'top_p', 'number', true, true);
+			checkProperty(overrides, 'snippy', 'boolean', true, true);
+			checkProperty(overrides, 'intent', 'boolean', true, true);
+			checkProperty(overrides, 'max_tokens', 'number', true, true);
+			checkProperty(overrides, 'max_completion_tokens', 'number', true, true);
+		}
+
+		// Validate supported_endpoints
+		if (model.supported_endpoints) {
+			if (!Array.isArray(model.supported_endpoints)) {
+				throw new Error(`Property 'supported_endpoints' in model configuration file ${resolvedModelConfigFilePath} must be an array`);
+			}
+			for (const endpointSuffix of model.supported_endpoints) {
+				if (!Object.values(ModelSupportedEndpoint).includes(endpointSuffix as ModelSupportedEndpoint)) {
+					throw new Error(`Invalid endpoint suffix '${endpointSuffix}' in supported_endpoints for model '${modelId}'. Must be one of: ${Object.values(ModelSupportedEndpoint).join(', ')}`);
+				}
+			}
+		}
+
+		modelConfigs.push({
+			id: modelId,
+			name: model.name,
+			version: model.version,
+			type: model.type,
+			useDeveloperRole: model.useDeveloperRole ?? false,
+			url: model.url,
+			capabilities: {
+				supports: {
+					parallel_tool_calls: model.capabilities?.supports?.parallel_tool_calls ?? false,
+					streaming: model.capabilities?.supports?.streaming ?? false,
+					tool_calls: model.capabilities?.supports?.tool_calls ?? false,
+					vision: model.capabilities?.supports?.vision ?? false,
+					prediction: model.capabilities?.supports?.prediction ?? false,
+					thinking: model.capabilities?.supports?.thinking ?? false
+				},
+				limits: {
+					max_prompt_tokens: model.capabilities?.limits?.max_prompt_tokens ?? 128000,
+					max_output_tokens: model.capabilities?.limits?.max_output_tokens ?? Number.MAX_SAFE_INTEGER,
+					max_context_window_tokens: model.capabilities?.limits?.max_context_window_tokens
+				}
+			},
+			supported_endpoints: model.supported_endpoints?.length ? model.supported_endpoints as ModelSupportedEndpoint[] : [ModelSupportedEndpoint.ChatCompletions],
+			auth: {
+				useBearerHeader: model.auth?.useBearerHeader ?? false,
+				useApiKeyHeader: model.auth?.useApiKeyHeader ?? false,
+				apiKeyEnvName: model.auth?.apiKeyEnvName
+			},
+			overrides: {
+				requestHeaders: model.overrides?.hasOwnProperty('requestHeaders') ? model.overrides.requestHeaders : {},
+				temperature: model.overrides?.hasOwnProperty('temperature') ? model.overrides.temperature : undefined,
+				top_p: model.overrides?.hasOwnProperty('top_p') ? model.overrides.top_p : undefined,
+				snippy: model.overrides?.hasOwnProperty('snippy') ? model.overrides.snippy : undefined,
+				intent: model.overrides?.hasOwnProperty('intent') ? model.overrides.intent : undefined,
+				max_tokens: model.overrides?.hasOwnProperty('max_tokens') ? model.overrides.max_tokens : undefined,
+				max_completion_tokens: model.overrides?.hasOwnProperty('max_completion_tokens') ? model.overrides.max_completion_tokens : undefined,
+			}
+		});
+	}
+
+	return modelConfigs;
 }
 
 (async () => main())();

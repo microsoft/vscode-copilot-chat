@@ -26,5 +26,5 @@ export interface ITokenizer extends ITsxTokenizer<OutputMode.Raw> {
 
 	countMessagesTokens(messages: Raw.ChatMessage[]): Promise<number>;
 
-	countToolTokens(tools: LanguageModelChatTool[]): Promise<number>;
+	countToolTokens(tools: readonly LanguageModelChatTool[]): Promise<number>;
 }

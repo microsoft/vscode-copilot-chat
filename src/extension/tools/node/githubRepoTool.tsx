@@ -6,20 +6,18 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { FileChunkAndScore } from '../../../platform/chunking/common/chunk';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { GithubRepoId, toGithubNwo } from '../../../platform/git/common/gitService';
 import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { RemoteCodeSearchIndexStatus } from '../../../platform/remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { GithubAvailableEmbeddingTypesManager } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
 import { raceCancellationError, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Lazy } from '../../../util/vs/base/common/lazy';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -43,16 +41,14 @@ interface PrepareError {
 export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 	public static readonly toolName = ToolName.GithubRepo;
 
-	private readonly _availableEmbeddingTypesManager = new Lazy<GithubAvailableEmbeddingTypesManager>(() => this._instantiationService.createInstance(GithubAvailableEmbeddingTypesManager));
 
 	constructor(
 		@IRunCommandExecutionService _commandService: IRunCommandExecutionService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IGithubCodeSearchService private readonly _githubCodeSearch: IGithubCodeSearchService,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesManager: GithubAvailableEmbeddingTypesService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-	) {
-	}
+	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<GithubRepoToolParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const githubRepoId = GithubRepoId.parse(options.input.repo);
@@ -60,17 +56,12 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			throw new Error('Invalid input. Could not parse repo');
 		}
 
-		const authToken = await this.tryGetAuthToken();
-		if (!authToken) {
-			throw new Error('Not authenticated');
-		}
-
-		const embeddingType = await this._availableEmbeddingTypesManager.value.getPreferredType(false);
+		const embeddingType = await this._availableEmbeddingTypesManager.getPreferredType(false);
 		if (!embeddingType) {
 			throw new Error('No embedding models available');
 		}
 
-		const searchResults = await this._githubCodeSearch.searchRepo(authToken, embeddingType, { githubRepoId, localRepoRoot: undefined, indexedCommit: undefined }, options.input.query, 64, {}, new TelemetryCorrelationId('github-repo-tool'), token);
+		const searchResults = await this._githubCodeSearch.searchRepo({ silent: true }, embeddingType, { githubRepoId, localRepoRoot: undefined, indexedCommit: undefined }, options.input.query, 64, {}, new TelemetryCorrelationId('github-repo-tool'), token);
 
 		// Map the chunks to URIs
 		// TODO: Won't work for proxima or branches not called main
@@ -160,21 +151,20 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			});
 		}
 
-		const authToken = await raceCancellationError(this.tryGetAuthToken(), token);
-		if (!authToken) {
-			return Result.error<PrepareError>({
-				message: l10n.t`Not authenticated`,
-				id: 'no-auth-token',
-			});
-		}
-
 		const checkIndexReady = async (): Promise<Result<boolean, PrepareError>> => {
-			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState(authToken, githubRepoId, token), token);
+			const state = await raceCancellationError(this._githubCodeSearch.getRemoteIndexState({ silent: true }, githubRepoId, token), token);
 			if (!state.isOk()) {
-				return Result.error<PrepareError>({
-					message: l10n.t`Could not check status of Github repo index`,
-					id: 'could-not-check-status',
-				});
+				if (state.err.type === 'not-authorized') {
+					return Result.error<PrepareError>({
+						message: l10n.t`Not authenticated`,
+						id: 'no-auth-token',
+					});
+				} else {
+					return Result.error<PrepareError>({
+						message: l10n.t`Could not check status of Github repo index`,
+						id: 'could-not-check-status',
+					});
+				}
 			}
 
 			if (state.val.status === RemoteCodeSearchIndexStatus.Ready) {
@@ -193,7 +183,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			return Result.ok(githubRepoId);
 		}
 
-		if (!await this._githubCodeSearch.triggerIndexing(authToken, 'tool', githubRepoId, new TelemetryCorrelationId('GitHubRepoTool'))) {
+		if (!await this._githubCodeSearch.triggerIndexing({ silent: true }, 'tool', githubRepoId, new TelemetryCorrelationId('GitHubRepoTool'))) {
 			return Result.error<PrepareError>({
 				message: l10n.t`Could not index Github repo. Repo may not exist or you may not have access to it.`,
 				id: 'trigger-indexing-failed',
@@ -213,11 +203,6 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			message: l10n.t`Github repo index not yet. Please try again shortly`,
 			id: 'not-ready-after-polling',
 		});
-	}
-
-	private async tryGetAuthToken() {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
 	}
 }
 

@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 // Allow importing vscode here. eslint does not let us exclude this path: https://github.com/import-js/eslint-plugin-import/issues/2800
-/* eslint-disable import/no-restricted-paths */
 /* eslint-disable local/no-runtime-import */
 
 import { writeFileSync } from 'fs';
@@ -19,7 +18,9 @@ export class SimulationWorkspaceExtHost extends SimulationWorkspace {
 	public override setupServices(testingServiceCollection: TestingServiceCollection): void {
 		super.setupServices(testingServiceCollection);
 		addExtensionHostSimulationServices(testingServiceCollection);
-		vscode.workspace.getConfiguration('chat.tools').update('autoApprove', true, vscode.ConfigurationTarget.Global);
+		vscode.commands.executeCommand('setContext', 'vscode.chat.tools.global.autoApprove.testMode', true);
+		vscode.workspace.getConfiguration('chat.tools.global').update('autoApprove', true, vscode.ConfigurationTarget.Global);
+		vscode.workspace.getConfiguration('chat.tools.terminal').update('autoReplyToPrompts', true, vscode.ConfigurationTarget.Global);
 	}
 
 	override applyEdits(uri: vscode.Uri, edits: vscode.TextEdit[], initialRange?: vscode.Range): vscode.Range {

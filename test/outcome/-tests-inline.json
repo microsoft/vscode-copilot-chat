@@ -2,140 +2,140 @@
 	{
 		"name": "/tests [inline] [cpp] - can create a new test file",
 		"requests": [
-			"807fb39765213112ad8bd357807a62318167821192b2573819eccda89cc0a907"
+			"8527d320640b00c0f71d1be6263bc6a6c76a7974b4ca3b3032c8f8812ce53ae1"
 		]
 	},
 	{
 		"name": "/tests [inline] [csharp] - creates new test file with some assertions and uses correct file name",
 		"requests": [
-			"790c1a41b8ca523c4e333127be7079e136d25349cb9839fab7cd8ef538cf6cb8"
+			"59cf82f6557d1b3c77e625ba1558ff327f48d752465affe7c2d2bbce540b85f3"
 		]
 	},
 	{
 		"name": "/tests [inline] [java] - looks up existing test file",
 		"requests": [
-			"76312def35c6367df16ce4dcfb107fe03aced71b21bca7e8f61549399ad88ecd"
+			"631c349b860ed334e83a70c59244a35cd4b5bd88305b22aa041cb2b4e092321a"
 		]
 	},
 	{
 		"name": "/tests [inline] [java] - looks up pom.xml and junit framework info",
 		"requests": [
-			"842c823f76fa575479011c9d55745da043fcc67f4cee6226c16e8dacfe2af6c0"
+			"5cd3a96051711fe865732993fad2b6a292b26cda9a0cb85b48904e30a82f85a7"
 		]
 	},
 	{
 		"name": "/tests [inline] [js] - /tests: with package.json info",
 		"requests": [
-			"5e7cf6e34f88f095ab8bcc3459534a9a2bb5828218c107407233eb2280343d97"
+			"7bd5232db76f1d5c4f5a5b36b8a160e58a5c97b598f838c0d18a46bff01067d5"
 		]
 	},
 	{
 		"name": "/tests [inline] [js] - add another test to existing file",
 		"requests": [
-			"c0bc6ca5a057a6f6dfaf0cd5f932f5d16978de40bf881c177ff115736610f876"
+			"e0bd79f0a1ff463461071cd531821db9c316808c4a0b30b754adb2bd76241ad2"
 		]
 	},
 	{
 		"name": "/tests [inline] [js] - generate-jest",
 		"requests": [
-			"5ad525695ca96178b2e47ef3a4f897137dcc9ce7e7d95a49215a5d924b509eae"
+			"2bf37eb00b11945daa6be4093b92979351037b2062facb771f34aa6f4fee12cb"
 		]
 	},
 	{
 		"name": "/tests [inline] [js] - issue #1261: Failed to create new test file when in an untitled file",
 		"requests": [
-			"663353682a5961f38ba2824c005f96aefc9ddd9fa291c7953a076aed46499930",
-			"7a3af40f49e654123a263f360b8e740fbc467e80ef1c365719ded84102776946"
+			"3ff8d64fed825b20d0fb3ada0c4dc880477bc82580a2ece057b9de9f4ad29995",
+			"77f70da386ba785289aff8686992e4fe14684f43d0445939486a39f6d196dfa8"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - focal file at repo root",
 		"requests": [
-			"b876a0eaacabb6a22c371cda76a80ed78080415559c69593650cf6ae9ce1cb7b"
+			"02be21f25def1ef338be8a6490b699a00a23d622fac52360482d499141b34e4c"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - parameterized tests",
 		"requests": [
-			"f7b53149456c3a69e3747afbbc726b0dccc9a988e1fe09a2e10aaea815367751"
+			"6eca5f8b1aaaba2a07a8d394a5e882c616987be8fb94658da88502ec14aab87d"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - py with pyproject.toml",
 		"requests": [
-			"d81bbf5305fdad664dca7692abdd355ecf420947697a7ff88559c2c591cf2b94"
+			"3e903201b5964c464cba7db880c9469d635cd370f2772c96d1bbc4c04ee787f4"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - python add to existing",
 		"requests": [
-			"215bac29c74c3cd39e18a7b7841edd1c3099111df5c068f387758d4c76dc7466"
+			"5151e8cb09454e927c202edb2e99ee1b21b46f67476e0d7bd08e5ca4ea283497"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - python correct import",
 		"requests": [
-			"8c76401b658568c3b48ec6889f668848170b84263ae71452f96fb2df310ef570"
+			"635ced5876792db7149d01d51d5d135097a5b10e5fc7c1cae8877249376f3acc"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - select existing test file using *_test.py format",
 		"requests": [
-			"552ca0bf9149a5818cb377ce43841e78a9ff99ab9c821969afd64bdc3c1d1fd0"
+			"ce3cd3a3e2d9f11ef61cd1fa25bf5bc2d97c6fbcfd742f8f3083d8742e7124b9"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - select test folder if exists for new test files",
 		"requests": [
-			"bcfbb443cb764d3e1c614ec1ee7e301ab19fb8bfeb161a4a009a15822f99654e"
+			"1f384993ae6a73871fd6b4efcd72e5f0c977806dd0597c100a7813140fbfff19"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - test with docstring",
 		"requests": [
-			"47d39e7707713abac14f54453a81062de390bef9b1d8a4743547d2127c1c297c"
+			"72c8ab3277be0d4e4bfc15901fe79f9289fc6703d9b828e66d853cb771cabb34"
 		]
 	},
 	{
 		"name": "/tests [inline] [python] - update import statement",
 		"requests": [
-			"47d39e7707713abac14f54453a81062de390bef9b1d8a4743547d2127c1c297c"
+			"72c8ab3277be0d4e4bfc15901fe79f9289fc6703d9b828e66d853cb771cabb34"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - BidiMap test generation (inside file)",
 		"requests": [
-			"546f32bffb7f6d9824302ec3c372b3e2c42e38ad2ed52e54dab618625da4d6f7"
+			"affe287d1c9226713c51acc16e02fc0de246ed623c4ca01dc2ae639cd68d983f"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - BidiMap test generation (inside test)",
 		"requests": [
-			"6ec2b183d0288fe8130190ad7b264c73ff1259012b0fbc68c252ce94f207a798"
+			"328870326ba6a88a817bff168c4e40d1e01156d0ed8962163de01a1e18b0a46d"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - can add a test after an existing one",
 		"requests": [
-			"01da33c68482b025da7b42c2ab0daa5d0fb3d4790d7bbf910c5216b73bfdf8d2"
+			"edb420f95ae9202d4441c6b866199e3dab42c973f6f883eaed19a04cdbcb98bf"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - can add a test after an existing one with empty line",
 		"requests": [
-			"6e174bd690992c3bd968bae5204d5dd90757df5b1f5774e38869d3cde7dd8bd5"
+			"9900cb70feabe0e45e6dd7c3e77e68429dcde57dcb47eb794f80312220121185"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - supports chat variables",
 		"requests": [
-			"70e6531cd5851b9a32d56845bd442c4e3cc788e8208e5d19e6f267c96a1f9013"
+			"fe05a60c78d4b9e4c2054a032d582475a13058cf3f8fac3c091f6e5001a5c29e"
 		]
 	},
 	{
 		"name": "/tests [inline] [typescript] - ts-new-test",
 		"requests": [
-			"0111a91b6ee279d87b3b8e4400cf024749293c387157f05145bde4a6026af691"
+			"fe30b280eca457f0be4695922e55777e60478c439c0e8a3ba638c722dabc526b"
 		]
 	}
 ]

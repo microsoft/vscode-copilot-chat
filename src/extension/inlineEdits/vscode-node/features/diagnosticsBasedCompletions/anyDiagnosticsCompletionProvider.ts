@@ -3,14 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CodeActionData } from '../../../../../platform/inlineEdits/common/dataTypes/codeActionData';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
-import { ITracer } from '../../../../../util/common/tracing';
+import { ILogger } from '../../../../../platform/log/common/logService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
-import { CodeAction, Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, getCodeActionsForDiagnostic, IDiagnosticCodeAction, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
+import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, IDiagnosticCodeAction, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
 
 interface IAnyCodeAction extends IDiagnosticCodeAction {
 	type: string;
@@ -23,10 +24,19 @@ export class AnyDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	constructor(
 		codeAction: IAnyCodeAction,
 		diagnostic: Diagnostic,
-		nextEditDisplayLocation: INextEditDisplayLocation | undefined,
+		private readonly _nextEditDisplayLabel: string | undefined,
 		workspaceDocument: IVSCodeObservableDocument,
 	) {
-		super(codeAction.type, diagnostic, codeAction.edit, nextEditDisplayLocation, workspaceDocument);
+		super(codeAction.type, diagnostic, codeAction.edit, workspaceDocument);
+	}
+
+	protected override _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		if (!this._nextEditDisplayLabel) {
+			return undefined;
+		}
+
+		const transformer = this._workspaceDocument.value.get().getTransformer();
+		return { range: transformer.getRange(this.diagnostic.range), label: this._nextEditDisplayLabel };
 	}
 }
 
@@ -36,18 +46,18 @@ export class AnyDiagnosticCompletionProvider implements IDiagnosticCompletionPro
 
 	public readonly providerName = 'any';
 
-	constructor(private readonly _tracer: ITracer) { }
+	constructor(private readonly _logger: ILogger) { }
 
-	public providesCompletionsForDiagnostic(diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean {
-		return isDiagnosticWithinDistance(diagnostic, pos, 5);
+	public providesCompletionsForDiagnostic(workspaceDocument: IVSCodeObservableDocument, diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean {
+		return isDiagnosticWithinDistance(workspaceDocument, diagnostic, pos, 5);
 	}
 
 	async provideDiagnosticCompletionItem(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<AnyDiagnosticCompletionItem | null> {
 
 		for (const diagnostic of sortedDiagnostics) {
-			const availableCodeActions = await getCodeActionsForDiagnostic(diagnostic, workspaceDocument, token);
+			const availableCodeActions = await workspaceDocument.getCodeActions(diagnostic.range, 3, token);
 			if (availableCodeActions === undefined) {
-				log(`Fetching code actions likely timed out for \`${diagnostic.message}\``, logContext, this._tracer);
+				log(`Fetching code actions likely timed out for \`${diagnostic.message}\``, logContext, this._logger);
 				continue;
 			}
 
@@ -56,31 +66,30 @@ export class AnyDiagnosticCompletionProvider implements IDiagnosticCompletionPro
 				continue;
 			}
 
-			logList(`Found the following code action which fix \`${diagnostic.message}\``, codeActionsFixingCodeAction, logContext, this._tracer);
+			logList(`Found the following code action which fix \`${diagnostic.message}\``, codeActionsFixingCodeAction, logContext, this._logger);
 
-			const filteredCodeActionsWithEdit = filterCodeActions(codeActionsFixingCodeAction, workspaceDocument);
+			const filteredCodeActionsWithEdit = filterCodeActions(codeActionsFixingCodeAction);
 
 			if (filteredCodeActionsWithEdit.length === 0) {
 				continue;
 			}
 
 			const codeAction = filteredCodeActionsWithEdit[0];
-			const edits = codeAction.getEditForWorkspaceDocument(workspaceDocument);
-			if (!edits) { continue; }
+			if (!codeAction.edits) { continue; }
 
-			const joinedEdit = TextReplacement.joinReplacements(edits, workspaceDocument.value.get());
+			const joinedEdit = TextReplacement.joinReplacements(codeAction.edits, workspaceDocument.value.get());
 			const anyCodeAction: IAnyCodeAction = {
 				edit: joinedEdit,
 				type: getSanitizedCodeActionTitle(codeAction)
 			};
 
-			let displayLocation: INextEditDisplayLocation | undefined;
+			let displayLocationLabel: string | undefined;
 			const editDistance = Math.abs(joinedEdit.range.startLineNumber - pos.lineNumber);
 			if (editDistance > 12) {
-				displayLocation = { range: diagnostic.range, label: codeAction.title };
+				displayLocationLabel = codeAction.title;
 			}
 
-			const item = new AnyDiagnosticCompletionItem(anyCodeAction, diagnostic, displayLocation, workspaceDocument);
+			const item = new AnyDiagnosticCompletionItem(anyCodeAction, diagnostic, displayLocationLabel, workspaceDocument);
 			log(`Created Completion Item for diagnostic: ${diagnostic.message}: ${item.toLineEdit().toString()}`);
 			return item;
 		}
@@ -91,18 +100,17 @@ export class AnyDiagnosticCompletionProvider implements IDiagnosticCompletionPro
 	completionItemRejected(item: AnyDiagnosticCompletionItem): void { }
 }
 
-function doesCodeActionFixDiagnostics(action: CodeAction, diagnostic: Diagnostic): boolean {
-	const CodeActionFixedDiagnostics = [...action.diagnostics, ...action.getDiagnosticsReferencedInCommand()];
-	return CodeActionFixedDiagnostics.some(d => diagnostic.equals(d));
+function doesCodeActionFixDiagnostics(action: CodeActionData, diagnostic: Diagnostic): boolean {
+	return action.diagnostics.some(d => diagnostic.data.message === d.message && diagnostic.data.range.equals(d.range));
 }
 
-function getSanitizedCodeActionTitle(action: CodeAction): string {
+function getSanitizedCodeActionTitle(action: CodeActionData): string {
 	return action.title.replace(/(["'])(.*?)\1/g, '$1...$1');
 }
 
-function filterCodeActions(codeActionsWithEdit: CodeAction[], workspaceDocument: IVSCodeObservableDocument): CodeAction[] {
+function filterCodeActions(codeActionsWithEdit: CodeActionData[]): CodeActionData[] {
 	return codeActionsWithEdit.filter(action => {
-		const edit = action.getEditForWorkspaceDocument(workspaceDocument);
+		const edit = action.edits;
 		if (!edit) { return false; }
 
 		if (action.title === 'Infer parameter types from usage') {

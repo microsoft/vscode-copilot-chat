@@ -9,7 +9,6 @@ import { ICopilotTokenManager } from '../../../../platform/authentication/common
 import { SimulationTestCopilotTokenManager } from '../../../../platform/authentication/test/node/simulationTestCopilotTokenManager';
 import { allEvents, withTelemetryCapture } from '../../../../platform/test/node/telemetry';
 import { SpyChatResponseStream } from '../../../../util/common/test/mockChatResponseStream';
-import { Event } from '../../../../util/vs/base/common/event';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatParticipantRequestHandler } from '../../../prompt/node/chatParticipantRequestHandler';
@@ -36,7 +35,7 @@ suite('Conversation telemetry tests - Integration tests', function () {
 				stream,
 				token,
 				{ agentName: '', agentId: '' },
-				Event.None);
+				() => false);
 			await session.getResult(); // and throw away the result
 		});
 		assert.ok(allEvents(messages));
@@ -53,6 +52,11 @@ suite('Conversation telemetry tests - Integration tests', function () {
 				'request.sent',
 				'request.response',
 				'engine.messages',
+				'engine.messages.length',
+				'model.request.added',
+				'model.message.added',
+				'model.modelCall.input',
+				'model.request.options.added',
 				'request.shownWarning',
 			].sort(),
 			names.filter(name => name !== 'log').sort()
@@ -121,6 +125,46 @@ suite('Conversation telemetry tests - Integration tests', function () {
 			userMessageEngine.data.baseData.properties.messagesJson.length >= messageText.length,
 			'engine.messages event for user message has messagesJson property with length < message length'
 		);
+
+		// Check there exists a engine.messages.length event with matching messageId
+		const userMessageEngineLength = messages.find(
+			message =>
+				message.data.baseData.name.split('/')[1] === 'engine.messages.length' &&
+				message.data.baseData.properties.messageId === userMessageId
+		);
+		assert.ok(userMessageEngineLength, 'engine.messages.length event for user message does not exist');
+
+		// Check there exists a model.request.added event with matching headerRequestId
+		const modelRequestAdded = messages.find(
+			message =>
+				message.data.baseData.name.split('/')[1] === 'model.request.added' &&
+				message.data.baseData.properties.headerRequestId
+		);
+		assert.ok(modelRequestAdded, 'model.request.added event for user message does not exist');
+
+		// Check there exists a model.message.added event with messageUuid
+		const modelMessageAdded = messages.find(
+			message =>
+				message.data.baseData.name.split('/')[1] === 'model.message.added' &&
+				message.data.baseData.properties.messageUuid
+		);
+		assert.ok(modelMessageAdded, 'model.message.added event for user message does not exist');
+
+		// Check there exists a model.modelCall.input event with modelCallId
+		const modelCallInput = messages.find(
+			message =>
+				message.data.baseData.name.split('/')[1] === 'model.modelCall.input' &&
+				message.data.baseData.properties.modelCallId
+		);
+		assert.ok(modelCallInput, 'model.modelCall.input event for user message does not exist');
+
+		// Check there exists a model.request.options.added event with requestOptionsId
+		const modelRequestOptionsAdded = messages.find(
+			message =>
+				message.data.baseData.name.split('/')[1] === 'model.request.options.added' &&
+				message.data.baseData.properties.requestOptionsId
+		);
+		assert.ok(modelRequestOptionsAdded, 'model.request.options.added event for user message does not exist');
 	});
 });
 

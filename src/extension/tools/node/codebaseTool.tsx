@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { PromptElement, PromptReference, TokenLimit } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
@@ -40,6 +41,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ICodebaseToolParams>, token: CancellationToken) {
@@ -65,7 +67,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 				query: options.input.query,
 				history: [],
 			},
-			maxResults: 64,
+			maxResults: 32,
 			include: {
 				workspaceChunks: true,
 				workspaceStructure: options.input.includeFileStructure ?? false
@@ -146,7 +148,15 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 		const agentEnabled = this.configurationService.getConfig(ConfigKey.CodeSearchAgentEnabled);
 		const noScopedDirectories = input.scopedDirectories === undefined || input.scopedDirectories.length === 0;
 
-		return agentEnabled && noScopedDirectories;
+		// When anonymous (no GitHub session), always force agent path so we avoid relying on semantic index features.
+		const isAnonymous = !this.authenticationService.anyGitHubSession;
+
+		// Don't trigger nested tool calling loop if we're already in a subagent
+		if (this._input?.tools?.subAgentInvocationId) {
+			return false;
+		}
+
+		return (isAnonymous || agentEnabled) && noScopedDirectories;
 	}
 }
 

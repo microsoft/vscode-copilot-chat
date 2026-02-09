@@ -19,7 +19,7 @@ let computeContext: typeof testing.computeContext;
 let create: typeof testing.create;
 
 // This is OK since we run tests in node loading a TS version installed in the workspace.
-const root = path.join(__dirname, '../../../fixtures');
+const root = path.join(__dirname, '../../../fixtures/context');
 
 // Use before hook to ensure async setup completes before tests run
 beforeAll(async function () {
@@ -44,7 +44,7 @@ suite('Class', () => {
 		expected = [{
 			kind: ContextKind.Snippet,
 			value: 'export class X implements Name, NameLength { name() { return \'x\'; } length() { return \'x\'.length; } }',
-			uri: /p1\/source\/f2.ts$/
+			fileName: /p1\/source\/f2.ts$/
 		}];
 	});
 
@@ -67,7 +67,7 @@ suite('Type Alias', () => {
 		expected = [{
 			kind: ContextKind.Snippet,
 			value: 'export class X implements Name, NameLength { name() { return \'x\'; } length() { return \'x\'.length; } }',
-			uri: /p4\/source\/f2.ts$/
+			fileName: /p4\/source\/f2.ts$/
 		}];
 	});
 
@@ -85,7 +85,19 @@ suite('Type Alias', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'export class W implements Both { name() { return \'w\'; } length() { return \'w\'.length; } }',
-			uri: /p4\/source\/f2.ts$/
+			fileName: /p4\/source\/f2.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'export type Both = Name & NameLength;',
+			fileName: /p4\/source\/f1.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'interface Name { name(): string; }',
+			fileName: /p4\/source\/f1.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'type NameLength = { length(): number; }',
+			fileName: /p4\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p4/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -101,8 +113,8 @@ suite('Method - Simple', () => {
 	test('complete method', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
-			value: 'declare class B { /** * The length of the line. */ protected _length: number; /** * Returns the occurrence of \'foo\'. * * @returns the occurrence of \'foo\'. */ public foo(): number; /** * The distance between two points. */ protected distance: number; }',
-			uri: /p2\/source\/f1.ts$/
+			value: 'declare class B { /** * The distance between two points. */ protected distance: number; /** * The length of the line. */ protected _length: number; /** * Returns the occurrence of \'foo\'. * * @returns the occurrence of \'foo\'. */ public foo(): number; }',
+			fileName: /p2\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p2/source/f2.ts'), { line: 5, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -116,12 +128,12 @@ suite('Method - Search', () => {
 			{
 				kind: ContextKind.Snippet,
 				value: 'declare class Foo { }',
-				uri: /p5\/source\/f1.ts$/
+				fileName: /p5\/source\/f1.ts$/
 			},
 			{
 				kind: ContextKind.Snippet,
 				value: '/** * Javadoc */ export class Bar extends Foo { private name(): string { return \'Bar\'; } }',
-				uri: /p5\/source\/f2.ts$/
+				fileName: /p5\/source\/f2.ts$/
 			}
 		];
 		const context = computeContext(session, path.join(root, 'p5/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
@@ -133,7 +145,7 @@ suite('Method - Search', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'export class Bar implements Foo { public name(): string { return \'Bar\'; } }',
-			uri: /p9\/source\/f2.ts$/
+			fileName: /p9\/source\/f2.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p9/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected, 'contains');
@@ -144,7 +156,7 @@ suite('Method - Search', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'export class Bar implements Fooo { public name(): string { return \'Bar\'; } }',
-			uri: /p10\/source\/f2.ts$/
+			fileName: /p10\/source\/f2.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p10/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected, 'contains');
@@ -155,7 +167,7 @@ suite('Method - Search', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'export class Bar implements Foo { public name(): string { return \'Bar\'; } }',
-			uri: /p11\/source\/f2.ts$/
+			fileName: /p11\/source\/f2.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p11/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected, 'contains');
@@ -172,23 +184,23 @@ suite('Method - Signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Foo { public foo(): void; }',
-			uri: /p6\/source\/f1.ts$/
+			fileName: /p6\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'interface Bar { bar(): void; }',
-			uri: /p6\/source\/f1.ts$/
+			fileName: /p6\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'enum Enum { a = 1, b = 2 }',
-			uri: /p6\/source\/f1.ts$/
+			fileName: /p6\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'const enum CEnum { a = 1, b = 2 }',
-			uri: /p6\/source\/f1.ts$/
+			fileName: /p6\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'type Baz = { baz(): void; bazz: () => number; }',
-			uri: /p6\/source\/f1.ts$/
+			fileName: /p6\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p6/source/f2.ts'), { line: 7, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -201,23 +213,23 @@ suite('Function signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Foo { public foo(): void; }',
-			uri: /p7\/source\/f1.ts$/
+			fileName: /p7\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'interface Bar { bar(): void; }',
-			uri: /p7\/source\/f1.ts$/
+			fileName: /p7\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'enum Enum { a = 1, b = 2 }',
-			uri: /p7\/source\/f1.ts$/
+			fileName: /p7\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'const enum CEnum { a = 1, b = 2 }',
-			uri: /p7\/source\/f1.ts$/
+			fileName: /p7\/source\/f1.ts$/
 		}, {
 			kind: ContextKind.Snippet,
 			value: 'type Baz = { baz(): void; bazz: () => number; }',
-			uri: /p7\/source\/f1.ts$/
+			fileName: /p7\/source\/f1.ts$/
 		}];
 
 		const context = computeContext(session, path.join(root, 'p7/source/f2.ts'), { line: 6, character: 0 }, ContextKind.Snippet);
@@ -229,7 +241,7 @@ suite('Function signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
-			uri: /p12\/source\/f1.ts$/
+			fileName: /p12\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p12/source/f2.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -240,7 +252,7 @@ suite('Function signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
-			uri: /p12\/source\/f1.ts$/
+			fileName: /p12\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p12/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -251,7 +263,7 @@ suite('Function signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
-			uri: /p12\/source\/f1.ts$/
+			fileName: /p12\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p12/source/f4.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -262,7 +274,7 @@ suite('Function signature', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
-			uri: /p12\/source\/f1.ts$/
+			fileName: /p12\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p12/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
@@ -280,12 +292,12 @@ suite('Constructor', () => {
 			{
 				kind: ContextKind.Snippet,
 				value: 'declare class Foo { }',
-				uri: /p8\/source\/f1.ts$/
+				fileName: /p8\/source\/f1.ts$/
 			},
 			{
 				kind: ContextKind.Snippet,
 				value: '/** * Javadoc */ export class Bar extends Foo { private name: string; constructor() { super(); this.name = \'Bar\'; } }',
-				uri: /p8\/source\/f2.ts$/
+				fileName: /p8\/source\/f2.ts$/
 			}
 		];
 		const context = computeContext(session, path.join(root, 'p8/source/f3.ts'), { line: 5, character: 0 }, ContextKind.Snippet);
@@ -304,12 +316,12 @@ suite('PropertyTypes', () => {
 			{
 				kind: ContextKind.Snippet,
 				value: 'type Age = { value: number; }',
-				uri: /p13\/source\/f1.ts$/
+				fileName: /p13\/source\/f1.ts$/
 			},
 			{
 				kind: ContextKind.Snippet,
 				value: 'declare class Street { constructor(name: string); public getName(); }',
-				uri: /p13\/source\/f1.ts$/
+				fileName: /p13\/source\/f1.ts$/
 			}
 		];
 		const context = computeContext(session, path.join(root, 'p13/source/f2.ts'), { line: 15, character: 0 }, ContextKind.Snippet);
@@ -320,16 +332,68 @@ suite('PropertyTypes', () => {
 			{
 				kind: ContextKind.Snippet,
 				value: 'declare class Person { constructor(age: Age = { value: 10 }); protected getStreet(): Street; public print(): void; }',
-				uri: /p13\/source\/f2.ts$/
+				fileName: /p13\/source\/f2.ts$/
 			},
 			{
 				kind: ContextKind.Snippet,
 				value: 'declare class Street { constructor(name: string); public getName(); }',
-				uri: /p13\/source\/f1.ts$/
+				fileName: /p13\/source\/f1.ts$/
 			}
 		];
 		const context = computeContext(session, path.join(root, 'p13/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
+	});
+});
+
+suite('TypeOfExpressionRunnable', () => {
+	let session: testing.TestSession;
+	beforeAll(() => {
+		session = create(path.join(root, 'p14'));
+	});
+
+	test('ignores property access without identifier', () => {
+		const context = computeContext(session, path.join(root, 'p14/source/f2.ts'), { line: 3, character: 19 }, ContextKind.Snippet);
+		assertContextItems(context, []);
+	});
+
+	test('type from method chain', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f3.ts'), { line: 4, character: 22 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from method return (interface)', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'interface Result { value: number; message: string; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f4.ts'), { line: 4, character: 25 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from element access chain', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f5.ts'), { line: 4, character: 19 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from deeply nested property access', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f6.ts'), { line: 7, character: 25 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
 	});
 });
 

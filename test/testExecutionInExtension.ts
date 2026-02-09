@@ -12,7 +12,6 @@ import path from 'path';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
 import { deserializeWorkbenchState } from '../src/platform/test/node/promptContextModel';
-import { findFreePortFaster, waitForListenerOnPort } from '../src/util/node/ports';
 import { createCancelablePromise, DeferredPromise, disposableTimeout, raceCancellablePromises, retry, timeout } from '../src/util/vs/base/common/async';
 import { Emitter, Event } from '../src/util/vs/base/common/event';
 import { Iterable } from '../src/util/vs/base/common/iterator';
@@ -26,6 +25,8 @@ import { SimulationTest } from './base/stest';
 import { ProxiedSONOutputPrinter } from './jsonOutputPrinter';
 import { logger } from './simulationLogger';
 import { ITestRunResult, SimulationTestContext } from './testExecutor';
+import { findFreePortFaster } from '../src/util/vs/base/node/ports';
+import { waitForListenerOnPort } from '../src/util/node/ports';
 
 const MAX_CONCURRENT_SESSIONS = 10;
 const HOST = '127.0.0.1';

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { commands } from 'vscode';
+import { commands, env } from 'vscode';
 import { DocumentEventLogEntryData } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -41,23 +41,22 @@ export class WorkspacListenerService extends Disposable implements IWorkspaceLis
 }
 
 class StructuredLoggerReceiver<T> extends Disposable {
-	private static counter = 0;
-
 	constructor(
 		key: string,
 		handler: (data: T) => void,
 	) {
 		super();
 
-		const commandId = `code.copilot.logStructured.${key}.${StructuredLoggerReceiver.counter++}`;
-		this._register(commands.registerCommand(commandId, (data: T) => {
-			handler(data);
+		const channel = env.getDataChannel<T>('structuredLogger:' + key);
+		this._register(channel.onDidReceiveData(e => {
+			handler(e.data);
 		}));
 
-		setContextKey(key, commandId);
+		const contextKey = 'structuredLogger.enabled:' + key;
+		setContextKey(contextKey, true);
 		this._register({
 			dispose: () => {
-				setContextKey(key, undefined);
+				setContextKey(contextKey, undefined);
 			}
 		});
 	}

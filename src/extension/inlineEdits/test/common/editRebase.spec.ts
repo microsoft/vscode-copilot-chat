@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 import { expect, suite, test } from 'vitest';
 import { decomposeStringEdit } from '../../../../platform/inlineEdits/common/dataTypes/editUtils';
-import { createTracer } from '../../../../util/common/tracing';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
-import { tryRebase, tryRebaseStringEdits } from '../../common/editRebase';
+import { maxAgreementOffset, maxImperfectAgreementLength, tryRebase, tryRebaseStringEdits } from '../../common/editRebase';
 
 
 suite('NextEditCache', () => {
@@ -49,16 +49,16 @@ class Point3D {
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
+		const logger = new TestLogService();
 		{
-			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'strict', tracer);
+			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'strict', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
 			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`"[68, 76) -> "\\n\\t\\tthis.z = z;""`);
 		}
 		{
-			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'lenient', tracer);
+			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'lenient', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
@@ -135,9 +135,9 @@ function main() {
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
-		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', tracer)).toStrictEqual('rebaseFailed');
-		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', tracer)).toStrictEqual('rebaseFailed');
+		const logger = new TestLogService();
+		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', logger)).toStrictEqual('rebaseFailed');
+		expect(tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', logger)).toStrictEqual('rebaseFailed');
 	});
 
 	test('tryRebase correct offsets', async () => {
@@ -214,9 +214,9 @@ int main()
 }
 `);
 
-		const tracer = createTracer('nextEditCache.spec', console.log);
+		const logger = new TestLogService();
 		{
-			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', tracer);
+			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'strict', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
@@ -224,7 +224,7 @@ int main()
 			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
 		}
 		{
-			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', tracer);
+			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', logger);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
@@ -729,5 +729,71 @@ class Point3D {
 		const lenient = tryRebaseStringEdits(text, suggestion, userEdit, 'lenient');
 		expect(lenient?.apply(current)).toStrictEqual('abCDEfg');
 		expect(lenient?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[3, 3) -> "DE""`);
+	});
+
+	test('overlap: both insert in agreement with large offset', () => {
+		const text = `abcdefg`;
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'),
+		]);
+		const current = userEdit.apply(text);
+		expect(current).toStrictEqual(`abcdefgh`);
+
+		const suggestion1 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'x'.repeat(maxAgreementOffset) + 'h'),
+		]);
+		const applied1 = suggestion1.apply(text);
+		expect(applied1).toStrictEqual(`abcdefg${'x'.repeat(maxAgreementOffset)}h`);
+
+		const strict1 = tryRebaseStringEdits(text, suggestion1, userEdit, 'strict');
+		expect(strict1?.apply(current)).toStrictEqual(applied1);
+		expect(strict1?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset)}""`);
+		const lenient1 = tryRebaseStringEdits(text, suggestion1, userEdit, 'lenient');
+		expect(lenient1?.apply(current)).toStrictEqual(applied1);
+		expect(lenient1?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset)}""`);
+
+		const suggestion2 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'x'.repeat(maxAgreementOffset + 1) + 'h'),
+		]);
+		const applied2 = suggestion2.apply(text);
+		expect(applied2).toStrictEqual(`abcdefg${'x'.repeat(maxAgreementOffset + 1)}h`);
+
+		expect(tryRebaseStringEdits(text, suggestion2, userEdit, 'strict')).toBeUndefined();
+		const lenient2 = tryRebaseStringEdits(text, suggestion2, userEdit, 'lenient');
+		expect(lenient2?.apply(current)).toStrictEqual(applied2);
+		expect(lenient2?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset + 1)}""`);
+	});
+
+	test('overlap: both insert in agreement with an offset with longish user edit', () => {
+		const text = `abcdefg`;
+		const userEdit1 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'.repeat(maxImperfectAgreementLength)),
+		]);
+		const current1 = userEdit1.apply(text);
+		expect(current1).toStrictEqual(`abcdefg${'h'.repeat(maxImperfectAgreementLength)}`);
+
+		const suggestion = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), `x${'h'.repeat(maxImperfectAgreementLength + 2)}x`),
+		]);
+		const applied = suggestion.apply(text);
+		expect(applied).toStrictEqual(`abcdefgx${'h'.repeat(maxImperfectAgreementLength + 2)}x`);
+
+		const strict1 = tryRebaseStringEdits(text, suggestion, userEdit1, 'strict');
+		expect(strict1?.apply(current1)).toStrictEqual(applied);
+		expect(strict1?.removeCommonSuffixAndPrefix(current1).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
+		const lenient1 = tryRebaseStringEdits(text, suggestion, userEdit1, 'lenient');
+		expect(lenient1?.apply(current1)).toStrictEqual(applied);
+		expect(lenient1?.removeCommonSuffixAndPrefix(current1).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
+
+		const userEdit2 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'.repeat(maxImperfectAgreementLength + 1)),
+		]);
+		const current2 = userEdit2.apply(text);
+		expect(current2).toStrictEqual(`abcdefg${'h'.repeat(maxImperfectAgreementLength + 1)}`);
+
+		expect(tryRebaseStringEdits(text, suggestion, userEdit2, 'strict')).toBeUndefined();
+		const lenient2 = tryRebaseStringEdits(text, suggestion, userEdit2, 'lenient');
+		expect(lenient2?.apply(current2)).toStrictEqual(applied);
+		expect(lenient2?.removeCommonSuffixAndPrefix(current2).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength + 1}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
 	});
 });
