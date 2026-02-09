@@ -73,6 +73,13 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 
 	// 2. Add recent diffs in original/updated format
 	const diffs = getRecentDiffsForSweep(activeDoc, xtabHistory, computeTokens, opts);
+
+	// TODO:
+	// include N diffs in the prompt until I have token budget (eg 2000tokens): [entry0, entry1, entry2, ... entryN]
+	// original current file = entry0.base
+	// updated current file= entryN.base.apply(entryN.edit)
+
+	// original: entry0.base
 	for (const diff of diffs) {
 		// Extract just filename for cleaner diff headers
 		const diffFileName = diff.path.includes('/') ? diff.path.split('/').pop()! : diff.path;
@@ -183,6 +190,30 @@ function getRecentDiffsForSweep(
 			continue;
 		}
 
+
+		// const docDiffLines: string[] = [];
+		// const lineEdit = RootedEdit.toLineEdit(entry.edit);
+
+		// for (const singleLineEdit of lineEdit.replacements) {
+		// 	const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
+		// 	const newLines = singleLineEdit.newLines;
+
+		// 	const currentEdit = [];
+		// 	currentEdit.push(`original:`);
+		// 	pushMany(currentEdit, oldLines);
+		// 	currentEdit.push(`updated:`);
+		// 	pushMany(currentEdit, newLines);
+		// }
+
+		// FIXME@federicobrancasi: this would count tokens for the whole, but we want only the edits
+		// original:
+		//             if (params.length >= 8 && params[7] != null) {
+		//                 linkState = LinkState.valueOf(params[7].toUpperCase());
+		//             }
+		// updated:
+		//             if (params.length >= 8 && params[7] != null) {
+		//                 linkState = LinkState.valueOf(params[7].toUpperCase(Locale.ENGLISH));
+		//             }
 		const tokens = computeTokens(originalContent) + computeTokens(updatedContent);
 
 		if (tokenBudget - tokens < 0) {

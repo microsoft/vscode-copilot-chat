@@ -1,0 +1,7 @@
+{
+	"github.copilot.chat.advanced.inlineEdits.xtabProvider.modelConfiguration": {
+		"modelName": "copilot-nes-oct",
+		"promptingStrategy": "nextEdit",
+		"includeTagsInCurrentFile": false
+	}
+}
