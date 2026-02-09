@@ -8,6 +8,7 @@ export namespace CustomDataPartMimeTypes {
 	export const StatefulMarker = 'stateful_marker';
 	export const ThinkingData = 'thinking';
 	export const ContextManagement = 'context_management';
+	export const PhaseData = 'phase_data';
 }
 
 export const CacheType = 'ephemeral';
