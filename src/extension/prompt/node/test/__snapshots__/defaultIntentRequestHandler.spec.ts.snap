@@ -22,6 +22,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   "toolCallRounds": [
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 0",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -37,6 +39,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 1",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -52,6 +56,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 2",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -85,6 +91,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   "toolCallRounds": [
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 3",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -100,6 +108,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 4",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -115,6 +125,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 5",
       "statefulMarker": undefined,
       "summary": undefined,
@@ -191,6 +203,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 0",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -206,6 +220,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 1",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -221,6 +237,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 2",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -236,6 +254,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 3",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -303,6 +323,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 4",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -318,6 +340,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 5",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -333,6 +357,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 6",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -348,6 +374,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 7",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -2456,6 +2484,8 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -2789,6 +2819,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
@@ -2804,6 +2836,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response to tool call",
         "statefulMarker": undefined,
         "summary": undefined,
