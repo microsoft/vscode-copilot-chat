@@ -10,13 +10,8 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
 /**
  * Chat session item provider for product growth and user education.
- * Immediately provides a single active session on every reload.
- *
- * The session initially appears without a special status. When the user opens
- * the session, the chat model loads the confirmation part from history, which
- * sets the model state to `NeedsInput`. The content provider then triggers a
- * refresh so the sidebar re-queries items and the `handleSessionModelOverrides`
- * override in VS Code kicks in, setting the visible status to `NeedsInput`.
+ * Provides a single session that shows a NeedsInput attention badge
+ * until the user opens it, at which point it transitions to Completed.
  */
 export class GrowthChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 
@@ -30,33 +25,42 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	private readonly _created = Date.now();
+	private _seen = false;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-		this._logService.info('[GrowthItemProvider] constructor');
+	}
+
+	/**
+	 * Mark the session as seen (opened by the user). Clears the NeedsInput
+	 * attention badge without requiring any confirmation click.
+	 */
+	public markSeen(): void {
+		if (!this._seen) {
+			this._logService.info('[GrowthItemProvider] markSeen() — clearing attention');
+			this._seen = true;
+			this.refresh();
+		}
 	}
 
 	public refresh(): void {
-		this._logService.info('[GrowthItemProvider] refresh() — firing onDidChangeChatSessionItems');
 		this._onDidChangeChatSessionItems.fire();
 	}
 
-	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		const item: vscode.ChatSessionItem = {
+	public async provideChatSessionItems(_token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		return [{
 			resource: GrowthSessionUri.forSessionId(GrowthChatSessionItemProvider.sessionId),
 			label: 'Try Copilot',
 			description: 'GitHub Copilot is now enabled. Try for free?',
-			status: vscode.ChatSessionStatus.NeedsInput,
+			status: this._seen ? vscode.ChatSessionStatus.Completed : vscode.ChatSessionStatus.NeedsInput,
 			timing: {
 				created: this._created,
 				lastRequestStarted: this._created,
 			},
 			iconPath: new vscode.ThemeIcon('lightbulb'),
-		};
-		this._logService.info(`[GrowthItemProvider] provideChatSessionItems() — returning 1 item, resource=${item.resource.toString()}, status=${item.status}`);
-		return [item];
+		}];
 	}
 }
 

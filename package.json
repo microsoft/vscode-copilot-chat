@@ -2845,11 +2845,6 @@
 				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
 				"icon": "$(repo)",
 				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.growth.sendMessage",
-				"title": "Send Growth Chat Session Message",
-				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [

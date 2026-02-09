@@ -44,7 +44,7 @@ import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from '.
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
 import { GrowthChatSessionContentProvider } from './growthChatSessionContentProvider';
-import { GrowthChatSessionItemProvider, GrowthSessionUri } from './growthChatSessionItemProvider';
+import { GrowthChatSessionItemProvider } from './growthChatSessionItemProvider';
 import { GrowthChatSessionParticipant } from './growthChatSessionParticipant';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
@@ -167,13 +167,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
 		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
 		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
-
-		this._register(vscode.commands.registerCommand('github.copilot.growth.sendMessage', async () => {
-			await vscode.commands.executeCommand(`workbench.action.chat.openSessionWithPrompt.${GrowthChatSessionItemProvider.sessionType}`, {
-				resource: GrowthSessionUri.forSessionId(`growth-${Date.now()}`),
-				prompt: vscode.l10n.t('How can I get the most out of Copilot?'),
-			});
-		}));
 		// #endregion
 	}
 
