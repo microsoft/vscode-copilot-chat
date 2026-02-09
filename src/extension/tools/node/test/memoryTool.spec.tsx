@@ -115,7 +115,7 @@ suite('MemoryTool', () => {
 	test('view returns file not exist message for missing path', async () => {
 		const result = await invokeMemoryTool(tool, { command: 'view', path: '/memories/nonexistent.md' });
 		const text = getResultText(result as never);
-		expect(text).toContain('does not exist');
+		expect(text).toContain('No memories found in /memories/nonexistent.md');
 	});
 
 	test('view returns file content with line numbers', async () => {

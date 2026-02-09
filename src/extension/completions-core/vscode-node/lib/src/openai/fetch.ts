@@ -642,110 +642,130 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 				}
 			});
 
-			// .finally from fetchWithInstrumentation
-			this.instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
+			try {
 
-			if (res.isError()) {
+				if (res.isError()) {
 
-				const err = res.err;
+					const err = res.err;
 
-				if (err instanceof Completions.RequestCancelled) {
-					// abort the request when the token is canceled
-					this.instantiationService.invokeFunction(telemetry,
-						'networking.cancelRequest',
-						TelemetryData.createAndMarkAsIssued({ headerRequestId: ourRequestId })
-					);
-					return { type: 'canceled', reason: 'during fetch request' };
-				} else if (err instanceof Completions.UnsuccessfulResponse) {
-					const telemetryData = this.createTelemetryData(endpoint, params); // FIXME
-					return this.handleError(this.statusReporter, telemetryData, {
-						status: err.status,
-						text: err.text,
-						headers: err.headers,
-					}, copilotToken);
-				} else if (err instanceof Completions.Unexpected) {
-
-					const error = err.error;
-
-					// .catch from fetchWithInstrumentation
-					if (isAbortError(error)) {
-						// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
+					if (err instanceof Completions.RequestCancelled) {
+						// abort the request when the token is canceled
+						this.instantiationService.invokeFunction(telemetry,
+							'networking.cancelRequest',
+							TelemetryData.createAndMarkAsIssued({ headerRequestId: ourRequestId })
+						);
 						this.instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
+						return { type: 'canceled', reason: 'during fetch request' };
+					} else if (err instanceof Completions.UnsuccessfulResponse) {
+						// Emit request.response for non-200 responses, matching fetchWithInstrumentation's .then()
+						// which fires for all HTTP responses including error status codes
+						const modelRequestId = getRequestId(err.headers);
+						telemetryData.extendWithRequestId(modelRequestId);
+						const totalTimeMs = requestSw.elapsed();
+						telemetryData.measurements.totalTimeMs = totalTimeMs;
+						telemetryData.properties.status = String(err.status);
+						logger.info(
+							this.logTargetService,
+							`Request ${ourRequestId} at <${uri}> finished with ${err.status} status after ${totalTimeMs}ms`
+						);
+						logger.debug(this.logTargetService, 'request.response properties', telemetryData.properties);
+						logger.debug(this.logTargetService, 'request.response measurements', telemetryData.measurements);
+						logger.debug(this.logTargetService, 'prompt:', prompt);
+						this.instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
+
+						return this.handleError(this.statusReporter, telemetryData, {
+							status: err.status,
+							text: err.text,
+							headers: err.headers,
+						}, copilotToken);
+					} else if (err instanceof Completions.Unexpected) {
+
+						const error = err.error;
+
+						// .catch from fetchWithInstrumentation
+						if (isAbortError(error)) {
+							// If we cancelled a network request, we want to log a `request.cancel` instead of `request.error`
+							this.instantiationService.invokeFunction(telemetry, 'request.cancel', telemetryData);
+							throw error;
+						}
+						this.statusReporter.setWarning(getKey(error, 'message') ?? '');
+						const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
+						this.instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
+
+						telemetryData.properties.message = String(getKey(error, 'name') ?? '');
+						telemetryData.properties.code = String(getKey(error, 'code') ?? '');
+						telemetryData.properties.errno = String(getKey(error, 'errno') ?? '');
+						telemetryData.properties.type = String(getKey(error, 'type') ?? '');
+
+						const totalTimeMs = requestSw.elapsed();
+						telemetryData.measurements.totalTimeMs = totalTimeMs;
+
+						logger.info(
+							this.logTargetService,
+							`Request ${ourRequestId} at <${uri}> rejected with ${String(error)} after ${totalTimeMs}ms`
+						);
+						logger.debug(this.logTargetService, 'request.error properties', telemetryData.properties);
+						logger.debug(this.logTargetService, 'request.error measurements', telemetryData.measurements);
+
+						this.instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
+
 						throw error;
+					} else {
+						assertNever(err);
 					}
-					this.statusReporter.setWarning(getKey(error, 'message') ?? '');
-					const warningTelemetry = telemetryData.extendedBy({ error: 'Network exception' });
-					this.instantiationService.invokeFunction(telemetry, 'request.shownWarning', warningTelemetry);
+				}
 
-					telemetryData.properties.message = String(getKey(error, 'name') ?? '');
-					telemetryData.properties.code = String(getKey(error, 'code') ?? '');
-					telemetryData.properties.errno = String(getKey(error, 'errno') ?? '');
-					telemetryData.properties.type = String(getKey(error, 'type') ?? '');
+				const responseStream = res.val;
 
+				// .then from fetchWithInstrumentation
+				{
+					// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
+					// If they are different then we will override the original one we set in telemetryData above.
+					const modelRequestId = responseStream.requestId;
+					telemetryData.extendWithRequestId(modelRequestId);
+
+					// TODO: Add response length (requires parsing)
 					const totalTimeMs = requestSw.elapsed();
 					telemetryData.measurements.totalTimeMs = totalTimeMs;
 
+					const responseStatus = 200; // because otherwise it wouldn't be here
 					logger.info(
 						this.logTargetService,
-						`Request ${ourRequestId} at <${uri}> rejected with ${String(error)} after ${totalTimeMs}ms`
+						`Request ${ourRequestId} at <${uri}> finished with ${responseStatus} status after ${totalTimeMs}ms`
 					);
-					logger.debug(this.logTargetService, 'request.error properties', telemetryData.properties);
-					logger.debug(this.logTargetService, 'request.error measurements', telemetryData.measurements);
+					telemetryData.properties.status = String(responseStatus);
+					logger.debug(this.logTargetService, 'request.response properties', telemetryData.properties);
+					logger.debug(this.logTargetService, 'request.response measurements', telemetryData.measurements);
 
-					this.instantiationService.invokeFunction(telemetry, 'request.error', telemetryData);
+					logger.debug(this.logTargetService, 'prompt:', prompt);
 
-					throw error;
-				} else {
-					assertNever(err);
+					this.instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
+
 				}
-			}
 
-			const responseStream = res.val;
-
-			// .then from fetchWithInstrumentation
-			{
-				// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
-				// If they are different then we will override the original one we set in telemetryData above.
-				const modelRequestId = responseStream.requestId;
-				telemetryData.extendWithRequestId(modelRequestId);
-
-				// TODO: Add response length (requires parsing)
-				const totalTimeMs = requestSw.elapsed();
-				telemetryData.measurements.totalTimeMs = totalTimeMs;
-
-				const responseStatus = 200; // because otherwise it wouldn't be here
-				logger.info(
-					this.logTargetService,
-					`Request ${ourRequestId} at <${uri}> finished with ${responseStatus} status after ${totalTimeMs}ms`
-				);
-				telemetryData.properties.status = String(responseStatus);
-				logger.debug(this.logTargetService, 'request.response properties', telemetryData.properties);
-				logger.debug(this.logTargetService, 'request.response measurements', telemetryData.measurements);
-
-				logger.debug(this.logTargetService, 'prompt:', prompt);
-
-				this.instantiationService.invokeFunction(telemetry, 'request.response', telemetryData);
-
-			}
-
-			if (cancel.isCancellationRequested) {
-				try {
-					// Destroy the stream so that the server is hopefully notified we don't want any more data
-					// and can cancel/forget about the request itself.
-					await responseStream.destroy();
-				} catch (e) {
-					this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
+				if (cancel.isCancellationRequested) {
+					try {
+						// Destroy the stream so that the server is hopefully notified we don't want any more data
+						// and can cancel/forget about the request itself.
+						await responseStream.destroy();
+					} catch (e) {
+						this.instantiationService.invokeFunction(acc => logger.exception(acc, e, `Error destroying stream`));
+					}
+					return { type: 'canceled', reason: 'after fetch request' };
 				}
-				return { type: 'canceled', reason: 'after fetch request' };
+
+				const choices = LiveOpenAIFetcher.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData, cancel);
+
+				return {
+					type: 'success',
+					choices: postProcessChoices(choices),
+					getProcessingTime: () => getProcessingTime(responseStream.headers),
+				};
+
+			} finally {
+				// Matches .finally() from fetchWithInstrumentation — always log engine prompt
+				this.instantiationService.invokeFunction(logEnginePrompt, prompt, telemetryData);
 			}
-
-			const choices = LiveOpenAIFetcher.convertStreamToApiChoices(responseStream, finishedCb, baseTelemetryData, cancel);
-
-			return {
-				type: 'success',
-				choices: postProcessChoices(choices),
-				getProcessingTime: () => getProcessingTime(responseStream.headers),
-			};
 		}
 	}
 

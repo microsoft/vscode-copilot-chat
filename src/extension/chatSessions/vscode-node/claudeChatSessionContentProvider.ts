@@ -31,6 +31,9 @@ import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
 // Import the hooks to trigger self-registration
 import '../../agents/claude/vscode-node/hooks/index';
 
+// Import the MCP server contributors to trigger self-registration
+import '../../agents/claude/vscode-node/mcpServers/index';
+
 const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 const FOLDER_OPTION_ID = 'folder';
