@@ -846,6 +846,29 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	opts: CurrentFileOptions
 ): Result<ClippedDocument, 'outOfBudget'> {
 
+	/*
+
+	document:
+
+	0 hello
+	<edit window>
+	1 world
+	</edit window>
+	2 foo
+
+	cursor: line 1, offset 3 (between r and l)
+
+	clipPreservingRange tries to include lines starting from the line with the cursor as long as token budget is not exceeded
+
+	how it works:
+
+	budget: 3
+
+	1. try include line with the cursor - 2 tokens - ok, include it, remaining budget: 1
+	2. try include line above - 2 tokens - not ok, don't include it, remaining budget: 1
+	3. try include line below - 1 tokens - not ok, include it
+
+	*/
 	const r = clipPreservingRange(
 		currentDocLines,
 		areaAroundEditWindowLinesRange,
