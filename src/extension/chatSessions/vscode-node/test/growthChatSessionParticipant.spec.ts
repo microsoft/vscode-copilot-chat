@@ -34,14 +34,4 @@ describe('GrowthChatSessionParticipant', () => {
 		expect(handler).toBeDefined();
 		expect(typeof handler).toBe('function');
 	});
-
-	it('should have sendNeedsInputMessage method', () => {
-		expect(participant.sendNeedsInputMessage).toBeDefined();
-		expect(typeof participant.sendNeedsInputMessage).toBe('function');
-	});
-
-	it('should have sendFeatureTip method', () => {
-		expect(participant.sendFeatureTip).toBeDefined();
-		expect(typeof participant.sendFeatureTip).toBe('function');
-	});
 });

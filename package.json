@@ -2847,13 +2847,8 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.growth.showNeedsInputMessage",
-				"title": "Show Copilot Welcome Message",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.growth.showFeatureTip",
-				"title": "Show Copilot Feature Tip",
+				"command": "github.copilot.growth.sendMessage",
+				"title": "Send Growth Chat Session Message",
 				"category": "GitHub Copilot"
 			}
 		],
@@ -3048,9 +3043,8 @@
 					},
 					"github.copilot.chat.growthMessages.enabled": {
 						"type": "boolean",
-						"default": false,
-						"markdownDescription": "Enable educational growth messages to help learn Copilot features. This is an experimental feature.",
-						"scope": "application"
+						"default": true,
+						"markdownDescription": "Enable educational growth messages to help learn Copilot features. This is an experimental feature."
 					}
 				}
 			},
@@ -5638,6 +5632,7 @@
 				"icon": "$(lightbulb)",
 				"welcomeTitle": "Learn Copilot",
 				"welcomeMessage": "Get tips and learn how to use Copilot effectively",
+				"canDelegate": true,
 				"inputPlaceholder": "Ask about Copilot features...",
 				"order": 99,
 				"description": "Educational messages to help you learn Copilot",

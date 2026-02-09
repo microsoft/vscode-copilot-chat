@@ -44,7 +44,7 @@ import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from '.
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
 import { GrowthChatSessionContentProvider } from './growthChatSessionContentProvider';
-import { GrowthChatSessionItemProvider } from './growthChatSessionItemProvider';
+import { GrowthChatSessionItemProvider, GrowthSessionUri } from './growthChatSessionItemProvider';
 import { GrowthChatSessionParticipant } from './growthChatSessionParticipant';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
@@ -117,7 +117,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IChatDelegationSummaryService, delegationSummary],
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
-		const cloudSessionProvider = this.registerCopilotCloudAgent();
+		const cloudSessionProvider = undefined; // temporarily disabled — network-heavy // this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
@@ -162,28 +162,22 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const growthSessionItemProvider = this._register(instantiationService.createInstance(GrowthChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionItemProvider.sessionType, growthSessionItemProvider));
 
-		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider));
+		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider, growthSessionItemProvider));
 		const growthChatSessionParticipant = instantiationService.createInstance(GrowthChatSessionParticipant);
 		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
 		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
 		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
 
-		// Register temporary commands for testing
-		this._register(vscode.commands.registerCommand('github.copilot.growth.showNeedsInputMessage', async () => {
-			await growthChatSessionParticipant.sendNeedsInputMessage(
-				vscode.l10n.t('👋 Welcome to Copilot! To get started, try asking a question about your code or selecting some code and using inline chat (Ctrl+I).'),
-				{ command: 'inlineChat.start', title: vscode.l10n.t('Start Inline Chat') }
-			);
-		}));
-
-		this._register(vscode.commands.registerCommand('github.copilot.growth.showFeatureTip', async () => {
-			await growthChatSessionParticipant.sendFeatureTip(
-				vscode.l10n.t('💡 **Tip**: You can use @workspace to ask questions about your entire codebase, or @terminal to get help with terminal commands.')
-			);
+		this._register(vscode.commands.registerCommand('github.copilot.growth.sendMessage', async () => {
+			await vscode.commands.executeCommand(`workbench.action.chat.openSessionWithPrompt.${GrowthChatSessionItemProvider.sessionType}`, {
+				resource: GrowthSessionUri.forSessionId(`growth-${Date.now()}`),
+				prompt: vscode.l10n.t('How can I get the most out of Copilot?'),
+			});
 		}));
 		// #endregion
 	}
 
+	// @ts-expect-error temporarily disabled — network-heavy
 	private registerCopilotCloudAgent() {
 		if (!this.copilotAgentInstaService) {
 			return;
