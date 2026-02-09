@@ -157,13 +157,14 @@ describe('isProcessRunning', () => {
 
 describe('cleanupStaleLockFiles', () => {
 	const testDir = path.join(os.tmpdir(), 'lockfile-cleanup-test-' + Date.now());
+	const copilotDir = path.join(testDir, '.copilot', 'ide');
 	let originalEnv: string | undefined;
 
 	beforeEach(() => {
 		originalEnv = process.env.XDG_STATE_HOME;
 		process.env.XDG_STATE_HOME = testDir;
-		if (!fs.existsSync(path.join(testDir, '.copilot', 'ide'))) {
-			fs.mkdirSync(path.join(testDir, '.copilot', 'ide'), { recursive: true });
+		if (!fs.existsSync(copilotDir)) {
+			fs.mkdirSync(copilotDir, { recursive: true });
 		}
 	});
 
@@ -179,8 +180,6 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should remove lockfiles for non-running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot', 'ide');
-
 		const staleLockFile = path.join(copilotDir, 'stale.lock');
 		const staleLockInfo = {
 			socketPath: '/tmp/test.sock',
@@ -200,8 +199,6 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should keep lockfiles for running processes', () => {
-		const copilotDir = path.join(testDir, '.copilot', 'ide');
-
 		const activeLockFile = path.join(copilotDir, 'active.lock');
 		const activeLockInfo = {
 			socketPath: '/tmp/test.sock',
@@ -221,7 +218,7 @@ describe('cleanupStaleLockFiles', () => {
 	});
 
 	it('should return 0 when copilot directory does not exist', () => {
-		fs.rmSync(path.join(testDir, '.copilot', 'ide'), { recursive: true, force: true });
+		fs.rmSync(copilotDir, { recursive: true, force: true });
 
 		const cleaned = cleanupStaleLockFiles(logger);
 		expect(cleaned).toBe(0);
