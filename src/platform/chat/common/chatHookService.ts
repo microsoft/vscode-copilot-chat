@@ -25,6 +25,58 @@ export interface IChatHookService {
 	 * @returns A promise that resolves to an array of hook execution results.
 	 */
 	executeHook(hookType: vscode.ChatHookType, options: vscode.ChatHookExecutionOptions, sessionId?: string, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
+
+	/**
+	 * Execute the preToolUse hook and collapse results from all hooks into a single result.
+	 *
+	 * Multiple hooks' decisions are collapsed using the most restrictive rule: deny > ask > allow.
+	 * `updatedInput` uses the last hook's value. `additionalContext` is collected from all hooks.
+	 *
+	 * @param toolName The name of the tool being invoked.
+	 * @param toolInput The input parameters for the tool.
+	 * @param toolCallId The unique ID for this tool call.
+	 * @param toolInvocationToken The tool invocation token from the chat participant.
+	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
+	 * @param token Optional cancellation token.
+	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
+	 */
+	executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, toolInvocationToken: vscode.ChatParticipantToolToken | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined>;
+
+	/**
+	 * Execute the postToolUse hook and collapse results from all hooks into a single result.
+	 *
+	 * Called after a tool completes successfully. If any hook returns a 'block' decision,
+	 * the block is included in the result. `additionalContext` is collected from all hooks.
+	 *
+	 * @param toolName The name of the tool that was invoked.
+	 * @param toolInput The input parameters that were passed to the tool.
+	 * @param toolResponseText The text representation of the tool's output.
+	 * @param toolCallId The unique ID for this tool call.
+	 * @param toolInvocationToken The tool invocation token from the chat participant.
+	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
+	 * @param token Optional cancellation token.
+	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
+	 */
+	executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, toolInvocationToken: vscode.ChatParticipantToolToken | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined>;
+}
+
+/**
+ * Collapsed result from all preToolUse hooks.
+ */
+export interface IPreToolUseHookResult {
+	permissionDecision?: 'allow' | 'deny' | 'ask';
+	permissionDecisionReason?: string;
+	updatedInput?: object;
+	additionalContext?: string[];
+}
+
+/**
+ * Collapsed result from all postToolUse hooks.
+ */
+export interface IPostToolUseHookResult {
+	decision?: 'block';
+	reason?: string;
+	additionalContext?: string[];
 }
 
 //#region Hook Input/Output Types
