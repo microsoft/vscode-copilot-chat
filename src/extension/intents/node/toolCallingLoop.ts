@@ -160,6 +160,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallRounds: IToolCallRound[] = [];
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
+	private stopHookConsumesPRU = false;
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -626,6 +627,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							result.round.hookContext = formatHookContext(stopHookResult.reasons);
 							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reasons: ${joinedReasons}`);
 							stopHookActive = true;
+							// Consume a PRU for the next iteration since the Stop hook is forcing continuation
+							this.stopHookConsumesPRU = true;
 							continue;
 						}
 					}
@@ -908,9 +911,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId,
+			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookConsumesPRU,
 			disableThinking,
 		}, token);
+
+		this.stopHookConsumesPRU = false;
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: buildPromptResult.messages,
