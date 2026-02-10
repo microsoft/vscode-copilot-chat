@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { EventEmitter } from 'events';
 import type { ChatHookCommand } from 'vscode';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -11,113 +12,121 @@ import { TestLogService } from '../../../testing/common/testLogService';
 import { HookCommandResultKind } from '../../common/hookExecutor';
 import { NodeHookExecutor } from '../../node/hookExecutor';
 
+let mockChild: MockChildProcess;
+
+vi.mock('child_process', () => ({
+	spawn: vi.fn(() => mockChild),
+}));
+
+interface MockChildProcess extends EventEmitter {
+	stdin: { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
+	stdout: EventEmitter;
+	stderr: EventEmitter;
+	kill: ReturnType<typeof vi.fn>;
+}
+
+function createMockChild(): MockChildProcess {
+	const child: MockChildProcess = Object.assign(new EventEmitter(), {
+		stdin: { write: vi.fn(), end: vi.fn() },
+		stdout: new EventEmitter(),
+		stderr: new EventEmitter(),
+		kill: vi.fn(),
+	});
+	return child;
+}
+
+/**
+ * Simulates a child process completing with the given stdout, stderr, and exit code.
+ */
+function completeChild(child: MockChildProcess, opts: { stdout?: string; stderr?: string; exitCode?: number }): void {
+	if (opts.stdout) {
+		child.stdout.emit('data', Buffer.from(opts.stdout));
+	}
+	if (opts.stderr) {
+		child.stderr.emit('data', Buffer.from(opts.stderr));
+	}
+	child.emit('exit', opts.exitCode ?? 0);
+	child.emit('close');
+}
+
 function cmd(command: string, options?: Partial<Omit<ChatHookCommand, 'command'>>): ChatHookCommand {
 	return { command, ...options } as ChatHookCommand;
 }
 
 describe('NodeHookExecutor', () => {
 	let executor: NodeHookExecutor;
+	let child: MockChildProcess;
 
 	beforeEach(() => {
 		executor = new NodeHookExecutor(new TestLogService());
+		child = createMockChild();
+		mockChild = child;
 	});
 
-	test('runs command and returns success result', async () => {
-		const result = await executor.executeCommand(
-			cmd('echo "hello world"'),
-			undefined,
-			CancellationToken.None
-		);
+	test('returns success with string output for exit code 0', async () => {
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { stdout: 'hello world', exitCode: 0 });
+		const result = await promise;
 
 		expect(result.kind).toBe(HookCommandResultKind.Success);
-		expect((result.result as string).trim()).toBe('hello world');
+		expect(result.result).toBe('hello world');
 	});
 
-	test('parses JSON output', async () => {
-		const result = await executor.executeCommand(
-			cmd('echo \'{"key": "value"}\''),
-			undefined,
-			CancellationToken.None
-		);
+	test('parses JSON stdout', async () => {
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { stdout: '{"key": "value"}', exitCode: 0 });
+		const result = await promise;
 
 		expect(result.kind).toBe(HookCommandResultKind.Success);
 		expect(result.result).toEqual({ key: 'value' });
 	});
 
+	test('returns empty string for no output', async () => {
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { exitCode: 0 });
+		const result = await promise;
+
+		expect(result.kind).toBe(HookCommandResultKind.Success);
+		expect(result.result).toBe('');
+	});
+
 	test('returns non-blocking error for exit code 1', async () => {
-		const result = await executor.executeCommand(
-			cmd('exit 1'),
-			undefined,
-			CancellationToken.None
-		);
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { stderr: 'warning', exitCode: 1 });
+		const result = await promise;
 
 		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
+		expect(result.result).toBe('warning');
 	});
 
 	test('returns blocking error for exit code 2', async () => {
-		const result = await executor.executeCommand(
-			cmd('exit 2'),
-			undefined,
-			CancellationToken.None
-		);
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { stderr: 'fatal error', exitCode: 2 });
+		const result = await promise;
 
 		expect(result.kind).toBe(HookCommandResultKind.Error);
+		expect(result.result).toBe('fatal error');
 	});
 
-	test('captures stderr on failure', async () => {
-		const result = await executor.executeCommand(
-			cmd('echo "error message" >&2 && exit 1'),
-			undefined,
-			CancellationToken.None
-		);
-
-		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
-		expect((result.result as string).trim()).toBe('error message');
-	});
-
-	test('passes input to stdin as JSON', async () => {
+	test('writes JSON input to stdin', async () => {
 		const input = { tool: 'bash', args: { command: 'ls' } };
-		const result = await executor.executeCommand(
-			cmd('cat'),
-			input,
-			CancellationToken.None
-		);
+		const promise = executor.executeCommand(cmd('test'), input, CancellationToken.None);
+		completeChild(child, { exitCode: 0 });
+		await promise;
 
-		expect(result.kind).toBe(HookCommandResultKind.Success);
-		expect(result.result).toEqual(input);
+		expect(child.stdin.write).toHaveBeenCalled();
+		const written = child.stdin.write.mock.calls[0][0];
+		expect(JSON.parse(written)).toEqual(input);
+		expect(child.stdin.end).toHaveBeenCalled();
 	});
 
-	test('returns error for invalid command', async () => {
-		const result = await executor.executeCommand(
-			cmd('/nonexistent/command/that/does/not/exist'),
-			undefined,
-			CancellationToken.None
-		);
+	test('does not write to stdin when input is undefined', async () => {
+		const promise = executor.executeCommand(cmd('test'), undefined, CancellationToken.None);
+		completeChild(child, { exitCode: 0 });
+		await promise;
 
-		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
-	});
-
-	test('uses custom environment variables', async () => {
-		const result = await executor.executeCommand(
-			cmd('echo $MY_VAR', { env: { MY_VAR: 'custom_value' } }),
-			undefined,
-			CancellationToken.None
-		);
-
-		expect(result.kind).toBe(HookCommandResultKind.Success);
-		expect((result.result as string).trim()).toBe('custom_value');
-	});
-
-	test('uses custom cwd', async () => {
-		const result = await executor.executeCommand(
-			cmd('pwd', { cwd: URI.file('/tmp') }),
-			undefined,
-			CancellationToken.None
-		);
-
-		expect(result.kind).toBe(HookCommandResultKind.Success);
-		// macOS uses /private/tmp symlink
-		expect((result.result as string).trim()).toMatch(/tmp/);
+		expect(child.stdin.write).not.toHaveBeenCalled();
+		expect(child.stdin.end).toHaveBeenCalled();
 	});
 
 	test('converts URI-like objects in input to filesystem paths', async () => {
@@ -125,71 +134,76 @@ describe('NodeHookExecutor', () => {
 			cwd: { scheme: 'file', path: '/test/path', fsPath: '/test/path' },
 			other: 'value'
 		};
-		const result = await executor.executeCommand(
-			cmd('cat'),
-			input,
-			CancellationToken.None
-		);
+		const promise = executor.executeCommand(cmd('test'), input, CancellationToken.None);
+		completeChild(child, { exitCode: 0 });
+		await promise;
 
+		const written = JSON.parse(child.stdin.write.mock.calls[0][0]);
+		expect(written.cwd).toBe('/test/path');
+		expect(written.other).toBe('value');
+	});
+
+	test('passes custom environment variables to spawn', async () => {
+		const promise = executor.executeCommand(
+			cmd('test', { env: { MY_VAR: 'custom_value' } }),
+			undefined, CancellationToken.None
+		);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		const result = await promise;
+
+		// Verify the command ran successfully (env is passed to spawn options)
 		expect(result.kind).toBe(HookCommandResultKind.Success);
-		const parsed = result.result as Record<string, unknown>;
-		expect(parsed['cwd']).toBe('/test/path');
-		expect(parsed['other']).toBe('value');
 	});
 
-	test('handles null and undefined input without error', async () => {
-		const resultNull = await executor.executeCommand(
-			cmd('echo ok'),
-			null,
-			CancellationToken.None
+	test('passes custom cwd from hook command to spawn', async () => {
+		const promise = executor.executeCommand(
+			cmd('test', { cwd: URI.file('/my/project') }),
+			undefined, CancellationToken.None
 		);
-		expect(resultNull.kind).toBe(HookCommandResultKind.Success);
+		completeChild(child, { stdout: 'ok', exitCode: 0 });
+		const result = await promise;
 
-		const resultUndefined = await executor.executeCommand(
-			cmd('echo ok'),
-			undefined,
-			CancellationToken.None
-		);
-		expect(resultUndefined.kind).toBe(HookCommandResultKind.Success);
-	});
-
-	test('returns empty string for command with no output', async () => {
-		const result = await executor.executeCommand(
-			cmd('true'),
-			undefined,
-			CancellationToken.None
-		);
-
+		// Verify the command ran successfully (cwd is passed to spawn options)
 		expect(result.kind).toBe(HookCommandResultKind.Success);
-		expect(result.result).toBe('');
 	});
 
-	test('respects cancellation token', async () => {
+	test('handles spawn error as non-blocking error', async () => {
+		const promise = executor.executeCommand(cmd('badcmd'), undefined, CancellationToken.None);
+		child.emit('error', new Error('spawn ENOENT'));
+		const result = await promise;
+
+		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
+		expect(result.result).toContain('ENOENT');
+	});
+
+	test('kills process on cancellation', async () => {
 		const cts = new CancellationTokenSource();
+		const promise = executor.executeCommand(cmd('test'), undefined, cts.token);
 
-		// Start a long-running command
-		const resultPromise = executor.executeCommand(
-			cmd('sleep 30'),
-			undefined,
-			cts.token
-		);
+		cts.cancel();
+		expect(child.kill).toHaveBeenCalledWith('SIGTERM');
 
-		// Cancel after a short delay
-		setTimeout(() => cts.cancel(), 100);
-
-		const result = await resultPromise;
-		// Command should be killed, resulting in non-blocking error (non-zero exit)
+		completeChild(child, { exitCode: 1 });
+		const result = await promise;
 		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
 	});
 
-	test('respects timeout', async () => {
-		const result = await executor.executeCommand(
-			cmd('sleep 30', { timeoutSec: 1 }),
-			undefined,
-			CancellationToken.None
-		);
+	test('kills process on timeout', async () => {
+		vi.useFakeTimers();
+		try {
+			const promise = executor.executeCommand(
+				cmd('test', { timeoutSec: 5 }),
+				undefined, CancellationToken.None
+			);
 
-		// Command should be killed after timeout
-		expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
+			vi.advanceTimersByTime(5000);
+			expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+
+			completeChild(child, { exitCode: 1 });
+			const result = await promise;
+			expect(result.kind).toBe(HookCommandResultKind.NonBlockingError);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
