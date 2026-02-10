@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { IChatHookService, IPostToolUseHookResult, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
+import { IPostToolUseHookCommandInput, IPostToolUseHookSpecificCommandOutput, IPreToolUseHookCommandInput, IPreToolUseHookSpecificCommandOutput } from '../../../platform/chat/common/hookCommandTypes';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../../platform/chat/common/hookExecutor';
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
@@ -12,20 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
-interface IPreToolUseHookSpecificOutput {
-	hookEventName?: string;
-	permissionDecision?: 'allow' | 'deny' | 'ask';
-	permissionDecisionReason?: string;
-	updatedInput?: object;
-	additionalContext?: string;
-}
-
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
-
-interface IPostToolUseHookSpecificOutput {
-	hookEventName?: string;
-	additionalContext?: string;
-}
 
 /**
  * Keys that should be redacted when logging hook input.
@@ -219,7 +207,7 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	async executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined> {
-		const hookInput = {
+		const hookInput: IPreToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
 			tool_use_id: toolCallId,
@@ -259,7 +247,7 @@ export class ChatHookService implements IChatHookService {
 				continue;
 			}
 
-			const output = result.output as { hookSpecificOutput?: IPreToolUseHookSpecificOutput };
+			const output = result.output as { hookSpecificOutput?: IPreToolUseHookSpecificCommandOutput };
 			const hookSpecificOutput = output.hookSpecificOutput;
 			if (!hookSpecificOutput) {
 				continue;
@@ -298,7 +286,7 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined> {
-		const hookInput = {
+		const hookInput: IPostToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
 			tool_response: toolResponseText,
@@ -339,7 +327,7 @@ export class ChatHookService implements IChatHookService {
 			const output = result.output as {
 				decision?: string;
 				reason?: string;
-				hookSpecificOutput?: IPostToolUseHookSpecificOutput;
+				hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
 			};
 
 			// Skip results from other hook event types
