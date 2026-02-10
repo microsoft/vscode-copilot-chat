@@ -42,22 +42,27 @@ export class PromptPieces {
 }
 
 const MAX_DIFF_BLOCKS = 15; // Maximum number of individual diff blocks to include
-const TOTAL_PROMPT_BUDGET = 4000; // Total token budget for prompt (half of 8K, leave room for output)
+const TOTAL_PROMPT_BUDGET = 7000; // Total token budget for prompt (model only outputs ~21 lines)
 const FILE_SEP = '<|file_sep|>';
 
-// Budget allocation for 4000 tokens:
-// - Diffs: ~2000 tokens (prioritized)
-// - Original/Current sections: ~1500 tokens (750 each)
-// - Context files: ~500 tokens (optional, fills remaining)
-const DIFF_BUDGET = 2000;
-const ORIGINAL_CURRENT_BUDGET = 1500;
-const CONTEXT_FILES_BUDGET = 500;
+// 21-line window: 10 lines above cursor, cursor line, 10 lines below cursor
+// This matches SweepAI's blog post format for local model inference
+const CURSOR_WINDOW_LINES_ABOVE = 10;
+const CURSOR_WINDOW_LINES_BELOW = 10;
+
+// Budget allocation for 7000 tokens:
+// - Diffs: ~3500 tokens (prioritized)
+// - Context files: ~3500 tokens (fills remaining)
+// Note: Original/Current sections are fixed at 21 lines each (~100-200 tokens)
+const DIFF_BUDGET = 3500;
+const CONTEXT_FILES_BUDGET = 3500;
 
 /**
  * Constructs a prompt for the Sweep next-edit-1.5B model.
  *
- * Token budget: 4000 tokens total (half of2 8K context, leave room for output)
- * Priority: Diffs (2000) > Original/Current (1500) > Context files (500)
+ * Token budget: 7000 tokens total (model only outputs ~21 lines)
+ * Priority: Diffs (3500) > Context files (3500)
+ * Original/Current: Fixed 21-line window around cursor
  *
  * Format:
  *   <|file_sep|>{file_path_1}
@@ -68,15 +73,15 @@ const CONTEXT_FILES_BUDGET = 500;
  *   updated:
  *   {only_changed_lines_after}
  *   <|file_sep|>original/{file_path}
- *   {truncated_contents_prior_to_most_recent_change}
+ *   {21_lines_around_cursor_before_session_edits}
  *   <|file_sep|>current/{file_path}
- *   {truncated_current_state_of_contents}
+ *   {21_lines_around_cursor_now}
  *   <|file_sep|>updated/{file_path}
  */
 export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 	const parts: string[] = [];
 
-	const { activeDoc, xtabHistory, computeTokens, editWindowLinesRange } = promptPieces;
+	const { activeDoc, xtabHistory, computeTokens, currentDocument } = promptPieces;
 
 	// Get file path and name
 	const filePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
@@ -125,8 +130,15 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 			);
 			const newLines = singleLineEdit.newLines;
 
+			// Skip empty diffs (no actual changes)
+			const oldContent = oldLines.join('\n').trim();
+			const newContent = newLines.join('\n').trim();
+			if (!oldContent && !newContent) {
+				continue;
+			}
+
 			// Calculate tokens for this diff block
-			const diffBlock = `${FILE_SEP}${fileName}.diff\noriginal:\n${oldLines.join('\n')}\nupdated:\n${newLines.join('\n')}`;
+			const diffBlock = `${FILE_SEP}${fileName}.diff\noriginal:\n${oldContent}\nupdated:\n${newContent}`;
 			const diffTokens = computeTokens(diffBlock);
 
 			if (diffTokenBudget - diffTokens < 0) {
@@ -139,18 +151,22 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 
 			diffParts.push(`${FILE_SEP}${fileName}.diff`);
 			diffParts.push('original:');
-			pushMany(diffParts, oldLines);
+			if (oldContent) {
+				diffParts.push(oldContent);
+			}
 			diffParts.push('updated:');
-			pushMany(diffParts, newLines);
+			if (newContent) {
+				diffParts.push(newContent);
+			}
 		}
 	}
 
-	// Step 4: Build original/current sections with truncation
-	// Budget: ORIGINAL_CURRENT_BUDGET tokens split between both sections
-	const perSectionTokens = Math.floor(ORIGINAL_CURRENT_BUDGET / 2);
+	// Step 4: Build original/current sections with 21-line window around cursor
+	// 10 lines above cursor, cursor line, 10 lines below = 21 lines total
+	const cursorLine = currentDocument.cursorLineOffset;
 
-	const originalSection = truncateContentForSection(originalContent, editWindowLinesRange, perSectionTokens, computeTokens);
-	const currentSection = truncateContentForSection(currentContent, editWindowLinesRange, perSectionTokens, computeTokens);
+	const originalSection = extract21LineWindow(originalContent, cursorLine);
+	const currentSection = extract21LineWindow(currentContent, cursorLine);
 
 	// Step 5: Calculate remaining budget for context files
 	const diffTokensUsed = DIFF_BUDGET - diffTokenBudget;
@@ -193,63 +209,19 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 }
 
 /**
- * Truncate content to fit budget, centered around edit window.
- * Uses windowed clipping similar to clipPreservingRange.
+ * Extract 21-line window around cursor position.
+ * 10 lines above cursor, cursor line, 10 lines below cursor.
+ * This matches SweepAI's blog post format for local model inference.
  */
-function truncateContentForSection(
-	content: string,
-	editWindow: OffsetRange,
-	maxTokens: number,
-	computeTokens: (s: string) => number
-): string {
-	const totalTokens = computeTokens(content);
-
-	// If content fits in budget, return as-is
-	if (totalTokens <= maxTokens) {
-		return content;
-	}
-
+function extract21LineWindow(content: string, cursorLine: number): string {
 	const lines = content.split('\n');
-	const editStart = Math.min(editWindow.start, lines.length - 1);
-	const editEnd = Math.min(editWindow.endExclusive, lines.length);
 
-	// Get the edit window content
-	const editLines = lines.slice(editStart, editEnd);
-	const editContent = editLines.join('\n');
-	const editTokens = computeTokens(editContent);
+	// Calculate window bounds (0-based indexing)
+	const startLine = Math.max(0, cursorLine - CURSOR_WINDOW_LINES_ABOVE);
+	const endLine = Math.min(lines.length, cursorLine + CURSOR_WINDOW_LINES_BELOW + 1);
 
-	// If edit window alone exceeds budget, truncate it
-	if (editTokens >= maxTokens) {
-		const truncatedLines = editLines.slice(0, Math.ceil(editLines.length * (maxTokens / editTokens)));
-		return truncatedLines.join('\n');
-	}
-
-	// Calculate remaining budget for context
-	const remainingBudget = maxTokens - editTokens;
-	const contextBudget = Math.floor(remainingBudget / 2);
-
-	// Expand before edit
-	let beforeStart = editStart;
-	while (beforeStart > 0) {
-		const testContent = lines.slice(beforeStart - 1, editStart).join('\n');
-		if (computeTokens(testContent) > contextBudget) {
-			break;
-		}
-		beforeStart--;
-	}
-
-	// Expand after edit
-	let afterEnd = editEnd;
-	while (afterEnd < lines.length) {
-		const testContent = lines.slice(editEnd, afterEnd + 1).join('\n');
-		if (computeTokens(testContent) > contextBudget) {
-			break;
-		}
-		afterEnd++;
-	}
-
-	// Build result
-	return lines.slice(beforeStart, afterEnd).join('\n');
+	// Extract the window
+	return lines.slice(startLine, endLine).join('\n');
 }
 
 /**
