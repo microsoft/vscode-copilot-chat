@@ -263,7 +263,6 @@ declare module 'vscode' {
 			permissionDecision?: 'allow' | 'deny' | 'ask';
 			permissionDecisionReason?: string;
 			updatedInput?: object;
-			additionalContext?: string[];
 		};
 	}
 

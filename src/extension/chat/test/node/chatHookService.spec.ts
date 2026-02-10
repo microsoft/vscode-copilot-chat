@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ChatHookResult, ChatHookResultKind } from 'vscode';
-import { IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
+import { IPostToolUseHookResult, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 
 /**
  * Minimal mock of ChatHookService that exposes executePreToolUseHook
@@ -305,6 +305,210 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		];
 
 		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result).toBeUndefined();
+	});
+});
+
+interface IPostToolUseHookSpecificOutput {
+	hookEventName?: string;
+	additionalContext?: string;
+}
+
+function collapsePostToolUseHookResults(results: ChatHookResult[]): IPostToolUseHookResult | undefined {
+	if (results.length === 0) {
+		return undefined;
+	}
+
+	let hasBlock = false;
+	let blockReason: string | undefined;
+	const allAdditionalContext: string[] = [];
+
+	for (const result of results) {
+		if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
+			continue;
+		}
+
+		const output = result.output as {
+			decision?: string;
+			reason?: string;
+			hookSpecificOutput?: IPostToolUseHookSpecificOutput;
+		};
+
+		if (output.hookSpecificOutput?.hookEventName !== undefined && output.hookSpecificOutput.hookEventName !== 'PostToolUse') {
+			continue;
+		}
+
+		if (output.hookSpecificOutput?.additionalContext) {
+			allAdditionalContext.push(output.hookSpecificOutput.additionalContext);
+		}
+
+		if (output.decision === 'block' && !hasBlock) {
+			hasBlock = true;
+			blockReason = output.reason;
+		}
+	}
+
+	if (!hasBlock && allAdditionalContext.length === 0) {
+		return undefined;
+	}
+
+	return {
+		decision: hasBlock ? 'block' : undefined,
+		reason: blockReason,
+		additionalContext: allAdditionalContext.length > 0 ? allAdditionalContext : undefined,
+	};
+}
+
+class TestablePostToolUseChatHookService {
+	public hookResults: ChatHookResult[] = [];
+
+	async executeHook(): Promise<ChatHookResult[]> {
+		return this.hookResults;
+	}
+
+	async executePostToolUseHook(
+		toolName: string,
+		toolInput: unknown,
+		toolResponseText: string,
+		toolCallId: string,
+		toolInvocationToken: unknown,
+		sessionId?: string,
+	): Promise<IPostToolUseHookResult | undefined> {
+		const results = await this.executeHook();
+		return collapsePostToolUseHookResults(results);
+	}
+}
+
+describe('ChatHookService.executePostToolUseHook', () => {
+	let service: TestablePostToolUseChatHookService;
+
+	beforeEach(() => {
+		service = new TestablePostToolUseChatHookService();
+	});
+
+	it('returns undefined when no hooks return results', async () => {
+		service.hookResults = [];
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result).toBeUndefined();
+	});
+
+	it('returns block decision when hook blocks', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'Lint errors found' }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result).toEqual({
+			decision: 'block',
+			reason: 'Lint errors found',
+			additionalContext: undefined,
+		});
+	});
+
+	it('returns additionalContext from hookSpecificOutput', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { additionalContext: 'Tests still pass' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result).toEqual({
+			decision: undefined,
+			reason: undefined,
+			additionalContext: ['Tests still pass'],
+		});
+	});
+
+	it('collects additionalContext from all hooks', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { additionalContext: 'context from hook 1' } }),
+			hookResult({ hookSpecificOutput: { additionalContext: 'context from hook 2' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.additionalContext).toEqual(['context from hook 1', 'context from hook 2']);
+	});
+
+	it('first block decision wins', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'First block' }),
+			hookResult({ decision: 'block', reason: 'Second block' }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBe('block');
+		expect(result?.reason).toBe('First block');
+	});
+
+	it('block decision with additionalContext from different hooks', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'Tests failed' }),
+			hookResult({ hookSpecificOutput: { additionalContext: 'Extra context from linter' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result).toEqual({
+			decision: 'block',
+			reason: 'Tests failed',
+			additionalContext: ['Extra context from linter'],
+		});
+	});
+
+	it('ignores results with wrong hookEventName', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: 'Should be ignored' } }),
+			hookResult({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'Correct context' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.additionalContext).toEqual(['Correct context']);
+	});
+
+	it('accepts results without hookEventName', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { additionalContext: 'No event name' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.additionalContext).toEqual(['No event name']);
+	});
+
+	it('skips non-success results', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'Should be ignored' }, 'error'),
+			hookResult({ hookSpecificOutput: { additionalContext: 'Valid context' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBeUndefined();
+		expect(result?.additionalContext).toEqual(['Valid context']);
+	});
+
+	it('skips results with non-object output', async () => {
+		service.hookResults = [
+			hookResult('string output'),
+			hookResult({ decision: 'block', reason: 'Valid block' }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBe('block');
+	});
+
+	it('returns undefined when all results are non-success', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block' }, 'error'),
+			hookResult({ hookSpecificOutput: { additionalContext: 'ctx' } }, 'warning'),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result).toBeUndefined();
+	});
+
+	it('returns undefined when no hook provides block or additionalContext', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: {} }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
 		expect(result).toBeUndefined();
 	});
 });

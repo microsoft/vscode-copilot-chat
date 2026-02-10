@@ -159,4 +159,8 @@ class NullChatHookService implements IChatHookService {
 	async executePreToolUseHook(): Promise<undefined> {
 		return undefined;
 	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
 }

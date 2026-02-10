@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IChatHookService, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, IPostToolUseHookResult, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { raceTimeout } from '../../../util/vs/base/common/async';
@@ -18,6 +18,11 @@ interface IPreToolUseHookSpecificOutput {
 }
 
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
+
+interface IPostToolUseHookSpecificOutput {
+	hookEventName?: string;
+	additionalContext?: string;
+}
 
 export class ChatHookService implements IChatHookService {
 	declare readonly _serviceBrand: undefined;
@@ -113,6 +118,68 @@ export class ChatHookService implements IChatHookService {
 			permissionDecision: mostRestrictiveDecision,
 			permissionDecisionReason: winningReason,
 			updatedInput: lastUpdatedInput,
+			additionalContext: allAdditionalContext.length > 0 ? allAdditionalContext : undefined,
+		};
+	}
+
+	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, toolInvocationToken: vscode.ChatParticipantToolToken | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined> {
+		const hookInput = {
+			tool_name: toolName,
+			tool_input: toolInput,
+			tool_response: toolResponseText,
+			tool_use_id: toolCallId,
+		};
+		const results = await this.executeHook(
+			'PostToolUse',
+			{ input: hookInput, toolInvocationToken: toolInvocationToken! },
+			sessionId,
+			token
+		);
+
+		if (results.length === 0) {
+			return undefined;
+		}
+
+		// Collapse results: first block wins, collect all additionalContext
+		let hasBlock = false;
+		let blockReason: string | undefined;
+		const allAdditionalContext: string[] = [];
+
+		for (const result of results) {
+			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
+				continue;
+			}
+
+			const output = result.output as {
+				decision?: string;
+				reason?: string;
+				hookSpecificOutput?: IPostToolUseHookSpecificOutput;
+			};
+
+			// Skip results from other hook event types
+			if (output.hookSpecificOutput?.hookEventName !== undefined && output.hookSpecificOutput.hookEventName !== 'PostToolUse') {
+				continue;
+			}
+
+			// Collect additionalContext from hookSpecificOutput
+			if (output.hookSpecificOutput?.additionalContext) {
+				allAdditionalContext.push(output.hookSpecificOutput.additionalContext);
+			}
+
+			// Track the first block decision
+			if (output.decision === 'block' && !hasBlock) {
+				hasBlock = true;
+				blockReason = output.reason;
+			}
+		}
+
+		if (!hasBlock && allAdditionalContext.length === 0) {
+			return undefined;
+		}
+
+		return {
+			decision: hasBlock ? 'block' : undefined,
+			reason: blockReason,
 			additionalContext: allAdditionalContext.length > 0 ? allAdditionalContext : undefined,
 		};
 	}

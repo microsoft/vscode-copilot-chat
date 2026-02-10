@@ -263,7 +263,6 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 							permissionDecision: hookResult.permissionDecision,
 							permissionDecisionReason: hookResult.permissionDecisionReason,
 							updatedInput: hookResult.updatedInput,
-							additionalContext: hookResult.additionalContext,
 						} : undefined,
 					};
 
@@ -276,6 +275,32 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 
 					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+
+					// Append additional context from preToolUse hook to the tool result
+					if (hookResult?.additionalContext) {
+						for (const context of hookResult.additionalContext) {
+							toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
+						}
+					}
+
+					// Execute postToolUse hook after successful tool execution
+					const postHookResult = await chatHookService.executePostToolUseHook(
+						props.toolCall.name, inputObj,
+						toolResultToText(toolResult),
+						props.toolCall.id, props.toolInvocationToken,
+						promptContext.conversation?.sessionId, CancellationToken.None
+					);
+
+					if (postHookResult?.decision === 'block') {
+						const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
+						const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
+						toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
+					}
+					if (postHookResult?.additionalContext) {
+						for (const context of postHookResult.additionalContext) {
+							toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
+						}
+					}
 
 					if (transcriptSessionId) {
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
@@ -444,6 +469,13 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 
 		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
+}
+
+function toolResultToText(result: LanguageModelToolResult2): string {
+	return result.content
+		.filter((part): part is LanguageModelTextPart => part instanceof LanguageModelTextPart)
+		.map(part => part.value)
+		.join(', ');
 }
 
 function textToolResult(text: string): LanguageModelToolResult {
