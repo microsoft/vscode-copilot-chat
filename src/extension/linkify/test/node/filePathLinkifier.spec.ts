@@ -6,6 +6,7 @@
 import { suite, test } from 'vitest';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { PromptReference } from '../../../prompt/common/conversation';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
 import { assertPartsEqual, createTestLinkifierService, linkify, workspaceFile } from './util';
 
@@ -260,7 +261,7 @@ suite('File Path Linkifier', () => {
 		// match it to a reference just because the basename (cli.js) matches.
 		// This prevents linking to wrong files when the model mentions paths that don't exist.
 		const linkifier = createTestLinkifierService();
-		const references = [{ anchor: URI.file('/workspace/src/cli.js') }];
+		const references = [new PromptReference(URI.file('/workspace/src/cli.js'))];
 
 		// Path with directories should NOT link to reference with matching basename
 		const result = await linkify(linkifier,
@@ -276,7 +277,7 @@ suite('File Path Linkifier', () => {
 		// Simple filenames without directory components CAN use reference fallback
 		const linkifier = createTestLinkifierService();
 		const refUri = URI.file('/workspace/src/cli.js');
-		const references = [{ anchor: refUri }];
+		const references = [new PromptReference(refUri)];
 
 		// Simple filename should link to reference with matching basename
 		const result = await linkify(linkifier,
@@ -292,7 +293,7 @@ suite('File Path Linkifier', () => {
 		// Text containing $, {, }, (, ) are likely code snippets, not filenames
 		const linkifier = createTestLinkifierService();
 		const refUri = URI.file('/workspace/src/config.js');
-		const references = [{ anchor: refUri }];
+		const references = [new PromptReference(refUri)];
 
 		// Code-like text should NOT link to reference even if basename matches
 		const result = await linkify(linkifier,
