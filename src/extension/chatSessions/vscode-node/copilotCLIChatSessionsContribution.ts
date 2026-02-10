@@ -165,8 +165,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const repositories = this.gitSevice.repositories
 			.filter(repository => repository.kind !== 'worktree');
 
-		// Empty window or workspace that contains multiple repositories
-		return vscode.workspace.workspaceFolders === undefined || repositories.length > 1;
+		return vscode.workspace.workspaceFolders === undefined || // empty window
+			vscode.workspace.isAgentSessionsWorkspace ||          // agent sessions workspace
+			repositories.length > 1;                              // multiple repositories
 	}
 
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
