@@ -18,7 +18,6 @@ import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { PlanAgentProvider } from '../planAgentProvider';
 import { buildAgentMarkdown } from '../agentTypes';
 import { PlanAgentProvider } from '../planAgentProvider';
 
