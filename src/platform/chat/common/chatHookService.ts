@@ -79,7 +79,6 @@ export interface IPostToolUseHookResult {
 	reason?: string;
 	additionalContext?: string[];
 }
-}
 
 //#region Hook Input/Output Types
 

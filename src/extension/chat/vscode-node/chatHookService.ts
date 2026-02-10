@@ -293,4 +293,3 @@ export class ChatHookService implements IChatHookService {
 		};
 	}
 }
-}

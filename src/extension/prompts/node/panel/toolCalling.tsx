@@ -239,6 +239,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					const hookResult = await chatHookService.executePreToolUseHook(
 						props.toolCall.name, inputObj, props.toolCall.id,
 						promptContext.request?.hooks, promptContext.conversation?.sessionId,
+						CancellationToken.None
+					);
 
 					// Apply updatedInput from hook (input modification takes effect before invocation)
 					if (hookResult?.updatedInput) {
@@ -471,6 +473,8 @@ async function appendHookContext(
 		props.toolCall.name, toolInput,
 		toolResultToText(toolResult),
 		props.toolCall.id, promptContext.request?.hooks,
+		promptContext.conversation?.sessionId, CancellationToken.None
+	);
 	if (postHookResult?.decision === 'block') {
 		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
 		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
