@@ -171,7 +171,15 @@ export class InProcHttpServer {
 	}
 
 	private async _handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
-		const sessionId = (req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id']) as string | undefined;
+		const sessionId = req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id'];
+		if (Array.isArray(sessionId) || !sessionId || typeof sessionId !== 'string') {
+			res.status(400).json({
+				jsonrpc: '2.0',
+				error: { code: -32000, message: 'Bad Request: Session ID must be a single, defined, string value' },
+				id: null,
+			});
+			return;
+		}
 		this._logger.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
 
 		const isInitializeRequest = await isInitializeRequestLazy.value;
