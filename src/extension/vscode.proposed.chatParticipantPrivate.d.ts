@@ -125,8 +125,10 @@ declare module 'vscode' {
 		 * Resolved hook commands for this request, organized by hook type.
 		 * The commands have already been resolved for the current platform.
 		 * Only present when hooks are enabled.
+		 * Note: This type mirrors {@link ChatRequestHooks} from the chatHooks proposal,
+		 * inlined here to avoid cross-proposal dependencies.
 		 */
-		readonly hooks?: ChatRequestHooks;
+		readonly hooks?: { readonly [hookType: string]: readonly { readonly command: string; readonly cwd?: Uri; readonly env?: Record<string, string>; readonly timeoutSec?: number }[] };
 	}
 
 	export enum ChatRequestEditedFileEventKind {
