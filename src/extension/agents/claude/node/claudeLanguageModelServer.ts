@@ -180,7 +180,9 @@ export class ClaudeLanguageModelServer extends Disposable {
 			const count = this._userInitiatedMessageCounts.get(selectedEndpoint.model) ?? 0;
 			const isUserInitiatedMessage = count > 0;
 			if (isUserInitiatedMessage) {
-				this._userInitiatedMessageCounts.set(selectedEndpoint.model, count - 1);
+				const newValue = count - 1;
+				this._userInitiatedMessageCounts.set(selectedEndpoint.model, newValue);
+				this.logService.trace(`[ClaudeLanguageModelServer] Handling user-initiated message for model ${selectedEndpoint.model}. Remaining count before reset: ${newValue}`);
 			}
 
 			// Set up streaming response
