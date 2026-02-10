@@ -445,7 +445,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		);
 	});
 
-	it('handles /delegate command from another chat without active repositor', async () => {
+	it('handles /delegate command from another chat without active repository', async () => {
 		expect(manager.sessions.size).toBe(0);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
