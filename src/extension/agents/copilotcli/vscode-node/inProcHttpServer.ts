@@ -180,6 +180,18 @@ export class InProcHttpServer {
 		let transport: StreamableHTTPServerTransport;
 		const existingTransport = sessionId ? this._getTransport(sessionId) : undefined;
 		if (sessionId && existingTransport) {
+			if (isInitializeRequest(req.body)) {
+				this._logger.debug(`Rejecting duplicate initialize for session ${sessionId}`);
+				res.status(409).json({
+					jsonrpc: '2.0',
+					error: {
+						code: -32000,
+						message: 'Conflict: A connection for this session already exists',
+					},
+					id: null,
+				});
+				return;
+			}
 			transport = existingTransport;
 		} else if (sessionId && isInitializeRequest(req.body)) {
 			this._logger.debug('Creating new MCP session...');
@@ -187,11 +199,11 @@ export class InProcHttpServer {
 			const clientPpid = parseInt(req.headers['x-copilot-parent-pid'] as string, 10);
 			let sessionRegistration: { dispose(): void } | undefined;
 			transport = new StreamableHTTPServerTransport({
-				sessionIdGenerator: () => crypto.randomUUID(),
-				onsessioninitialized: () => {
-					this._registerTransport(sessionId, transport);
+				sessionIdGenerator: () => sessionId,
+				onsessioninitialized: (mcpSessionId) => {
+					this._registerTransport(mcpSessionId, transport);
 					if (!isNaN(clientPid) && !isNaN(clientPpid)) {
-						sessionRegistration = this._sessionTracker.registerSession(sessionId, { pid: clientPid, ppid: clientPpid });
+						sessionRegistration = this._sessionTracker.registerSession(mcpSessionId, { pid: clientPid, ppid: clientPpid });
 					}
 				},
 				onsessionclosed: closedSessionId => {
