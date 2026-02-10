@@ -20,11 +20,11 @@ import { IContributedLinkifier, LinkifierContext } from './linkifyService';
 // Create a single regex which runs different regexp parts in a big `|` expression.
 const pathMatchRe = new RegExp(
 	[
-		// Inline code paths
-		/(?<!\[)`(?<inlineCodePath>[^`\s]+)`(?!\])/.source,
+		// Inline code paths (exclude code-like characters $, {, }, that are common in code but rare in filenames)
+		/(?<!\[)`(?<inlineCodePath>[^`\s${}]+)`(?!\])/.source,
 
-		// File paths rendered as plain text
-		/(?<![\[`()<])(?<plainTextPath>[^\s`*]+\.[^\s`*]+)(?![\]`])/.source
+		// File paths rendered as plain text (exclude code-like characters)
+		/(?<![\[`()<])(?<plainTextPath>[^\s`*${}()]+\.[^\s`*${}()]+)(?![\]`])/.source
 	].join('|'),
 	'gu');
 
