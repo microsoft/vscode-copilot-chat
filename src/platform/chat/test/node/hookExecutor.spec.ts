@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { EventEmitter } from 'events';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ChatHookCommand } from 'vscode';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
