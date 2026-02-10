@@ -175,7 +175,7 @@ export class InProcHttpServer {
 			try {
 				listener(sessionId);
 			} catch (err) {
-				this._logger.error(`Error in disconnect listener: ${err instanceof Error ? err.message : String(err)}`);
+				this._logger.error(err instanceof Error ? err : String(err), 'Error in disconnect listener');
 			}
 		}
 	}
