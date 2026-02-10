@@ -89,7 +89,7 @@ function isValidFile(type: PromptsType, fileName: string): boolean {
 export class GitHubOrgChatResourcesService extends Disposable implements IGitHubOrgChatResourcesService {
 	private static readonly CACHE_ROOT = 'github';
 
-	private readonly _pollingSubscriptions = this._register(new DisposableStore());
+	// private readonly _pollingSubscriptions = this._register(new DisposableStore());
 	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
 
 	constructor(
