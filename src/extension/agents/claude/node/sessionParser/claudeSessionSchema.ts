@@ -211,7 +211,7 @@ export type CacheCreation = ValidatorType<typeof vCacheCreation>;
  * Token usage information for API calls.
  */
 export const vUsage = vObj({
-	cache_creation: vCacheCreation,
+	cache_creation: vNullable(vCacheCreation),
 	cache_creation_input_tokens: vNumber(),
 	cache_read_input_tokens: vNumber(),
 	input_tokens: vNumber(),

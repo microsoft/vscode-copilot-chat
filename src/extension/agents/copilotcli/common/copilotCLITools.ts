@@ -408,7 +408,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
 			case 'assistant.message_delta': {

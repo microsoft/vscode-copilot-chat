@@ -33,9 +33,8 @@ describe('LintErrors', () => {
 		return new CurrentDocument(content, new Position(cursorLine, cursorColumn));
 	}
 
-	function createLintErrors(options: LintOptions, document: CurrentDocument): LintErrors {
+	function createLintErrors(document: CurrentDocument): LintErrors {
 		return new LintErrors(
-			options,
 			documentId,
 			document,
 			diagnosticsService
@@ -52,9 +51,9 @@ describe('LintErrors', () => {
 			const document = createDocument(['const x = 1;', 'const y = 2;'], 1, 1);
 			diagnosticsService.setDiagnostics(fileUri, []);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
+			const lintErrors = createLintErrors(document);
 
-			expect(lintErrors.getFormattedLintErrors()).toBe('<|linter diagnostics|>\n\n<|/linter diagnostics|>');
+			expect(lintErrors.getFormattedLintErrors(defaultLintOptions)).toBe('<|linter diagnostics|>\n\n<|/linter diagnostics|>');
 		});
 
 		it('should format single error diagnostic without code context', () => {
@@ -67,9 +66,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('<|linter diagnostics|>');
 			expect(result).toContain('0:0 - error: Missing semicolon');
 			expect(result).toContain('<|/linter diagnostics|>');
@@ -87,12 +86,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('TS6133');
 		});
 
@@ -107,12 +103,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('1234');
 		});
 
@@ -127,12 +120,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('E001');
 		});
 
@@ -151,12 +141,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithCode,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithCode);
 			expect(result).toContain('0|const x = 1;');
 		});
 
@@ -175,12 +162,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithSurrounding,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 			expect(result).toContain('1|line2'); // line before
 			expect(result).toContain('2|line3'); // diagnostic line
 			expect(result).toContain('3|line4'); // line after
@@ -201,12 +185,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithSurrounding,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 			expect(result).toContain('0|line1');
 			expect(result).toContain('1|line2');
 		});
@@ -226,12 +207,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithSurrounding,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 			expect(result).toContain('1|line2');
 			expect(result).toContain('2|line3');
 		});
@@ -256,12 +234,9 @@ describe('LintErrors', () => {
 				warnings: LintOptionWarning.NO
 			};
 
-			const lintErrors = createLintErrors(
-				optionsNoWarnings,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsNoWarnings);
 			expect(result).toContain('This is an error');
 			expect(result).not.toContain('This is a warning');
 		});
@@ -286,12 +261,9 @@ describe('LintErrors', () => {
 				warnings: LintOptionWarning.YES
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithWarnings,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithWarnings);
 			expect(result).toContain('This is an error');
 			expect(result).toContain('This is a warning');
 		});
@@ -316,12 +288,9 @@ describe('LintErrors', () => {
 				warnings: LintOptionWarning.YES_IF_NO_ERRORS
 			};
 
-			const lintErrors = createLintErrors(
-				optionsYesIfNoErrors,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsYesIfNoErrors);
 			expect(result).toContain('This is an error');
 			expect(result).not.toContain('This is a warning');
 		});
@@ -341,12 +310,9 @@ describe('LintErrors', () => {
 				warnings: LintOptionWarning.YES_IF_NO_ERRORS
 			};
 
-			const lintErrors = createLintErrors(
-				optionsYesIfNoErrors,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsYesIfNoErrors);
 			expect(result).toContain('This is a warning');
 		});
 
@@ -372,12 +338,9 @@ describe('LintErrors', () => {
 				maxLineDistance: 5
 			};
 
-			const lintErrors = createLintErrors(
-				optionsSmallDistance,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsSmallDistance);
 			expect(result).toContain('Near error');
 			expect(result).not.toContain('Far error');
 		});
@@ -407,12 +370,9 @@ describe('LintErrors', () => {
 				maxLints: 2
 			};
 
-			const lintErrors = createLintErrors(
-				optionsMaxLints,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsMaxLints);
 			// Should include Error 3 (closest to cursor at line 2) and one other
 			// but not all three
 			const errorCount = (result.match(/Error \d/g) || []).length;
@@ -439,12 +399,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			const closeIndex = result.indexOf('Close error');
 			const farIndex = result.indexOf('Far error');
 			const mediumIndex = result.indexOf('Medium error');
@@ -469,12 +426,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithSurrounding,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 			// Should include line before diagnostic start (line1), diagnostic lines (line2-line4), and line after diagnostic end (line5)
 			expect(result).toContain('0|line1');
 			expect(result).toContain('1|line2');
@@ -496,12 +450,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithSurrounding,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 			// Should include line before (0|function foo() {), all diagnostic lines, and line after (4|})
 			expect(result).toContain('0|function foo() {');
 			expect(result).toContain('1|const x = 1;');
@@ -525,12 +476,9 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES
 			};
 
-			const lintErrors = createLintErrors(
-				optionsWithCode,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsWithCode);
 			// Should include all diagnostic lines when YES is set
 			expect(result).toContain('1|const x = 1;');
 			expect(result).toContain('2|const y = 2;');
@@ -554,12 +502,9 @@ describe('LintErrors', () => {
 				tagName: 'custom lint tag'
 			};
 
-			const lintErrors = createLintErrors(
-				optionsCustomTag,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(optionsCustomTag);
 			expect(result).toContain('<|custom lint tag|>');
 			expect(result).toContain('<|/custom lint tag|>');
 		});
@@ -574,12 +519,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('warning: Warning message');
 		});
 
@@ -598,12 +540,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			const closeIndex = result.indexOf('Close column error');
 			const farIndex = result.indexOf('Far column error');
 
@@ -622,12 +561,9 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(
-				defaultLintOptions,
-				document
-			);
+			const lintErrors = createLintErrors(document);
 
-			const result = lintErrors.getFormattedLintErrors();
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 			expect(result).toContain('E001');
 			expect(result).toContain('Error without source');
 		});
@@ -667,8 +603,8 @@ describe('LintErrors', () => {
 				maxLineDistance: 20,
 			};
 
-			const lintErrors = createLintErrors(options, document);
-			const result = lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			const result = lintErrors.getFormattedLintErrors(options);
 
 			const expected = `<|linter diagnostics|>
 3:6 - warning TS6133: Unused variable
@@ -713,8 +649,8 @@ describe('LintErrors', () => {
 				maxLineDistance: 20,
 			};
 
-			const lintErrors = createLintErrors(options, document);
-			const result = lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			const result = lintErrors.getFormattedLintErrors(options);
 
 			const expected = `<|linter diagnostics|>
 3:6 - warning TS6133: Unused variable
@@ -736,9 +672,9 @@ describe('LintErrors', () => {
 	describe('lineNumberInPreviousFormattedPrompt', () => {
 		it('should throw error when called before getFormattedLintErrors', () => {
 			const document = createDocument(['const x = 1;'], 1, 1);
-			const lintErrors = createLintErrors(defaultLintOptions, document);
+			const lintErrors = createLintErrors(document);
 
-			expect(() => lintErrors.lineNumberInPreviousFormattedPrompt(1)).toThrow('No previous formatted diagnostics available to check line number against.');
+			expect(() => lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 1)).toThrow('No previous formatted diagnostics available to check line number against.');
 		});
 
 		it('should return true for line number at diagnostic start position', () => {
@@ -751,11 +687,11 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(defaultLintOptions);
 
 			// Diagnostic is on array index 1 (line2)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 1)).toBe(true);
 		});
 
 		it('should return false for line number not in any diagnostic', () => {
@@ -768,11 +704,11 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(defaultLintOptions);
 
 			// Diagnostic is at index 1, so index 3 should not be in any diagnostic
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 3)).toBe(false);
 		});
 
 		it('should return false for code lines when showCode is NO', () => {
@@ -790,11 +726,11 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.NO
 			};
 
-			const lintErrors = createLintErrors(optionsNoCode, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsNoCode);
 
 			// Diagnostic is at index 1, but index 0 should not be in range when showCode is NO
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsNoCode, 0)).toBe(false);
 		});
 
 		it('should return true for code lines when showCode is YES', () => {
@@ -812,11 +748,11 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES
 			};
 
-			const lintErrors = createLintErrors(optionsWithCode, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsWithCode);
 
 			// Diagnostic at index 1 (line2) should be in the code range
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 1)).toBe(true);
 		});
 
 		it('should return true for surrounding lines when showCode is YES_WITH_SURROUNDING', () => {
@@ -834,17 +770,17 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(optionsWithSurrounding, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 
 			// Line before diagnostic (line1 at index 0)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 0)).toBe(true);
 			// Diagnostic line (line2 at index 1)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 1)).toBe(true);
 			// Line after diagnostic (line3 at index 2)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(2)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 2)).toBe(true);
 			// Line not in range (line4 at index 3)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 3)).toBe(false);
 		});
 
 		it('should handle multi-line diagnostics with YES', () => {
@@ -862,19 +798,19 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES
 			};
 
-			const lintErrors = createLintErrors(optionsWithCode, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsWithCode);
 
 			// Line before multi-line diagnostic (index 0)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 0)).toBe(false);
 			// Start line of diagnostic (index 1)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 1)).toBe(true);
 			// Middle line of diagnostic (index 2)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(2)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 2)).toBe(true);
 			// End line of diagnostic (index 3)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 3)).toBe(true);
 			// Line after multi-line diagnostic (index 4)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(4)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 4)).toBe(false);
 		});
 
 		it('should handle multi-line diagnostics with YES_WITH_SURROUNDING', () => {
@@ -892,21 +828,21 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES_WITH_SURROUNDING
 			};
 
-			const lintErrors = createLintErrors(optionsWithSurrounding, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsWithSurrounding);
 
 			// Line before multi-line diagnostic (line0 at index 0)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 0)).toBe(true);
 			// Start line of diagnostic (line1 at index 1)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 1)).toBe(true);
 			// Middle line of diagnostic (line2 at index 2)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(2)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 2)).toBe(true);
 			// End line of diagnostic (line3 at index 3)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 3)).toBe(true);
 			// Line after multi-line diagnostic (line4 at index 4)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(4)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 4)).toBe(true);
 			// Line outside range (line5 at index 5)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(5)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithSurrounding, 5)).toBe(false);
 		});
 
 		it('should handle multiple diagnostics', () => {
@@ -929,28 +865,28 @@ describe('LintErrors', () => {
 				showCode: LintOptionShowCode.YES
 			};
 
-			const lintErrors = createLintErrors(optionsWithCode, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsWithCode);
 
 			// First diagnostic line (index 0)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 0)).toBe(true);
 			// Line between diagnostics (indices 1 and 2)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(false);
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(2)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 1)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 2)).toBe(false);
 			// Second diagnostic line (index 3)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsWithCode, 3)).toBe(true);
 		});
 
 		it('should return false when no diagnostics in previous formatted prompt', () => {
 			const document = createDocument(['line1', 'line2', 'line3'], 2, 1);
 			diagnosticsService.setDiagnostics(fileUri, []);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(defaultLintOptions);
 
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(0)).toBe(false);
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(false);
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(2)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 0)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 1)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(defaultLintOptions, 2)).toBe(false);
 		});
 
 		it('should handle diagnostics filtered by maxLints', () => {
@@ -974,13 +910,13 @@ describe('LintErrors', () => {
 				maxLints: 1
 			};
 
-			const lintErrors = createLintErrors(optionsMaxLints, document);
-			lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			lintErrors.getFormattedLintErrors(optionsMaxLints);
 
 			// Only the closest diagnostic should be in the formatted output (index 1)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(1)).toBe(true);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsMaxLints, 1)).toBe(true);
 			// The far error should not be included due to maxLints (index 3)
-			expect(lintErrors.lineNumberInPreviousFormattedPrompt(3)).toBe(false);
+			expect(lintErrors.lineNumberInPreviousFormattedPrompt(optionsMaxLints, 3)).toBe(false);
 		});
 
 		it('should handle diagnostic without any code', () => {
@@ -993,8 +929,8 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
-			const result = lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 
 			expect(result).toContain('Error without code');
 			expect(result).not.toContain('undefined');
@@ -1015,8 +951,8 @@ describe('LintErrors', () => {
 				}
 			]);
 
-			const lintErrors = createLintErrors(defaultLintOptions, document);
-			const result = lintErrors.getFormattedLintErrors();
+			const lintErrors = createLintErrors(document);
+			const result = lintErrors.getFormattedLintErrors(defaultLintOptions);
 
 			// Non-error severities should be treated as warnings
 			expect(result).toContain('warning: Information message');

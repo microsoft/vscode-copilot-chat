@@ -6,7 +6,6 @@
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 
@@ -28,7 +27,6 @@ export interface ClaudeCodeModelInfo {
 
 export interface IClaudeCodeModels {
 	readonly _serviceBrand: undefined;
-	resolveModel(modelId: string): Promise<string | undefined>;
 	/**
 	 * Gets the default Claude model.
 	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
@@ -36,6 +34,12 @@ export interface IClaudeCodeModels {
 	getDefaultModel(): Promise<string>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
 	getModels(): Promise<ClaudeCodeModelInfo[]>;
+	/**
+	 * Maps an SDK model ID to the best matching endpoint model ID.
+	 * SDK model IDs are raw Anthropic API model IDs (e.g., 'claude-opus-4-5-20251101').
+	 * Returns undefined if no suitable match is found.
+	 */
+	mapSdkModelToEndpointModel(sdkModelId: string): Promise<string | undefined>;
 }
 
 export const IClaudeCodeModels = createServiceIdentifier<IClaudeCodeModels>('IClaudeCodeModels');
@@ -50,12 +54,6 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 		@ILogService private readonly logService: ILogService,
 	) {
 		this._availableModels = new Lazy<Promise<ClaudeCodeModelInfo[]>>(() => this._getAvailableModels());
-	}
-
-	async resolveModel(modelId: string): Promise<string | undefined> {
-		const models = await this.getModels();
-		const normalizedId = modelId.trim().toLowerCase();
-		return models.find(m => m.id.toLowerCase() === normalizedId || m.name.toLowerCase() === normalizedId)?.id;
 	}
 
 	public async getDefaultModel(): Promise<string> {
@@ -95,7 +93,7 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 			// Filter for Claude/Anthropic models that are available in the model picker
 			// and use the Messages API (required for Claude Code)
 			const claudeEndpoints = endpoints.filter(e =>
-				e.showInModelPicker &&
+				e.supportsToolCalls &&
 				(e.family?.toLowerCase().includes('claude') || e.model?.toLowerCase().includes('claude')) &&
 				e.apiType === 'messages'
 			);
@@ -105,57 +103,106 @@ export class ClaudeCodeModels implements IClaudeCodeModels {
 				return [];
 			}
 
-			// Filter to only include the latest version of each model family
-			// Parse version from family string (e.g., "claude-opus-4.5" or "claude-opus-41")
-			const familyMap = new Map<string, { endpoint: IChatEndpoint; version: number }>();
-
-			for (const endpoint of claudeEndpoints) {
-				const parsed = this._parseFamilyString(endpoint.family);
-				if (!parsed) {
-					// Can't parse, include as-is using full family as key
-					familyMap.set(endpoint.family, { endpoint, version: 0 });
-					continue;
-				}
-
-				const existing = familyMap.get(parsed.modelFamily);
-				if (!existing || parsed.version > existing.version) {
-					familyMap.set(parsed.modelFamily, { endpoint, version: parsed.version });
-				}
-			}
-
-			return Array.from(familyMap.values()).map(v => ({ id: v.endpoint.model, name: v.endpoint.name, multiplier: v.endpoint.multiplier }));
+			return claudeEndpoints
+				.map(e => ({ id: e.model, name: e.name, multiplier: e.multiplier }))
+				.sort((a, b) => b.name.localeCompare(a.name));
 		} catch (ex) {
 			this.logService.error(`[ClaudeCodeModels] Failed to fetch models`, ex);
 			return [];
 		}
 	}
 
-	/**
-	 * Parses a Claude family string to extract the model family and version.
-	 * Examples:
-	 * - "claude-haiku-4.5" -> { modelFamily: "haiku", version: 4.5 }
-	 * - "claude-opus-41" -> { modelFamily: "opus", version: 4.1 }
-	 * - "claude-opus-4.5" -> { modelFamily: "opus", version: 4.5 }
-	 * - "claude-sonnet-35" -> { modelFamily: "sonnet", version: 3.5 }
-	 */
-	private _parseFamilyString(family: string): { modelFamily: string; version: number } | undefined {
-		const lower = family.toLowerCase();
+	public async mapSdkModelToEndpointModel(sdkModelId: string): Promise<string | undefined> {
+		const models = await this.getModels();
 
-		// Match pattern: claude-{model}-{version} where version is digits with optional decimal
-		const match = lower.match(/^claude-(\w+)-(\d+\.?\d*)$/);
-		if (!match) {
+		// Try exact match first
+		const exactMatch = models.find(m => m.id === sdkModelId);
+		if (exactMatch) {
+			return exactMatch.id;
+		}
+
+		// Try case-insensitive match
+		const sdkModelLower = sdkModelId.toLowerCase();
+		const caseInsensitiveMatch = models.find(m => m.id.toLowerCase() === sdkModelLower);
+		if (caseInsensitiveMatch) {
+			return caseInsensitiveMatch.id;
+		}
+
+		// Normalize SDK model ID to extract family and version
+		const normalized = this._normalizeSdkModelId(sdkModelId);
+		if (!normalized) {
 			return undefined;
 		}
 
-		const modelFamily = match[1];
-		let versionStr = match[2];
+		// Find models with the same family
+		const familyMatches = models.filter(m => {
+			const modelNormalized = this._normalizeSdkModelId(m.id);
+			return modelNormalized?.family === normalized.family;
+		});
 
-		// Handle versions like "41" -> 4.1, "35" -> 3.5 (two-digit without decimal)
-		if (!versionStr.includes('.') && versionStr.length === 2) {
-			versionStr = versionStr[0] + '.' + versionStr[1];
+		if (familyMatches.length === 0) {
+			return undefined;
 		}
 
-		const version = parseFloat(versionStr) || 0;
-		return { modelFamily, version };
+		// Among family matches, prefer exact version match
+		const versionMatch = familyMatches.find(m => {
+			const modelNormalized = this._normalizeSdkModelId(m.id);
+			return modelNormalized?.version === normalized.version;
+		});
+
+		if (versionMatch) {
+			return versionMatch.id;
+		}
+
+		// Fall back to the first (latest) model in the family
+		return familyMatches[0].id;
+	}
+
+	/**
+	 * Normalizes an SDK model ID to extract the model family and version.
+	 * Examples:
+	 * - "claude-opus-4-5-20251101" -> { family: "opus", version: "4.5" }
+	 * - "claude-3-5-sonnet-20241022" -> { family: "sonnet", version: "3.5" }
+	 * - "claude-sonnet-4-20250514" -> { family: "sonnet", version: "4" }
+	 * - "claude-haiku-3-5-20250514" -> { family: "haiku", version: "3.5" }
+	 * - "claude-haiku-4.5" -> { family: "haiku", version: "4.5" }
+	 */
+	private _normalizeSdkModelId(sdkModelId: string): { family: string; version: string } | undefined {
+		const lower = sdkModelId.toLowerCase();
+
+		// Strip date suffix (8 digits at the end)
+		const withoutDate = lower.replace(/-\d{8}$/, '');
+
+		// Pattern 1: claude-{family}-{major}-{minor} (e.g., claude-opus-4-5, claude-haiku-3-5)
+		const pattern1 = withoutDate.match(/^claude-(\w+)-(\d+)-(\d+)$/);
+		if (pattern1) {
+			return { family: pattern1[1], version: `${pattern1[2]}.${pattern1[3]}` };
+		}
+
+		// Pattern 2: claude-{major}-{minor}-{family} (e.g., claude-3-5-sonnet)
+		const pattern2 = withoutDate.match(/^claude-(\d+)-(\d+)-(\w+)$/);
+		if (pattern2) {
+			return { family: pattern2[3], version: `${pattern2[1]}.${pattern2[2]}` };
+		}
+
+		// Pattern 3: claude-{family}-{major}.{minor} (e.g., claude-haiku-4.5)
+		const pattern3 = withoutDate.match(/^claude-(\w+)-(\d+)\.(\d+)$/);
+		if (pattern3) {
+			return { family: pattern3[1], version: `${pattern3[2]}.${pattern3[3]}` };
+		}
+
+		// Pattern 4: claude-{family}-{major} (e.g., claude-sonnet-4)
+		const pattern4 = withoutDate.match(/^claude-(\w+)-(\d+)$/);
+		if (pattern4) {
+			return { family: pattern4[1], version: pattern4[2] };
+		}
+
+		// Pattern 5: claude-{major}-{family} (e.g., claude-3-opus)
+		const pattern5 = withoutDate.match(/^claude-(\d+)-(\w+)$/);
+		if (pattern5) {
+			return { family: pattern5[2], version: pattern5[1] };
+		}
+
+		return undefined;
 	}
 }

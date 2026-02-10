@@ -10,6 +10,7 @@ import { IAuthenticationService } from '../../../authentication/common/authentic
 import { ICAPIClientService } from '../../../endpoint/common/capiClient';
 import { MockFileSystemService } from '../../../filesystem/node/test/mockFileSystemService';
 import { RepoContext } from '../../../git/common/gitService';
+import { NullRequestLogger } from '../../../requestLogger/node/nullRequestLogger';
 import { TestLogService } from '../../../testing/common/testLogService';
 import { RemoteContentExclusion } from '../remoteContentExclusion';
 import { MockAuthenticationService } from './mockAuthenticationService';
@@ -43,7 +44,8 @@ suite('RemoteContentExclusion', () => {
 			mockAuthService as unknown as IAuthenticationService,
 			mockCAPIClientService as unknown as ICAPIClientService,
 			mockFileSystemService,
-			mockWorkspaceService
+			mockWorkspaceService,
+			new NullRequestLogger()
 		);
 	});
 

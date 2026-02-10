@@ -94,6 +94,97 @@ describe('claudeSessionParser', () => {
 			expect(result.errors.length).toBe(0);
 		});
 
+		it('should parse assistant message with cache_creation: null in usage (newer SDK format)', () => {
+			const content = JSON.stringify({
+				parentUuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				isSidechain: false,
+				type: 'assistant',
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Hello!' }],
+					id: 'msg_123',
+					model: 'claude-sonnet-4',
+					type: 'message',
+					stop_reason: null,
+					stop_sequence: null,
+					usage: {
+						input_tokens: 0,
+						cache_creation_input_tokens: 0,
+						cache_read_input_tokens: 0,
+						output_tokens: 1,
+						cache_creation: null,
+					},
+				},
+				uuid: 'cc74a117-72ce-4ea6-8d01-4401e60ddfeb',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+				timestamp: '2026-01-31T00:35:00.000Z',
+			});
+
+			const result = parseSessionFileContent(content);
+
+			expect(result.messages.size).toBe(1);
+			expect(result.stats.assistantMessages).toBe(1);
+			expect(result.stats.chainLinks).toBe(0);
+			expect(result.errors.length).toBe(0);
+
+			const message = result.messages.get('cc74a117-72ce-4ea6-8d01-4401e60ddfeb');
+			expect(message).toBeDefined();
+			expect(message?.type).toBe('assistant');
+		});
+
+		it('should not misclassify assistant messages with null usage fields as chain links', () => {
+			// Regression test: assistant messages with cache_creation: null were being
+			// misclassified as chain links because vObj rejects null, causing the entire
+			// assistant message validation to fail and fall through to vChainLinkEntry.
+			const lines = [
+				JSON.stringify({
+					parentUuid: null,
+					type: 'user',
+					message: { role: 'user', content: 'Hello' },
+					uuid: 'uuid-user-1',
+					sessionId: 'session-1',
+					timestamp: '2026-01-31T00:34:50.049Z',
+				}),
+				JSON.stringify({
+					parentUuid: 'uuid-user-1',
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hi there!' }],
+						id: 'msg_1',
+						model: 'claude-sonnet-4',
+						type: 'message',
+						stop_reason: 'end_turn',
+						stop_sequence: null,
+						usage: {
+							input_tokens: 100,
+							cache_creation_input_tokens: 0,
+							cache_read_input_tokens: 0,
+							output_tokens: 50,
+							cache_creation: null,
+						},
+					},
+					uuid: 'uuid-assistant-1',
+					sessionId: 'session-1',
+					timestamp: '2026-01-31T00:35:00.000Z',
+				}),
+			];
+
+			const result = parseSessionFileContent(lines.join('\n'));
+
+			expect(result.messages.size).toBe(2);
+			expect(result.stats.userMessages).toBe(1);
+			expect(result.stats.assistantMessages).toBe(1);
+			expect(result.stats.chainLinks).toBe(0);
+			expect(result.errors.length).toBe(0);
+
+			// Verify the session can be built correctly
+			const buildResult = buildSessions(result.messages, result.summaries, result.chainLinks);
+			expect(buildResult.sessions.length).toBe(1);
+			expect(buildResult.sessions[0].messages.length).toBe(2);
+			expect(buildResult.sessions[0].messages[1].type).toBe('assistant');
+		});
+
 		it('should parse summary entry', () => {
 			const content = JSON.stringify({
 				type: 'summary',

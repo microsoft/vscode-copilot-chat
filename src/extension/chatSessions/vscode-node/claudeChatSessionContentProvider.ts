@@ -8,11 +8,12 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
-import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
-import { IClaudeCodeModels } from '../../agents/claude/node/claudeCodeModels';
+import { completeToolInvocation, createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
+import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
 import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
@@ -132,7 +133,17 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
 	 */
 	public async getModelIdForSession(sessionId: string): Promise<string> {
-		return this.sessionStateService.getModelIdForSession(sessionId);
+		const availableModels = await this.claudeCodeModels.getModels();
+		if (availableModels.length === 0) {
+			throw new NoClaudeModelsAvailableError();
+		}
+
+		// Load the session to extract SDK model if needed
+		const sessionUri = ClaudeSessionUri.forSessionId(sessionId);
+		const session = await this.sessionService.getSession(sessionUri, CancellationToken.None);
+
+		const resolvedModel = await this._resolveModelForSession(session);
+		return resolvedModel;
 	}
 
 	/**
@@ -218,11 +229,17 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this._buildChatHistory(existingSession, toolContext) :
 			[];
 
-		// Get model and permission mode from state service (queries session if active)
-		const availableModels = await this.claudeCodeModels.getModels();
-		const model = availableModels.length === 0
-			? UNAVAILABLE_MODEL_ID
-			: await this.sessionStateService.getModelIdForSession(sessionId);
+		let model: string | undefined;
+		try {
+			model = await this._resolveModelForSession(existingSession);
+		} catch (e) {
+			if (e instanceof NoClaudeModelsAvailableError) {
+				model = UNAVAILABLE_MODEL_ID;
+			} else {
+				throw e;
+			}
+		}
+
 		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string> = {};
@@ -313,7 +330,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			return;
 		}
 
-		return new ChatRequestTurn2(combinedText, undefined, [], '', [], undefined);
+		return new ChatRequestTurn2(combinedText, undefined, [], '', [], undefined, undefined);
 	}
 
 	/**
@@ -372,17 +389,76 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		for (const block of content) {
 			if (isToolResultBlock(block)) {
 				const toolUse = toolContext.unprocessedToolCalls.get(block.tool_use_id);
-				if (toolUse) {
+				if (toolUse && isToolUseBlock(toolUse)) {
 					toolContext.unprocessedToolCalls.delete(block.tool_use_id);
 					const pendingInvocation = toolContext.pendingToolInvocations.get(block.tool_use_id);
 					if (pendingInvocation) {
+						pendingInvocation.isComplete = true;
 						pendingInvocation.isConfirmed = true;
 						pendingInvocation.isError = block.is_error;
+						// Populate tool output for display in chat UI
+						completeToolInvocation(toolUse, block, pendingInvocation);
 						toolContext.pendingToolInvocations.delete(block.tool_use_id);
 					}
 				}
 			}
 		}
+	}
+
+	/**
+	 * Resolves the model to use for a session with fallback logic:
+	 * 1. Stored session state (user's explicit selection)
+	 * 2. SDK model from session messages (mapped to endpoint model)
+	 * 3. Default model
+	 *
+	 * Caches the result in session state if resolved from fallback logic.
+	 */
+	private async _resolveModelForSession(session: IClaudeCodeSession | undefined): Promise<string> {
+		// 1. Check stored session state (user's explicit selection or cached value)
+		if (session) {
+			const cachedModel = await this.sessionStateService.getModelIdForSession(session.id);
+			if (cachedModel) {
+				// Keep the global default in sync with user's selection
+				await this.claudeCodeModels.setDefaultModel(cachedModel);
+				return cachedModel;
+			}
+		}
+
+		// 2. Try SDK model from session messages
+		if (session) {
+			const sdkModel = this._extractModelFromSession(session);
+			if (sdkModel) {
+				const model = await this.claudeCodeModels.mapSdkModelToEndpointModel(sdkModel);
+				if (model) {
+					// Cache the resolved model in session state for future retrieval
+					this.sessionStateService.setModelIdForSession(session.id, model);
+					// Keep the global default in sync with user's selection
+					await this.claudeCodeModels.setDefaultModel(model);
+					return model;
+				}
+			}
+		}
+
+		// 3. Fall back to default
+		return await this.claudeCodeModels.getDefaultModel();
+	}
+
+	/**
+	 * Extract the SDK model ID from the session's last assistant message.
+	 * Returns the raw model ID from the Anthropic API (e.g., 'claude-opus-4-5-20251101').
+	 */
+	private _extractModelFromSession(session: IClaudeCodeSession): string | undefined {
+		// Iterate backwards to find the most recent assistant message with a model
+		for (let i = session.messages.length - 1; i >= 0; i--) {
+			const msg = session.messages[i];
+			if (
+				msg.type === 'assistant' &&
+				msg.message.role === 'assistant'
+			) {
+				return msg.message.model;
+			}
+		}
+		return undefined;
 	}
 
 }

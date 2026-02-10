@@ -211,6 +211,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 	private _shouldRefreshModels(): boolean {
 		if (this._familyMap.size === 0) {
+			// Always refresh if we have no models as this means the last fetch failed in some way
 			return true;
 		}
 		const tenMinutes = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -220,7 +221,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 			return true; // If there's no last fetch time, we should refresh
 		}
 
-		// We only want to fetch models if the current session is active
+		// Only fetch if the current session is active.
+		// This avoids unnecessary network calls when VS Code is in the background.
 		if (!this._envService.isActive) {
 			return false;
 		}

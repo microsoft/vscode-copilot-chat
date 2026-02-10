@@ -1,6 +1,6 @@
 [
     {
-        "question": "@workspace /new create a Typescript Express app",
+        "question": "/new create a Typescript Express app",
         "stateFile": "./workspaceState.state.json"
     }
 ]
