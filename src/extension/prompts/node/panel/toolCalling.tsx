@@ -7,6 +7,7 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
 import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -188,6 +189,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
+	const chatHookService = accessor.get(IChatHookService);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -233,6 +235,18 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, promptContext, props.toolCallMode);
 					}
 
+					// Execute preToolUse hook before invoking the tool
+					const hookResult = await chatHookService.executePreToolUseHook(
+						props.toolCall.name, inputObj, props.toolCall.id,
+						props.toolInvocationToken, promptContext.conversation?.sessionId,
+						CancellationToken.None
+					);
+
+					// Apply updatedInput from hook (input modification takes effect before invocation)
+					if (hookResult?.updatedInput) {
+						inputObj = hookResult.updatedInput;
+					}
+
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
 					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
@@ -245,6 +259,12 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						// Split on `__vscode` so it's the chat stream id
 						// TODO @lramos15 - This is a gross hack
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
+						preToolUseResult: hookResult ? {
+							permissionDecision: hookResult.permissionDecision,
+							permissionDecisionReason: hookResult.permissionDecisionReason,
+							updatedInput: hookResult.updatedInput,
+							additionalContext: hookResult.additionalContext,
+						} : undefined,
 					};
 
 					const transcriptSessionId = promptContext.conversation?.sessionId;

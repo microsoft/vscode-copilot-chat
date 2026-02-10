@@ -77,6 +77,10 @@ export class MockChatHookService implements IChatHookService {
 		// Return configured results or empty array
 		return this.hookResults.get(hookType) || [];
 	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
 }
 
 /**
