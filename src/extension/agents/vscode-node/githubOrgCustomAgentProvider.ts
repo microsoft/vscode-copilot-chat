@@ -29,6 +29,7 @@ export class GitHubOrgCustomAgentProvider extends Disposable implements vscode.C
 		super();
 
 		// Set up polling with provider-specific interval
+		// Skip polling when window is inactive and there's no recent chat activity to reduce network overhead
 		this._register(this.githubOrgChatResourcesService.startPolling(REFRESH_INTERVAL_MS, this.pollAgents.bind(this)));
 	}
 

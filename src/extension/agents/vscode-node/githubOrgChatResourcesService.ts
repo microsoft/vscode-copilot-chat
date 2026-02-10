@@ -5,7 +5,9 @@
 
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../platform/customInstructions/common/promptTypes';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
@@ -15,6 +17,12 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
+
+/**
+ * Time window (10 minutes) after the last chat request during which polling continues
+ * even if the window is inactive.
+ */
+const RECENT_CHAT_ACTIVITY_THRESHOLD_MS = 10 * 60 * 1000;
 
 export interface IGitHubOrgChatResourcesService extends IDisposable {
 	/**
@@ -91,9 +99,12 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 
 	private readonly _pollingSubscriptions = this._register(new DisposableStore());
 	private _cachedPreferredOrgName: Promise<string | undefined> | undefined;
+	private _lastChatRequestTime = 0;
 
 	constructor(
 		@IAuthenticationService private readonly authService: IAuthenticationService,
+		@IChatMLFetcher private readonly chatMLFetcher: IChatMLFetcher,
+		@IEnvService private readonly envService: IEnvService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystem: IFileSystemService,
 		@IGitService private readonly gitService: IGitService,
@@ -102,6 +113,11 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 	) {
 		super();
+
+		// Track chat activity to enable activity-aware polling
+		this._register(this.chatMLFetcher.onDidMakeChatMLRequest(() => {
+			this._lastChatRequestTime = Date.now();
+		}));
 
 		// Invalidate cached org name when workspace folders change
 		this._register(this.workspaceService.onDidChangeWorkspaceFolders(() => {
@@ -206,10 +222,20 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		const disposables = new DisposableStore();
 
 		let isPolling = false;
+		let isFirstPoll = true;
 		const poll = async () => {
 			if (isPolling) {
 				return;
 			}
+
+			// Skip polling if configured and conditions are met (but always allow the first poll)
+			const hasRecentChatActivity = (Date.now() - this._lastChatRequestTime) < RECENT_CHAT_ACTIVITY_THRESHOLD_MS;
+			if (!isFirstPoll && !this.envService.isActive && !hasRecentChatActivity) {
+				this.logService.trace('[GitHubOrgChatResourcesService] Skipping poll - window inactive and no recent chat activity');
+				return;
+			}
+			isFirstPoll = false;
+
 			isPolling = true;
 			try {
 				const orgName = await this.getPreferredOrganizationName();
