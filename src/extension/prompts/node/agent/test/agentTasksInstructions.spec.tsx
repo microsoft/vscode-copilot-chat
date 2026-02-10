@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, UserMessage } from '@vscode/prompt-tsx';
-import type * as vscode from 'vscode';
 import { expect, suite, test } from 'vitest';
+import type * as vscode from 'vscode';
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { IIgnoreService, NullIgnoreService } from '../../../../../platform/ignore/common/ignoreService';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
@@ -15,8 +15,8 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { renderPromptElement } from '../../base/promptRenderer';
 import { ToolName } from '../../../../tools/common/toolNames';
+import { renderPromptElement } from '../../base/promptRenderer';
 import { AgentTasksInstructions } from '../agentPrompt';
 
 interface TaskPromptProps extends BasePromptElementProps {
@@ -89,7 +89,7 @@ suite('AgentTasksInstructions', () => {
 			priority: 1,
 			availableTools: [taskTool]
 		});
-		const output = messages.map(messageToMarkdown).join('\n\n');
+		const output = messages.map(m => messageToMarkdown(m)).join('\n\n');
 		accessor.dispose();
 		return { messages, output };
 	};
