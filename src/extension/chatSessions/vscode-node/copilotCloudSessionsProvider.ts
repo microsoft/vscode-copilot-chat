@@ -2292,7 +2292,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 				case 422:
 					// NOTE: Although earlier checks should prevent this, ensure that if we end up
 					//       with a 422 from the API, we give a useful error message
-					throw new Error(vscode.l10n.t('Cloud agent was unable to create a pull request with the specified base branch `{0}`. Please push the branch to the remote and verify repository rules allow this operation.', base_ref));
+					throw new Error(vscode.l10n.t('Cloud agent was unable to create a pull request with the specified base branch `{0}`. Please push the branch to the remote and verify repository rules allow this operation. For empty repos, push an initial commit and try again.', base_ref));
 				case 500:
 					throw new Error(vscode.l10n.t('Cloud agent service encountered an internal error. Please try again later.'));
 				default:

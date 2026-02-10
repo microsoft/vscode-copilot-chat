@@ -28,7 +28,7 @@ import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMes
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
-import { RepoMemoryContextPrompt, RepoMemoryInstructionsPrompt } from '../../../tools/node/memoryContextPrompt';
+import { MemoryContextPrompt, MemoryInstructionsPrompt } from '../../../tools/node/memoryContextPrompt';
 import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
@@ -105,7 +105,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			</SystemMessage>
 			{instructions}
 			<SystemMessage>
-				<RepoMemoryInstructionsPrompt />
+				<MemoryInstructionsPrompt />
 			</SystemMessage>
 		</>;
 		const baseInstructions = <>
@@ -199,9 +199,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		const isNewChat = this.props.promptContext.history?.length === 0;
+		// TODO:@bhavyau find a better way to extract session resource
+		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} isNewChat={isNewChat} sessionResource={sessionResource} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -217,7 +219,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 
 		const isNewChat = this.props.promptContext.history?.length === 0;
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat }, undefined, undefined);
+		// TODO:@bhavyau find a better way to extract session resource
+		const sessionResource = (this.props.promptContext.tools?.toolInvocationToken as any)?.sessionResource as string | undefined;
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools, isNewChat, sessionResource }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
 			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
@@ -230,6 +234,7 @@ interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly availableTools?: readonly LanguageModelToolInformation[];
 	readonly isNewChat?: boolean;
+	readonly sessionResource?: string;
 }
 
 /**
@@ -250,7 +255,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<AgentMultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} availableTools={this.props.availableTools} />
 			</Tag>
 			<UserPreferences flexGrow={7} priority={800} />
-			{this.props.isNewChat && <RepoMemoryContextPrompt />}
+			{this.props.isNewChat && <MemoryContextPrompt sessionResource={this.props.sessionResource} />}
 			{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 		</UserMessage>;
 	}

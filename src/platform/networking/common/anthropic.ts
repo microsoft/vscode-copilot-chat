@@ -95,6 +95,7 @@ export const nonDeferredToolNames = new Set([
 	// Misc
 	'ask_questions',
 	'switch_agent',
+	'memory'
 ]);
 
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
@@ -255,6 +256,18 @@ export function isAnthropicContextEditingEnabled(
 		return false;
 	}
 	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
+}
+
+export function isAnthropicMemoryToolEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
 export interface ContextEditingConfig {

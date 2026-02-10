@@ -18,19 +18,20 @@ import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifec
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
+import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
+import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
 import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '../common/claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
-import { SYNTHETIC_MODEL_ID } from './sessionParser/claudeSessionSchema';
+import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -85,7 +86,7 @@ export class ClaudeAgentManager extends Disposable {
 			}
 
 			await session.invoke(
-				this.resolvePrompt(request),
+				await this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
 				token,
@@ -126,19 +127,42 @@ export class ClaudeAgentManager extends Disposable {
 		}
 	}
 
-	private resolvePrompt(request: vscode.ChatRequest): Anthropic.TextBlockParam[] {
+	private async resolvePrompt(request: vscode.ChatRequest): Promise<Anthropic.ContentBlockParam[]> {
 		if (request.prompt.startsWith('/')) {
 			return [{ type: 'text', text: request.prompt }]; // likely a slash command, don't modify
 		}
 
-		const contentBlocks: Anthropic.TextBlockParam[] = [];
+		const contentBlocks: Anthropic.ContentBlockParam[] = [];
 		const extraRefsTexts: string[] = [];
+		const uriToString = (uri: URI) => uri.scheme === 'file' ? uri.fsPath : uri.toString();
 		let prompt = request.prompt;
-		request.references.forEach(ref => {
-			const valueText = URI.isUri(ref.value) ?
-				ref.value.fsPath :
-				isLocation(ref.value) ?
-					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+		for (const ref of request.references) {
+			let refValue = ref.value;
+			if (refValue instanceof ChatReferenceBinaryData) {
+				const mediaType = toAnthropicImageMediaType(refValue.mimeType);
+				if (mediaType) {
+					const data = await refValue.data();
+					contentBlocks.push({
+						type: 'image',
+						source: {
+							type: 'base64',
+							data: Buffer.from(data).toString('base64'),
+							media_type: mediaType
+						}
+					});
+					continue;
+				}
+				// Unsupported image type — fall through to use reference URI if available
+				if (!refValue.reference) {
+					continue;
+				}
+				refValue = refValue.reference;
+			}
+
+			const valueText = URI.isUri(refValue) ?
+				uriToString(refValue) :
+				isLocation(refValue) ?
+					`${uriToString(refValue.uri)}:${refValue.range.start.line + 1}` :
 					undefined;
 			if (valueText) {
 				if (ref.range) {
@@ -147,7 +171,7 @@ export class ClaudeAgentManager extends Disposable {
 					extraRefsTexts.push(`- ${valueText}`);
 				}
 			}
-		});
+		}
 
 		// Add system-reminder as a separate content block so it's not rendered in chat history
 		if (extraRefsTexts.length > 0) {
@@ -170,7 +194,7 @@ class KnownClaudeError extends Error { }
  * Represents a queued chat request waiting to be processed by the Claude session
  */
 interface QueuedRequest {
-	readonly prompt: Anthropic.TextBlockParam[];
+	readonly prompt: Anthropic.ContentBlockParam[];
 	readonly stream: vscode.ChatResponseStream;
 	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 	readonly token: vscode.CancellationToken;
@@ -320,7 +344,7 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param yieldRequested Function to check if the user has requested to interrupt
 	 */
 	public async invoke(
-		prompt: Anthropic.TextBlockParam[],
+		prompt: Anthropic.ContentBlockParam[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
@@ -395,6 +419,7 @@ export class ClaudeCodeSession extends Disposable {
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
+		const mcpServers = await buildMcpServersFromRegistry(this.instantiationService);
 		const options: Options = {
 			cwd,
 			additionalDirectories,
@@ -420,6 +445,7 @@ export class ClaudeCodeSession extends Disposable {
 			// Pass the permission mode to the SDK
 			permissionMode: this._currentPermissionMode,
 			hooks: this._buildHooks(token),
+			mcpServers,
 			canUseTool: async (name, input) => {
 				if (!this._currentRequest) {
 					return { behavior: 'deny', message: 'No active request' };
