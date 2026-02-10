@@ -2958,7 +2958,12 @@
 					"yourcompany.ai.searchEndpoint": {
 						"type": "string",
 						"default": "",
-						"description": "Azure AI Search endpoint URL for workspace indexing (optional)"
+						"description": "Azure AI Search endpoint URL for workspace indexing (e.g. https://your-search.search.windows.net)"
+					},
+					"yourcompany.ai.searchApiKey": {
+						"type": "string",
+						"default": "",
+						"description": "Azure AI Search admin API key for indexing and querying"
 					},
 					"yourcompany.ai.searchIndexName": {
 						"type": "string",

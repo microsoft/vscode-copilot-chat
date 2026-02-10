@@ -48,7 +48,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		private readonly _embeddingType: EmbeddingType,
 		@IVSCodeExtensionContext vsExtensionContext: IVSCodeExtensionContext,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationService private readonly _authService: IAuthenticationService,
+		@IAuthenticationService _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -449,7 +449,9 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		return this._chunkingEndpointClient.computeChunks(authToken, this._embeddingType, file, batchInfo, qos, cachedChunks, telemetryInfo, token);
 	}
 
-	private async tryGetAuthToken(options: AuthenticationGetSessionOptions = { createIfNone: true }): Promise<string | undefined> {
-		return (await this._authService.getGitHubSession('any', options))?.accessToken;
+	private async tryGetAuthToken(_options: AuthenticationGetSessionOptions = { createIfNone: true }): Promise<string | undefined> {
+		// Azure-only fork: return a placeholder token since AzureChunkingEndpointClient
+		// handles its own auth via service principal and ignores this parameter
+		return 'azure-service-principal';
 	}
 }

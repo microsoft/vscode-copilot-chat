@@ -15,7 +15,9 @@ import { IChatHookService } from '../../../platform/chat/common/chatHookService'
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
-import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
+// Azure-only fork: replaced ChunkingEndpointClientImpl with AzureChunkingEndpointClient
+// import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
+import { AzureChunkingEndpointClient } from '../../../platform/azure/common/azureChunkingEndpointClient';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
 import { IDevContainerConfigurationService } from '../../../platform/devcontainer/common/devContainerConfigurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
@@ -76,7 +78,11 @@ import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/n
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
 import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
-import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+// Azure-only fork: replaced GithubAvailableEmbeddingTypesService with AzureAvailableEmbeddingTypesService
+// import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { AzureAvailableEmbeddingTypesService } from '../../../platform/azure/common/azureAvailableEmbeddingTypes';
+import { AzureSearchClient, IAzureSearchClient } from '../../../platform/azure/common/azureSearchClient';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
@@ -197,7 +203,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IIntentService, new SyncDescriptor(IntentService));
 	builder.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	builder.define(IWorkspaceFileIndex, new SyncDescriptor(WorkspaceFileIndex));
-	builder.define(IChunkingEndpointClient, new SyncDescriptor(ChunkingEndpointClientImpl));
+	// Azure-only fork: local chunking + Azure OpenAI embeddings
+	builder.define(IChunkingEndpointClient, new SyncDescriptor(AzureChunkingEndpointClient));
 	builder.define(ICommandService, new SyncDescriptor(CommandServiceImpl));
 	builder.define(IDocsSearchClient, new SyncDescriptor(DocsSearchClient));
 	builder.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
@@ -236,7 +243,9 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
-	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	// Azure-only fork: always returns text3small_512 (no GitHub CAPI dependency)
+	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(AzureAvailableEmbeddingTypesService));
+	builder.define(IAzureSearchClient, new SyncDescriptor(AzureSearchClient));
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IPowerService, new SyncDescriptor(PowerService));
