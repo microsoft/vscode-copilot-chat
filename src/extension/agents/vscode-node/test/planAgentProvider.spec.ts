@@ -129,7 +129,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('applies model override from settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'Claude Haiku 4.5 (copilot)');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'Claude Haiku 4.5 (copilot)');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -156,7 +156,7 @@ suite('PlanAgentProvider', () => {
 
 	test('prefers core default model over extension setting', async () => {
 		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', 'core-model');
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'extension-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'extension-model');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -171,7 +171,7 @@ suite('PlanAgentProvider', () => {
 
 	test('applies both additionalTools and model settings together', async () => {
 		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['extraTool']);
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'claude-3-sonnet');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'claude-3-sonnet');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -207,7 +207,7 @@ suite('PlanAgentProvider', () => {
 			eventFired = true;
 		});
 
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'new-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'new-model');
 
 		assert.equal(eventFired, true);
 	});
@@ -284,7 +284,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('preserves body content after frontmatter when applying settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'test-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'test-model');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -311,7 +311,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('handles empty model string gracefully', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, '');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, '');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -325,7 +325,7 @@ suite('PlanAgentProvider', () => {
 
 	test('falls back to extension setting when core default model is empty string', async () => {
 		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', '');
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'fallback-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'fallback-model');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
