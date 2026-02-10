@@ -36,17 +36,6 @@ describe('CopilotCLISessionTracker', () => {
 			expect(disposable.dispose).toBeInstanceOf(Function);
 		});
 
-		it('should allow registering multiple sessions', () => {
-			tracker.registerSession('session-1', { pid: 1000, ppid: 2000 });
-			tracker.registerSession('session-2', { pid: 3000, ppid: 4000 });
-
-			// Both should be registered (verified via getTerminal not returning undefined for known ppid)
-			mockTerminals.value = [
-				{ processId: Promise.resolve(2000), name: 'terminal-1' },
-				{ processId: Promise.resolve(4000), name: 'terminal-2' },
-			];
-		});
-
 		it('should remove session on dispose', async () => {
 			const disposable = tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
 			mockTerminals.value = [
