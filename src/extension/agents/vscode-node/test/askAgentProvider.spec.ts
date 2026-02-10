@@ -82,7 +82,8 @@ suite('AskAgentProvider', () => {
 
 		// Should NOT contain editing tools
 
-		assert.ok(!content.includes('execute/getTerminalOutput'), 'Should not have terminal tool');
+		assert.ok(!content.includes('\'edit'), 'Should not have edit or edit/... tools');
+		assert.ok(!content.includes('\'execute/run'), 'Should not have any execute/run... tool');
 
 		// Should have correct metadata
 		assert.ok(content.includes('name: Ask'));
