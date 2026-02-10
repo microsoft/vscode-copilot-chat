@@ -2874,6 +2874,11 @@
 				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
 				"icon": "$(repo)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.cloudSessions.clearCaches",
+				"title": "%github.copilot.command.cloudSessions.clearCaches.title%",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -3882,15 +3887,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.planAgent.model": {
-						"type": "string",
-						"default": "",
-						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.model%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",
@@ -4644,6 +4640,12 @@
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
+				}
+			],
+			"chat/newSession": [
+				{
+					"command": "github.copilot.cli.newSession",
+					"group": "4_recommendations@0"
 				}
 			],
 			"testing/item/result": [
