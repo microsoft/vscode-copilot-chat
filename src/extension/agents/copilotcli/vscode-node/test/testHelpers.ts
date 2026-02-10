@@ -30,6 +30,14 @@ export class MockMcpServer {
 		this._tools.set(name, { handler, schema });
 	}
 
+	/**
+	* Mimics the McpServer.registerTool() registration method.
+	* Signature: registerTool(name, config, callback)
+	*/
+	registerTool(name: string, config: { description?: string; inputSchema?: unknown }, handler: ToolHandler): void {
+		this._tools.set(name, { handler, schema: config.inputSchema });
+	}
+
 	getToolHandler(name: string): ToolHandler | undefined {
 		return this._tools.get(name)?.handler;
 	}
