@@ -109,7 +109,6 @@ export class RouterDecisionFetcher extends Disposable {
 			/* __GDPR__
 				"automode.routerDecision" : {
 					"owner": "tyleonha",
-
 					"comment": "Reports the routing decision made by the auto mode router API",
 					"routerUrl": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The router API endpoint URL used for the routing decision." },
 					"predictedLabel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The predicted classification label (needs_reasoning or no_reasoning)" },
