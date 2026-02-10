@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 11
+// version: 12
 
 declare module 'vscode' {
 
@@ -30,12 +30,17 @@ declare module 'vscode' {
 	}
 
 	export class ChatRequestEditorData {
+
+		readonly editor: TextEditor;
+
 		//TODO@API should be the editor
 		document: TextDocument;
 		selection: Selection;
+
+		/** @deprecated */
 		wholeRange: Range;
 
-		constructor(document: TextDocument, selection: Selection, wholeRange: Range);
+		constructor(editor: TextEditor, document: TextDocument, selection: Selection, wholeRange: Range);
 	}
 
 	export class ChatRequestNotebookData {
@@ -56,9 +61,16 @@ declare module 'vscode' {
 		readonly attempt: number;
 
 		/**
-		 * The session identifier for this chat request
+		 * The session identifier for this chat request.
+		 *
+		 * @deprecated Use {@link chatSessionResource} instead.
 		 */
 		readonly sessionId: string;
+
+		/**
+		 * The resource URI for the chat session this request belongs to.
+		 */
+		readonly sessionResource: Uri;
 
 		/**
 		 * If automatic command detection is enabled.
@@ -95,7 +107,7 @@ declare module 'vscode' {
 		readonly subAgentInvocationId?: string;
 
 		/**
-		 * The name of the subagent, used for logging and debugging purposes.
+		 * Display name of the subagent that is invoking this request.
 		 */
 		readonly subAgentName?: string;
 
@@ -108,6 +120,13 @@ declare module 'vscode' {
 		 * Whether any hooks are enabled for this request.
 		 */
 		readonly hasHooksEnabled: boolean;
+
+		/**
+		 * Resolved hook commands for this request, organized by hook type.
+		 * The commands have already been resolved for the current platform.
+		 * Only present when hooks are enabled.
+		 */
+		readonly hooks?: ChatRequestHooks;
 	}
 
 	export enum ChatRequestEditedFileEventKind {
@@ -248,12 +267,15 @@ declare module 'vscode' {
 
 	export interface LanguageModelToolInvocationOptions<T> {
 		chatRequestId?: string;
+		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: string;
+		chatSessionResource?: Uri;
 		chatInteractionId?: string;
 		terminalCommand?: string;
+		/**
+		 * Unique ID for the subagent invocation, used to group tool calls from the same subagent run together.
+		 */
 		subAgentInvocationId?: string;
-		subAgentName?: string;
 	}
 
 	export interface LanguageModelToolInvocationPrepareOptions<T> {
@@ -262,8 +284,9 @@ declare module 'vscode' {
 		 */
 		input: T;
 		chatRequestId?: string;
+		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: string;
+		chatSessionResource?: Uri;
 		chatInteractionId?: string;
 		/**
 		 * If set, tells the tool that it should include confirmation messages.
@@ -352,5 +375,6 @@ declare module 'vscode' {
 		 */
 		readonly yieldRequested: boolean;
 	}
+
 	// #endregion
 }

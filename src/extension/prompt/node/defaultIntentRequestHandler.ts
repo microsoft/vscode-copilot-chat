@@ -348,7 +348,7 @@ export class DefaultIntentRequestHandler {
 			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
 			await loop.runStartHooks(this.stream, this.token);
 
-			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput }, this.conversation.sessionId, this.token);
+			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
 			processHookResults({
 				hookType: 'UserPromptSubmit',
 				results: userPromptSubmitResults,
