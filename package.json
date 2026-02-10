@@ -3077,8 +3077,8 @@
 					},
 					"github.copilot.chat.growthMessages.enabled": {
 						"type": "boolean",
-						"default": true,
-						"markdownDescription": "Enable educational growth messages to help learn Copilot features. This is an experimental feature."
+						"default": false,
+						"markdownDescription": "Enable educational growth messages to help learn Copilot features."
 					}
 				}
 			},
