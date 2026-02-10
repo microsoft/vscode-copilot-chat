@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert } from 'chai';
+import * as os from 'os';
+import * as path from 'path';
 import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -16,9 +18,8 @@ import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { buildAgentMarkdown, PlanAgentProvider } from '../planAgentProvider';
-import * as os from 'os';
-import * as path from 'path';
+import { buildAgentMarkdown } from '../agentTypes';
+import { PlanAgentProvider } from '../planAgentProvider';
 
 suite('PlanAgentProvider', () => {
 	let disposables: DisposableStore;
