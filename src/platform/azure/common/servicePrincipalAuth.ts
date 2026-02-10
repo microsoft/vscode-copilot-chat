@@ -29,9 +29,12 @@ export interface IServicePrincipalAuthConfig {
  * No interactive login required - fully automated token management.
  */
 export class ServicePrincipalAuthService {
-	private cachedToken: AccessToken | undefined;
+	private readonly _tokenCache = new Map<string, AccessToken>();
 	private _config: IServicePrincipalAuthConfig | undefined;
 	private _extensionContext: ExtensionContext | undefined;
+
+	static readonly SCOPE_COGNITIVE_SERVICES = 'https://cognitiveservices.azure.com/.default';
+	static readonly SCOPE_SEARCH = 'https://search.azure.com/.default';
 
 	constructor(
 		private readonly _fetchFn: (url: string, init: RequestInit) => Promise<Response>,
@@ -77,10 +80,13 @@ export class ServicePrincipalAuthService {
 		);
 	}
 
-	async getToken(): Promise<string> {
+	async getToken(scope?: string): Promise<string> {
+		const resolvedScope = scope || ServicePrincipalAuthService.SCOPE_COGNITIVE_SERVICES;
+
 		// Return cached token if still valid (with 5 min buffer)
-		if (this.cachedToken && this.cachedToken.expiresOnTimestamp > Date.now() + 300_000) {
-			return this.cachedToken.token;
+		const cached = this._tokenCache.get(resolvedScope);
+		if (cached && cached.expiresOnTimestamp > Date.now() + 300_000) {
+			return cached.token;
 		}
 
 		const config = await this.getConfig();
@@ -91,7 +97,7 @@ export class ServicePrincipalAuthService {
 			grant_type: 'client_credentials',
 			client_id: config.clientId,
 			client_secret: config.clientSecret,
-			scope: 'https://cognitiveservices.azure.com/.default',
+			scope: resolvedScope,
 		});
 
 		const response = await this._fetchFn(tokenUrl, {
@@ -104,17 +110,18 @@ export class ServicePrincipalAuthService {
 
 		if (!response.ok) {
 			const errorText = await response.text();
-			throw new Error(`Failed to acquire token from Azure AD: ${response.status} ${errorText}`);
+			throw new Error(`Failed to acquire token from Azure AD (scope: ${resolvedScope}): ${response.status} ${errorText}`);
 		}
 
 		const tokenResponse = await response.json() as TokenResponse;
 
-		this.cachedToken = {
+		const accessToken: AccessToken = {
 			token: tokenResponse.access_token,
 			expiresOnTimestamp: Date.now() + (tokenResponse.expires_in * 1000),
 		};
 
-		return this.cachedToken.token;
+		this._tokenCache.set(resolvedScope, accessToken);
+		return accessToken.token;
 	}
 
 	/**
@@ -122,7 +129,7 @@ export class ServicePrincipalAuthService {
 	 */
 	reset(): void {
 		this._config = undefined;
-		this.cachedToken = undefined;
+		this._tokenCache.clear();
 	}
 
 	/**

@@ -2917,6 +2917,58 @@
 								}
 							}
 						}
+					},
+					"yourcompany.ai.embeddingsDeployment": {
+						"type": "string",
+						"default": "text-embedding-3-small",
+						"description": "Azure OpenAI deployment name for embeddings (text-embedding-3-small)"
+					},
+					"yourcompany.ai.embeddingsApiVersion": {
+						"type": "string",
+						"default": "2024-12-01-preview",
+						"description": "API version for the embeddings deployment"
+					},
+					"yourcompany.ai.routing": {
+						"type": "object",
+						"default": {},
+						"description": "Feature-to-deployment routing overrides. Keys: chat, embeddings, completions, code-apply, intent-detection",
+						"properties": {
+							"chat": {
+								"type": "string",
+								"description": "Deployment for chat requests"
+							},
+							"embeddings": {
+								"type": "string",
+								"description": "Deployment for embeddings"
+							},
+							"completions": {
+								"type": "string",
+								"description": "Deployment for inline completions"
+							},
+							"code-apply": {
+								"type": "string",
+								"description": "Deployment for code application (diffs)"
+							},
+							"intent-detection": {
+								"type": "string",
+								"description": "Deployment for intent detection"
+							}
+						}
+					},
+					"yourcompany.ai.searchEndpoint": {
+						"type": "string",
+						"default": "",
+						"description": "Azure AI Search endpoint URL for workspace indexing (optional)"
+					},
+					"yourcompany.ai.searchIndexName": {
+						"type": "string",
+						"default": "copilot-workspace",
+						"description": "Azure AI Search index name for workspace embeddings"
+					},
+					"yourcompany.ai.autoIndex": {
+						"type": "boolean",
+						"default": false,
+						"description": "Automatically index workspace files for @workspace semantic search"
 					}
 				}
 			},

@@ -33,7 +33,10 @@ import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
-import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
+// Azure-only fork: VsCodeIgnoreService replaced with LocalIgnoreService (no CAPI dependency)
+// import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
+import { AzureModelRouter, IModelRouter } from '../../../platform/azure/common/modelRouter';
+import { LocalIgnoreService } from '../../../platform/azure/common/localIgnoreService';
 import { IImageService } from '../../../platform/image/common/imageService';
 import { ImageServiceImpl } from '../../../platform/image/node/imageServiceImpl';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
@@ -182,8 +185,12 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
 		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
-		builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
+		// Azure-only fork: use local-only ignore service (no CAPI remote exclusions)
+		builder.define(IIgnoreService, new SyncDescriptor(LocalIgnoreService));
 	}
+
+	// Azure-only fork: model router for deployment routing
+	builder.define(IModelRouter, new SyncDescriptor(AzureModelRouter));
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
