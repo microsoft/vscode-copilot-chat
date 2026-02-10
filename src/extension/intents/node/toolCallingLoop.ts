@@ -248,11 +248,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeStopHook(input: StopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
 		try {
-			// PauseController implements CancellationToken, so we can use it directly
-			const results = await this._chatHookService.executeHook('Stop', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('Stop', this.options.request.hooks, input, sessionId, token);
 
 			const blockingReasons = new Set<string>();
 			processHookResults({
@@ -319,10 +315,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StartHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SessionStart', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SessionStart', this.options.request.hooks, input, sessionId, token);
 
 			const additionalContexts: string[] = [];
 			processHookResults({
@@ -364,10 +357,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SubagentStart', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SubagentStart', this.options.request.hooks, input, sessionId, token);
 
 			const additionalContexts: string[] = [];
 			processHookResults({
@@ -409,10 +399,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSubagentStopHook(input: SubagentStopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStopHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SubagentStop', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SubagentStop', this.options.request.hooks, input, sessionId, token);
 
 			const blockingReasons = new Set<string>();
 			processHookResults({
