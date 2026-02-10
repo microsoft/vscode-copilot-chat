@@ -66,14 +66,6 @@ describe('LockFileHandle', () => {
 			expect(content.isTrusted).toBe(true);
 		});
 
-		it('should write isTrusted status from workspace', async () => {
-			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
-			await handle.update();
-
-			const content = JSON.parse(await fs.readFile(testLockFilePath, 'utf-8'));
-			expect(content.isTrusted).toBe(true);
-		});
-
 		it.skipIf(process.platform === 'win32')('should set restrictive file permissions (0o600)', async () => {
 			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
 			await handle.update();
