@@ -44,12 +44,11 @@ export interface UserPromptSubmitHookInput {
  */
 export interface UserPromptSubmitHookOutput {
 	/**
-	 * Set to "block" to prevent the agent from stopping.
-	 * Omit or set to undefined to allow the agent to stop.
+	 * Set to "block" to prevent the user prompt from being submitted to the agent.
 	 */
 	readonly decision?: 'block';
 	/**
-	 * Required when decision is "block". Tells the agent why it should continue.
+	 * Tells the agent why it should continue.
 	 */
 	readonly reason?: string;
 }
