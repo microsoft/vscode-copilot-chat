@@ -20,7 +20,7 @@ function makeErrorResult(message: string): { content: [{ type: 'text'; text: str
 	};
 }
 
-export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffState: DiffStateManager, contentProvider: ReadonlyContentProvider): void {
+export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffState: DiffStateManager, contentProvider: ReadonlyContentProvider, sessionId: string): void {
 	const schema = {
 		original_file_path: z.string().describe('Path to the original file'),
 		new_file_contents: z.string().describe('The new file contents to compare against'),
@@ -127,6 +127,7 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffSta
 					logger.info('[DIFF] Registering diff');
 					diffState.register({
 						diffId,
+						sessionId,
 						tabName: tab_name,
 						originalUri,
 						modifiedUri: newUri,

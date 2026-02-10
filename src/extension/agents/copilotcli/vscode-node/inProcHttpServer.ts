@@ -18,7 +18,7 @@ interface McpProviderOptions {
 	id: string;
 	serverLabel: string;
 	serverVersion: string;
-	registerTools: (server: McpServer) => Promise<void> | void;
+	registerTools: (server: McpServer, sessionId: string) => Promise<void> | void;
 	registerPushNotifications?: () => Promise<void> | void;
 }
 
@@ -52,11 +52,28 @@ class AsyncLazy<T> {
 
 export class InProcHttpServer {
 	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
+	private readonly _disconnectListeners: Array<(sessionId: string) => void> = [];
 
 	constructor(
 		private readonly _logger: ILogger,
 		private readonly _sessionTracker: ICopilotCLISessionTracker,
 	) { }
+
+	/**
+	 * Register a listener that fires when a client session disconnects.
+	 * Returns a disposable to remove the listener.
+	 */
+	onClientDisconnected(listener: (sessionId: string) => void): DisposableLike {
+		this._disconnectListeners.push(listener);
+		return {
+			dispose: () => {
+				const idx = this._disconnectListeners.indexOf(listener);
+				if (idx >= 0) {
+					this._disconnectListeners.splice(idx, 1);
+				}
+			},
+		};
+	}
 
 	broadcastNotification(method: string, params: Record<string, unknown>): void {
 		const message = {
@@ -154,6 +171,13 @@ export class InProcHttpServer {
 	private _unregisterTransport(sessionId: string): void {
 		delete this._transports[sessionId];
 		this._logger.info(`Client disconnected: ${sessionId}`);
+		for (const listener of this._disconnectListeners) {
+			try {
+				listener(sessionId);
+			} catch (err) {
+				this._logger.error(`Error in disconnect listener: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
 	}
 
 	private _getTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
@@ -231,7 +255,7 @@ export class InProcHttpServer {
 
 			try {
 				this._logger.debug('Registering MCP tools...');
-				await Promise.resolve(mcpOptions.registerTools(server));
+				await Promise.resolve(mcpOptions.registerTools(server, sessionId));
 			} catch (err) {
 				const errMsg = err instanceof Error ? err.message : String(err);
 				this._logger.error(`Failed to register MCP tools: ${errMsg}`);
