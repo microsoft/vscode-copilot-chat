@@ -30,17 +30,12 @@ declare module 'vscode' {
 	}
 
 	export class ChatRequestEditorData {
-
-		readonly editor: TextEditor;
-
 		//TODO@API should be the editor
 		document: TextDocument;
 		selection: Selection;
-
-		/** @deprecated */
 		wholeRange: Range;
 
-		constructor(editor: TextEditor, document: TextDocument, selection: Selection, wholeRange: Range);
+		constructor(document: TextDocument, selection: Selection, wholeRange: Range);
 	}
 
 	export class ChatRequestNotebookData {
@@ -61,16 +56,9 @@ declare module 'vscode' {
 		readonly attempt: number;
 
 		/**
-		 * The session identifier for this chat request.
-		 *
-		 * @deprecated Use {@link chatSessionResource} instead.
+		 * The session identifier for this chat request
 		 */
 		readonly sessionId: string;
-
-		/**
-		 * The resource URI for the chat session this request belongs to.
-		 */
-		readonly sessionResource: Uri;
 
 		/**
 		 * If automatic command detection is enabled.
@@ -107,7 +95,7 @@ declare module 'vscode' {
 		readonly subAgentInvocationId?: string;
 
 		/**
-		 * Display name of the subagent that is invoking this request.
+		 * The name of the subagent, used for logging and debugging purposes.
 		 */
 		readonly subAgentName?: string;
 
@@ -258,18 +246,12 @@ declare module 'vscode' {
 		provideFileIgnored(uri: Uri, token: CancellationToken): ProviderResult<boolean>;
 	}
 
-	export type PreToolUsePermissionDecision = 'allow' | 'deny' | 'ask';
-
 	export interface LanguageModelToolInvocationOptions<T> {
 		chatRequestId?: string;
-		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: Uri;
+		chatSessionResource?: string;
 		chatInteractionId?: string;
 		terminalCommand?: string;
-		/**
-		 * Unique ID for the subagent invocation, used to group tool calls from the same subagent run together.
-		 */
 		subAgentInvocationId?: string;
 		subAgentName?: string;
 		/**
@@ -278,7 +260,7 @@ declare module 'vscode' {
 		 * and use this result for permission decisions and input modifications instead.
 		 */
 		preToolUseResult?: {
-			permissionDecision?: PreToolUsePermissionDecision;
+			permissionDecision?: 'allow' | 'deny' | 'ask';
 			permissionDecisionReason?: string;
 			updatedInput?: object;
 		};
@@ -290,9 +272,8 @@ declare module 'vscode' {
 		 */
 		input: T;
 		chatRequestId?: string;
-		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: Uri;
+		chatSessionResource?: string;
 		chatInteractionId?: string;
 		/**
 		 * If set, tells the tool that it should include confirmation messages.
@@ -381,6 +362,5 @@ declare module 'vscode' {
 		 */
 		readonly yieldRequested: boolean;
 	}
-
 	// #endregion
 }
