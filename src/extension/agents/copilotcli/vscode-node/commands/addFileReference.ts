@@ -6,8 +6,10 @@
 import * as vscode from 'vscode';
 import * as l10n from '@vscode/l10n';
 import { ILogger } from '../../../../../platform/log/common/logService';
+import { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
 import { InProcHttpServer } from '../inProcHttpServer';
 import { getSelectionInfo } from '../tools';
+import { pickSession } from './pickSession';
 
 export interface FileReferenceInfo {
 	filePath: string;
@@ -22,9 +24,14 @@ export interface FileReferenceInfo {
 export const ADD_FILE_REFERENCE_COMMAND = 'github.copilot.chat.copilotCLI.addFileReference';
 export const ADD_FILE_REFERENCE_NOTIFICATION = 'add_file_reference';
 
-export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InProcHttpServer): vscode.Disposable {
-	return vscode.commands.registerCommand(ADD_FILE_REFERENCE_COMMAND, (uri?: vscode.Uri) => {
+export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InProcHttpServer, sessionTracker: ICopilotCLISessionTracker): vscode.Disposable {
+	return vscode.commands.registerCommand(ADD_FILE_REFERENCE_COMMAND, async (uri?: vscode.Uri) => {
 		logger.debug('Add file reference command executed');
+
+		const sessionId = await pickSession(logger, httpServer, sessionTracker);
+		if (!sessionId) {
+			return;
+		}
 
 		// If URI is provided (from explorer context menu), use it directly
 		if (uri) {
@@ -35,8 +42,9 @@ export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InP
 				selectedText: null,
 			};
 
-			logger.info(`Broadcasting file reference from explorer: ${uri.fsPath}`);
-			httpServer.broadcastNotification(
+			logger.info(`Sending file reference from explorer to session ${sessionId}: ${uri.fsPath}`);
+			httpServer.sendNotification(
+				sessionId,
 				ADD_FILE_REFERENCE_NOTIFICATION,
 				fileReferenceInfo as unknown as Record<string, unknown>,
 			);
@@ -65,7 +73,7 @@ export function registerAddFileReferenceCommand(logger: ILogger, httpServer: InP
 			selectedText: selectionInfo.selection.isEmpty ? null : selectionInfo.text,
 		};
 
-		logger.info(`Broadcasting file reference: ${selectionInfo.filePath}`);
-		httpServer.broadcastNotification(ADD_FILE_REFERENCE_NOTIFICATION, fileReferenceInfo as unknown as Record<string, unknown>);
+		logger.info(`Sending file reference to session ${sessionId}: ${selectionInfo.filePath}`);
+		httpServer.sendNotification(sessionId, ADD_FILE_REFERENCE_NOTIFICATION, fileReferenceInfo as unknown as Record<string, unknown>);
 	});
 }

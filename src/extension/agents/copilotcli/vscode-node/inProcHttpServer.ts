@@ -75,6 +75,28 @@ export class InProcHttpServer {
 		}
 	}
 
+	sendNotification(sessionId: string, method: string, params: Record<string, unknown>): void {
+		const transport = this._getTransport(sessionId);
+		if (!transport) {
+			this._logger.debug(`Cannot send notification "${method}": session ${sessionId} not found`);
+			return;
+		}
+
+		const message = {
+			jsonrpc: '2.0' as const,
+			method,
+			params,
+		};
+
+		transport.send(message).catch(() => {
+			this._logger.debug(`Failed to send notification "${method}" to client ${sessionId}`);
+		});
+	}
+
+	getConnectedSessionIds(): readonly string[] {
+		return Object.keys(this._transports);
+	}
+
 	async start(
 		mcpOptions: McpProviderOptions,
 	): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {

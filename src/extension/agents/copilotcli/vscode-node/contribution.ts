@@ -38,7 +38,7 @@ export class CopilotCLIContrib extends Disposable {
 		const contentProvider = new ReadonlyContentProvider();
 
 		// Register commands
-		this._register(registerAddFileReferenceCommand(logger, httpServer));
+		this._register(registerAddFileReferenceCommand(logger, httpServer, this.sessionTracker));
 		for (const d of registerDiffCommands(logger, diffState)) {
 			this._register(d);
 		}

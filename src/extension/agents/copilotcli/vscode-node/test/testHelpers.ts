@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { vi } from 'vitest';
+import type { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -141,9 +142,24 @@ export function createMockDiagnostic(
 */
 export class MockHttpServer {
 	readonly broadcastedNotifications: Array<{ method: string; params: Record<string, unknown> }> = [];
+	readonly sentNotifications: Array<{ sessionId: string; method: string; params: Record<string, unknown> }> = [];
+	private _connectedSessionIds: readonly string[] = [];
+
 	readonly broadcastNotification = vi.fn((method: string, params: Record<string, unknown>) => {
 		this.broadcastedNotifications.push({ method, params });
 	});
+
+	readonly sendNotification = vi.fn((sessionId: string, method: string, params: Record<string, unknown>) => {
+		this.sentNotifications.push({ sessionId, method, params });
+	});
+
+	readonly getConnectedSessionIds = vi.fn((): readonly string[] => {
+		return this._connectedSessionIds;
+	});
+
+	setConnectedSessionIds(ids: readonly string[]): void {
+		this._connectedSessionIds = ids;
+	}
 
 	getNotifications(method: string) {
 		return this.broadcastedNotifications.filter(n => n.method === method);
@@ -151,6 +167,36 @@ export class MockHttpServer {
 
 	clear() {
 		this.broadcastedNotifications.length = 0;
+		this.sentNotifications.length = 0;
 		this.broadcastNotification.mockClear();
+		this.sendNotification.mockClear();
+		this.getConnectedSessionIds.mockClear();
+	}
+}
+
+/**
+* A mock session tracker for testing session picker logic.
+*/
+export class MockSessionTracker {
+	declare _serviceBrand: undefined;
+	private readonly _displayNames = new Map<string, string>();
+
+	readonly registerSession = vi.fn();
+	readonly getTerminal = vi.fn().mockResolvedValue(undefined);
+
+	setDisplayName(sessionId: string, name: string): void {
+		this._displayNames.set(sessionId, name);
+	}
+
+	getSessionDisplayName(sessionId: string): string {
+		return this._displayNames.get(sessionId) || sessionId;
+	}
+
+	getSessionIds(): readonly string[] {
+		return Array.from(this._displayNames.keys());
+	}
+
+	asTracker(): ICopilotCLISessionTracker {
+		return this as unknown as ICopilotCLISessionTracker;
 	}
 }
