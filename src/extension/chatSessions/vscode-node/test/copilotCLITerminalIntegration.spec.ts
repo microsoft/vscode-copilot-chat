@@ -45,13 +45,6 @@ vi.mock('../copilotCLIPythonTerminalService', () => ({
 	}
 }));
 
-// Verify the test file loads - if this test doesn't run, the ps1 mock isn't working
-describe('test loading check', () => {
-	it('should load the test file', () => {
-		expect(true).toBe(true);
-	});
-});
-
 import { PythonTerminalService } from '../copilotCLIPythonTerminalService';
 import { CopilotCLITerminalIntegration } from '../copilotCLITerminalIntegration';
 
