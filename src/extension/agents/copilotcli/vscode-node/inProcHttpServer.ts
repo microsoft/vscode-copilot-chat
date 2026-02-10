@@ -171,7 +171,7 @@ export class InProcHttpServer {
 	}
 
 	private async _handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
-		const sessionId = (req.headers['mcp-session-id'] ?? req.headers['X-Copilot-Session-Id']) as string | undefined;
+		const sessionId = (req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id']) as string | undefined;
 		this._logger.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
 
 		const isInitializeRequest = await isInitializeRequestLazy.value;
@@ -183,8 +183,8 @@ export class InProcHttpServer {
 			transport = existingTransport;
 		} else if (!sessionId && isInitializeRequest(req.body)) {
 			this._logger.debug('Creating new MCP session...');
-			const clientPid = parseInt(req.headers['X-Copilot-PID'] as string, 10);
-			const clientPpid = parseInt(req.headers['X-Copilot-Parent-PID'] as string, 10);
+			const clientPid = parseInt(req.headers['x-copilot-pid'] as string, 10);
+			const clientPpid = parseInt(req.headers['x-copilot-parent-pid'] as string, 10);
 			let sessionRegistration: { dispose(): void } | undefined;
 			transport = new StreamableHTTPServerTransport({
 				sessionIdGenerator: () => crypto.randomUUID(),
