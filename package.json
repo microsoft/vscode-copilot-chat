@@ -4625,6 +4625,12 @@
 					"group": "navigation@0"
 				}
 			],
+			"chat/newSession": [
+				{
+					"command": "github.copilot.cli.newSession",
+					"group": "4_recommendations@0"
+				}
+			],
 			"testing/item/result": [
 				{
 					"command": "github.copilot.tests.fixTestFailure.fromInline",
