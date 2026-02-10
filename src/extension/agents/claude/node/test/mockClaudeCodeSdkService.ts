@@ -14,6 +14,7 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 	public queryCallCount = 0;
 	public setModelCallCount = 0;
 	public lastSetModel: string | undefined;
+	public lastQueryOptions: Options | undefined;
 	public readonly receivedMessages: SDKUserMessage[] = [];
 
 	public async query(options: {
@@ -21,6 +22,7 @@ export class MockClaudeCodeSdkService implements IClaudeCodeSdkService {
 		options: Options;
 	}): Promise<Query> {
 		this.queryCallCount++;
+		this.lastQueryOptions = options.options;
 		return this.createMockQuery(options.prompt);
 	}
 
