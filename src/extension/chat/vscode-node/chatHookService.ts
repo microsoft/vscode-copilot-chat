@@ -156,12 +156,12 @@ export class ChatHookService implements IChatHookService {
 	private _toHookResult(commandResult: IHookCommandResult): vscode.ChatHookResult {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
-				// Exit code 2 - blocking error, stop processing
+				// Exit code 2 - blocking error
+				// Callers handle this based on hook type (e.g., deny for PreToolUse, blocking reason for Stop)
 				const message = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
 				return {
 					resultKind: 'error',
-					stopReason: message,
-					output: undefined,
+					output: message,
 				};
 			}
 			case HookCommandResultKind.NonBlockingError: {
@@ -246,7 +246,7 @@ export class ChatHookService implements IChatHookService {
 		for (const result of results) {
 			// Exit code 2 (error) means deny the tool
 			if (result.resultKind === 'error') {
-				const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+				const reason = typeof result.output === 'string' ? result.output : undefined;
 				return {
 					permissionDecision: 'deny',
 					permissionDecisionReason: reason,
@@ -324,7 +324,7 @@ export class ChatHookService implements IChatHookService {
 		for (const result of results) {
 			// Exit code 2 (error) means block the tool result
 			if (result.resultKind === 'error') {
-				const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+				const reason = typeof result.output === 'string' ? result.output : undefined;
 				return {
 					decision: 'block',
 					reason,

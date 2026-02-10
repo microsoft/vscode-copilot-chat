@@ -78,7 +78,7 @@ class TestableExecuteHookService {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
 				const message = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
-				return { resultKind: 'error', stopReason: message, output: undefined };
+				return { resultKind: 'error', output: message };
 			}
 			case HookCommandResultKind.NonBlockingError: {
 				const errorMessage = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
@@ -146,13 +146,31 @@ describe('ChatHookService.executeHook', () => {
 		expect(results[0].output).toEqual({ decision: 'block', reason: 'test' });
 	});
 
-	it('converts exit code 2 to error result with stopReason', async () => {
+	it('converts exit code 2 to error result with message in output', async () => {
 		service.executorHandler = () => ({ kind: HookCommandResultKind.Error, result: 'fatal error' });
 		const results = await service.executeHook('Stop', { Stop: [cmd('fail')] }, {});
 
 		expect(results).toHaveLength(1);
 		expect(results[0].resultKind).toBe('error');
-		expect(results[0].stopReason).toBe('fatal error');
+		expect(results[0].output).toBe('fatal error');
+		expect(results[0].stopReason).toBeUndefined();
+	});
+
+	it('does not stop processing on error results (callers decide)', async () => {
+		let callCount = 0;
+		service.executorHandler = () => {
+			callCount++;
+			if (callCount === 1) {
+				return { kind: HookCommandResultKind.Error, result: 'error from first' };
+			}
+			return { kind: HookCommandResultKind.Success, result: 'second ok' };
+		};
+		const results = await service.executeHook('Stop', { Stop: [cmd('first'), cmd('second')] }, {});
+
+		expect(results).toHaveLength(2);
+		expect(callCount).toBe(2);
+		expect(results[0].resultKind).toBe('error');
+		expect(results[1].resultKind).toBe('success');
 	});
 
 	it('converts non-blocking error to warning', async () => {
