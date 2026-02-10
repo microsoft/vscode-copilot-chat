@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { OutputChannel, window } from 'vscode';
+import { LogOutputChannel, window } from 'vscode';
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 
 export class HooksOutputChannel implements IHooksOutputChannel {
 	declare readonly _serviceBrand: undefined;
 
-	private _channel: OutputChannel | undefined;
+	private _channel: LogOutputChannel | undefined;
 
 	appendLine(message: string): void {
 		if (!this._channel) {
-			this._channel = window.createOutputChannel('Hooks');
+			this._channel = window.createOutputChannel('Chat Hooks', { log: true });
 		}
-		this._channel.appendLine(message);
+		this._channel.info(message);
 	}
 }
