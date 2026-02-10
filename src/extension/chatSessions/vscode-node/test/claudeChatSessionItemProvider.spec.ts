@@ -44,7 +44,6 @@ function createMockSessionService(sessions: IClaudeCodeSessionInfo[]): IClaudeCo
 		getSession: vi.fn().mockResolvedValue(undefined),
 		getLastParseErrors: vi.fn().mockReturnValue([]),
 		getLastParseStats: vi.fn().mockReturnValue(undefined),
-		waitForSessionReady: vi.fn().mockResolvedValue(undefined),
 	};
 }
 

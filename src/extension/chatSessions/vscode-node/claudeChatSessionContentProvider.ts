@@ -99,7 +99,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	public override dispose(): void {
-		this._untitledToSdkSession.clear();
 		this._sessionModels.clear();
 		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
@@ -242,11 +241,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	// #region Chat Participant Handler
 
-	// Track SDK session IDs for untitled sessions that haven't been swapped yet.
-	// When VS Code yields mid-request, we can't swap yet (no complete session to display),
-	// so we store the SDK session ID to reuse on the next request.
-	private readonly _untitledToSdkSession = new Map<string, string>();
-
 	createHandler(): ChatExtendedRequestHandler {
 		return async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> => {
 			const { chatSessionContext } = context;
@@ -278,22 +272,27 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const folderInfo = this.getFolderInfoForSession(sessionId);
 			const yieldRequested = () => context.yieldRequested;
 
-			// Resolve the effective session ID: always a string, never undefined.
-			// For untitled sessions, generate a UUID upfront on the first request
-			// and cache it so subsequent requests (e.g., after yield) reuse the same ID.
-			const untitledKey = chatSessionContext.isUntitled ? chatSessionContext.chatSessionItem.resource.toString() : undefined;
+			// Resolve the effective session ID and swap untitled sessions to persistent
+			// sessions immediately, before handling the request.
 			let effectiveSessionId: string;
 			let isNewSession: boolean;
 			if (chatSessionContext.isUntitled) {
-				const cached = this._untitledToSdkSession.get(untitledKey!);
-				if (cached) {
-					effectiveSessionId = cached;
-					isNewSession = false;
-				} else {
-					effectiveSessionId = generateUuid();
-					isNewSession = true;
-					this._untitledToSdkSession.set(untitledKey!, effectiveSessionId);
+				effectiveSessionId = generateUuid();
+				isNewSession = true;
+
+				// Transfer folder selection from untitled session to the new session ID
+				const untitledFolder = this._sessionFolders.get(sessionId);
+				if (untitledFolder) {
+					this._sessionFolders.set(effectiveSessionId, untitledFolder);
+					this._sessionFolders.delete(sessionId);
 				}
+
+				// Swap to persistent session before handling the request
+				const swapResource = ClaudeSessionUri.forSessionId(effectiveSessionId);
+				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
+					resource: swapResource,
+					label: request.prompt ?? 'Claude Agent'
+				});
 			} else {
 				effectiveSessionId = sessionId;
 				isNewSession = false;
@@ -305,31 +304,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
 
 			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
-
-			if (chatSessionContext.isUntitled) {
-				if (result.claudeSessionId) {
-					// Transfer folder selection from untitled session to the new real session ID
-					const untitledFolder = this._sessionFolders.get(sessionId);
-					if (untitledFolder) {
-						this._sessionFolders.set(result.claudeSessionId, untitledFolder);
-						this._sessionFolders.delete(sessionId);
-					}
-
-					if (!context.yieldRequested) {
-						// Done yielding (or never yielded) - swap to persistent session
-						this._untitledToSdkSession.delete(untitledKey!);
-						const swapResource = ClaudeSessionUri.forSessionId(result.claudeSessionId);
-						await this.sessionService.waitForSessionReady(swapResource, token);
-						this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-							resource: swapResource,
-							label: request.prompt ?? 'Claude Agent'
-						});
-					}
-				} else if (!result.errorDetails) {
-					// Only show generic warning if we didn't already show a specific error
-					stream.warning(vscode.l10n.t("Failed to create a new Claude Agent session."));
-				}
-			}
 
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};

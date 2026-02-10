@@ -759,7 +759,7 @@ describe('ChatSessionContentProvider', () => {
 			expect(modelId).toBe('claude-3-5-haiku-20241022');
 		});
 
-		it('local permission mode selection takes priority over session state service', () => {
+		it('local permission mode selection takes priority over session state service', async () => {
 			const sessionUri = createClaudeSessionUri('test-session');
 
 			// Set a value in the session state service directly
@@ -767,7 +767,7 @@ describe('ChatSessionContentProvider', () => {
 			mockSessionStateService.setPermissionModeForSession('test-session', 'acceptEdits');
 
 			// Now set a different local selection
-			provider.provideHandleOptionsChange(
+			await provider.provideHandleOptionsChange(
 				sessionUri,
 				[{ optionId: 'permissionMode', value: 'plan' }],
 				CancellationToken.None

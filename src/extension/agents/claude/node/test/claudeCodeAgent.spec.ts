@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
@@ -45,11 +46,11 @@ function commitTestState(
 	sessionStateService: IClaudeSessionStateService,
 	sessionId: string,
 	modelId: string = TEST_MODEL_ID,
-	permissionMode: string = TEST_PERMISSION_MODE,
+	permissionMode: PermissionMode = TEST_PERMISSION_MODE,
 	folderInfo: ClaudeFolderInfo = TEST_FOLDER_INFO,
 ): void {
 	sessionStateService.setModelIdForSession(sessionId, modelId);
-	sessionStateService.setPermissionModeForSession(sessionId, permissionMode as any);
+	sessionStateService.setPermissionModeForSession(sessionId, permissionMode);
 	sessionStateService.setFolderInfoForSession(sessionId, folderInfo);
 }
 

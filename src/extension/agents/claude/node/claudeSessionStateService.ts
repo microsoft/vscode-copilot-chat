@@ -6,6 +6,7 @@
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { arrayEquals } from '../../../../util/vs/base/common/equals';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
@@ -149,12 +150,16 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 
 	setFolderInfoForSession(sessionId: string, folderInfo: ClaudeFolderInfo): void {
 		const existing = this._sessionState.get(sessionId);
+		if (existing?.folderInfo?.cwd === folderInfo.cwd && arrayEquals(existing?.folderInfo?.additionalDirectories ?? [], folderInfo.additionalDirectories)) {
+			return;
+		}
 		this._sessionState.set(sessionId, {
 			modelId: existing?.modelId,
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
 			capturingToken: existing?.capturingToken,
 			folderInfo,
 		});
+		this._onDidChangeSessionState.fire({ sessionId, folderInfo });
 	}
 
 	override dispose(): void {
