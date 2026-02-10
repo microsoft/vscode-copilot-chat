@@ -44,9 +44,7 @@ import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
 import { ClaudeFolderRepositoryManager, CopilotCLIFolderRepositoryManager } from './folderRepositoryManagerImpl';
-import { GrowthChatSessionContentProvider } from './growthChatSessionContentProvider';
-import { GrowthChatSessionItemProvider } from './growthChatSessionItemProvider';
-import { GrowthChatSessionParticipant } from './growthChatSessionParticipant';
+import { GrowthChatSessionProvider } from './growthChatSessionProvider';
 import { PRContentProvider } from './prContentProvider';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
@@ -162,15 +160,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService));
 
 		// #region Growth Chat Sessions
-		// Register growth chat sessions provider for product growth and user education
-		const growthSessionItemProvider = this._register(instantiationService.createInstance(GrowthChatSessionItemProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionItemProvider.sessionType, growthSessionItemProvider));
-
-		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider, growthSessionItemProvider));
-		const growthChatSessionParticipant = this._register(instantiationService.createInstance(GrowthChatSessionParticipant));
-		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
+		const growthProvider = this._register(instantiationService.createInstance(GrowthChatSessionProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionProvider.sessionType, growthProvider));
+		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionProvider.sessionType, growthProvider.createHandler());
 		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
-		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
+		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionProvider.sessionType, growthProvider, growthParticipant));
 		// #endregion
 	}
 

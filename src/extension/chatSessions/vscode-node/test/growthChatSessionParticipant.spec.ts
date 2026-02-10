@@ -7,30 +7,30 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { GrowthChatSessionParticipant } from '../growthChatSessionParticipant';
+import { GrowthChatSessionProvider } from '../growthChatSessionProvider';
 
-describe('GrowthChatSessionParticipant', () => {
+describe('GrowthChatSessionProvider', () => {
 	const store = new DisposableStore();
-	let participant: GrowthChatSessionParticipant;
+	let provider: GrowthChatSessionProvider;
 	let instantiationService: IInstantiationService;
 
 	beforeEach(() => {
 		const serviceCollection = store.add(createExtensionUnitTestingServices());
 		const accessor = serviceCollection.createTestingAccessor();
 		instantiationService = accessor.get(IInstantiationService);
-		participant = instantiationService.createInstance(GrowthChatSessionParticipant);
+		provider = instantiationService.createInstance(GrowthChatSessionProvider);
 	});
 
 	afterEach(() => {
 		store.clear();
 	});
 
-	it('should create a growth chat session participant', () => {
-		expect(participant).toBeDefined();
+	it('should create a growth chat session provider', () => {
+		expect(provider).toBeDefined();
 	});
 
 	it('should create handler', () => {
-		const handler = participant.createHandler();
+		const handler = provider.createHandler();
 		expect(handler).toBeDefined();
 		expect(typeof handler).toBe('function');
 	});
