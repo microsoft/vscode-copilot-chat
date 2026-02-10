@@ -67,10 +67,10 @@ suite('AgentTasksInstructions', () => {
 		args: ['run', 'build']
 	};
 
-	const renderTaskPrompt = async (ignoreTasks: boolean) => {
+	const renderTaskPrompt = async (shouldIgnoreTasksFile: boolean) => {
 		const services = createExtensionUnitTestingServices();
 		services.define(ITasksService, new SyncDescriptor(StaticTasksService, [[[workspaceFolder, [taskDefinition]]]]));
-		services.define(IIgnoreService, new SyncDescriptor(TestIgnoreService, [new Set(ignoreTasks ? [tasksFile.toString()] : [])]));
+		services.define(IIgnoreService, new SyncDescriptor(TestIgnoreService, [new Set(shouldIgnoreTasksFile ? [tasksFile.toString()] : [])]));
 		const accessor = services.createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		const endpoint = instantiationService.createInstance(MockEndpoint, undefined);
