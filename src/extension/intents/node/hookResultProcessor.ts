@@ -141,7 +141,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
  */
 export function formatHookErrorMessage(errorMessage: string): string {
 	if (errorMessage) {
-		return l10n.t('A hook prevented chat from continuing. Error message: {0}', errorMessage);
+		return l10n.t('A hook prevented chat from continuing. Please check the Hooks output channel for more details. Error message: {0}', errorMessage);
 	}
-	return l10n.t('A hook prevented chat from continuing.');
+	return l10n.t('A hook prevented chat from continuing. Please check the Hooks output channel for more details.');
 }

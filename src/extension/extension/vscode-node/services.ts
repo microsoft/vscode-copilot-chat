@@ -12,10 +12,12 @@ import { AuthenticationService } from '../../../platform/authentication/vscode-n
 import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
+import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IHookExecutor } from '../../../platform/chat/common/hookExecutor';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { NodeHookExecutor } from '../../../platform/chat/node/hookExecutor';
+import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
 import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
@@ -207,6 +209,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IPromptCategorizerService, new SyncDescriptor(PromptCategorizerService));
 	builder.define(IChatHookService, new SyncDescriptor(ChatHookService));
 	builder.define(IHookExecutor, new SyncDescriptor(NodeHookExecutor));
+	builder.define(IHooksOutputChannel, new SyncDescriptor(HooksOutputChannel));
 	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
