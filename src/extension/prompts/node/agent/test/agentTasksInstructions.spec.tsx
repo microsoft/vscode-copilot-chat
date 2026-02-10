@@ -38,12 +38,15 @@ class StaticTasksService extends TestTasksService {
 		super();
 	}
 
-	override getTasks(workspaceFolder?: URI): [URI, vscode.TaskDefinition[]][] | vscode.TaskDefinition[] {
+	override getTasks(...args: any[]): [] {
+		const workspaceFolder = args[0] as URI | undefined;
+
 		if (workspaceFolder) {
-			return this.taskGroups.find(([folder]) => folder.toString() === workspaceFolder.toString())?.[1] ?? [];
+			const tasksForFolder = this.taskGroups.find(([folder]) => folder.toString() === workspaceFolder.toString())?.[1] ?? [];
+			return tasksForFolder as unknown as [];
 		}
 
-		return this.taskGroups;
+		return this.taskGroups as unknown as [];
 	}
 }
 
