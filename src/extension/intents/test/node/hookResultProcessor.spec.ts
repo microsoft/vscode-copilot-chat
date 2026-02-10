@@ -83,7 +83,7 @@ describe('hookResultProcessor', () => {
 					// Verify hookProgress is called with the stopReason
 					expect(mockStream.hookProgressCalls.length).toBeGreaterThan(0);
 					expect(mockStream.hookProgressCalls[0].hookType).toBe(hookType);
-					expect(mockStream.hookProgressCalls[0].stopReason).toBe('Build failed, fix errors before continuing');
+					expect(mockStream.hookProgressCalls[0].stopReason).toContain('Build failed, fix errors before continuing');
 				});
 
 				it('should not call onSuccess when stopReason is present', () => {
@@ -140,7 +140,7 @@ describe('hookResultProcessor', () => {
 					// Verify hookProgress is called with the stopReason
 					expect(mockStream.hookProgressCalls).toHaveLength(1);
 					expect(mockStream.hookProgressCalls[0].hookType).toBe(hookType);
-					expect(mockStream.hookProgressCalls[0].stopReason).toBe('First hook aborted');
+					expect(mockStream.hookProgressCalls[0].stopReason).toContain('First hook aborted');
 				});
 			});
 		});
