@@ -13,7 +13,7 @@ import { getGithubRepoIdFromFetchUrl, IGitService } from '../../../platform/git/
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 export interface IGitHubOrgChatResourcesService extends IDisposable {
@@ -228,11 +228,12 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 		// Initial poll
 		void poll();
 
+		// TODO: re-enable polling
 		// Set up interval polling
-		const intervalId = setInterval(() => poll(), intervalMs);
-		disposables.add(toDisposable(() => clearInterval(intervalId)));
+		// const intervalId = setInterval(() => poll(), intervalMs);
+		// disposables.add(toDisposable(() => clearInterval(intervalId)));
 
-		this._pollingSubscriptions.add(disposables);
+		// this._pollingSubscriptions.add(disposables);
 
 		return disposables;
 	}

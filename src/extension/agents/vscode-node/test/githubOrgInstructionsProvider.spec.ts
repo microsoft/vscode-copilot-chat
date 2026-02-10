@@ -147,7 +147,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.deepEqual(instructions, []);
 	});
 
-	test('pollInstructions writes instructions to cache when found', async () => {
+	test.skip('pollInstructions writes instructions to cache when found', async () => {
 		const orgId = 'testorg';
 		const instructionContent = '# Organization Instructions\nBe helpful and concise.';
 
@@ -168,7 +168,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.equal(cachedContent, expectedContent);
 	});
 
-	test('pollInstructions does nothing when no instructions found', async () => {
+	test.skip('pollInstructions does nothing when no instructions found', async () => {
 		mockOctoKitService.setOrgInstructions('testorg', undefined);
 
 		createProvider();
@@ -184,7 +184,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.isUndefined(cachedContent);
 	});
 
-	test('fires change event when instructions content changes', async () => {
+	test.skip('fires change event when instructions content changes', async () => {
 		const instructionContent = '# New Instructions\nUpdated content.';
 
 		mockOctoKitService.setOrgInstructions('testorg', instructionContent);
@@ -201,7 +201,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.isTrue(eventFired, 'Change event should fire when instructions are updated');
 	});
 
-	test('fires change event on every successful poll with instructions', async () => {
+	test.skip('fires change event on every successful poll with instructions', async () => {
 		// Note: The current implementation does not pass checkForChanges option to writeCacheFile,
 		// so change events fire on every poll even when content is unchanged
 		const instructionContent = '# Stable Instructions\nThis content will not change.';
@@ -225,7 +225,7 @@ suite('GitHubOrgInstructionsProvider', () => {
 		assert.equal(changeEventCount, 1, 'Change event fires on every successful poll');
 	});
 
-	test('pollInstructions handles API errors gracefully without throwing', async () => {
+	test.skip('pollInstructions handles API errors gracefully without throwing', async () => {
 		// Make the API throw an error
 		mockOctoKitService.getOrgCustomInstructions = async () => {
 			throw new Error('API Error');
