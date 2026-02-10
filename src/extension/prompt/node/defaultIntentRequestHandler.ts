@@ -55,28 +55,6 @@ import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor, TelemetryData } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
 
-/**
- * Output format for UserPromptSubmit hooks that want to block processing.
- */
-interface BlockDecisionOutput {
-	decision: 'block';
-	reason: string;
-}
-
-/**
- * Type guard to check if an output is a block decision.
- */
-function isBlockDecisionOutput(output: unknown): output is BlockDecisionOutput {
-	return (
-		typeof output === 'object' &&
-		output !== null &&
-		'decision' in output &&
-		(output as BlockDecisionOutput).decision === 'block' &&
-		'reason' in output &&
-		typeof (output as BlockDecisionOutput).reason === 'string'
-	);
-}
-
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
 	/**
