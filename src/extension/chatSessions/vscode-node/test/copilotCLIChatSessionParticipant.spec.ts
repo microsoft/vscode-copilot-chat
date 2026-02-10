@@ -15,8 +15,9 @@ import { PromptsServiceImpl } from '../../../../platform/promptFiles/common/prom
 import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullRequestLogger';
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { mock } from '../../../../util/common/test/simpleMock';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { sep } from '../../../../util/vs/base/common/path';
@@ -182,7 +183,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let telemetry: ITelemetryService;
 	let tools: IToolsService;
 	let participant: CopilotCLIChatSessionParticipant;
-	let workspaceService: IWorkspaceService;
+	let workspaceService: TestWorkspaceService;
 	let instantiationService: IInstantiationService;
 	let manager: MockCliSdkSessionManager;
 	let mcpHandler: ICopilotCLIMCPHandler;
@@ -218,7 +219,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		cliSessionServiceForFolderManager = new FakeCopilotCLISessionService();
 		telemetry = new NullTelemetryService();
 		tools = new class FakeToolsService extends mock<IToolsService>() { }();
-		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
+		workspaceService = new TestWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
 		const logService = accessor.get(ILogService);
 		mcpHandler = new class extends mock<ICopilotCLIMCPHandler>() {
@@ -283,7 +284,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			tools,
 			instantiationService,
 			logger,
-			new PromptsServiceImpl(new NullWorkspaceService()),
+			new PromptsServiceImpl(workspaceService),
 			delegationService,
 			workspaceService,
 			folderRepositoryManager,
@@ -479,6 +480,31 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toContain('Push this');
+	});
+
+	it('includes prompt file body when delegating from another chat', async () => {
+		const promptFileUri = URI.file('/workspace/plan.prompt.md');
+		const promptDoc = createTextDocumentData(
+			promptFileUri,
+			`---\nname: plan\n---\nPlan body text`,
+			'prompt',
+		).document;
+		workspaceService.textDocuments.push(promptDoc);
+		const promptFileReference: vscode.ChatPromptReference = {
+			id: `vscode.prompt.file__${promptFileUri.toString()}`,
+			name: 'prompt:plan.prompt.md',
+			value: promptFileUri
+		};
+		const request = new TestChatRequest('Start implementation', [promptFileReference]);
+		const context = { chatSessionContext: undefined, chatSummary: undefined, history: [] } as unknown as vscode.ChatContext;
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toContain('Plan body text');
 	});
 
 	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
