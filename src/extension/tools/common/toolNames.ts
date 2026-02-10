@@ -69,7 +69,15 @@ export enum ToolName {
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	AskQuestions = 'ask_questions',
-	SwitchAgent = 'switch_agent'
+	SwitchAgent = 'switch_agent',
+
+	// Debug tools
+	DebugGetTrajectories = 'debug_getTrajectories',
+	DebugGetTrajectory = 'debug_getTrajectory',
+	DebugGetHierarchy = 'debug_getHierarchy',
+	DebugGetFailures = 'debug_getFailures',
+	DebugGetToolCalls = 'debug_getToolCalls',
+	DebugLoadTrajectoryFile = 'debug_loadTrajectoryFile',
 }
 
 export enum ContributedToolName {
@@ -227,6 +235,14 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+
+	// Debug Tools
+	[ToolName.DebugGetTrajectories]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugGetTrajectory]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugGetHierarchy]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugGetFailures]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugGetToolCalls]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugLoadTrajectoryFile]: ToolCategory.RedundantButSpecific,
 } as const;
 
 

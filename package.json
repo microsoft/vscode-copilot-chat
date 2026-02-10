@@ -1301,6 +1301,134 @@
 				"legacyToolReferenceFullNames": [
 					"editFiles"
 				]
+			},
+			{
+				"name": "copilot_debugGetTrajectories",
+				"displayName": "Get Debug Trajectories",
+				"icon": "$(debug-alt)",
+				"toolReferenceName": "debugTrajectories",
+				"userDescription": "List all available agent trajectories for debugging",
+				"modelDescription": "List all available agent trajectories in the debug context. Use this to get an overview of all trajectories before drilling into specific ones. Returns a table with sessionId, agentName, stepCount, toolCallCount, and failure status.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {}
+				}
+			},
+			{
+				"name": "copilot_debugGetTrajectory",
+				"displayName": "Get Debug Trajectory Details",
+				"icon": "$(debug-alt)",
+				"toolReferenceName": "debugTrajectory",
+				"userDescription": "Get detailed information about a specific trajectory",
+				"modelDescription": "Get detailed information about a specific trajectory by sessionId. Includes all steps, tool calls, model responses, and errors. Use format parameter to control output: 'full' for complete details, 'summary' for overview, or 'steps' for step-by-step breakdown.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "The session ID of the trajectory to retrieve"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["full", "summary", "steps"],
+							"description": "Output format: 'full' for all details, 'summary' for overview, 'steps' for step-by-step"
+						}
+					},
+					"required": ["sessionId"]
+				}
+			},
+			{
+				"name": "copilot_debugGetHierarchy",
+				"displayName": "Get Agent Hierarchy",
+				"icon": "$(type-hierarchy)",
+				"toolReferenceName": "debugHierarchy",
+				"userDescription": "Build and display the sub-agent hierarchy tree",
+				"modelDescription": "Build the sub-agent invocation hierarchy showing parent-child relationships between trajectories. Essential for understanding complex orchestration patterns and debugging sub-agent delegation. Use format parameter: 'tree' for ASCII tree, 'mermaid' for diagram code, or 'detailed' for full ancestry chains.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional: Focus on hierarchy rooted at this session. If omitted, shows all hierarchies."
+						},
+						"format": {
+							"type": "string",
+							"enum": ["tree", "mermaid", "detailed"],
+							"description": "Output format: 'tree' for ASCII, 'mermaid' for flowchart, 'detailed' for full info"
+						}
+					}
+				}
+			},
+			{
+				"name": "copilot_debugGetFailures",
+				"displayName": "Get Debug Failures",
+				"icon": "$(error)",
+				"toolReferenceName": "debugFailures",
+				"userDescription": "Find failures across trajectories",
+				"modelDescription": "Find all failures and errors across trajectories. Classifies failures by type: tool_error, model_error, user_cancel, timeout, parse_error, unknown. Use sessionId to filter to a specific trajectory. Critical for debugging orchestration failures.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional: Filter failures to a specific session"
+						}
+					}
+				}
+			},
+			{
+				"name": "copilot_debugGetToolCalls",
+				"displayName": "Get Tool Calls",
+				"icon": "$(symbol-method)",
+				"toolReferenceName": "debugToolCalls",
+				"userDescription": "Get tool calls with optional filtering",
+				"modelDescription": "Get tool calls from trajectories with optional filtering by tool name, session, or result status. Use format parameter: 'summary' for counts per tool, 'detailed' for all calls with arguments/results, 'timeline' for chronological view.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional: Filter to a specific session"
+						},
+						"toolName": {
+							"type": "string",
+							"description": "Optional: Filter to a specific tool name"
+						},
+						"hasError": {
+							"type": "boolean",
+							"description": "Optional: Filter to calls that have errors (true) or succeeded (false)"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["summary", "detailed", "timeline"],
+							"description": "Output format: 'summary' for counts, 'detailed' for full info, 'timeline' for chronological"
+						}
+					}
+				}
+			},
+			{
+				"name": "copilot_debugLoadTrajectoryFile",
+				"displayName": "Load Trajectory File",
+				"icon": "$(file-code)",
+				"toolReferenceName": "debugLoadFile",
+				"userDescription": "Load a trajectory from an ATIF file",
+				"modelDescription": "Load a trajectory from an ATIF (Agent Trajectory Interchange Format) file into the debug context. This allows analyzing previously saved trajectories or trajectories from other sessions. After loading, use other debug tools to analyze the trajectory.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Absolute path to the ATIF trajectory file to load"
+						}
+					},
+					"required": ["filePath"]
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -2487,6 +2615,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.openDebugPanel",
+				"title": "%github.copilot.command.openDebugPanel%",
+				"icon": "$(debug-console)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.showOutputChannel",
 				"title": "%github.copilot.command.showOutputChannel%",
 				"category": "Developer"
@@ -3283,6 +3417,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.switchAgent.enabled%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.debug.enableDebugAgent": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "Enable the debug agent tools for analyzing agent trajectories and orchestration failures. When enabled, provides tools for inspecting sub-agent hierarchies, tool calls, and failures.",
 						"tags": [
 							"experimental"
 						]
