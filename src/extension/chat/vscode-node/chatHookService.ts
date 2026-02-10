@@ -244,6 +244,17 @@ export class ChatHookService implements IChatHookService {
 		const allAdditionalContext: string[] = [];
 
 		for (const result of results) {
+			// Exit code 2 (error) means deny the tool
+			if (result.resultKind === 'error') {
+				const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+				return {
+					permissionDecision: 'deny',
+					permissionDecisionReason: reason,
+					updatedInput: undefined,
+					additionalContext: undefined,
+				};
+			}
+
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 				continue;
 			}
@@ -311,6 +322,16 @@ export class ChatHookService implements IChatHookService {
 		const allAdditionalContext: string[] = [];
 
 		for (const result of results) {
+			// Exit code 2 (error) means block the tool result
+			if (result.resultKind === 'error') {
+				const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+				return {
+					decision: 'block',
+					reason,
+					additionalContext: undefined,
+				};
+			}
+
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 				continue;
 			}

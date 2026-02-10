@@ -308,6 +308,17 @@ function collapsePreToolUseHookResults(results: ChatHookResult[]): IPreToolUseHo
 	const allAdditionalContext: string[] = [];
 
 	for (const result of results) {
+		// Exit code 2 (error) means deny the tool
+		if (result.resultKind === 'error') {
+			const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+			return {
+				permissionDecision: 'deny',
+				permissionDecisionReason: reason,
+				updatedInput: undefined,
+				additionalContext: undefined,
+			};
+		}
+
 		if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 			continue;
 		}
@@ -535,9 +546,19 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		});
 	});
 
-	it('skips non-success results', async () => {
+	it('treats error results (exit code 2) as deny', async () => {
 		service.hookResults = [
 			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'error'),
+			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result?.permissionDecision).toBe('deny');
+	});
+
+	it('skips warning results', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'warning'),
 			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }),
 		];
 
@@ -565,9 +586,9 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		expect(result?.permissionDecision).toBe('deny');
 	});
 
-	it('returns undefined when all results are non-success', async () => {
+	it('returns undefined when all results are warnings', async () => {
 		service.hookResults = [
-			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'error'),
+			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'warning'),
 			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }, 'warning'),
 		];
 
@@ -591,6 +612,16 @@ function collapsePostToolUseHookResults(results: ChatHookResult[]): IPostToolUse
 	const allAdditionalContext: string[] = [];
 
 	for (const result of results) {
+		// Exit code 2 (error) means block the tool result
+		if (result.resultKind === 'error') {
+			const reason = result.stopReason || (typeof result.output === 'string' ? result.output : undefined);
+			return {
+				decision: 'block',
+				reason,
+				additionalContext: undefined,
+			};
+		}
+
 		if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 			continue;
 		}
@@ -739,9 +770,19 @@ describe('ChatHookService.executePostToolUseHook', () => {
 		expect(result?.additionalContext).toEqual(['No event name']);
 	});
 
-	it('skips non-success results', async () => {
+	it('treats error results (exit code 2) as block', async () => {
 		service.hookResults = [
-			hookResult({ decision: 'block', reason: 'Should be ignored' }, 'error'),
+			hookResult({ decision: 'block', reason: 'Error reason' }, 'error'),
+			hookResult({ hookSpecificOutput: { additionalContext: 'Valid context' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBe('block');
+	});
+
+	it('skips warning results', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'Should be ignored' }, 'warning'),
 			hookResult({ hookSpecificOutput: { additionalContext: 'Valid context' } }),
 		];
 
@@ -760,9 +801,9 @@ describe('ChatHookService.executePostToolUseHook', () => {
 		expect(result?.decision).toBe('block');
 	});
 
-	it('returns undefined when all results are non-success', async () => {
+	it('returns undefined when all results are warnings', async () => {
 		service.hookResults = [
-			hookResult({ decision: 'block' }, 'error'),
+			hookResult({ decision: 'block' }, 'warning'),
 			hookResult({ hookSpecificOutput: { additionalContext: 'ctx' } }, 'warning'),
 		];
 
