@@ -18,7 +18,9 @@ import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { buildAgentMarkdown, PlanAgentProvider } from '../planAgentProvider';
+import { PlanAgentProvider } from '../planAgentProvider';
+import { buildAgentMarkdown } from '../agentTypes';
+import { PlanAgentProvider } from '../planAgentProvider';
 
 suite('PlanAgentProvider', () => {
 	let disposables: DisposableStore;
