@@ -4,15 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { XtabProvider } from '../../xtab/node/xtabProvider';
 import { NesChangeHint } from '../common/nesTriggerHint';
-import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
 import { NextEditProvider } from '../node/nextEditProvider';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -23,7 +22,7 @@ export class InlineEditModel extends Disposable {
 	public readonly debugRecorder: DebugRecorder;
 	public readonly nextEditProvider: NextEditProvider;
 
-	private readonly _predictor: IStatelessNextEditProvider;
+	private readonly _predictor: XtabProvider;
 	private _triggerer: InlineEditTriggerer;
 
 	public readonly inlineEditsInlineCompletionsEnabled = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsInlineCompletionsEnabled);
@@ -31,7 +30,6 @@ export class InlineEditModel extends Disposable {
 	public readonly onChange: Event<NesChangeHint>;
 
 	constructor(
-		private readonly _predictorId: string | undefined,
 		public readonly workspace: VSCodeWorkspace,
 		historyContextProvider: NesHistoryContextProvider,
 		public readonly diagnosticsBasedProvider: DiagnosticsNextEditProvider | undefined,
@@ -43,7 +41,7 @@ export class InlineEditModel extends Disposable {
 
 		this.debugRecorder = this._register(new DebugRecorder(this.workspace));
 
-		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
+		this._predictor = this._register(this._instantiationService.createInstance(XtabProvider));
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);
 		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
