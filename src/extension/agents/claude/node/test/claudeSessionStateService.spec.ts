@@ -5,8 +5,8 @@
 
 import sinon from 'sinon';
 import { afterEach, assert, beforeEach, describe, it } from 'vitest';
-import { ClaudeSessionStateService, SessionStateChangeEvent } from '../claudeSessionStateService';
 import type { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
+import { ClaudeSessionStateService, SessionStateChangeEvent } from '../claudeSessionStateService';
 
 describe('ClaudeSessionStateService', () => {
 	let service: ClaudeSessionStateService;
