@@ -7,7 +7,7 @@ import type { Disposable, LanguageModelChatInformation, LanguageModelDataPart, L
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { EndpointEditToolName, IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
-import { isScenarioAutomation } from '../../../platform/env/common/envService';
+// Azure-only fork: isScenarioAutomation no longer needed since isBYOKEnabled always returns true
 import { TokenizerType } from '../../../util/common/tokenizer';
 
 export const enum BYOKAuthType {
@@ -174,14 +174,9 @@ export function byokKnownModelToAPIInfo(providerName: string, id: string, capabi
 	};
 }
 
-export function isBYOKEnabled(copilotToken: Omit<CopilotToken, 'token'>, capiClientService: ICAPIClientService): boolean {
-	if (isScenarioAutomation) {
-		return true;
-	}
-
-	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
-	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
-	return byokAllowed;
+export function isBYOKEnabled(_copilotToken: Omit<CopilotToken, 'token'>, _capiClientService: ICAPIClientService): boolean {
+	// Azure-only fork: BYOK is always enabled since we don't need copilot token checks
+	return true;
 }
 
 /**

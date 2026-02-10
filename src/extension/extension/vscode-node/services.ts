@@ -63,9 +63,10 @@ import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/c
 import { IExperimentationService, NullExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
-import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
-import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
-import { TelemetryService } from '../../../platform/telemetry/vscode-node/telemetryServiceImpl';
+// Azure-only fork: telemetry stripped
+// import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
+// import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
+// import { TelemetryService } from '../../../platform/telemetry/vscode-node/telemetryServiceImpl';
 import { IWorkspaceMutationManager } from '../../../platform/testing/common/workspaceMutationManager';
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
@@ -239,30 +240,13 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 }
 
-function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
-	if (ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
-		// Intitiate the experimentation service
-		builder.define(IExperimentationService, new SyncDescriptor(MicrosoftExperimentationService));
-	} else {
-		builder.define(IExperimentationService, new NullExperimentationService());
-	}
+function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, _extensionContext: ExtensionContext) {
+	// Azure-only fork: always use null experimentation service
+	builder.define(IExperimentationService, new NullExperimentationService());
 }
 
-function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string) {
-
-	if (ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
-		builder.define(ITelemetryService, new SyncDescriptor(TelemetryService, [
-			extensionContext.extension.packageJSON.name,
-			internalAIKey,
-			internalLargeEventAIKey,
-			externalAIKey,
-			APP_INSIGHTS_KEY_STANDARD,
-			APP_INSIGHTS_KEY_ENHANCED,
-		]));
-	} else {
-		// If we're developing or testing we don't want telemetry to be sent, so we turn it off
-		builder.define(ITelemetryService, new NullTelemetryService());
-	}
-
+function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, _internalAIKey: string, _internalLargeEventAIKey: string, _externalAIKey: string) {
+	// Azure-only fork: telemetry disabled - always use null service
+	builder.define(ITelemetryService, new NullTelemetryService());
 	setupMSFTExperimentationService(builder, extensionContext);
 }

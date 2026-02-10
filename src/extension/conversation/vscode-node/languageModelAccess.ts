@@ -162,15 +162,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			provideTokenCount: this._provideTokenCount.bind(this)
 		};
 		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
+		// Azure-only fork: don't clear models on auth change since we don't use GitHub auth
 		this._register(this._authenticationService.onDidAuthenticationChange(() => {
-			if (!this._authenticationService.anyGitHubSession) {
-				this._currentModels = [];
-			}
-			// Auth changed which means models could've changed. Fire the event
 			this._onDidChange.fire();
 		}));
 		this._register(this._endpointProvider.onDidModelsRefresh(() => {
-			// Models have been refreshed from CAPI so we should requery them
 			this._onDidChange.fire();
 		}));
 	}
@@ -375,12 +371,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _getToken(): Promise<CopilotToken | undefined> {
+		// Azure-only fork: try to get copilot token but don't fail if not available.
+		// The Azure-only provider handles auth separately via service principal.
 		try {
 			const copilotToken = await this._authenticationService.getCopilotToken();
 			return copilotToken;
-		} catch (e) {
-			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
-			this._logService.error(e);
+		} catch {
+			this._logService.debug('[LanguageModelAccess] No copilot token available (expected in Azure-only fork)');
 			return undefined;
 		}
 	}
