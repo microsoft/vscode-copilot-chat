@@ -25,7 +25,6 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	private readonly _created = Date.now();
-	private readonly _registeredAt = Date.now();
 	private _seen = false;
 
 	/**
@@ -49,13 +48,13 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 	 * avoid VS Code's eager content preloading from clearing the badge.
 	 */
 	public markSeen(): void {
-		const elapsed = Date.now() - this._registeredAt;
+		const elapsed = Date.now() - this._created;
 		if (elapsed < GrowthChatSessionItemProvider.PRELOAD_GRACE_PERIOD_MS) {
-			this._logService.info(`[GrowthItemProvider] markSeen() ignored — still in grace period (${elapsed}ms < ${GrowthChatSessionItemProvider.PRELOAD_GRACE_PERIOD_MS}ms)`);
+			this._logService.trace(`[GrowthItemProvider] markSeen() ignored — still in grace period (${elapsed}ms < ${GrowthChatSessionItemProvider.PRELOAD_GRACE_PERIOD_MS}ms)`);
 			return;
 		}
 		if (!this._seen) {
-			this._logService.info('[GrowthItemProvider] markSeen() — clearing attention');
+			this._logService.trace('[GrowthItemProvider] markSeen() — clearing attention');
 			this._seen = true;
 			this.refresh();
 		}
@@ -83,13 +82,5 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 export namespace GrowthSessionUri {
 	export function forSessionId(sessionId: string): vscode.Uri {
 		return vscode.Uri.from({ scheme: GrowthChatSessionItemProvider.sessionType, path: '/' + sessionId });
-	}
-
-	export function getId(resource: vscode.Uri): string {
-		if (resource.scheme !== GrowthChatSessionItemProvider.sessionType) {
-			throw new Error('Invalid resource scheme for Growth session');
-		}
-
-		return resource.path.slice(1);
 	}
 }

@@ -71,8 +71,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
-		// temporarily skip activation blockers (network-dependent, slow offline)
-		// await contributions.waitForActivationBlockers();
+		await contributions.waitForActivationBlockers();
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {

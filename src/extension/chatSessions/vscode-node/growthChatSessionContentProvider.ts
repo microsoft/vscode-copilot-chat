@@ -25,7 +25,7 @@ export class GrowthChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	public async provideChatSessionContent(resource: vscode.Uri, _token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		this._logService.info(`[GrowthContentProvider] provideChatSessionContent called, resource=${resource.toString()}`);
+		this._logService.trace(`[GrowthContentProvider] provideChatSessionContent called, resource=${resource.toString()}`);
 
 		// Only serve growth content for the known growth-tip session.
 		// Untitled sessions (created when the user presses "new chat" or

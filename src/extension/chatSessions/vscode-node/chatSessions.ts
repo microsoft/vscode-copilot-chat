@@ -118,7 +118,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			[IChatDelegationSummaryService, delegationSummary],
 			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
-		const cloudSessionProvider = undefined; // temporarily disabled — network-heavy // this.registerCopilotCloudAgent();
+		const cloudSessionProvider = this.registerCopilotCloudAgent();
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLIImageSupport, new SyncDescriptor(CopilotCLIImageSupport)],
@@ -167,14 +167,13 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionItemProvider.sessionType, growthSessionItemProvider));
 
 		const growthContentProvider = this._register(instantiationService.createInstance(GrowthChatSessionContentProvider, growthSessionItemProvider));
-		const growthChatSessionParticipant = instantiationService.createInstance(GrowthChatSessionParticipant);
+		const growthChatSessionParticipant = this._register(instantiationService.createInstance(GrowthChatSessionParticipant));
 		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionItemProvider.sessionType, growthChatSessionParticipant.createHandler());
 		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
 		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionItemProvider.sessionType, growthContentProvider, growthParticipant));
 		// #endregion
 	}
 
-	// @ts-expect-error temporarily disabled — network-heavy
 	private registerCopilotCloudAgent() {
 		if (!this.copilotAgentInstaService) {
 			return;
