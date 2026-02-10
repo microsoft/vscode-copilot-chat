@@ -7,7 +7,7 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IChatHookService } from '../../../../platform/chat/common/chatHookService';
+import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -276,31 +276,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
 					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
 
-					// Append additional context from preToolUse hook to the tool result
-					if (hookResult?.additionalContext) {
-						for (const context of hookResult.additionalContext) {
-							toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
-						}
-					}
-
-					// Execute postToolUse hook after successful tool execution
-					const postHookResult = await chatHookService.executePostToolUseHook(
-						props.toolCall.name, inputObj,
-						toolResultToText(toolResult),
-						props.toolCall.id, props.toolInvocationToken,
-						promptContext.conversation?.sessionId, CancellationToken.None
-					);
-
-					if (postHookResult?.decision === 'block') {
-						const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
-						const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
-						toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
-					}
-					if (postHookResult?.additionalContext) {
-						for (const context of postHookResult.additionalContext) {
-							toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
-						}
-					}
+					// Run hook context handling after tool execution
+					appendHookContext(toolResult, hookResult, chatHookService, props, inputObj, promptContext);
 
 					if (transcriptSessionId) {
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
@@ -471,11 +448,52 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 	}
 }
 
+/**
+ * Appends hook context to a tool result after execution.
+ * Handles preToolUse additionalContext and executes the postToolUse hook,
+ * appending block messages and additionalContext as `<*-context>` tags.
+ */
+async function appendHookContext(
+	toolResult: LanguageModelToolResult2,
+	preHookResult: IPreToolUseHookResult | undefined,
+	chatHookService: IChatHookService,
+	props: ToolResultOpts,
+	toolInput: unknown,
+	promptContext: IBuildPromptContext,
+): Promise<void> {
+	// Append additional context from preToolUse hook
+	if (preHookResult?.additionalContext) {
+		for (const context of preHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
+		}
+	}
+
+	// Execute postToolUse hook after successful tool execution
+	const postHookResult = await chatHookService.executePostToolUseHook(
+		props.toolCall.name, toolInput,
+		toolResultToText(toolResult),
+		props.toolCall.id, props.toolInvocationToken,
+		promptContext.conversation?.sessionId, CancellationToken.None
+	);
+
+	if (postHookResult?.decision === 'block') {
+		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
+		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
+		toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
+	}
+	if (postHookResult?.additionalContext) {
+		for (const context of postHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
+		}
+	}
+}
+
 function toolResultToText(result: LanguageModelToolResult2): string {
 	return result.content
-		.filter((part): part is LanguageModelTextPart => part instanceof LanguageModelTextPart)
+		.filter((part): part is LanguageModelTextPart | LanguageModelTextPart2 =>
+			part instanceof LanguageModelTextPart || part instanceof LanguageModelTextPart2)
 		.map(part => part.value)
-		.join(', ');
+		.join('\n');
 }
 
 function textToolResult(text: string): LanguageModelToolResult {
