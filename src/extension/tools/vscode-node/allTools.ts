@@ -7,4 +7,6 @@
 
 import './askQuestionsTool';
 import './fetchWebPageTool';
+import './openFileTool';
 import './switchAgentTool';
+

@@ -13,6 +13,7 @@ import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvid
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
+import { TourAgentProvider } from './tourAgentProvider';
 
 export class PromptFileContribution extends Disposable implements IExtensionContribution {
 	readonly id = 'PromptFiles';
@@ -34,6 +35,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Plan agent provider for dynamic settings-based customization
 			const planProvider = instantiationService.createInstance(PlanAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+
+			// Register Tour agent provider for dynamic settings-based customization
+			const tourProvider = instantiationService.createInstance(TourAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(tourProvider));
 		}
 
 		// Register instructions provider

@@ -14,7 +14,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 /**
  * Handoff configuration for agent transitions
  */
-interface PlanAgentHandoff {
+export interface CustomAgentHandoff {
 	label: string;
 	agent: string;
 	prompt: string;
@@ -24,9 +24,9 @@ interface PlanAgentHandoff {
 }
 
 /**
- * Complete Plan agent configuration
+ * Complete Custom agent configuration
  */
-interface PlanAgentConfig {
+export interface CustomAgentConfig {
 	name: string;
 	description: string;
 	argumentHint: string;
@@ -35,7 +35,7 @@ interface PlanAgentConfig {
 	target?: string;
 	disableModelInvocation?: boolean;
 	agents?: string[];
-	handoffs: PlanAgentHandoff[];
+	handoffs: CustomAgentHandoff[];
 	body: string;
 }
 
@@ -43,7 +43,7 @@ interface PlanAgentConfig {
  * Base Plan agent configuration - embedded from Plan.agent.md
  * This avoids runtime file loading and YAML parsing dependencies.
  */
-const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
+const BASE_PLAN_AGENT_CONFIG: CustomAgentConfig = {
 	name: 'Plan',
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
@@ -69,7 +69,7 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
  * Builds .agent.md content from a configuration object using string formatting.
  * No YAML library required - generates valid YAML frontmatter via string templates.
  */
-export function buildAgentMarkdown(config: PlanAgentConfig): string {
+export function buildAgentMarkdown(config: CustomAgentConfig): string {
 	const lines: string[] = ['---'];
 
 	// Simple scalar fields
@@ -293,7 +293,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 </plan_style_guide>`;
 	}
 
-	private buildCustomizedConfig(): PlanAgentConfig {
+	private buildCustomizedConfig(): CustomAgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
 
@@ -304,7 +304,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
 		// Build handoffs dynamically with model override
-		const startImplementationHandoff: PlanAgentHandoff = {
+		const startImplementationHandoff: CustomAgentHandoff = {
 			label: 'Start Implementation',
 			agent: 'agent',
 			prompt: 'Start implementation',
@@ -312,7 +312,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
 		};
 
-		const openInEditorHandoff: PlanAgentHandoff = {
+		const openInEditorHandoff: CustomAgentHandoff = {
 			label: 'Open in Editor',
 			agent: 'agent',
 			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
@@ -321,7 +321,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		};
 
 		// Start with base config, using dynamic body based on askQuestions setting
-		const config: PlanAgentConfig = {
+		const config: CustomAgentConfig = {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],

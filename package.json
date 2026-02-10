@@ -1301,6 +1301,34 @@
 				"legacyToolReferenceFullNames": [
 					"editFiles"
 				]
+			},
+			{
+				"name": "copilot_openFile",
+				"modelDescription": "Opens a file in the editor, optionally highlighting a range of lines.. Use this to show code to the user during a tour.",
+				"userDescription": "Opens a file at a specific line and highlights a range if specified.",
+				"icon": "$(go-to-file)",
+				"displayName": "Open File",
+				"toolReferenceName": "openFile",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"path": {
+							"type": "string",
+							"description": "Workspace-relative file path to open"
+						},
+						"startLine": {
+							"type": "number",
+							"description": "Line number start highlighting at (1-based)"
+						},
+						"endLine": {
+							"type": "number",
+							"description": "End line for highlighting a range"
+						}
+					},
+					"required": [
+						"path"
+					]
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -1362,7 +1390,8 @@
 					"runCommand",
 					"askQuestions",
 					"switchAgent",
-					"vscodeAPI"
+					"vscodeAPI",
+					"openFile"
 				]
 			},
 			{
