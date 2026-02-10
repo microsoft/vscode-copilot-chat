@@ -37,6 +37,7 @@ export class GrowthChatSessionContentProvider extends Disposable implements vsco
 		}
 
 		// Opening the session clears the NeedsInput attention badge.
+		// (markSeen() has a grace period to ignore eager preloading calls)
 		this._itemProvider.markSeen();
 
 		const sessionType = GrowthChatSessionItemProvider.sessionType;

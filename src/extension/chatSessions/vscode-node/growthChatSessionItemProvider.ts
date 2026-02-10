@@ -25,7 +25,15 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	private readonly _created = Date.now();
+	private readonly _registeredAt = Date.now();
 	private _seen = false;
+
+	/**
+	 * Grace period (ms) after registration during which markSeen() is ignored.
+	 * This prevents VS Code's eager preloading from clearing the badge before
+	 * the user has a chance to see it.
+	 */
+	private static readonly PRELOAD_GRACE_PERIOD_MS = 2000;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -36,8 +44,16 @@ export class GrowthChatSessionItemProvider extends Disposable implements vscode.
 	/**
 	 * Mark the session as seen (opened by the user). Clears the NeedsInput
 	 * attention badge without requiring any confirmation click.
+	 *
+	 * Calls within the first few seconds after registration are ignored to
+	 * avoid VS Code's eager content preloading from clearing the badge.
 	 */
 	public markSeen(): void {
+		const elapsed = Date.now() - this._registeredAt;
+		if (elapsed < GrowthChatSessionItemProvider.PRELOAD_GRACE_PERIOD_MS) {
+			this._logService.info(`[GrowthItemProvider] markSeen() ignored — still in grace period (${elapsed}ms < ${GrowthChatSessionItemProvider.PRELOAD_GRACE_PERIOD_MS}ms)`);
+			return;
+		}
 		if (!this._seen) {
 			this._logService.info('[GrowthItemProvider] markSeen() — clearing attention');
 			this._seen = true;
