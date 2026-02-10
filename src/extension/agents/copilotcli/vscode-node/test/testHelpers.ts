@@ -181,7 +181,7 @@ export class MockSessionTracker {
 	declare _serviceBrand: undefined;
 	private readonly _displayNames = new Map<string, string>();
 
-	readonly registerSession = vi.fn();
+	readonly registerSession = vi.fn().mockReturnValue({ dispose: () => { } });
 	readonly getTerminal = vi.fn().mockResolvedValue(undefined);
 
 	setDisplayName(sessionId: string, name: string): void {
