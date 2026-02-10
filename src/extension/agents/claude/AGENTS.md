@@ -314,9 +314,6 @@ Tool permission handlers control what actions Claude can take without user confi
 - **Node handlers** (`node/toolPermissionHandlers/`):
   - `editToolHandler.ts` - Handles file edit operations (Edit, Write, MultiEdit)
 
-- **VS Code-Node handlers** (`vscode-node/toolPermissionHandlers/`):
-  - `askUserQuestionHandler.ts` - Handles user question prompts via VS Code QuickPick UI
-
 **Auto-approval Rules:**
 - File edits are auto-approved if the file is within the workspace
 - All other tools show a confirmation dialog via VS Code's chat API

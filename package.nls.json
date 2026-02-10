@@ -315,8 +315,6 @@
 	"copilot.tools.fetchWebPage.name": "Fetch Web Page",
 	"copilot.tools.memory.name": "Memory",
 	"copilot.tools.memory.description": "Store facts about the codebase so they can be recalled in future conversations",
-	"copilot.tools.askQuestions.name": "Ask Questions",
-	"copilot.tools.askQuestions.description": "Ask questions to clarify requirements before proceeding with a task.",
 	"copilot.tools.switchAgent.name": "Switch Agent",
 	"copilot.tools.switchAgent.description": "Switch to a different agent mode. Currently only the Plan agent is supported.",
 	"copilot.tools.findTestFiles.name": "Find Test Files",
