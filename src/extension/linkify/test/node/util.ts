@@ -62,21 +62,7 @@ export function createTestLinkifierService(...listOfFiles: readonly (string | UR
 	);
 }
 
-export async function linkify(linkifer: ILinkifyService, text: string): Promise<LinkifiedText> {
-	const linkifier = linkifer.createLinkifier({ requestId: undefined, references: [] }, []);
-
-	const initial = await linkifier.append(text, CancellationToken.None);
-	const flushed = await linkifier.flush(CancellationToken.None);
-	if (!flushed) {
-		return initial;
-	}
-
-	return {
-		parts: coalesceParts(initial.parts.concat(flushed.parts)),
-	};
-}
-
-export async function linkifyWithReferences(linkifer: ILinkifyService, text: string, references: readonly { anchor: URI }[]): Promise<LinkifiedText> {
+export async function linkify(linkifer: ILinkifyService, text: string, references: readonly { anchor: URI }[] = []): Promise<LinkifiedText> {
 	const linkifier = linkifer.createLinkifier({ requestId: undefined, references: references as any }, []);
 
 	const initial = await linkifier.append(text, CancellationToken.None);

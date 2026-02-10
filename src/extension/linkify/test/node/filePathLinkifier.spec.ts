@@ -7,7 +7,7 @@ import { suite, test } from 'vitest';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { LinkifyLocationAnchor } from '../../common/linkifiedText';
-import { assertPartsEqual, createTestLinkifierService, linkify, linkifyWithReferences, workspaceFile } from './util';
+import { assertPartsEqual, createTestLinkifierService, linkify, workspaceFile } from './util';
 
 
 suite('File Path Linkifier', () => {
@@ -263,7 +263,7 @@ suite('File Path Linkifier', () => {
 		const references = [{ anchor: URI.file('/workspace/src/cli.js') }];
 
 		// Path with directories should NOT link to reference with matching basename
-		const result = await linkifyWithReferences(linkifier,
+		const result = await linkify(linkifier,
 			'./node_modules/playwright/cli.js',
 			references
 		);
@@ -279,7 +279,7 @@ suite('File Path Linkifier', () => {
 		const references = [{ anchor: refUri }];
 
 		// Simple filename should link to reference with matching basename
-		const result = await linkifyWithReferences(linkifier,
+		const result = await linkify(linkifier,
 			'cli.js',
 			references
 		);
@@ -295,7 +295,7 @@ suite('File Path Linkifier', () => {
 		const references = [{ anchor: refUri }];
 
 		// Code-like text should NOT link to reference even if basename matches
-		const result = await linkifyWithReferences(linkifier,
+		const result = await linkify(linkifier,
 			'config.${TerminalSettingId',
 			references
 		);
