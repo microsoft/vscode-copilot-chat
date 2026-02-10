@@ -16,6 +16,28 @@ vi.mock('vscode', () => ({
 			fragment: components.fragment,
 		}),
 	},
+	EventEmitter: class MockEventEmitter<T> {
+		private readonly listeners: Array<(e: T) => void> = [];
+		readonly event = (listener: (e: T) => void) => {
+			this.listeners.push(listener);
+			return {
+				dispose: () => {
+					const idx = this.listeners.indexOf(listener);
+					if (idx >= 0) {
+						this.listeners.splice(idx, 1);
+					}
+				},
+			};
+		};
+		fire(data: T): void {
+			for (const listener of this.listeners) {
+				listener(data);
+			}
+		}
+		dispose(): void {
+			this.listeners.length = 0;
+		}
+	},
 }));
 
 describe('InProcHttpServer.onDidClientDisconnect', () => {
