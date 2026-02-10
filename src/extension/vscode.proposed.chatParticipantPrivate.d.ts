@@ -120,15 +120,6 @@ declare module 'vscode' {
 		 * Whether any hooks are enabled for this request.
 		 */
 		readonly hasHooksEnabled: boolean;
-
-		/**
-		 * Resolved hook commands for this request, organized by hook type.
-		 * The commands have already been resolved for the current platform.
-		 * Only present when hooks are enabled.
-		 * Note: This type mirrors {@link ChatRequestHooks} from the chatHooks proposal,
-		 * inlined here to avoid cross-proposal dependencies.
-		 */
-		readonly hooks?: { readonly [hookType: string]: readonly { readonly command: string; readonly cwd?: Uri; readonly env?: Record<string, string>; readonly timeoutSec?: number }[] };
 	}
 
 	export enum ChatRequestEditedFileEventKind {
@@ -267,6 +258,8 @@ declare module 'vscode' {
 		provideFileIgnored(uri: Uri, token: CancellationToken): ProviderResult<boolean>;
 	}
 
+	export type PreToolUsePermissionDecision = 'allow' | 'deny' | 'ask';
+
 	export interface LanguageModelToolInvocationOptions<T> {
 		chatRequestId?: string;
 		/** @deprecated Use {@link chatSessionResource} instead */
@@ -285,7 +278,7 @@ declare module 'vscode' {
 		 * and use this result for permission decisions and input modifications instead.
 		 */
 		preToolUseResult?: {
-			permissionDecision?: 'allow' | 'deny' | 'ask';
+			permissionDecision?: PreToolUsePermissionDecision;
 			permissionDecisionReason?: string;
 			updatedInput?: object;
 		};

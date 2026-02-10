@@ -75,6 +75,15 @@ declare module 'vscode' {
 		readonly output: unknown;
 	}
 
+	export interface ChatRequest {
+		/**
+		 * Resolved hook commands for this request, organized by hook type.
+		 * The commands have already been resolved for the current platform.
+		 * Only present when hooks are enabled.
+		 */
+		readonly hooks?: ChatRequestHooks;
+	}
+
 	export namespace chat {
 	}
 
