@@ -803,6 +803,8 @@ export function identify_files_affected(text: string): Array<string> {
 			result.add(line.slice(MOVE_FILE_TO_PREFIX.length));
 		} else if (line.startsWith(DELETE_FILE_PREFIX)) {
 			result.add(line.slice(DELETE_FILE_PREFIX.length));
+		} else if (line.startsWith(ADD_FILE_PREFIX)) {
+			result.add(line.slice(ADD_FILE_PREFIX.length));
 		}
 	}
 
