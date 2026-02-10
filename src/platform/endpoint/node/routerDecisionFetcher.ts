@@ -9,6 +9,7 @@ import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '..
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 
 interface RouterDecisionResponse {
 	predicted_label: 'needs_reasoning' | 'no_reasoning';
@@ -48,7 +49,8 @@ export class RouterDecisionFetcher extends Disposable {
 		private readonly _fetcherService: IFetcherService,
 		private readonly _logService: ILogService,
 		private readonly _configurationService: IConfigurationService,
-		private readonly _experimentationService: IExperimentationService
+		private readonly _experimentationService: IExperimentationService,
+		private readonly _telemetryService: ITelemetryService
 	) {
 		super();
 	}
@@ -103,6 +105,15 @@ export class RouterDecisionFetcher extends Disposable {
 			}
 
 			this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
+
+			this._telemetryService.sendGHTelemetryEvent('autoMode.routerDecision', {
+				routerUrl: routerApiUrl,
+				chosenModel: result.chosen_model,
+				predictedLabel: result.predicted_label,
+			}, {
+				confidence: result.confidence,
+				latencyMs: result.latency_ms,
+			});
 
 			return result.chosen_model;
 		}
