@@ -24,8 +24,6 @@ export interface ICopilotCLISessionTracker {
 
 	/**
 	 * Get the terminal associated with a session.
-	 * If a terminal was directly registered, returns it.
-	 * Otherwise, attempts to find a terminal whose processId matches the session's PPID.
 	 * Returns `undefined` if no matching terminal is found.
 	 */
 	getTerminal(sessionId: string): Promise<Terminal | undefined>;
@@ -53,9 +51,13 @@ export class CopilotCLISessionTracker implements ICopilotCLISessionTracker {
 		const terminalPids = window.terminals.map(t => t.processId.then(pid => ({ terminal: t, pid })));
 
 		for (const promise of terminalPids) {
-			const { terminal, pid } = await promise;
-			if (pid === info.ppid) {
-				return terminal;
+			try {
+				const { terminal, pid } = await promise;
+				if (pid === info.ppid) {
+					return terminal;
+				}
+			} catch {
+				//
 			}
 		}
 
