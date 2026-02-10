@@ -40,6 +40,21 @@ export interface UserPromptSubmitHookInput {
 }
 
 /**
+ * Output from the UserPromptSubmit hook.
+ */
+export interface UserPromptSubmitHookOutput {
+	/**
+	 * Set to "block" to prevent the agent from stopping.
+	 * Omit or set to undefined to allow the agent to stop.
+	 */
+	readonly decision?: 'block';
+	/**
+	 * Required when decision is "block". Tells the agent why it should continue.
+	 */
+	readonly reason?: string;
+}
+
+/**
  * Input passed to the Stop hook.
  */
 export interface StopHookInput {
