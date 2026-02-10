@@ -99,6 +99,11 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 				logger.info('Workspace folders changed, lock file updated.');
 			}));
 
+			// Update lock file when workspace trust is granted
+			this._register(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+				void lockFile.update();
+			}));
+
 			this._register(disposable);
 			this._register({ dispose: () => { void lockFile.remove(); } });
 		} catch (err) {

@@ -18,6 +18,7 @@ export interface LockFileInfo {
 	ideName: string;
 	timestamp: number;
 	workspaceFolders: string[];
+	isTrusted: boolean;
 }
 
 export class LockFileHandle {
@@ -51,6 +52,7 @@ export class LockFileHandle {
 				ideName: vscode.env.appName,
 				timestamp: this.timestamp,
 				workspaceFolders: workspaceFolders,
+				isTrusted: vscode.workspace.isTrusted,
 			};
 
 			await fs.writeFile(this.lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });
@@ -92,6 +94,7 @@ export async function createLockFile(serverUri: vscode.Uri, headers: Record<stri
 		ideName: vscode.env.appName,
 		timestamp: timestamp,
 		workspaceFolders: workspaceFolders,
+		isTrusted: vscode.workspace.isTrusted,
 	};
 
 	await fs.writeFile(lockFilePath, JSON.stringify(lockInfo, null, 2), { mode: 0o600 });

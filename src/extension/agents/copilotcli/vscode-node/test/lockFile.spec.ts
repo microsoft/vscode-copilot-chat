@@ -15,6 +15,7 @@ vi.mock('vscode', async (importOriginal) => {
 		...original,
 		workspace: {
 			workspaceFolders: [{ uri: { fsPath: '/test/workspace' } }],
+			isTrusted: true,
 		},
 		env: {
 			appName: 'Visual Studio Code',
@@ -62,6 +63,15 @@ describe('LockFileHandle', () => {
 			expect(content.headers).toEqual(mockHeaders);
 			expect(content.pid).toBe(process.pid);
 			expect(content.timestamp).toBe(testTimestamp);
+			expect(content.isTrusted).toBe(true);
+		});
+
+		it('should write isTrusted status from workspace', async () => {
+			const handle = new LockFileHandle(testLockFilePath, mockServerUri, mockHeaders, testTimestamp, logger);
+			await handle.update();
+
+			const content = JSON.parse(await fs.readFile(testLockFilePath, 'utf-8'));
+			expect(content.isTrusted).toBe(true);
 		});
 
 		it.skipIf(process.platform === 'win32')('should set restrictive file permissions (0o600)', async () => {
@@ -133,6 +143,7 @@ describe('createLockFile', () => {
 		expect(content.headers).toEqual(mockHeaders);
 		expect(content.pid).toBe(process.pid);
 		expect(typeof content.timestamp).toBe('number');
+		expect(content.isTrusted).toBe(true);
 	});
 
 	it('should create .copilot directory if it does not exist', async () => {
