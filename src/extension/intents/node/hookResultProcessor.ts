@@ -80,7 +80,8 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 
 	for (const result of results) {
 		// Check for stopReason - abort immediately (unless ignoreErrors is set)
-		if (result.stopReason) {
+		// Note: empty string is a valid stopReason (from continue: false without explicit message)
+		if (result.stopReason !== undefined) {
 			if (ignoreErrors) {
 				logService.trace(`[ToolCallingLoop] ${hookType} hook stopReason ignored: ${result.stopReason}`);
 				continue;
@@ -111,7 +112,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 			if (onError) {
 				// Pass error to callback (for Stop/SubagentStop to collect as blocking reason)
 				onError(errorMessage);
-				return;
+				continue;
 			} else if (ignoreErrors) {
 				// Completely ignore error - no throw, no hookProgress (silently continue)
 				continue;

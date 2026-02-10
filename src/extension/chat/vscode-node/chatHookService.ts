@@ -57,6 +57,7 @@ export class ChatHookService implements IChatHookService {
 			const commonInput = {
 				timestamp: new Date().toISOString(),
 				hookEventName: hookType,
+				...(sessionId ? { sessionId } : undefined),
 				...(transcriptPath ? { transcript_path: transcriptPath } : undefined),
 			};
 			const fullInput = (typeof input === 'object' && input !== null)
@@ -70,7 +71,11 @@ export class ChatHookService implements IChatHookService {
 
 			for (const hookCommand of hookCommands) {
 				try {
-					const commandResult = await this._hookExecutor.executeCommand(hookCommand, fullInput, effectiveToken);
+					// Include per-command cwd in the input
+					const commandInput = hookCommand.cwd
+						? { ...fullInput, cwd: hookCommand.cwd }
+						: fullInput;
+					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
 					const result = this._toHookResult(commandResult);
 					results.push(result);
 
