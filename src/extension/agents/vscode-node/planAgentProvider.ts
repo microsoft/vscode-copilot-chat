@@ -159,6 +159,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration('chat.planAgent.defaultModel') ||
 				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
@@ -297,7 +298,8 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 
 	private buildCustomizedConfig(): PlanAgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
+		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.PlanAgentModel);
 
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);

@@ -3882,15 +3882,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.planAgent.model": {
-						"type": "string",
-						"default": "",
-						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.model%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",
