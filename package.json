@@ -2848,7 +2848,7 @@
 			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
-				"enablement": "config.github.copilot.chat.cli.integration.enabled",
+				"enablement": "github.copilot.chat.copilotCLI.hasSession",
 				"category": "Copilot CLI"
 			},
 			{
@@ -4436,15 +4436,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.cli.integration.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.integration.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4569,7 +4560,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"explorer/context": [
@@ -4581,7 +4572,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !explorerResourceIsFolder"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !explorerResourceIsFolder"
 				}
 			],
 			"editor/context": [
@@ -4593,7 +4584,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [
@@ -5418,7 +5409,7 @@
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"key": "ctrl+shift+.",
 				"mac": "cmd+shift+.",
-				"when": "config.github.copilot.chat.cli.integration.enabled && editorTextFocus"
+				"when": "github.copilot.chat.copilotCLI.hasSession && editorTextFocus"
 			},
 			{
 				"command": "github.copilot.chat.rerunWithCopilotDebug",

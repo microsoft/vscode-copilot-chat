@@ -416,7 +416,6 @@
 	"github.copilot.command.chat.copilotCLI.addFileReference": "Add File Reference to Prompt",
 	"github.copilot.command.chat.copilotCLI.acceptDiff": "Accept Changes",
 	"github.copilot.command.chat.copilotCLI.rejectDiff": "Reject Changes",
-	"github.copilot.config.cli.integration.enabled": "Enable GitHub Copilot CLI integration in VS Code",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",

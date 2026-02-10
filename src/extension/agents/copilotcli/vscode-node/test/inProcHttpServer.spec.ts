@@ -18,7 +18,7 @@ vi.mock('vscode', () => ({
 	},
 }));
 
-describe('InProcHttpServer.onClientDisconnected', () => {
+describe('InProcHttpServer.onDidClientDisconnect', () => {
 	let server: InProcHttpServer;
 
 	beforeEach(() => {
@@ -26,14 +26,14 @@ describe('InProcHttpServer.onClientDisconnected', () => {
 	});
 
 	it('should return a disposable', () => {
-		const disposable = server.onClientDisconnected(() => { });
+		const disposable = server.onDidClientDisconnect(() => { });
 		expect(disposable).toBeDefined();
 		expect(disposable.dispose).toBeInstanceOf(Function);
 	});
 
 	it('should remove the listener on dispose', () => {
 		const listener = vi.fn();
-		const disposable = server.onClientDisconnected(listener);
+		const disposable = server.onDidClientDisconnect(listener);
 		disposable.dispose();
 
 		// Trigger _unregisterTransport indirectly by accessing private state
@@ -45,8 +45,8 @@ describe('InProcHttpServer.onClientDisconnected', () => {
 	it('should support multiple listeners', () => {
 		const listener1 = vi.fn();
 		const listener2 = vi.fn();
-		server.onClientDisconnected(listener1);
-		server.onClientDisconnected(listener2);
+		server.onDidClientDisconnect(listener1);
+		server.onDidClientDisconnect(listener2);
 
 		// Both should be registered (we can't easily trigger them without
 		// going through the full MCP flow, but at least we verify registration)
@@ -57,8 +57,8 @@ describe('InProcHttpServer.onClientDisconnected', () => {
 	it('should only remove the disposed listener', () => {
 		const listener1 = vi.fn();
 		const listener2 = vi.fn();
-		const disposable1 = server.onClientDisconnected(listener1);
-		server.onClientDisconnected(listener2);
+		const disposable1 = server.onDidClientDisconnect(listener1);
+		server.onDidClientDisconnect(listener2);
 
 		disposable1.dispose();
 
@@ -69,7 +69,7 @@ describe('InProcHttpServer.onClientDisconnected', () => {
 
 	it('should handle double dispose gracefully', () => {
 		const listener = vi.fn();
-		const disposable = server.onClientDisconnected(listener);
+		const disposable = server.onDidClientDisconnect(listener);
 		disposable.dispose();
 		expect(() => disposable.dispose()).not.toThrow();
 	});

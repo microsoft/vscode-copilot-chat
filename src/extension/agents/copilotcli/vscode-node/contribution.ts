@@ -8,6 +8,7 @@ import { ILogger, ILogService } from '../../../../platform/log/common/logService
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { registerAddFileReferenceCommand, registerDiffCommands } from './commands';
+import { registerCommandContext } from './commands/context';
 import { CopilotCLISessionTracker, ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 import { DiffStateManager } from './diffState';
 import { InProcHttpServer } from './inProcHttpServer';
@@ -33,9 +34,11 @@ export class CopilotCLIContrib extends Disposable {
 
 		// Create shared instances
 		const diffState = new DiffStateManager(logger);
-		const httpServer = new InProcHttpServer(logger, this.sessionTracker);
+		const httpServer = this._register(new InProcHttpServer(logger, this.sessionTracker));
 		const selectionState = new SelectionState();
 		const contentProvider = new ReadonlyContentProvider();
+
+		this._register(registerCommandContext(httpServer));
 
 		// Register commands
 		this._register(registerAddFileReferenceCommand(logger, httpServer, this.sessionTracker));
@@ -46,7 +49,7 @@ export class CopilotCLIContrib extends Disposable {
 			this._register(d);
 		}
 		this._register(contentProvider.register());
-		this._register(httpServer.onClientDisconnected(sessionId => {
+		this._register(httpServer.onDidClientDisconnect(sessionId => {
 			diffState.closeAllForSession(sessionId);
 		}));
 

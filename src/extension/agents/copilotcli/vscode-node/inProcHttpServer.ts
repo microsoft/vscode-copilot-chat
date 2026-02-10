@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
 interface McpProviderOptions {
@@ -50,29 +51,17 @@ class AsyncLazy<T> {
 	}
 }
 
-export class InProcHttpServer {
+export class InProcHttpServer extends Disposable {
 	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
-	private readonly _disconnectListeners: Array<(sessionId: string) => void> = [];
-
+	private readonly _onDidClientConnect = this._register(new vscode.EventEmitter<string>());
+	public readonly onDidClientConnect = this._onDidClientConnect.event;
+	private readonly _onDidClientDisconnect = this._register(new vscode.EventEmitter<string>());
+	public readonly onDidClientDisconnect = this._onDidClientDisconnect.event;
 	constructor(
 		private readonly _logger: ILogger,
 		private readonly _sessionTracker: ICopilotCLISessionTracker,
-	) { }
-
-	/**
-	 * Register a listener that fires when a client session disconnects.
-	 * Returns a disposable to remove the listener.
-	 */
-	onClientDisconnected(listener: (sessionId: string) => void): DisposableLike {
-		this._disconnectListeners.push(listener);
-		return {
-			dispose: () => {
-				const idx = this._disconnectListeners.indexOf(listener);
-				if (idx >= 0) {
-					this._disconnectListeners.splice(idx, 1);
-				}
-			},
-		};
+	) {
+		super();
 	}
 
 	broadcastNotification(method: string, params: Record<string, unknown>): void {
@@ -187,19 +176,14 @@ export class InProcHttpServer {
 
 	private _registerTransport(sessionId: string, transport: StreamableHTTPServerTransport): void {
 		this._transports[sessionId] = transport;
+		this._onDidClientConnect.fire(sessionId);
 		this._logger.info(`Client connected: ${sessionId}`);
 	}
 
 	private _unregisterTransport(sessionId: string): void {
 		delete this._transports[sessionId];
+		this._onDidClientDisconnect.fire(sessionId);
 		this._logger.info(`Client disconnected: ${sessionId}`);
-		for (const listener of this._disconnectListeners) {
-			try {
-				listener(sessionId);
-			} catch (err) {
-				this._logger.error(err instanceof Error ? err : String(err), 'Error in disconnect listener');
-			}
-		}
 	}
 
 	private _getTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
