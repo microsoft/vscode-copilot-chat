@@ -357,10 +357,10 @@ export class DefaultIntentRequestHandler {
 				onSuccess: (output) => {
 					const typedOutput = output as UserPromptSubmitHookOutput;
 					// Check for block decision output
-					if (typedOutput.decision === 'block') {
+					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
 						const blockReason = typedOutput.reason || l10n.t('No reason provided');
 						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
-						this.stream.hookProgress?.('UserPromptSubmit', blockReason, blockReason);
+						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
 						throw new HookAbortError('UserPromptSubmit', blockReason);
 					}
 				},
