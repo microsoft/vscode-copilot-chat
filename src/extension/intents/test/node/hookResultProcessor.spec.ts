@@ -586,12 +586,12 @@ describe('hookResultProcessor', () => {
 		it('should format error message with details', () => {
 			const message = formatHookErrorMessage('Connection failed');
 			expect(message).toContain('Connection failed');
-			expect(message).toContain('hook failed');
+			expect(message).toContain('A hook prevented chat from continuing');
 		});
 
 		it('should format error message without details', () => {
 			const message = formatHookErrorMessage('');
-			expect(message).toContain('hook failed');
+			expect(message).toContain('A hook prevented chat from continuing');
 			expect(message).not.toContain('Error message:');
 		});
 	});
