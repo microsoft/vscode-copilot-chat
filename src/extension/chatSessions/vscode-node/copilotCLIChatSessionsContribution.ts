@@ -32,6 +32,7 @@ import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcl
 import { ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { PermissionRequest, requestPermission } from '../../agents/copilotcli/node/permissionHelpers';
+import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
 import { ChatVariablesCollection, isPromptFile } from '../../prompt/common/chatVariablesCollection';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
@@ -96,6 +97,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
+		@ICopilotCLISessionTracker private readonly sessionTracker: ICopilotCLISessionTracker,
 		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 		@IChatSessionWorktreeService private readonly worktreeManager: IChatSessionWorktreeService,
 		@IRunCommandExecutionService private readonly commandExecutionService: IRunCommandExecutionService,
@@ -220,6 +222,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
 		const id = SessionIdForCLI.parse(sessionItem.resource);
+		const existingTerminal = await this.sessionTracker.getTerminal(SessionIdForCLI.parse(sessionItem.resource));
+		if (existingTerminal) {
+			existingTerminal.show();
+			return;
+		}
+
 		const terminalName = sessionItem.label || id;
 		const cliArgs = ['--resume', id];
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(id);
