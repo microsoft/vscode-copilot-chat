@@ -6,7 +6,9 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import type { ExtensionContext } from 'vscode';
+import { MockChatMLFetcher } from '../../../../platform/chat/test/common/mockChatMLFetcher';
 import { INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
 import { MockGitService } from '../../../../platform/ignore/node/test/mockGitService';
@@ -27,6 +29,8 @@ suite('GitHubOrgInstructionsProvider', () => {
 	let mockWorkspaceService: MockWorkspaceService;
 	let mockExtensionContext: Partial<ExtensionContext>;
 	let mockAuthService: MockAuthenticationService;
+	let mockChatMLFetcher: MockChatMLFetcher;
+	let mockEnvService: IEnvService;
 	let accessor: any;
 	let provider: GitHubOrgInstructionsProvider;
 	let resourcesService: GitHubOrgChatResourcesService;
@@ -47,6 +51,8 @@ suite('GitHubOrgInstructionsProvider', () => {
 			globalStorageUri: storageUri,
 		};
 		mockAuthService = new MockAuthenticationService();
+		mockChatMLFetcher = new MockChatMLFetcher();
+		mockEnvService = { isActive: true } as IEnvService;
 
 		// Default: user is in 'testorg' and workspace belongs to 'testorg'
 		mockOctoKitService.setUserOrganizations(['testorg']);
@@ -71,6 +77,8 @@ suite('GitHubOrgInstructionsProvider', () => {
 		// Create the real GitHubOrgChatResourcesService with mocked dependencies
 		resourcesService = new GitHubOrgChatResourcesService(
 			mockAuthService as any,
+			mockChatMLFetcher,
+			mockEnvService,
 			mockExtensionContext as any,
 			mockFileSystem,
 			mockGitService,

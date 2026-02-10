@@ -6,7 +6,9 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test } from 'vitest';
 import type { ExtensionContext } from 'vscode';
+import { MockChatMLFetcher } from '../../../../platform/chat/test/common/mockChatMLFetcher';
 import { AGENT_FILE_EXTENSION, INSTRUCTION_FILE_EXTENSION, PromptsType } from '../../../../platform/customInstructions/common/promptTypes';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { MockAuthenticationService } from '../../../../platform/ignore/node/test/mockAuthenticationService';
@@ -27,6 +29,8 @@ suite('GitHubOrgChatResourcesService', () => {
 	let mockOctoKitService: MockOctoKitService;
 	let mockWorkspaceService: MockWorkspaceService;
 	let mockAuthService: MockAuthenticationService;
+	let mockChatMLFetcher: MockChatMLFetcher;
+	let mockEnvService: IEnvService;
 	let logService: ILogService;
 	let service: GitHubOrgChatResourcesService;
 
@@ -45,6 +49,8 @@ suite('GitHubOrgChatResourcesService', () => {
 		mockOctoKitService = new MockOctoKitService();
 		mockWorkspaceService = new MockWorkspaceService();
 		mockAuthService = new MockAuthenticationService();
+		mockChatMLFetcher = new MockChatMLFetcher();
+		mockEnvService = { isActive: true } as IEnvService;
 
 		// Set up testing services to get log service
 		const testingServiceCollection = createExtensionUnitTestingServices(disposables);
@@ -60,6 +66,8 @@ suite('GitHubOrgChatResourcesService', () => {
 	function createService(): GitHubOrgChatResourcesService {
 		service = new GitHubOrgChatResourcesService(
 			mockAuthService as any,
+			mockChatMLFetcher,
+			mockEnvService,
 			mockExtensionContext as any,
 			mockFileSystem,
 			mockGitService,
