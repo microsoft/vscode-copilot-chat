@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as crypto from 'crypto';
 import type * as express from 'express';
 import * as fs from 'fs/promises';
@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
 interface McpProviderOptions {
 	id: string;
@@ -52,7 +53,10 @@ class AsyncLazy<T> {
 export class InProcHttpServer {
 	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
 
-	constructor(private readonly _logger: ILogger) { }
+	constructor(
+		private readonly _logger: ILogger,
+		private readonly _sessionTracker: ICopilotCLISessionTracker,
+	) { }
 
 	broadcastNotification(method: string, params: Record<string, unknown>): void {
 		const message = {
@@ -167,7 +171,7 @@ export class InProcHttpServer {
 	}
 
 	private async _handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
-		const sessionId = req.headers['mcp-session-id'] as string | undefined;
+		const sessionId = (req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id']) as string | undefined;
 		this._logger.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
 
 		const isInitializeRequest = await isInitializeRequestLazy.value;
@@ -177,15 +181,22 @@ export class InProcHttpServer {
 		const existingTransport = sessionId ? this._getTransport(sessionId) : undefined;
 		if (sessionId && existingTransport) {
 			transport = existingTransport;
-		} else if (!sessionId && isInitializeRequest(req.body)) {
+		} else if (sessionId && isInitializeRequest(req.body)) {
 			this._logger.debug('Creating new MCP session...');
+			const clientPid = parseInt(req.headers['x-copilot-pid'] as string, 10);
+			const clientPpid = parseInt(req.headers['x-copilot-parent-pid'] as string, 10);
+			let sessionRegistration: { dispose(): void } | undefined;
 			transport = new StreamableHTTPServerTransport({
 				sessionIdGenerator: () => crypto.randomUUID(),
-				onsessioninitialized: newSessionId => {
-					this._registerTransport(newSessionId, transport);
+				onsessioninitialized: () => {
+					this._registerTransport(sessionId, transport);
+					if (!isNaN(clientPid) && !isNaN(clientPpid)) {
+						sessionRegistration = this._sessionTracker.registerSession(sessionId, { pid: clientPid, ppid: clientPpid });
+					}
 				},
 				onsessionclosed: closedSessionId => {
 					this._unregisterTransport(closedSessionId);
+					sessionRegistration?.dispose();
 				},
 				enableDnsRebindingProtection: true,
 				allowedHosts: ['localhost'],

@@ -13,10 +13,12 @@ export function registerCloseDiffTool(server: McpServer, logger: ILogger, diffSt
 	const schema = {
 		tab_name: z.string().describe('The tab name of the diff to close (must match the tab_name used when opening the diff)'),
 	};
-	server.tool(
+	server.registerTool(
 		'close_diff',
-		'Closes a diff tab by its tab name. Use this when the client rejects an edit to close the corresponding diff view.',
-		schema,
+		{
+			description: 'Closes a diff tab by its tab name. Use this when the client rejects an edit to close the corresponding diff view.',
+			inputSchema: schema,
+		},
 		async (args: { tab_name: string }) => {
 			const { tab_name } = args;
 			logger.debug(`Closing diff: ${tab_name}`);

@@ -8,7 +8,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
@@ -37,7 +37,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
-import { isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
+import { formatHookErrorMessage, HookAbortError, isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -354,7 +354,16 @@ export class DefaultIntentRequestHandler {
 				results: userPromptSubmitResults,
 				outputStream: this.stream,
 				logService: this._logService,
-				onSuccess: () => { /* UserPromptSubmit has no output to process */ },
+				onSuccess: (output) => {
+					const typedOutput = output as UserPromptSubmitHookOutput;
+					// Check for block decision output
+					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
+						const blockReason = typedOutput.reason || l10n.t('No reason provided');
+						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+						throw new HookAbortError('UserPromptSubmit', blockReason);
+					}
+				},
 			});
 
 			const result = await loop.run(this.stream, this.token);

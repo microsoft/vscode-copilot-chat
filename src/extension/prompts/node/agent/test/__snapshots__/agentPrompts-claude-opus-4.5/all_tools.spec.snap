@@ -82,7 +82,6 @@ get_search_view_results
 get_vscode_api
 github_repo
 install_extension
-memory
 open_simple_browser
 read_notebook_cell_output
 read_project_structure

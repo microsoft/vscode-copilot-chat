@@ -33,6 +33,7 @@ class AutoModeTokenBank extends Disposable {
 	private _token: AutoModeAPIResponse | undefined;
 	private _fetchTokenPromise: Promise<void> | undefined;
 	private _refreshTimer: TimeoutTimer;
+	private _usedSinceLastFetch = false;
 
 	constructor(
 		public debugName: string,
@@ -46,7 +47,7 @@ class AutoModeTokenBank extends Disposable {
 		super();
 		this._refreshTimer = this._register(new TimeoutTimer());
 		this._register(this._envService.onDidChangeWindowState((state) => {
-			if (state.active && (!this._token || this._token.expires_at * 1000 - Date.now() < 5 * 60 * 1000)) {
+			if (state.active && this._usedSinceLastFetch && (!this._token || this._token.expires_at * 1000 - Date.now() < 5 * 60 * 1000)) {
 				// Window is active again, fetch a new token if it's expiring soon or we don't have one
 				this._fetchTokenPromise = this._fetchToken();
 			}
@@ -68,6 +69,7 @@ class AutoModeTokenBank extends Disposable {
 		if (!this._token) {
 			throw new Error(`[${this.debugName}] Failed to fetch AutoMode token: token is undefined after fetch attempt.`);
 		}
+		this._usedSinceLastFetch = true;
 		return this._token;
 	}
 
@@ -105,9 +107,17 @@ class AutoModeTokenBank extends Disposable {
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		this._logService.trace(`Fetched auto model for ${this.debugName} in ${Date.now() - startTime}ms.`);
 		this._token = data;
+		this._usedSinceLastFetch = false;
 		// Trigger a refresh 5 minutes before expiration
 		if (!this._store.isDisposed) {
-			this._refreshTimer.cancelAndSet(this._fetchToken.bind(this), (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
+			this._refreshTimer.cancelAndSet(() => {
+				if (!this._usedSinceLastFetch) {
+					this._logService.trace(`[${this.debugName}] Skipping auto mode token refresh because it was not used since last fetch.`);
+					this._token = undefined;
+					return;
+				}
+				this._fetchToken();
+			}, (data.expires_at * 1000) - Date.now() - 5 * 60 * 1000);
 		}
 		this._fetchTokenPromise = undefined;
 	}
@@ -123,7 +133,7 @@ export interface IAutomodeService {
 
 export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
-	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank; lastRoutedPrompt?: string }> = new Map();
+	private readonly _autoModelCache: Map<string, { endpoints: AutoChatEndpoint[]; tokenBank: AutoModeTokenBank; lastSessionToken?: string; lastRoutedPrompt?: string }> = new Map();
 	private _reserveTokens: DisposableMap<ChatLocation, AutoModeTokenBank> = new DisposableMap();
 	private readonly _routerDecisionFetcher: RouterDecisionFetcher;
 
@@ -231,13 +241,14 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
 
-		const existingEndpoints = entry?.endpoints || [];
+		// If the session token changed, invalidate all cached endpoints so they get recreated with the new token
+		const existingEndpoints = (entry && entry.lastSessionToken === reserveToken.session_token) ? entry.endpoints : [];
 		let autoEndpoint = existingEndpoints.find(e => e.model === selectedModel.model);
 		if (!autoEndpoint) {
 			autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 			existingEndpoints.push(autoEndpoint);
 		}
-		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastRoutedPrompt: prompt });
+		this._autoModelCache.set(conversationId, { endpoints: existingEndpoints, tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token, lastRoutedPrompt: prompt });
 		return autoEndpoint;
 	}
 
@@ -251,8 +262,8 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		// If we have a cached entry, use it (refreshing if the model changed)
 		if (entry) {
 			const entryToken = await entry.tokenBank.getToken();
-			if (entry.endpoints.length && entry.endpoints[0].model !== entryToken.selected_model) {
-				// Model changed during a token refresh -> map to new endpoint
+			if (entry.endpoints.length && (entry.endpoints[0].model !== entryToken.selected_model || entry.lastSessionToken !== entryToken.session_token)) {
+				// Model or session token changed during a token refresh -> map to new endpoint
 				const newModel = knownEndpoints.find(e => e.model === entryToken.selected_model);
 				if (!newModel) {
 					const errorMsg = `Auto mode failed: selected model '${entryToken.selected_model}' not found in known endpoints.`;
@@ -260,6 +271,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 					throw new Error(errorMsg);
 				}
 				entry.endpoints = [this._instantiationService.createInstance(AutoChatEndpoint, newModel, entryToken.session_token, entryToken.discounted_costs?.[newModel.model] || 0, this._calculateDiscountRange(entryToken.discounted_costs))];
+				entry.lastSessionToken = entryToken.session_token;
 			}
 			// Apply vision fallback even on cached entries, since the cached model may not support images
 			const cachedEndpoint = entry.endpoints[0];
@@ -288,7 +300,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		selectedModel = this._applyVisionFallback(chatRequest, selectedModel, reserveToken.available_models, knownEndpoints);
 		const autoEndpoint = this._instantiationService.createInstance(AutoChatEndpoint, selectedModel, reserveToken.session_token, reserveToken.discounted_costs?.[selectedModel.model] || 0, this._calculateDiscountRange(reserveToken.discounted_costs));
 
-		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank });
+		this._autoModelCache.set(conversationId, { endpoints: [autoEndpoint], tokenBank: reserveTokenBank, lastSessionToken: reserveToken.session_token });
 		return autoEndpoint;
 	}
 

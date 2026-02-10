@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IExtensionContribution } from '../../../common/contributions';
+import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { registerAddFileReferenceCommand, registerDiffCommands } from './commands';
+import { CopilotCLISessionTracker, ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 import { DiffStateManager } from './diffState';
 import { InProcHttpServer } from './inProcHttpServer';
 import { cleanupStaleLockFiles, createLockFile } from './lockFile';
@@ -17,34 +16,24 @@ import { ReadonlyContentProvider } from './readonlyContentProvider';
 import { registerTools, SelectionState } from './tools';
 import { registerDiagnosticsChangedNotification, registerSelectionChangedNotification } from './tools/push';
 
-export class CopilotCLIContrib extends Disposable implements IExtensionContribution {
-	readonly id = 'copilotCLI';
-	private initialized: boolean = false;
+export function getServices(): ConstructorParameters<typeof ServiceCollection> {
+	return [
+		[ICopilotCLISessionTracker, new CopilotCLISessionTracker()]
+	];
+}
+export class CopilotCLIContrib extends Disposable {
+
 	constructor(
-		@IInstantiationService _instantiationService: IInstantiationService,
+		@ICopilotCLISessionTracker private readonly sessionTracker: ICopilotCLISessionTracker,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 
-		this.configurationService.onDidChangeConfiguration(() => this.initialize());
-		this.initialize();
-	}
-
-	private initialize() {
-		if (this.initialized) {
-			return;
-		}
-		if (!this.configurationService.getConfig(ConfigKey.Advanced.CLIIntegrationEnabled)) {
-			return;
-		}
-
-		this.initialized = true;
 		const logger = this.logService.createSubLogger('CopilotCLI');
 
 		// Create shared instances
 		const diffState = new DiffStateManager(logger);
-		const httpServer = new InProcHttpServer(logger);
+		const httpServer = new InProcHttpServer(logger, this.sessionTracker);
 		const selectionState = new SelectionState();
 		const contentProvider = new ReadonlyContentProvider();
 
@@ -59,10 +48,13 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 		this._register(contentProvider.register());
 
 		// Clean up any stale lockfiles from previous sessions
-		const cleanedCount = cleanupStaleLockFiles(logger);
-		if (cleanedCount > 0) {
-			logger.info(`Cleaned up ${cleanedCount} stale lock file(s).`);
-		}
+		cleanupStaleLockFiles(logger).then(cleanedCount => {
+			if (cleanedCount > 0) {
+				logger.info(`Cleaned up ${cleanedCount} stale lock file(s).`);
+			}
+		}).catch(err => {
+			logger.error(err, 'Failed to clean up stale lock files');
+		});
 
 		// Start the MCP server
 		this._startMcpServer(logger, httpServer, diffState, selectionState, contentProvider);
@@ -92,12 +84,17 @@ export class CopilotCLIContrib extends Disposable implements IExtensionContribut
 
 			// Update lock file when workspace folders change
 			this._register(vscode.workspace.onDidChangeWorkspaceFolders(() => {
-				lockFile.update();
+				void lockFile.update();
 				logger.info('Workspace folders changed, lock file updated.');
 			}));
 
+			// Update lock file when workspace trust is granted
+			this._register(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+				void lockFile.update();
+			}));
+
 			this._register(disposable);
-			this._register({ dispose: () => lockFile.remove() });
+			this._register({ dispose: () => { void lockFile.remove(); } });
 		} catch (err) {
 			const errMsg = err instanceof Error ? err.message : String(err);
 			logger.error(`Failed to start MCP server: ${errMsg}`);

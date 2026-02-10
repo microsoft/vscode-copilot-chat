@@ -80,6 +80,7 @@ suite('PlanAgentProvider', () => {
 		assert.ok(content.includes('agent'));
 		assert.ok(content.includes('search'));
 		assert.ok(content.includes('read'));
+		assert.ok(content.includes('memory'));
 
 		// Should not have model override (not in base content)
 		assert.ok(content.includes('name: Plan'));
@@ -343,7 +344,7 @@ suite('buildAgentMarkdown', () => {
 			name: 'Plan',
 			description: 'Researches and outlines multi-step plans',
 			argumentHint: 'Outline the goal or problem to research',
-			tools: ['github/issue_read', 'agent', 'search'],
+			tools: ['github/issue_read', 'agent', 'search', 'memory'],
 			model: 'Claude Haiku 4.5 (copilot)',
 			handoffs: [
 				{
@@ -364,7 +365,7 @@ name: Plan
 description: Researches and outlines multi-step plans
 argument-hint: Outline the goal or problem to research
 model: Claude Haiku 4.5 (copilot)
-tools: ['github/issue_read', 'agent', 'search']
+tools: ['github/issue_read', 'agent', 'search', 'memory']
 handoffs:
   - label: Start Implementation
     agent: agent
