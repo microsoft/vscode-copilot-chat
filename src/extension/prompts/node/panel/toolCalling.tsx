@@ -238,7 +238,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					// Execute preToolUse hook before invoking the tool
 					const hookResult = await chatHookService.executePreToolUseHook(
 						props.toolCall.name, inputObj, props.toolCall.id,
-						props.toolInvocationToken, promptContext.conversation?.sessionId,
+						promptContext.request?.hooks, promptContext.conversation?.sessionId,
 						CancellationToken.None
 					);
 
@@ -472,10 +472,9 @@ async function appendHookContext(
 	const postHookResult = await chatHookService.executePostToolUseHook(
 		props.toolCall.name, toolInput,
 		toolResultToText(toolResult),
-		props.toolCall.id, props.toolInvocationToken,
+		props.toolCall.id, promptContext.request?.hooks,
 		promptContext.conversation?.sessionId, CancellationToken.None
 	);
-
 	if (postHookResult?.decision === 'block') {
 		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
 		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;

@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as vscode from 'vscode';
 import { z } from 'zod';
 import { ILogger } from '../../../../../platform/log/common/logService';
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { DiffStateManager } from '../diffState';
 import { ReadonlyContentProvider, createReadonlyUri } from '../readonlyContentProvider';
 import { makeTextResult } from './utils';
@@ -52,7 +52,7 @@ export function registerOpenDiffTool(server: McpServer, logger: ILogger, diffSta
 				}
 
 				// Create unique suffix for this diff
-				const uniqueSuffix = `${Date.now()}-${crypto.randomUUID()}`;
+				const uniqueSuffix = `${Date.now()}-${generateUuid()}`;
 				logger.info(`[DIFF] uniqueSuffix=${uniqueSuffix}`);
 
 				// Create readonly URIs for both sides

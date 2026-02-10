@@ -13,18 +13,19 @@ export interface IChatHookService {
 
 	/**
 	 * Execute all hooks of the specified type for the current chat session.
-	 * Hooks are configured in hooks.json files in the workspace.
+	 * Hooks are sourced from the resolved hook commands on the chat request.
 	 *
 	 * If a `sessionId` is provided, the session transcript is flushed to disk
 	 * before the hook runs so that hook scripts see up-to-date content.
 	 *
 	 * @param hookType The type of hook to execute.
-	 * @param options Hook execution options including the input data.
+	 * @param hooks The resolved hook commands for the session (from request.hooks).
+	 * @param input Input data to pass to the hook via stdin (will be JSON-serialized).
 	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
 	 * @returns A promise that resolves to an array of hook execution results.
 	 */
-	executeHook(hookType: vscode.ChatHookType, options: vscode.ChatHookExecutionOptions, sessionId?: string, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
+	executeHook(hookType: vscode.ChatHookType, hooks: vscode.ChatRequestHooks | undefined, input: unknown, sessionId?: string, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]>;
 
 	/**
 	 * Execute the preToolUse hook and collapse results from all hooks into a single result.
@@ -35,12 +36,12 @@ export interface IChatHookService {
 	 * @param toolName The name of the tool being invoked.
 	 * @param toolInput The input parameters for the tool.
 	 * @param toolCallId The unique ID for this tool call.
-	 * @param toolInvocationToken The tool invocation token from the chat participant.
+	 * @param hooks The resolved hook commands for the session (from request.hooks).
 	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
 	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
 	 */
-	executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, toolInvocationToken: vscode.ChatParticipantToolToken | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined>;
+	executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined>;
 
 	/**
 	 * Execute the postToolUse hook and collapse results from all hooks into a single result.
@@ -52,12 +53,12 @@ export interface IChatHookService {
 	 * @param toolInput The input parameters that were passed to the tool.
 	 * @param toolResponseText The text representation of the tool's output.
 	 * @param toolCallId The unique ID for this tool call.
-	 * @param toolInvocationToken The tool invocation token from the chat participant.
+	 * @param hooks The resolved hook commands for the session (from request.hooks).
 	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
 	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
 	 */
-	executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, toolInvocationToken: vscode.ChatParticipantToolToken | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined>;
+	executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined>;
 }
 
 /**

@@ -491,18 +491,15 @@ class ConversationHistorySummarizer {
 	 * before the conversation is compacted.
 	 */
 	private async executePreCompactHook(): Promise<void> {
-		const toolInvocationToken = this.props.promptContext.tools?.toolInvocationToken;
-		if (!toolInvocationToken) {
+		const hooks = this.props.promptContext.request?.hooks;
+		if (!hooks) {
 			return;
 		}
 
 		try {
-			const results = await this.chatHookService.executeHook('PreCompact', {
-				toolInvocationToken,
-				input: {
-					trigger: 'auto',
-				} satisfies PreCompactHookInput
-			}, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
+			const results = await this.chatHookService.executeHook('PreCompact', hooks, {
+				trigger: 'auto',
+			} satisfies PreCompactHookInput, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
 
 			for (const result of results) {
 				if (result.resultKind === 'error') {
