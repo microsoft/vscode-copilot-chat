@@ -5,13 +5,13 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import * as crypto from 'crypto';
 import type * as express from 'express';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
 interface McpProviderOptions {
@@ -83,7 +83,7 @@ export class InProcHttpServer {
 		this._logger.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
 
 		try {
-			const nonce = crypto.randomUUID();
+			const nonce = generateUuid();
 			socketPath = await getRandomSocketPath();
 			this._logger.trace(`Generated socket path: ${socketPath}`);
 
@@ -280,7 +280,7 @@ export class InProcHttpServer {
 
 async function getRandomSocketPath(): Promise<string> {
 	if (os.platform() === 'win32') {
-		return `\\\\.\\pipe\\mcp-${crypto.randomUUID()}.sock`;
+		return `\\\\.\\pipe\\mcp-${generateUuid()}.sock`;
 	} else {
 		const prefix = path.join(os.tmpdir(), 'mcp-');
 		const tempDir = await fs.mkdtemp(prefix);
