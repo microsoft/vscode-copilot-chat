@@ -137,7 +137,7 @@ export class ChatHookService implements IChatHookService {
 				} catch (err) {
 					const errMessage = err instanceof Error ? err.message : String(err);
 					this._log(requestId, hookType, `Error: ${errMessage}`);
-					this._logService.error(`[ChatHookService] Error running hook command: ${errMessage}`);
+					this._logService.error(err instanceof Error ? err : new Error(errMessage), '[ChatHookService] Error running hook command');
 					results.push({
 						resultKind: 'warning',
 						output: undefined,

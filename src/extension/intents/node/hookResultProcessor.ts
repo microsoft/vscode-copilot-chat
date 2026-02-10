@@ -87,7 +87,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				continue;
 			}
 			logService.info(`[ToolCallingLoop] ${hookType} hook requested abort: ${result.stopReason}`);
-			outputStream?.hookProgress(hookType, formatHookErrorMessage(result.stopReason));
+			outputStream?.hookProgress?.(hookType, formatHookErrorMessage(result.stopReason));
 			throw new HookAbortError(hookType, result.stopReason);
 		}
 
@@ -108,7 +108,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 		// Handle error - abort unless ignoreErrors is set or onError is provided
 		if (result.resultKind === 'error') {
 			const errorMessage = typeof result.output === 'string' && result.output ? result.output : '';
-			logService.error(`[ToolCallingLoop] ${hookType} hook error: ${errorMessage}`);
+			logService.error(new Error(errorMessage), `[ToolCallingLoop] ${hookType} hook error`);
 			if (onError) {
 				// Pass error to callback (for Stop/SubagentStop to collect as blocking reason)
 				onError(errorMessage);
@@ -117,7 +117,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				// Completely ignore error - no throw, no hookProgress (silently continue)
 				continue;
 			} else {
-				outputStream?.hookProgress(hookType, formatHookErrorMessage(errorMessage));
+				outputStream?.hookProgress?.(hookType, formatHookErrorMessage(errorMessage));
 				throw new HookAbortError(hookType, errorMessage);
 			}
 		}

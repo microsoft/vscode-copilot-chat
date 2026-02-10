@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import type { ChatHookCommand } from 'vscode';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { TestLogService } from '../../../testing/common/testLogService';
 import { HookCommandResultKind } from '../../common/hookExecutor';
 import { NodeHookExecutor } from '../../node/hookExecutor';
@@ -109,7 +110,7 @@ describe('NodeHookExecutor', () => {
 
 	test('uses custom cwd', async () => {
 		const result = await executor.executeCommand(
-			cmd('pwd', { cwd: { scheme: 'file', path: '/tmp', fsPath: '/tmp' } as any }),
+			cmd('pwd', { cwd: URI.file('/tmp') }),
 			undefined,
 			CancellationToken.None
 		);
