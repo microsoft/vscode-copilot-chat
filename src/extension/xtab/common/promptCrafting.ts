@@ -41,72 +41,215 @@ export class PromptPieces {
 	}
 }
 
+const MAX_DIFF_BLOCKS = 15; // Maximum number of individual diff blocks to include
+const TOTAL_PROMPT_BUDGET = 4000; // Total token budget for prompt (half of 8K, leave room for output)
+const FILE_SEP = '<|file_sep|>';
+
+// Budget allocation for 4000 tokens:
+// - Diffs: ~2000 tokens (prioritized)
+// - Original/Current sections: ~1500 tokens (750 each)
+// - Context files: ~500 tokens (optional, fills remaining)
+const DIFF_BUDGET = 2000;
+const ORIGINAL_CURRENT_BUDGET = 1500;
+const CONTEXT_FILES_BUDGET = 500;
+
 /**
  * Constructs a prompt for the Sweep next-edit-1.5B model.
+ *
+ * Token budget: 4000 tokens total (half of2 8K context, leave room for output)
+ * Priority: Diffs (2000) > Original/Current (1500) > Context files (500)
  *
  * Format:
  *   <|file_sep|>{file_path_1}
  *   {file_content_1}
  *   <|file_sep|>{changed_file}.diff
  *   original:
- *   {before_changes}
+ *   {only_changed_lines_before}
  *   updated:
- *   {after_changes}
+ *   {only_changed_lines_after}
  *   <|file_sep|>original/{file_path}
- *   {contents_prior_to_most_recent_change}
+ *   {truncated_contents_prior_to_most_recent_change}
  *   <|file_sep|>current/{file_path}
- *   {current_state_of_contents}
+ *   {truncated_current_state_of_contents}
  *   <|file_sep|>updated/{file_path}
  */
 export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
-	const FILE_SEP = '<|file_sep|>';
 	const parts: string[] = [];
 
-	const { activeDoc, xtabHistory, computeTokens, opts } = promptPieces;
+	const { activeDoc, xtabHistory, computeTokens, editWindowLinesRange } = promptPieces;
 
-	// 1. Add context files (recently viewed files)
-	const recentFiles = getRecentFilesForSweep(activeDoc, xtabHistory, computeTokens, opts);
-	for (const file of recentFiles) {
-		parts.push(`${FILE_SEP}${file.path}`);
-		parts.push(file.content);
-	}
-
-	// 2. Add recent diffs in original/updated format
-	const diffs = getRecentDiffsForSweep(activeDoc, xtabHistory, computeTokens, opts);
-
-	// TODO:
-	// include N diffs in the prompt until I have token budget (eg 2000tokens): [entry0, entry1, entry2, ... entryN]
-	// original current file = entry0.base
-	// updated current file= entryN.base.apply(entryN.edit)
-
-	// original: entry0.base
-	for (const diff of diffs) {
-		// Extract just filename for cleaner diff headers
-		const diffFileName = diff.path.includes('/') ? diff.path.split('/').pop()! : diff.path;
-		parts.push(`${FILE_SEP}${diffFileName}.diff`);
-		parts.push('original:');
-		parts.push(diff.original);
-		parts.push('updated:');
-		parts.push(diff.updated);
-	}
-
-	// 3. Add original/current/updated sections for active file
+	// Get file path and name
 	const filePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
-	// Extract just the filename for cleaner paths in original/current/updated headers
 	const fileName = filePath.includes('/') ? filePath.split('/').pop()! : filePath;
 
-	// Original = document before recent edits
-	parts.push(`${FILE_SEP}original/${fileName}`);
-	parts.push(activeDoc.documentBeforeEdits.value);
+	// Step 1: Collect edit entries from xtabHistory for current file only
+	const editEntries: IXtabHistoryEditEntry[] = [];
+	for (const entry of xtabHistory) {
+		if (entry.kind === 'edit' && entry.docId === activeDoc.id) {
+			editEntries.push(entry);
+		}
+	}
 
-	// Current = document after recent edits
+	// Step 2: Compute "original" = entry0.base (oldest entry's base)
+	// Compute "current" = activeDoc.documentAfterEdits (current state)
+	const originalContent = editEntries.length > 0
+		? editEntries[0].edit.base.value
+		: activeDoc.documentBeforeEdits.value;
+	const currentContent = activeDoc.documentAfterEdits.value;
+
+	// Step 3: Build individual diffs - extract ONLY changed lines using toLineEdit
+	// Budget: DIFF_BUDGET tokens, max MAX_DIFF_BLOCKS blocks
+	let diffTokenBudget = DIFF_BUDGET;
+	let diffBlockCount = 0;
+	const diffParts: string[] = [];
+	let budgetExceeded = false;
+
+	// Process entries from oldest to newest
+	for (const entry of editEntries) {
+		if (budgetExceeded || diffBlockCount >= MAX_DIFF_BLOCKS) {
+			break;
+		}
+
+		const lineEdit = RootedEdit.toLineEdit(entry.edit);
+
+		for (const singleLineEdit of lineEdit.replacements) {
+			if (diffBlockCount >= MAX_DIFF_BLOCKS) {
+				budgetExceeded = true;
+				break;
+			}
+
+			// Get only the changed lines, not full file
+			const oldLines = entry.edit.base.getLines().slice(
+				singleLineEdit.lineRange.startLineNumber - 1,
+				singleLineEdit.lineRange.endLineNumberExclusive - 1
+			);
+			const newLines = singleLineEdit.newLines;
+
+			// Calculate tokens for this diff block
+			const diffBlock = `${FILE_SEP}${fileName}.diff\noriginal:\n${oldLines.join('\n')}\nupdated:\n${newLines.join('\n')}`;
+			const diffTokens = computeTokens(diffBlock);
+
+			if (diffTokenBudget - diffTokens < 0) {
+				budgetExceeded = true;
+				break;
+			}
+
+			diffTokenBudget -= diffTokens;
+			diffBlockCount++;
+
+			diffParts.push(`${FILE_SEP}${fileName}.diff`);
+			diffParts.push('original:');
+			pushMany(diffParts, oldLines);
+			diffParts.push('updated:');
+			pushMany(diffParts, newLines);
+		}
+	}
+
+	// Step 4: Build original/current sections with truncation
+	// Budget: ORIGINAL_CURRENT_BUDGET tokens split between both sections
+	const perSectionTokens = Math.floor(ORIGINAL_CURRENT_BUDGET / 2);
+
+	const originalSection = truncateContentForSection(originalContent, editWindowLinesRange, perSectionTokens, computeTokens);
+	const currentSection = truncateContentForSection(currentContent, editWindowLinesRange, perSectionTokens, computeTokens);
+
+	// Step 5: Calculate remaining budget for context files
+	const diffTokensUsed = DIFF_BUDGET - diffTokenBudget;
+	const originalCurrentTokens = computeTokens(originalSection) + computeTokens(currentSection);
+	const usedTokens = diffTokensUsed + originalCurrentTokens;
+	const remainingBudget = Math.max(0, TOTAL_PROMPT_BUDGET - usedTokens - 100); // 100 tokens overhead for tags
+
+	// Step 6: Insert context files (newest first, only if budget allows)
+	const contextParts: string[] = [];
+	let contextTokenBudget = Math.min(remainingBudget, CONTEXT_FILES_BUDGET);
+
+	const recentFiles = getRecentFilesForSweep(activeDoc, xtabHistory, computeTokens, promptPieces.opts);
+	for (const file of recentFiles) {
+		const fileBlock = `${FILE_SEP}${file.path}\n${file.content}`;
+		const fileTokens = computeTokens(fileBlock);
+
+		if (contextTokenBudget - fileTokens < 0) {
+			break;
+		}
+		contextTokenBudget -= fileTokens;
+
+		contextParts.push(`${FILE_SEP}${file.path}`);
+		contextParts.push(file.content);
+	}
+
+	// Assemble final prompt: context files -> diffs -> original/current/updated
+	pushMany(parts, contextParts);
+	pushMany(parts, diffParts);
+
+	parts.push(`${FILE_SEP}original/${fileName}`);
+	parts.push(originalSection);
+
 	parts.push(`${FILE_SEP}current/${fileName}`);
-	parts.push(promptPieces.currentDocument.content.value);
+	parts.push(currentSection);
 
 	// Updated = prompt for model to complete
 	parts.push(`${FILE_SEP}updated/${fileName}`);
 
 	return parts.join('\n');
+}
+
+/**
+ * Truncate content to fit budget, centered around edit window.
+ * Uses windowed clipping similar to clipPreservingRange.
+ */
+function truncateContentForSection(
+	content: string,
+	editWindow: OffsetRange,
+	maxTokens: number,
+	computeTokens: (s: string) => number
+): string {
+	const totalTokens = computeTokens(content);
+
+	// If content fits in budget, return as-is
+	if (totalTokens <= maxTokens) {
+		return content;
+	}
+
+	const lines = content.split('\n');
+	const editStart = Math.min(editWindow.start, lines.length - 1);
+	const editEnd = Math.min(editWindow.endExclusive, lines.length);
+
+	// Get the edit window content
+	const editLines = lines.slice(editStart, editEnd);
+	const editContent = editLines.join('\n');
+	const editTokens = computeTokens(editContent);
+
+	// If edit window alone exceeds budget, truncate it
+	if (editTokens >= maxTokens) {
+		const truncatedLines = editLines.slice(0, Math.ceil(editLines.length * (maxTokens / editTokens)));
+		return truncatedLines.join('\n');
+	}
+
+	// Calculate remaining budget for context
+	const remainingBudget = maxTokens - editTokens;
+	const contextBudget = Math.floor(remainingBudget / 2);
+
+	// Expand before edit
+	let beforeStart = editStart;
+	while (beforeStart > 0) {
+		const testContent = lines.slice(beforeStart - 1, editStart).join('\n');
+		if (computeTokens(testContent) > contextBudget) {
+			break;
+		}
+		beforeStart--;
+	}
+
+	// Expand after edit
+	let afterEnd = editEnd;
+	while (afterEnd < lines.length) {
+		const testContent = lines.slice(editEnd, afterEnd + 1).join('\n');
+		if (computeTokens(testContent) > contextBudget) {
+			break;
+		}
+		afterEnd++;
+	}
+
+	// Build result
+	return lines.slice(beforeStart, afterEnd).join('\n');
 }
 
 /**
@@ -154,77 +297,7 @@ function getRecentFilesForSweep(
 		result.push({ path, content: contentStr });
 	}
 
-	return result.reverse(); // Return from oldest to newest
-}
-
-/**
- * Get recent diffs formatted for Sweep prompt (original/updated blocks).
- * Each diff represents one complete edit with before/after content.
- */
-function getRecentDiffsForSweep(
-	activeDoc: StatelessNextEditDocument,
-	xtabHistory: readonly IXtabHistoryEntry[],
-	computeTokens: (s: string) => number,
-	opts: PromptOptions,
-): { path: string; original: string; updated: string }[] {
-	const result: { path: string; original: string; updated: string }[] = [];
-	let tokenBudget = opts.diffHistory.maxTokens;
-
-	// Only get the most recent diff (last edit)
-	for (let i = xtabHistory.length - 1; i >= 0 && result.length < 1; --i) {
-		const entry = xtabHistory[i];
-
-		// Only process edit entries
-		if (entry.kind !== 'edit') {
-			continue;
-		}
-
-		const path = toUniquePath(entry.docId, activeDoc.workspaceRoot?.path);
-
-		// Get the full before/after content for this edit
-		const originalContent = entry.edit.base.value;
-		const updatedContent = entry.edit.edit.applyOnText(entry.edit.base).value;
-
-		// Skip if no meaningful change
-		if (originalContent === updatedContent) {
-			continue;
-		}
-
-
-		// const docDiffLines: string[] = [];
-		// const lineEdit = RootedEdit.toLineEdit(entry.edit);
-
-		// for (const singleLineEdit of lineEdit.replacements) {
-		// 	const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
-		// 	const newLines = singleLineEdit.newLines;
-
-		// 	const currentEdit = [];
-		// 	currentEdit.push(`original:`);
-		// 	pushMany(currentEdit, oldLines);
-		// 	currentEdit.push(`updated:`);
-		// 	pushMany(currentEdit, newLines);
-		// }
-
-		// FIXME@federicobrancasi: this would count tokens for the whole, but we want only the edits
-		// original:
-		//             if (params.length >= 8 && params[7] != null) {
-		//                 linkState = LinkState.valueOf(params[7].toUpperCase());
-		//             }
-		// updated:
-		//             if (params.length >= 8 && params[7] != null) {
-		//                 linkState = LinkState.valueOf(params[7].toUpperCase(Locale.ENGLISH));
-		//             }
-		const tokens = computeTokens(originalContent) + computeTokens(updatedContent);
-
-		if (tokenBudget - tokens < 0) {
-			break;
-		}
-
-		tokenBudget -= tokens;
-		result.push({ path, original: originalContent, updated: updatedContent });
-	}
-
-	return result; // Return only the most recent diff
+	return result; // Keep newest first - prioritize most recent files if budget runs out
 }
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
