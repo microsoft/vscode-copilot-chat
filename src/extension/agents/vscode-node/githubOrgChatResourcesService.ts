@@ -230,7 +230,7 @@ export class GitHubOrgChatResourcesService extends Disposable implements IGitHub
 
 			// Skip polling if configured and conditions are met (but always allow the first poll)
 			const hasRecentChatActivity = (Date.now() - this._lastChatRequestTime) < RECENT_CHAT_ACTIVITY_THRESHOLD_MS;
-			if (!isFirstPoll && !this.envService.isActive && !hasRecentChatActivity) {
+			if (!isFirstPoll && (!this.envService.isActive || !hasRecentChatActivity)) {
 				this.logService.trace('[GitHubOrgChatResourcesService] Skipping poll - window inactive and no recent chat activity');
 				return;
 			}
