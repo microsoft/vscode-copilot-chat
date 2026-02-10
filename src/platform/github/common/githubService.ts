@@ -148,6 +148,11 @@ export interface CustomAgentListItem {
 	target?: string;
 	config_error?: string;
 	model?: string;
+	/**
+	 * @deprecated Backend field being migrated. Maps to `disable-model-invocation` attribute:
+	 * - `infer: true` or `undefined` → agent CAN be invoked by model → `disable-model-invocation: false` (default, omitted)
+	 * - `infer: false` → agent CANNOT be invoked by model → `disable-model-invocation: true`
+	 */
 	infer?: boolean;
 	'mcp-servers'?: {
 		[serverName: string]: {
