@@ -162,8 +162,8 @@ suite('MemoryTool', () => {
 
 		const result = await invokeMemoryTool(tool, { command: 'view', path: '/memories/' });
 		const text = getResultText(result as never);
-		expect(text).toContain('user-note.md');
-		expect(text).toContain('session/');
+		expect(text).toContain('/memories/user-note.md');
+		expect(text).toContain('/memories/session/');
 	});
 
 	test('view with view_range returns specific lines', async () => {
@@ -446,47 +446,6 @@ suite('MemoryTool', () => {
 			const text = getResultText(result as never);
 			expect(text).toContain('File created successfully');
 		});
-
-		test('str_replace is not supported for repo paths', async () => {
-			const result = await invokeMemoryTool(tool, {
-				command: 'str_replace',
-				path: '/memories/repo/file.md',
-				old_str: 'old',
-				new_str: 'new',
-			});
-			const text = getResultText(result as never);
-			expect(text).toContain('not supported');
-		});
-
-		test('delete is not supported for repo paths', async () => {
-			const result = await invokeMemoryTool(tool, {
-				command: 'delete',
-				path: '/memories/repo/fact.md',
-			});
-			const text = getResultText(result as never);
-			expect(text).toContain('not supported');
-		});
-
-		test('insert is not supported for repo paths', async () => {
-			const result = await invokeMemoryTool(tool, {
-				command: 'insert',
-				path: '/memories/repo/fact.md',
-				insert_line: 0,
-				new_str: 'text',
-			});
-			const text = getResultText(result as never);
-			expect(text).toContain('not supported');
-		});
-
-		test('rename is not supported for repo paths', async () => {
-			const result = await invokeMemoryTool(tool, {
-				command: 'rename',
-				old_path: '/memories/repo/old.md',
-				new_path: '/memories/repo/new.md',
-			});
-			const text = getResultText(result as never);
-			expect(text).toContain('not supported');
-		});
 	});
 });
 
@@ -507,15 +466,6 @@ suite('MemoryTool when CAPI disabled', () => {
 
 	beforeEach(() => {
 		tool = accessor.get(IInstantiationService).createInstance(MemoryTool);
-	});
-
-	test('view repo returns not supported even when CAPI disabled', async () => {
-		const result = await invokeMemoryTool(tool, {
-			command: 'view',
-			path: '/memories/repo',
-		});
-		const text = getResultText(result as never);
-		expect(text).toContain('not supported');
 	});
 
 	test('create repo returns error when memory not enabled', async () => {

@@ -399,7 +399,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 					continue;
 				}
 				if (type === FileType.Directory) {
-					lines.push(`${name}/`);
+					lines.push(`/memories/${name}/`);
 				} else {
 					lines.push(`/memories/${name}`);
 				}
@@ -424,22 +424,22 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 				}
 				// Add session/ header if there are files
 				if (sessionFiles.length > 0) {
-					lines.push('session/');
+					lines.push('/memories/session/');
 					lines.push(...sessionFiles);
 				} else {
 					// Add session/ entry even if empty, to show it exists
-					lines.push('session/');
+					lines.push('/memories/session/');
 				}
 			} catch {
 				// Session storage may not exist yet, but still mention it
-				lines.push('session/');
+				lines.push('/memories/session/');
 			}
 		} else {
 			// No session resource, still mention session directory exists
-			lines.push('session/');
+			lines.push('/memories/session/');
 		}
 
-		if (lines.length === 0 || (lines.length === 1 && lines[0] === 'session/')) {
+		if (lines.length === 0 || (lines.length === 1 && lines[0] === '/memories/session/')) {
 			return 'No memories found.';
 		}
 
