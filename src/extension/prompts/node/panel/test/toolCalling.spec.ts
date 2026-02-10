@@ -3,20 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type * as vscode from 'vscode';
 import { describe, expect, test } from 'vitest';
+import type * as vscode from 'vscode';
 import { IChatHookService, type IPreToolUseHookResult } from '../../../../../platform/chat/common/chatHookService';
 import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
-import { IToolsService, type IToolValidationResult } from '../../../../tools/common/toolsService';
-import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
-import type { Conversation } from '../../../../prompt/common/conversation';
-import type { IBuildPromptContext, IToolCallRound } from '../../../../prompt/common/intents';
-import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../../util/vs/base/common/event';
 import { constObservable } from '../../../../../util/vs/base/common/observable';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
+import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
+import type { Conversation } from '../../../../prompt/common/conversation';
+import type { IBuildPromptContext, IToolCallRound } from '../../../../prompt/common/intents';
+import { createExtensionUnitTestingServices } from '../../../../test/node/services';
+import { IToolsService, type IToolValidationResult } from '../../../../tools/common/toolsService';
 import { renderPromptElement } from '../../base/promptRenderer';
 import { ChatToolCalls } from '../toolCalling';
 
