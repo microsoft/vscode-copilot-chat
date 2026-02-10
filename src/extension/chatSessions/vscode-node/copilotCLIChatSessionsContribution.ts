@@ -222,7 +222,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
 		const id = SessionIdForCLI.parse(sessionItem.resource);
-		const existingTerminal = await this.sessionTracker.getTerminal(SessionIdForCLI.parse(sessionItem.resource));
+		const existingTerminal = await this.sessionTracker.getTerminal(id);
 		if (existingTerminal) {
 			existingTerminal.show();
 			return;
