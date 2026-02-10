@@ -198,22 +198,24 @@ export class MemoryInstructionsPrompt extends PromptElement<BasePromptElementPro
 			<br />
 			<Tag name='memoryScopes'>
 				Memory is organized into the scopes defined below:<br />
-				- **User memory** (`/memories/`): Persistent notes that survive across all workspaces and conversations. Store user preferences, common patterns, frequently used commands, and general insights here. First {MAX_USER_MEMORY_LINES} lines are loaded into your context automatically.<br />
-				- **Session memory** (`/memories/session/`): Notes for the current conversation only. Store task-specific context, in-progress notes, and temporary working state here. Session files are listed in your context but not loaded automatically — use the memory tool to read them when needed.<br />
+				{enableMemoryTool && <>- **User memory** (`/memories/`): Persistent notes that survive across all workspaces and conversations. Store user preferences, common patterns, frequently used commands, and general insights here. First {MAX_USER_MEMORY_LINES} lines are loaded into your context automatically.<br /></>}
+				{enableMemoryTool && <>- **Session memory** (`/memories/session/`): Notes for the current conversation only. Store task-specific context, in-progress notes, and temporary working state here. Session files are listed in your context but not loaded automatically — use the memory tool to read them when needed.<br /></>}
 				{enableCopilotMemory && <>- **Repository memory** (`/memories/repo/`): Repository-scoped facts stored via Copilot. Only the `create` command is supported. Store codebase conventions, build commands, project structure facts, and verified practices here.<br /></>}
 			</Tag>
 			<br />
-			<Tag name='memoryGuidelines'>
-				Guidelines for user memory (`/memories/`):<br />
-				- Keep entries short and concise — use brief bullet points or single-line facts, not lengthy prose. User memory is loaded into context automatically, so brevity is critical.<br />
-				- Organize by topic in separate files (e.g., `debugging.md`, `patterns.md`).<br />
-				- Record only key insights: problem constraints, strategies that worked or failed, and lessons learned.<br />
-				- Update or remove memories that turn out to be wrong or outdated.<br />
-				- Do not create new files unless necessary — prefer updating existing files.<br />
-				Guidelines for session memory (`/memories/session/`):<br />
-				- Use session memory to keep plans up to date and reviewing historical summaries.<br />
-				- Do not create unnecessary session memory files. You should only view and update existing session files.<br />
-			</Tag>
+			{enableMemoryTool && <>
+				<Tag name='memoryGuidelines'>
+					Guidelines for user memory (`/memories/`):<br />
+					- Keep entries short and concise — use brief bullet points or single-line facts, not lengthy prose. User memory is loaded into context automatically, so brevity is critical.<br />
+					- Organize by topic in separate files (e.g., `debugging.md`, `patterns.md`).<br />
+					- Record only key insights: problem constraints, strategies that worked or failed, and lessons learned.<br />
+					- Update or remove memories that turn out to be wrong or outdated.<br />
+					- Do not create new files unless necessary — prefer updating existing files.<br />
+					Guidelines for session memory (`/memories/session/`):<br />
+					- Use session memory to keep plans up to date and reviewing historical summaries.<br />
+					- Do not create unnecessary session memory files. You should only view and update existing session files.<br />
+				</Tag>
+			</>}
 			<br />
 			{enableCopilotMemory && <>
 				<Tag name='repoMemoryInstructions'>
