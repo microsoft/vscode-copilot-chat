@@ -413,7 +413,7 @@
 	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Integrated Terminal",
 	"github.copilot.command.cli.newSession": "New CLI Session",
 	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
-	"github.copilot.command.chat.copilotCLI.addFileReference": "Add File Reference to Prompt",
+	"github.copilot.command.chat.copilotCLI.addFileReference": "Add File to Copilot CLI",
 	"github.copilot.command.chat.copilotCLI.acceptDiff": "Accept Changes",
 	"github.copilot.command.chat.copilotCLI.rejectDiff": "Reject Changes",
 	"github.copilot.config.cli.integration.enabled": "Enable GitHub Copilot CLI integration in VS Code",
