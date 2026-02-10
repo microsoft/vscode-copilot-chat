@@ -10,40 +10,13 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-
-/**
- * Handoff configuration for agent transitions
- */
-interface PlanAgentHandoff {
-	label: string;
-	agent: string;
-	prompt: string;
-	send?: boolean;
-	showContinueOn?: boolean;
-	model?: string;
-}
-
-/**
- * Complete Plan agent configuration
- */
-interface PlanAgentConfig {
-	name: string;
-	description: string;
-	argumentHint: string;
-	tools: string[];
-	model?: string;
-	target?: string;
-	disableModelInvocation?: boolean;
-	agents?: string[];
-	handoffs: PlanAgentHandoff[];
-	body: string;
-}
+import { AgentConfig, AgentHandoff, buildAgentMarkdown, DEFAULT_READ_TOOLS } from './agentTypes';
 
 /**
  * Base Plan agent configuration - embedded from Plan.agent.md
  * This avoids runtime file loading and YAML parsing dependencies.
  */
-const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
+const BASE_PLAN_AGENT_CONFIG: AgentConfig = {
 	name: 'Plan',
 	description: 'Researches and outlines multi-step plans',
 	argumentHint: 'Outline the goal or problem to research',
@@ -51,82 +24,12 @@ const BASE_PLAN_AGENT_CONFIG: PlanAgentConfig = {
 	disableModelInvocation: true,
 	agents: [],
 	tools: [
+		...DEFAULT_READ_TOOLS,
 		'agent',
-		'search',
-		'read',
-		'execute/getTerminalOutput',
-		'execute/testFailure',
-		'web',
-		'vscode/memory',
-		'github/issue_read',
-		'github.vscode-pull-request-github/issue_fetch',
-		'github.vscode-pull-request-github/activePullRequest'
 	],
 	handoffs: [], // Handoffs are generated dynamically in buildCustomizedConfig
 	body: '' // Body is generated dynamically in buildCustomizedConfig
 };
-
-/**
- * Builds .agent.md content from a configuration object using string formatting.
- * No YAML library required - generates valid YAML frontmatter via string templates.
- */
-export function buildAgentMarkdown(config: PlanAgentConfig): string {
-	const lines: string[] = ['---'];
-
-	// Simple scalar fields
-	lines.push(`name: ${config.name}`);
-	lines.push(`description: ${config.description}`);
-	lines.push(`argument-hint: ${config.argumentHint}`);
-
-	// Model (optional)
-	if (config.model) {
-		lines.push(`model: ${config.model}`);
-	}
-	if (config.target) {
-		lines.push(`target: ${config.target}`);
-	}
-	if (config.disableModelInvocation) {
-		lines.push(`disable-model-invocation: true`);
-	}
-
-	// Tools array - flow style for readability
-	// Escape single quotes by doubling them (YAML spec)
-	if (config.tools.length > 0) {
-		const quotedTools = config.tools.map(t => `'${t.replace(/'/g, '\'\'')}'`).join(', ');
-		lines.push(`tools: [${quotedTools}]`);
-	}
-
-	// Agents array - same format as tools (empty array = no subagents allowed)
-	if (config.agents) {
-		const quotedAgents = config.agents.map(a => `'${a.replace(/'/g, '\'\'')}'`).join(', ');
-		lines.push(`agents: [${quotedAgents}]`);
-	}
-
-	// Handoffs - block style for complex nested objects
-	// Escape prompts using single quotes (with doubled single quotes for internal quotes)
-	if (config.handoffs.length > 0) {
-		lines.push('handoffs:');
-		for (const handoff of config.handoffs) {
-			lines.push(`  - label: ${handoff.label}`);
-			lines.push(`    agent: ${handoff.agent}`);
-			lines.push(`    prompt: '${handoff.prompt.replace(/'/g, '\'\'')}'`);
-			if (handoff.send !== undefined) {
-				lines.push(`    send: ${handoff.send}`);
-			}
-			if (handoff.showContinueOn !== undefined) {
-				lines.push(`    showContinueOn: ${handoff.showContinueOn}`);
-			}
-			if (handoff.model !== undefined) {
-				lines.push(`    model: ${handoff.model}`);
-			}
-		}
-	}
-
-	lines.push('---');
-	lines.push(config.body);
-
-	return lines.join('\n');
-}
 
 /**
  * Provides the Plan agent dynamically with settings-based customization.
@@ -158,7 +61,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// these capture the model at render time.
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.PlanAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration('chat.planAgent.defaultModel') ||
 				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
@@ -295,9 +199,10 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 </plan_style_guide>`;
 	}
 
-	private buildCustomizedConfig(): PlanAgentConfig {
+	private buildCustomizedConfig(): AgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
-		const modelOverride = this.configurationService.getConfig(ConfigKey.PlanAgentModel);
+		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
+		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
 
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
@@ -306,7 +211,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
 		// Build handoffs dynamically with model override
-		const startImplementationHandoff: PlanAgentHandoff = {
+		const startImplementationHandoff: AgentHandoff = {
 			label: 'Start Implementation',
 			agent: 'agent',
 			prompt: 'Start implementation',
@@ -314,20 +219,12 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
 		};
 
-		const openInEditorHandoff: PlanAgentHandoff = {
+		const openInEditorHandoff: AgentHandoff = {
 			label: 'Open in Editor',
 			agent: 'agent',
 			prompt: '#createFile the plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement.',
 			showContinueOn: false,
 			send: true
-		};
-
-		// Start with base config, using dynamic body based on askQuestions setting
-		const config: PlanAgentConfig = {
-			...BASE_PLAN_AGENT_CONFIG,
-			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
-			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],
-			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
 		};
 
 		// Collect tools to add
@@ -339,15 +236,17 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		}
 
 		// Merge additional tools (deduplicated)
-		if (toolsToAdd.length > 0) {
-			config.tools = [...new Set([...config.tools, ...toolsToAdd])];
-		}
+		const tools = toolsToAdd.length > 0
+			? [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])]
+			: [...BASE_PLAN_AGENT_CONFIG.tools];
 
-		// Apply model override
-		if (modelOverride) {
-			config.model = modelOverride;
-		}
-
-		return config;
+		// Start with base config, using dynamic body based on askQuestions setting
+		return {
+			...BASE_PLAN_AGENT_CONFIG,
+			tools,
+			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
+			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled),
+			...(modelOverride ? { model: modelOverride } : {}),
+		};
 	}
 }

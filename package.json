@@ -3882,20 +3882,32 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.planAgent.model": {
-						"type": "string",
-						"default": "",
-						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.model%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",
 						"scope": "resource",
 						"markdownDescription": "%github.copilot.config.implementAgent.model%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.askAgent.additionalTools": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"default": [],
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.askAgent.additionalTools%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.askAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.askAgent.model%",
 						"tags": [
 							"experimental"
 						]
@@ -4623,6 +4635,12 @@
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
+				}
+			],
+			"chat/newSession": [
+				{
+					"command": "github.copilot.cli.newSession",
+					"group": "4_recommendations@0"
 				}
 			],
 			"testing/item/result": [
