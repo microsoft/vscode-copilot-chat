@@ -16,6 +16,8 @@ import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint } from '../../../networking/common/networking';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
 import { AutomodeService } from '../automodeService';
 
@@ -30,6 +32,7 @@ describe('AutomodeService', () => {
 	let configurationService: IConfigurationService;
 	let mockChatEndpoint: IChatEndpoint;
 	let envService: NullEnvService;
+	let telemetryService: ITelemetryService;
 
 	beforeEach(() => {
 		mockChatEndpoint = {
@@ -81,6 +84,7 @@ describe('AutomodeService', () => {
 
 		configurationService = new InMemoryConfigurationService(new DefaultsOnlyConfigurationService());
 		envService = new NullEnvService();
+		telemetryService = new NullTelemetryService();
 	});
 
 	describe('resolveAutoModeEndpoint', () => {
@@ -99,7 +103,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				telemetryService
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -146,7 +151,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				telemetryService
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -175,7 +181,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				telemetryService
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -204,7 +211,8 @@ describe('AutomodeService', () => {
 				mockExpService,
 				mockFetcherService,
 				configurationService,
-				envService
+				envService,
+				telemetryService
 			);
 
 			const chatRequest: Partial<ChatRequest> = {
@@ -216,6 +224,66 @@ describe('AutomodeService', () => {
 
 			// Verify that router fetch was NOT called for terminal chat
 			expect(mockFetcherService.fetch).not.toHaveBeenCalled();
+		});
+
+		it('should send telemetry event when router makes a decision', async () => {
+			// Enable router via config
+			(configurationService as InMemoryConfigurationService).setConfig(
+				ConfigKey.TeamInternal.AutoModeRouterUrl,
+				'https://router.example.com/api'
+			);
+
+			const sendGHTelemetryEventSpy = vi.spyOn(telemetryService, 'sendGHTelemetryEvent');
+
+			// Mock successful router response
+			(mockFetcherService.fetch as any).mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: vi.fn().mockResolvedValue({
+					predicted_label: 'needs_reasoning',
+					confidence: 0.92,
+					latency_ms: 75,
+					chosen_model: 'gpt-4o',
+					candidate_models: ['gpt-4o', 'gpt-4o-mini'],
+					scores: {
+						needs_reasoning: 0.92,
+						no_reasoning: 0.08
+					}
+				})
+			});
+
+			automodeService = new AutomodeService(
+				mockCAPIClientService,
+				mockAuthService,
+				mockLogService,
+				mockInstantiationService,
+				mockExpService,
+				mockFetcherService,
+				configurationService,
+				envService,
+				telemetryService
+			);
+
+			const chatRequest: Partial<ChatRequest> = {
+				location: ChatLocation.Panel,
+				prompt: 'complex reasoning question'
+			};
+
+			await automodeService.resolveAutoModeEndpoint(chatRequest as ChatRequest, [mockChatEndpoint]);
+
+			// Verify that telemetry event was sent with router decision details
+			expect(sendGHTelemetryEventSpy).toHaveBeenCalledWith(
+				'autoMode.routerDecision',
+				{
+					routerUrl: 'https://router.example.com/api',
+					chosenModel: 'gpt-4o',
+					predictedLabel: 'needs_reasoning',
+				},
+				{
+					confidence: 0.92,
+					latencyMs: 75,
+				}
+			);
 		});
 	});
 });
