@@ -181,17 +181,17 @@ export class InProcHttpServer {
 		const existingTransport = sessionId ? this._getTransport(sessionId) : undefined;
 		if (sessionId && existingTransport) {
 			transport = existingTransport;
-		} else if (!sessionId && isInitializeRequest(req.body)) {
+		} else if (sessionId && isInitializeRequest(req.body)) {
 			this._logger.debug('Creating new MCP session...');
 			const clientPid = parseInt(req.headers['x-copilot-pid'] as string, 10);
 			const clientPpid = parseInt(req.headers['x-copilot-parent-pid'] as string, 10);
 			let sessionRegistration: { dispose(): void } | undefined;
 			transport = new StreamableHTTPServerTransport({
 				sessionIdGenerator: () => crypto.randomUUID(),
-				onsessioninitialized: newSessionId => {
-					this._registerTransport(newSessionId, transport);
+				onsessioninitialized: () => {
+					this._registerTransport(sessionId, transport);
 					if (!isNaN(clientPid) && !isNaN(clientPpid)) {
-						sessionRegistration = this._sessionTracker.registerSession(newSessionId, { pid: clientPid, ppid: clientPpid });
+						sessionRegistration = this._sessionTracker.registerSession(sessionId, { pid: clientPid, ppid: clientPpid });
 					}
 				},
 				onsessionclosed: closedSessionId => {
