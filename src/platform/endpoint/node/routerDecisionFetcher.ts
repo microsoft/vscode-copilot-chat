@@ -110,7 +110,6 @@ export class RouterDecisionFetcher extends Disposable {
 				"automode.routerDecision" : {
 					"owner": "tyleonha",
 					"comment": "Reports the routing decision made by the auto mode router API",
-					"routerUrl": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The router API endpoint URL used for the routing decision." },
 					"predictedLabel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The predicted classification label (needs_reasoning or no_reasoning)" },
 					"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model selected by the router" },
 					"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The confidence score of the routing decision" },
@@ -119,7 +118,6 @@ export class RouterDecisionFetcher extends Disposable {
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecision',
 				{
-					routerUrl: routerApiUrl,
 					predictedLabel: result.predicted_label,
 					chosenModel: result.chosen_model,
 				},
