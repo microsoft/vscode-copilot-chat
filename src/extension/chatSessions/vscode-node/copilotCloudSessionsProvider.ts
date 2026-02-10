@@ -186,8 +186,8 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	// Only caches enabled=true results; disabled results always re-fetch to avoid stuck states
 	private _ccaEnabledCache = new TtlCache<CCAEnabledResult>(CCA_ENABLED_CACHE_TTL_MS);
 
-	// TTL cache for the full session provider options result (custom agents, models, partner agents, etc.)
-	// Keyed by stringified repo context so different workspaces get their own cache entry
+	// Single-slot TTL cache for the full session provider options result (custom agents, models, partner agents, etc.)
+	// Caches the most recently computed options regardless of repo/workspace context
 	private _optionsCache = new SingleSlotTtlCache<vscode.ChatSessionProviderOptions>(OPTIONS_CACHE_TTL_MS);
 
 	// Title
@@ -390,6 +390,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			this.logService.debug('copilotCloudSessionsProvider#clearCaches: clearing all cloud agent caches');
 			this.clearOptionsCaches();
 			this.refresh();
+			this._onDidChangeChatSessionProviderOptions.fire();
 		}));
 	}
 
@@ -664,7 +665,9 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 		}
 
 		// Check TTL-based options cache
-		const optionsCacheKey = repoIds?.map(r => `${r.org}/${r.repo}`).join(',') ?? '';
+		const optionsCacheKey = repoIds && repoIds.length > 0
+			? repoIds.map(r => `${r.org}/${r.repo}`).sort().join(',')
+			: '';
 		const cachedOptions = this._optionsCache.get(optionsCacheKey);
 		if (cachedOptions) {
 			this.logService.trace('copilotCloudSessionsProvider#provideChatSessionProviderOptions: using cached options');
