@@ -86,7 +86,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 				continue;
 			}
 			logService.info(`[ToolCallingLoop] ${hookType} hook requested abort: ${result.stopReason}`);
-			outputStream?.hookProgress(hookType, result.stopReason);
+			outputStream?.hookProgress(hookType, formatHookErrorMessage(result.stopReason));
 			throw new HookAbortError(hookType, result.stopReason);
 		}
 
