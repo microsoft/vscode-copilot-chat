@@ -408,7 +408,7 @@ export function buildChatHistoryFromEvents(sessionId: string, events: readonly S
 					references.push(info.reference);
 				}
 				isFirstUserMessage = false;
-				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined));
+				turns.push(new ChatRequestTurn2(prompt, undefined, references, '', [], undefined, details?.requestId));
 				break;
 			}
 			case 'assistant.message_delta': {
@@ -636,7 +636,8 @@ export function createCopilotCLIToolInvocation(data: {
 		const invocation = new ChatToolInvocationPart(toolName ?? 'unknown', data.toolCallId ?? '', false);
 		invocation.isConfirmed = false;
 		invocation.isComplete = false;
-		invocation.invocationMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
+		invocation.invocationMessage = l10n.t("Using tool: {0}", toolName ?? 'unknown');
+		invocation.pastTenseMessage = l10n.t("Used tool: {0}", toolName ?? 'unknown');
 		return invocation;
 	}
 
@@ -721,9 +722,13 @@ function formatViewToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 		const location = new Location(Uri.file(args.path), new Range(start === 0 ? start : start - 1, 0, end, 0));
 		const display = formatUriForFileWidget(location);
 		const localizedMessage = start === end
+			? l10n.t("Reading {0}, line {1}", display, start)
+			: l10n.t("Reading {0}, lines {1} to {2}", display, start, end);
+		const localizedPastTenseMessage = start === end
 			? l10n.t("Read {0}, line {1}", display, start)
 			: l10n.t("Read {0}, lines {1} to {2}", display, start, end);
 		invocation.invocationMessage = new MarkdownString(localizedMessage);
+		invocation.pastTenseMessage = new MarkdownString(localizedPastTenseMessage);
 	} else {
 		const display = formatUriForFileWidget(Uri.file(args.path));
 		invocation.invocationMessage = new MarkdownString(l10n.t("Read {0}", display));
@@ -767,7 +772,8 @@ function formatInsertToolInvocation(invocation: ChatToolInvocationPart, toolCall
 function formatUndoEdit(invocation: ChatToolInvocationPart, toolCall: UndoEditTool): void {
 	const args = toolCall.arguments;
 	if (args.path) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Undoing edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Undid edit in {0}", formatUriForFileWidget(Uri.file(args.path))));
 	}
 }
 
@@ -776,6 +782,9 @@ function formatEditToolInvocation(invocation: ChatToolInvocationPart, toolCall: 
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	invocation.invocationMessage = display
+		? new MarkdownString(l10n.t("Editing {0}", display))
+		: new MarkdownString(l10n.t("Editing file"));
+	invocation.pastTenseMessage = display
 		? new MarkdownString(l10n.t("Edited {0}", display))
 		: new MarkdownString(l10n.t("Edited file"));
 }
@@ -786,34 +795,17 @@ function formatCreateToolInvocation(invocation: ChatToolInvocationPart, toolCall
 	const display = args.path ? formatUriForFileWidget(Uri.file(args.path)) : '';
 
 	if (display) {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created {0}", display));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating {0}", display));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created {0}", display));
 	} else {
-		invocation.invocationMessage = new MarkdownString(l10n.t("Created file"));
+		invocation.invocationMessage = new MarkdownString(l10n.t("Creating file"));
+		invocation.pastTenseMessage = new MarkdownString(l10n.t("Created file"));
 	}
 }
 
 function formatShellInvocation(invocation: ChatToolInvocationPart, toolCall: ShellTool): void {
 	const args = toolCall.arguments;
 	const command = args.command ?? '';
-	// TODO @DonJayamanne This is the code in copilot cloud, discuss and decide if we want to use it.
-	// Not for Cli as we want users to see the exact command being run so they can review and approve it.
-	// const MAX_CONTENT_LENGTH = 200;
-	// if (command.length > MAX_CONTENT_LENGTH) {
-	// 	// Check if content contains EOF marker (heredoc pattern)
-	// 	const hasEOF = (command && /<<\s*['"]?EOF['"]?/.test(command));
-	// 	if (hasEOF) {
-	// 		// show the command line up to EOL
-	// 		const firstLineEnd = command.indexOf('\n');
-	// 		if (firstLineEnd > 0) {
-	// 			const firstLine = command.substring(0, firstLineEnd);
-	// 			const remainingChars = command.length - firstLineEnd - 1;
-	// 			command = firstLine + `\n... [${remainingChars} characters of heredoc content]`;
-	// 		}
-	// 	} else {
-	// 		command = command.substring(0, MAX_CONTENT_LENGTH) + `\n... [${command.length - MAX_CONTENT_LENGTH} more characters]`;
-	// 	}
-	// }
-
 	invocation.invocationMessage = args.description ? new MarkdownString(args.description) : '';
 	invocation.toolSpecificData = {
 		commandLine: {
@@ -842,7 +834,6 @@ function formatShellInvocationCompleted(invocation: ChatToolInvocationPart, tool
 		}
 	};
 	invocation.toolSpecificData = toolSpecificData;
-
 }
 function formatSearchToolInvocation(invocation: ChatToolInvocationPart, toolCall: SearchTool | GLobTool | GrepTool | SearchBashTool | SemanticCodeSearchTool): void {
 	if (toolCall.toolName === 'search') {
@@ -897,7 +888,8 @@ function formatCodeReviewInvocation(invocation: ChatToolInvocationPart, toolCall
 }
 
 function formatReplyToCommentInvocation(invocation: ChatToolInvocationPart, toolCall: ReplyToCommentTool): void {
-	invocation.invocationMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.invocationMessage = `Replying to comment_id ${toolCall.arguments.comment_id}`;
+	invocation.pastTenseMessage = `Replied to comment_id ${toolCall.arguments.comment_id}`;
 	invocation.originMessage = toolCall.arguments.reply;
 }
 
@@ -987,7 +979,8 @@ function formatUpdateTodoInvocation(invocation: ChatToolInvocationPart, toolCall
 	const args = toolCall.arguments;
 	const parsed = args.todos ? parseTodoMarkdown(args.todos) : { title: '', todoList: [] };
 	if (!args.todos || !parsed) {
-		invocation.invocationMessage = 'Updated todo list';
+		invocation.invocationMessage = 'Updating todo list';
+		invocation.pastTenseMessage = 'Updated todo list';
 		return;
 	}
 

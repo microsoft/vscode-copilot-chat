@@ -175,6 +175,10 @@ export enum PromptingStrategy {
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
+	/**
+	 * Xtab275 prompt + aggressiveness level tag.
+	 */
+	Xtab275Aggressiveness = 'xtab275Aggressiveness',
 	PatchBased = 'patchBased',
 	PatchBased01 = 'patchBased01',
 	/**
@@ -195,6 +199,13 @@ export function isPromptingStrategy(value: string): value is PromptingStrategy {
 	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
+export function isAggressivenessStrategy(strategy: PromptingStrategy | undefined): boolean {
+	return strategy === PromptingStrategy.XtabAggressiveness
+		|| strategy === PromptingStrategy.Xtab275Aggressiveness
+		|| strategy === PromptingStrategy.Xtab275EditIntent
+		|| strategy === PromptingStrategy.Xtab275EditIntentShort;
+}
+
 export enum ResponseFormat {
 	CodeBlock = 'codeBlock',
 	UnifiedWithXml = 'unifiedWithXml',
@@ -213,6 +224,7 @@ export namespace ResponseFormat {
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
 			case PromptingStrategy.XtabAggressiveness:
+			case PromptingStrategy.Xtab275Aggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;

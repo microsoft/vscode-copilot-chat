@@ -168,7 +168,7 @@ export type ChatFetchError =
 	/**
 	 * We requested conversation, but didn't come up with any results because of a network error
 	 */
-	| { type: ChatFetchResponseType.NetworkError; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	| { type: ChatFetchResponseType.NetworkError; reason: string; reasonDetail?: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse; isNetworkProcessCrash?: boolean }
 	/**
 	 * We requested conversation, but didn't come up with any results for some "unknown"
 	 * reason, such as slur redaction or snippy.

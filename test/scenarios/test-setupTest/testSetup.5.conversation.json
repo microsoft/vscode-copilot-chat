@@ -1,7 +1,7 @@
 [
   {
     "name": "phpLaravelApp",
-    "question": "@workspace /setupTests phpunit",
+    "question": "/setupTests phpunit",
     "expectations": {
       "filePatterns": ["^tests/.*Test\\.php$"],
       "installCommandPattern": "composer require.*phpunit",

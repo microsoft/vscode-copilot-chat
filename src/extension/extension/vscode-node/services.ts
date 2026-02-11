@@ -13,6 +13,10 @@ import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vsco
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { IHookExecutor } from '../../../platform/chat/common/hookExecutor';
+import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
+import { NodeHookExecutor } from '../../../platform/chat/node/hookExecutor';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
 import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
@@ -79,6 +83,8 @@ import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
+import { HooksOutputChannel } from '../../chat/vscode-node/hooksOutputChannel';
+import { SessionTranscriptService } from '../../chat/vscode-node/sessionTranscriptService';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CopilotInlineCompletionItemProviderService } from '../../completions/vscode-node/copilotInlineCompletionItemProviderService';
@@ -118,6 +124,7 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
+import { IMemoryCleanupService, MemoryCleanupService } from '../../tools/common/memoryCleanupService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { ToolsService } from '../../tools/vscode-node/toolsService';
 import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/languageContextService';
@@ -144,6 +151,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
 	builder.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
+	builder.define(IMemoryCleanupService, new SyncDescriptor(MemoryCleanupService));
 	builder.define(IChatDiskSessionResources, new SyncDescriptor(ChatDiskSessionResources));
 	builder.define(IRequestLogger, new SyncDescriptor(RequestLogger));
 	builder.define(INativeEnvService, new SyncDescriptor(NativeEnvServiceImpl));
@@ -200,6 +208,9 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IChatAgentService, new SyncDescriptor(ChatAgentService));
 	builder.define(IPromptCategorizerService, new SyncDescriptor(PromptCategorizerService));
 	builder.define(IChatHookService, new SyncDescriptor(ChatHookService));
+	builder.define(IHookExecutor, new SyncDescriptor(NodeHookExecutor));
+	builder.define(IHooksOutputChannel, new SyncDescriptor(HooksOutputChannel));
+	builder.define(ISessionTranscriptService, new SyncDescriptor(SessionTranscriptService));
 	builder.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));

@@ -8,6 +8,7 @@ import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata,
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
+import { IChatHookService, PreCompactHookInput } from '../../../../platform/chat/common/chatHookService';
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -161,6 +162,11 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 			<>
 				<SystemMessage priority={this.props.priority}>
 					{SummaryPrompt}
+					{this.props.summarizationInstructions && <>
+						<br /><br />
+						## Additional instructions from the user:<br />
+						{this.props.summarizationInstructions}
+					</>}
 				</SystemMessage>
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
@@ -356,6 +362,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps, Age
 	readonly maxToolResultLength: number;
 	/** Optional hard cap on summary tokens; effective budget = min(prompt sizing tokenBudget, this value) */
 	readonly maxSummaryTokens?: number;
+	/** Optional custom instructions to include in the summarization prompt */
+	readonly summarizationInstructions?: string;
 }
 
 /**
@@ -430,18 +438,22 @@ class ConversationHistorySummarizer {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IChatHookService private readonly chatHookService: IChatHookService,
 	) { }
 
 	async summarizeHistory(): Promise<{ summary: string; toolCallRoundId: string; thinking?: ThinkingData }> {
+		// Execute pre-compact hook before summarization to allow hooks to archive transcripts or perform cleanup
+		await this.executePreCompactHook();
+
 		// Just a function for test to create props and call this
 		const propsInfo = this.instantiationService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(this.props);
 
 		const summaryPromise = this.getSummaryWithFallback(propsInfo);
-		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Summarizing conversation history...'), async () => {
+		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Compacting conversation...'), async () => {
 			try {
 				await summaryPromise;
 			} catch { }
-			return l10n.t('Summarized conversation history');
+			return l10n.t('Compacted conversation');
 		}));
 
 		const summary = await summaryPromise;
@@ -471,6 +483,33 @@ class ConversationHistorySummarizer {
 
 	private logInfo(message: string, mode: SummaryMode): void {
 		this.logService.info(`[ConversationHistorySummarizer] [${mode}] ${message}`);
+	}
+
+	/**
+	 * Executes the PreCompact hook before summarization starts.
+	 * This gives hook scripts a chance to archive the transcript or perform cleanup
+	 * before the conversation is compacted.
+	 */
+	private async executePreCompactHook(): Promise<void> {
+		const hooks = this.props.promptContext.request?.hooks;
+		if (!hooks) {
+			return;
+		}
+
+		try {
+			const results = await this.chatHookService.executeHook('PreCompact', hooks, {
+				trigger: 'auto',
+			} satisfies PreCompactHookInput, this.props.promptContext.conversation?.sessionId, this.token ?? CancellationToken.None);
+
+			for (const result of results) {
+				if (result.resultKind === 'error') {
+					const errorMessage = typeof result.output === 'string' ? result.output : 'Unknown error';
+					this.logService.error(`[ConversationHistorySummarizer] PreCompact hook error: ${errorMessage}`);
+				}
+			}
+		} catch (error) {
+			this.logService.error('[ConversationHistorySummarizer] Error executing PreCompact hook', error);
+		}
 	}
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {

@@ -29,7 +29,6 @@ import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platfo
 import { Intent } from '../../common/constants';
 import { InlineDocIntent } from '../../intents/node/docIntent';
 import { explainIntentPromptSnippet } from '../../intents/node/explainIntent';
-import { workspaceIntentId } from '../../intents/node/workspaceIntent';
 import { GenerateTests } from '../../intents/vscode-node/testGenAction';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
@@ -53,7 +52,7 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 
 	const disposables = new DisposableStore();
 	const doExplain = async (arg0: any, fromPalette?: true) => {
-		let message = `@${workspaceIntentId} /${Intent.Explain} `;
+		let message = `/${Intent.Explain} `;
 		let selectedText;
 		let activeDocumentUri;
 		let explainingDiagnostics = false;
@@ -359,6 +358,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			tools: new Map(),
 			id: '1',
 			sessionId: '1',
+			hasHooksEnabled: false,
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];

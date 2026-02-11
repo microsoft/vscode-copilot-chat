@@ -66,10 +66,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		super(
 			chatModelInfo,
 			_domainService,
-			_capiClientService,
-			_fetcherService,
-			_telemetryService,
-			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
 			_instantiationService,

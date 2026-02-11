@@ -194,6 +194,15 @@ export function parseSessionFileContent(
  * Convert a user message entry's timestamp from string to Date.
  */
 function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
+	// Extract agentId from toolUseResult if present (links Task tool_use to subagent).
+	// The toolUseResult field is typed as string | object by the validator; for Task tools
+	// it's an object containing { agentId, status, prompt, ... }. The `in` check narrows
+	// the type so no unsafe cast is needed.
+	let toolUseResultAgentId: string | undefined;
+	if (entry.toolUseResult && typeof entry.toolUseResult === 'object' && 'agentId' in entry.toolUseResult && typeof entry.toolUseResult.agentId === 'string') {
+		toolUseResultAgentId = entry.toolUseResult.agentId;
+	}
+
 	return {
 		uuid: entry.uuid,
 		sessionId: entry.sessionId,
@@ -208,6 +217,7 @@ function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
 		gitBranch: entry.gitBranch,
 		slug: entry.slug,
 		agentId: entry.agentId,
+		toolUseResultAgentId,
 	};
 }
 
@@ -360,6 +370,37 @@ function buildSessionFromLeaf(
 			success: false,
 			error: `Leaf message not found: ${leafUuid}`,
 		};
+	}
+
+	// Collect parallel tool result siblings that branched off the main chain.
+	// When parallel tool calls occur, each tool_use assistant message is chained
+	// linearly, but results come back pointing to their respective tool_use message.
+	// Only the last result is in the main chain; the others are orphaned siblings.
+	// We identify these as user messages whose parent is an assistant message already
+	// in the chain — this distinguishes tool results from edit sidechains (where
+	// both parent and child are the same role).
+	const chainUuids = new Set(messageChain.map(m => m.uuid));
+	const siblings: StoredMessage[] = [];
+	for (const msg of messages.values()) {
+		if (chainUuids.has(msg.uuid)) {
+			continue; // Already in chain
+		}
+		if (msg.parentUuid !== null && chainUuids.has(msg.parentUuid)) {
+			// Only collect user messages whose parent is an assistant message
+			const parent = messages.get(msg.parentUuid);
+			if (msg.type === 'user' && parent !== undefined && parent.type === 'assistant') {
+				siblings.push(msg);
+			}
+		}
+	}
+
+	// Insert siblings into the chain right after their parent
+	for (const sibling of siblings) {
+		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
+		if (parentIndex !== -1) {
+			messageChain.splice(parentIndex + 1, 0, sibling);
+			chainUuids.add(sibling.uuid);
+		}
 	}
 
 	const session: IClaudeCodeSession = {
@@ -533,16 +574,14 @@ export function buildSubagentSession(
 	chainLinks: ReadonlyMap<string, ChainLinkLike>
 ): ISubagentSession | null {
 	// Build message chain from scratch - subagent files are typically linear
-	// Find leaf nodes (messages not referenced as parents)
+	// Find leaf nodes (messages not referenced as parents by other messages).
+	// Only consider references from actual messages, not chain links (which
+	// include progress entries that would otherwise mark all messages as
+	// non-leaves).
 	const referencedAsParent = new Set<string>();
 	for (const message of messages.values()) {
 		if (message.parentUuid !== null) {
 			referencedAsParent.add(message.parentUuid);
-		}
-	}
-	for (const chainLink of chainLinks.values()) {
-		if (chainLink.parentUuid !== null) {
-			referencedAsParent.add(chainLink.parentUuid);
 		}
 	}
 
@@ -721,12 +760,14 @@ function processLineForMetadata(
 					if (typeof msgContent === 'string') {
 						state.firstUserMessageContent = msgContent;
 					} else if (Array.isArray(msgContent)) {
+						// Concatenate all text blocks - system-reminders are stripped later like comments
+						const textParts: string[] = [];
 						for (const block of msgContent) {
 							if (block.type === 'text' && 'text' in block) {
-								state.firstUserMessageContent = block.text;
-								break;
+								textParts.push(block.text);
 							}
 						}
+						state.firstUserMessageContent = textParts.join('\n');
 					}
 				}
 			}

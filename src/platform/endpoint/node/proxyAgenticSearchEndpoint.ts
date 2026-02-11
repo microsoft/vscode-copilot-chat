@@ -56,10 +56,6 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		super(
 			modelInfo,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
