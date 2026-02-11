@@ -311,7 +311,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? constructSweepPrompt(promptPieces) : getUserPrompt(promptPieces);
+		const userPrompt = promptOptions.promptingStrategy === 'sweep' ? constructSweepPrompt(promptPieces) : getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -692,7 +692,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		let cleanedLinesStream: AsyncIterableObject<string>;
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
-			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
+			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Sweep) {
 				// Use Sweep module for response handling
 				return yield* handleSweepResponse({
 					linesStream,
@@ -1158,7 +1158,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				return xtab275SystemPrompt;
 			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
 				return nes41Miniv3SystemPrompt;
-			case xtabPromptOptions.PromptingStrategy.nextEdit:
+			case xtabPromptOptions.PromptingStrategy.Sweep:
 				return ''; // Sweep next-edit model doesn't use a system prompt
 			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
 			case undefined:

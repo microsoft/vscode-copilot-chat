@@ -189,7 +189,13 @@ export enum PromptingStrategy {
 	 * followed by the edit window content.
 	 */
 	Xtab275EditIntentShort = 'xtab275EditIntentShort',
-	nextEdit = 'nextEdit'
+	/**
+	 * SweepAI's next-edit-1.5B model prompting strategy.
+	 * Uses a 21-line window format with original/current/updated sections.
+	 * @see https://blog.sweep.dev/posts/oss-next-edit
+	 * @see https://huggingface.co/sweepai/sweep-next-edit-1.5B
+	 */
+	Sweep = 'sweep'
 }
 
 export function isPromptingStrategy(value: string): value is PromptingStrategy {
@@ -214,7 +220,7 @@ export namespace ResponseFormat {
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
 			case PromptingStrategy.XtabAggressiveness:
-			case PromptingStrategy.nextEdit:
+			case PromptingStrategy.Sweep:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
