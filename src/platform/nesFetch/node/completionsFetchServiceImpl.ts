@@ -174,6 +174,10 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			// For successful requests, wait for the stream to complete so we can log the response
 			const responseStream = result.val;
 			void responseStream.response.then(aggregated => {
+				if (aggregated.isError()) {
+					this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'failed', aggregated);
+					return;
+				}
 				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'success', aggregated);
 			});
 		} else {
