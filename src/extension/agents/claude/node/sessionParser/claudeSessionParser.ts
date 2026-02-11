@@ -684,8 +684,8 @@ export function extractSessionMetadata(
 ): IClaudeCodeSessionInfo | null {
 	const state = {
 		summary: undefined as string | undefined,
-		firstMessageTimestamp: undefined as number | undefined,
-		lastMessageTimestamp: undefined as number | undefined,
+		created: undefined as number | undefined,
+		lastRequestEnded: undefined as number | undefined,
 		lastRequestStartedTimestamp: undefined as number | undefined,
 		firstUserMessageContent: undefined as string | undefined,
 		foundSessionId: false,
@@ -709,8 +709,8 @@ export function extractSessionMetadata(
  */
 interface MetadataExtractionState {
 	summary: string | undefined;
-	firstMessageTimestamp: number | undefined;
-	lastMessageTimestamp: number | undefined;
+	created: number | undefined;
+	lastRequestEnded: number | undefined;
 	lastRequestStartedTimestamp: number | undefined;
 	firstUserMessageContent: string | undefined;
 	foundSessionId: boolean;
@@ -770,9 +770,9 @@ function processLineForMetadata(
 			const messageTimestamp = new Date(entry.timestamp).getTime();
 
 			// Track first message timestamp and content
-			if (state.firstMessageTimestamp === undefined) {
+			if (state.created === undefined) {
 				state.foundSessionId = true;
-				state.firstMessageTimestamp = messageTimestamp;
+				state.created = messageTimestamp;
 
 				// Extract user message content for label fallback
 				if (entry.type === 'user') {
@@ -798,11 +798,11 @@ function processLineForMetadata(
 			}
 
 			// Always update last message timestamp (messages are chronological in file)
-			state.lastMessageTimestamp = messageTimestamp;
+			state.lastRequestEnded = messageTimestamp;
 		}
 	}
 
-	// No early termination - we need to read all messages to get lastMessageTimestamp
+	// No early termination - we need to read all messages to get lastRequestEnded
 	return { shouldContinue: true };
 }
 
@@ -815,7 +815,7 @@ function buildMetadataResult(
 	state: MetadataExtractionState
 ): IClaudeCodeSessionInfo | null {
 	// Require at least one message for a valid session
-	if (state.firstMessageTimestamp === undefined || state.lastMessageTimestamp === undefined) {
+	if (state.created === undefined || state.lastRequestEnded === undefined) {
 		return null;
 	}
 
@@ -833,9 +833,9 @@ function buildMetadataResult(
 	return {
 		id: sessionId,
 		label,
-		created: state.firstMessageTimestamp,
+		created: state.created,
 		lastRequestStarted: state.lastRequestStartedTimestamp,
-		lastRequestEnded: state.lastMessageTimestamp,
+		lastRequestEnded: state.lastRequestEnded,
 	};
 }
 
@@ -863,8 +863,8 @@ export async function extractSessionMetadataStreaming(
 
 	const state: MetadataExtractionState = {
 		summary: undefined,
-		firstMessageTimestamp: undefined,
-		lastMessageTimestamp: undefined,
+		created: undefined,
+		lastRequestEnded: undefined,
 		lastRequestStartedTimestamp: undefined,
 		firstUserMessageContent: undefined,
 		foundSessionId: false,
