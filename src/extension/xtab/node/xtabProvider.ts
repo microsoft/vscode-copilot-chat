@@ -51,7 +51,7 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nextEditConstructPrompt, PromptPieces, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nextEditConstructPrompt, PromptPieces, SWEEP_WINDOW_LINES_ABOVE, SWEEP_WINDOW_LINES_BELOW, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
@@ -692,8 +692,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
-				// Smart extraction for Sweep: diff full response against full document
-				// and yield only the actual changes
+				// Smart extraction for Sweep: diff the 21-line WINDOW against model response
+				// Model outputs the updated 21-line window, so we diff window vs response
 				const responseLines: string[] = [];
 				for await (const line of linesStream) {
 					responseLines.push(line);
@@ -715,22 +715,32 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
 				}
 
-				// Get full current document content
-				const currentLines = promptPieces.currentDocument.lines;
+				// Compute the SAME 21-line window that was sent to the model
+				const cursorLine = promptPieces.currentDocument.cursorLineOffset;
+				const sweepWindowStart = Math.max(0, cursorLine - SWEEP_WINDOW_LINES_ABOVE);
+				const sweepWindowEnd = Math.min(promptPieces.currentDocument.lines.length, cursorLine + SWEEP_WINDOW_LINES_BELOW + 1);
 
-				// Compute diff between current document and model response
+				// Get the 21-line window from current document (same window we sent to model)
+				const windowLines = promptPieces.currentDocument.lines.slice(sweepWindowStart, sweepWindowEnd);
+
+				tracer.trace(`Sweep window: lines ${sweepWindowStart}-${sweepWindowEnd} (cursor at ${cursorLine}), window has ${windowLines.length} lines, response has ${responseLines.length} lines`);
+
+				// Compute diff between the window and model response
 				const diffResult = await this.diffService.computeDiff(
-					currentLines.join('\n'),
+					windowLines.join('\n'),
 					responseLines.join('\n'),
 					{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }
 				);
 
 				tracer.trace(`Sweep smart extraction: found ${diffResult.changes.length} changes`);
 
-				// Yield only the actual changes
+				// Yield only the actual changes, adjusting line numbers to full document coordinates
 				for (const change of diffResult.changes) {
+					// Adjust line numbers: diff is relative to window, convert to full document
+					const docStartLine = sweepWindowStart + change.original.startLineNumber;
+					const docEndLine = sweepWindowStart + change.original.endLineNumberExclusive;
 					const singleLineEdit = new LineReplacement(
-						new LineRange(change.original.startLineNumber, change.original.endLineNumberExclusive),
+						new LineRange(docStartLine, docEndLine),
 						responseLines.slice(change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1)
 					);
 					tracer.trace(`Sweep edit: ${singleLineEdit.toString()}`);

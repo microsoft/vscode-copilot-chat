@@ -47,8 +47,8 @@ const FILE_SEP = '<|file_sep|>';
 
 // 21-line window: 10 lines above cursor, cursor line, 10 lines below cursor
 // This matches SweepAI's blog post format for local model inference
-const CURSOR_WINDOW_LINES_ABOVE = 10;
-const CURSOR_WINDOW_LINES_BELOW = 10;
+export const SWEEP_WINDOW_LINES_ABOVE = 10;
+export const SWEEP_WINDOW_LINES_BELOW = 10;
 
 // Budget allocation for 7000 tokens:
 // - Diffs: ~3500 tokens (prioritized)
@@ -226,8 +226,8 @@ function extract21LineWindow(content: string, cursorLine: number): string {
 	const lines = content.split('\n');
 
 	// Calculate window bounds (0-based indexing)
-	const startLine = Math.max(0, cursorLine - CURSOR_WINDOW_LINES_ABOVE);
-	const endLine = Math.min(lines.length, cursorLine + CURSOR_WINDOW_LINES_BELOW + 1);
+	const startLine = Math.max(0, cursorLine - SWEEP_WINDOW_LINES_ABOVE);
+	const endLine = Math.min(lines.length, cursorLine + SWEEP_WINDOW_LINES_BELOW + 1);
 
 	// Extract the window
 	return lines.slice(startLine, endLine).join('\n');
@@ -295,8 +295,8 @@ function extractOriginalWindowViaRebase(
 
 	// Step 2: Calculate window bounds in current file (byte offsets)
 	const currentLines = currentContent.split('\n');
-	const windowStartLine = Math.max(0, cursorLine - CURSOR_WINDOW_LINES_ABOVE);
-	const windowEndLine = Math.min(currentLines.length - 1, cursorLine + CURSOR_WINDOW_LINES_BELOW);
+	const windowStartLine = Math.max(0, cursorLine - SWEEP_WINDOW_LINES_ABOVE);
+	const windowEndLine = Math.min(currentLines.length - 1, cursorLine + SWEEP_WINDOW_LINES_BELOW);
 
 	const currentWindowStart = getLineStartOffset(currentContent, windowStartLine);
 	const currentWindowEnd = getLineEndOffset(currentContent, windowEndLine);
@@ -339,7 +339,7 @@ function extractOriginalWindowViaRebase(
 
 	// Ensure we have at least some content and roughly 21 lines
 	// Expand if needed to match the expected window size
-	const expectedLines = CURSOR_WINDOW_LINES_ABOVE + 1 + CURSOR_WINDOW_LINES_BELOW;
+	const expectedLines = SWEEP_WINDOW_LINES_ABOVE + 1 + SWEEP_WINDOW_LINES_BELOW;
 	const currentWindowLines = endLineIdx - startLineIdx + 1;
 
 	if (currentWindowLines < expectedLines) {
