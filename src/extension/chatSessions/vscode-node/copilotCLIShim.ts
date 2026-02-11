@@ -132,13 +132,13 @@ function runWget(label: string) {
 }
 
 function hasCommand(cmd: string) {
-	const result = spawnSync('which', [cmd], { env, encoding: 'utf8' });
+	const result = spawnSync('sh', ['-c', `command -v ${cmd}`], { env, encoding: 'utf8' });
 	return !result.error && result.status === 0;
 }
 
-function installCopilotCLI(label: string): boolean {
+function installCopilotCLI(label: string, update = false): boolean {
 	// Try npm first
-	if (hasCommand('npm') && runNpm(['install', '-g', PACKAGE_NAME], label)) {
+	if (hasCommand('npm') && runNpm([update ? 'update' : 'install', '-g', PACKAGE_NAME], label)) {
 		return true;
 	}
 	// Try brew
@@ -180,7 +180,7 @@ async function validateVersion(version: string) {
 		warn(`GitHub Copilot CLI version ${version} is not compatible.`);
 		log(`Version ${REQUIRED_VERSION} or later is required.`);
 		if (await promptYes('Update GitHub Copilot CLI?')) {
-			if (installCopilotCLI('Update')) {
+			if (installCopilotCLI('Update', true)) {
 				return true;
 			}
 			await pressKeyToExit();
