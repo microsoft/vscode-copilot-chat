@@ -29,6 +29,10 @@ export class EditToolHandler implements IClaudeToolPermissionHandler<EditToolNam
 		input: FileEditInput | FileWriteInput,
 		context: ClaudeToolPermissionContext
 	): Promise<boolean> {
+		// Never auto-approve in plan mode - edits are not allowed
+		if (context.permissionMode === 'plan') {
+			return false;
+		}
 		// Auto-approve all edits in 'acceptEdits' mode
 		if (context.permissionMode === 'acceptEdits') {
 			return true;

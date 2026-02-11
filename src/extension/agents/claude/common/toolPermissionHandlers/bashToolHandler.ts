@@ -34,6 +34,11 @@ export class BashToolHandler implements IClaudeToolPermissionHandler<ClaudeToolN
 		input: BashInput,
 		context: ClaudeToolPermissionContext
 	): Promise<ClaudeToolPermissionResult> {
+		// Block Bash in plan mode
+		if (context.permissionMode === 'plan') {
+			return { behavior: 'deny', message: 'Tool not available in plan mode. Use ExitPlanMode to switch to implementation.' };
+		}
+
 		try {
 			const result = await this.toolsService.invokeTool(ToolName.CoreTerminalConfirmationTool, {
 				input: {

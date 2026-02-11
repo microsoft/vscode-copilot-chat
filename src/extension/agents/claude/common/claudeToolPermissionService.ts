@@ -42,6 +42,19 @@ export interface IClaudeToolPermissionService {
  */
 const DenyToolMessage = 'The user declined to run the tool';
 
+/**
+ * Tools that are blocked in plan mode. These are execution/mutation tools
+ * that should not run while planning.
+ */
+const PlanModeBlockedTools: ReadonlySet<string> = new Set([
+	ClaudeToolNames.Bash,
+	ClaudeToolNames.Edit,
+	ClaudeToolNames.MultiEdit,
+	ClaudeToolNames.Write,
+	ClaudeToolNames.NotebookEdit,
+	ClaudeToolNames.KillBash,
+]);
+
 export class ClaudeToolPermissionService implements IClaudeToolPermissionService {
 	declare readonly _serviceBrand: undefined;
 
@@ -60,6 +73,11 @@ export class ClaudeToolPermissionService implements IClaudeToolPermissionService
 		if (context.permissionMode === 'bypassPermissions') {
 			// Bypass mode: allow all tools without confirmation
 			return { behavior: 'allow', updatedInput: input };
+		}
+
+		// Plan mode: block execution/mutation tools
+		if (context.permissionMode === 'plan' && PlanModeBlockedTools.has(toolName)) {
+			return { behavior: 'deny', message: 'Tool not available in plan mode. Use ExitPlanMode to switch to implementation.' };
 		}
 
 		const handler = this._getHandler(toolName as ClaudeToolNames);
