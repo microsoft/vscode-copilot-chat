@@ -124,12 +124,12 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 	}
 
 	// Show aggregated warnings via hookProgress
-	if (warnings.length > 0 && outputStream) {
+	if (warnings.length > 0 && outputStream?.hookProgress) {
 		if (warnings.length === 1) {
-			outputStream.hookProgress(hookType, undefined, formatHookErrorMessage(warnings[0]));
+			outputStream.hookProgress(hookType, undefined, warnings[0]);
 		} else {
 			const formattedWarnings = warnings.map((w, i) => `${i + 1}. ${w}`).join('\n');
-			outputStream.hookProgress(hookType, undefined, formatHookErrorMessage(formattedWarnings));
+			outputStream.hookProgress(hookType, undefined, formattedWarnings);
 		}
 	}
 }

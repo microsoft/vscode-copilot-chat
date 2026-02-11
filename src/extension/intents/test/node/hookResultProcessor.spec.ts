@@ -238,7 +238,7 @@ describe('hookResultProcessor', () => {
 			expect(onSuccess).not.toHaveBeenCalled();
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
 			expect(mockStream.hookProgressCalls[0].hookType).toBe('UserPromptSubmit');
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Process exited with code 1: Some warning'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Process exited with code 1: Some warning');
 		});
 
 		it('should aggregate multiple warnings', () => {
@@ -356,7 +356,7 @@ describe('hookResultProcessor', () => {
 			});
 
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Session start warning'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Session start warning');
 		});
 	});
 
@@ -462,7 +462,7 @@ describe('hookResultProcessor', () => {
 			});
 
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Stop hook warning'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Stop hook warning');
 		});
 	});
 
@@ -561,7 +561,7 @@ describe('hookResultProcessor', () => {
 			});
 
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Subagent start warning'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Subagent start warning');
 		});
 	});
 
@@ -633,7 +633,7 @@ describe('hookResultProcessor', () => {
 			});
 
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Subagent stop warning'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Subagent stop warning');
 		});
 	});
 
@@ -703,7 +703,7 @@ describe('hookResultProcessor', () => {
 
 			expect(onSuccess).toHaveBeenCalledWith('some output');
 			expect(mockStream.hookProgressCalls).toHaveLength(1);
-			expect(mockStream.hookProgressCalls[0].systemMessage).toBe(formatHookErrorMessage('Warning from success result'));
+			expect(mockStream.hookProgressCalls[0].systemMessage).toBe('Warning from success result');
 		});
 
 		it('should handle error result with empty output', () => {
