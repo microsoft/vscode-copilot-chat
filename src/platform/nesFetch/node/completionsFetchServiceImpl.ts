@@ -218,10 +218,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		lines.push(`## Metadata`);
 		lines.push(`<pre><code>`);
 		lines.push(`url              : ${url}`);
-		lines.push(`requestId        : ${requestId.callerRequestId}`);
-		if (requestId.headerRequestId) {
-			lines.push(`headerRequestId   : ${requestId.headerRequestId}`);
-		}
+		lines.push(`requestId        : ${requestId}`);
 		lines.push(`model            : ${params.model ?? '(default)'}`);
 		lines.push(`maxTokens        : ${params.max_tokens}`);
 		lines.push(`temperature      : ${params.temperature}`);
