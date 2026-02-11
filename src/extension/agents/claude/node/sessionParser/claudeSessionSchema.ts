@@ -172,6 +172,39 @@ assertValidatorAssignable<ValidatorType<typeof vToolResultBlock>, Anthropic.Tool
 export type ToolResultBlock = Anthropic.ToolResultBlockParam;
 
 /**
+ * Base64 image source with inline data.
+ * Matches Anthropic.Base64ImageSource from the SDK.
+ */
+const vBase64ImageSource = vObj({
+	type: vRequired(vLiteral('base64')),
+	media_type: vRequired(vEnum('image/jpeg', 'image/png', 'image/gif', 'image/webp')),
+	data: vRequired(vString()),
+});
+
+/**
+ * URL image source with a remote URL.
+ * Matches Anthropic.URLImageSource from the SDK.
+ */
+const vURLImageSource = vObj({
+	type: vRequired(vLiteral('url')),
+	url: vRequired(vString()),
+});
+
+/**
+ * Image content block in user messages.
+ * Matches Anthropic.ImageBlockParam from the SDK.
+ *
+ * Source is validated as a discriminated union of base64 and url shapes,
+ * ensuring required fields (type, media_type/data or url) are present.
+ */
+export const vImageBlock = vObj({
+	type: vRequired(vLiteral('image')),
+	source: vRequired(vUnion(vBase64ImageSource, vURLImageSource)),
+});
+assertValidatorAssignable<ValidatorType<typeof vImageBlock>, Anthropic.ImageBlockParam>();
+export type ImageBlock = Anthropic.ImageBlockParam;
+
+/**
  * Unknown content block type for forward compatibility.
  * Allows parsing of new block types the SDK may introduce.
  */
@@ -190,9 +223,10 @@ export const vContentBlock = vUnion(
 	vThinkingBlock,
 	vToolUseBlock,
 	vToolResultBlock,
+	vImageBlock,
 	vUnknownContentBlock
 );
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownContentBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock | UnknownContentBlock;
 
 // #endregion
 
@@ -365,6 +399,30 @@ export type MessageEntry = ValidatorType<typeof vMessageEntry>;
 
 // #region Type Guards
 
+export type ImageMediaType = Anthropic.Messages.Base64ImageSource['media_type'];
+
+// Record ensures a compile error if the SDK adds a new media type we haven't covered.
+const SUPPORTED_IMAGE_MEDIA_TYPES: Record<ImageMediaType, true> = {
+	'image/jpeg': true,
+	'image/png': true,
+	'image/gif': true,
+	'image/webp': true,
+};
+
+function isImageMediaType(value: string): value is ImageMediaType {
+	return Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, value);
+}
+
+/**
+ * Normalizes a MIME type string to a supported Anthropic image media type.
+ * Handles variations like 'image/jpg' → 'image/jpeg'.
+ * Returns undefined for unsupported types.
+ */
+export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | undefined {
+	const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
+	return isImageMediaType(normalized) ? normalized : undefined;
+}
+
 /**
  * Type guard for user message entries.
  */
@@ -460,6 +518,8 @@ export interface IClaudeCodeSessionInfo {
 	readonly firstMessageTimestamp: Date;
 	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
 	readonly lastMessageTimestamp: Date;
+	/** Basename of the workspace folder this session belongs to (for badge display) */
+	readonly folderName?: string;
 }
 
 // #endregion

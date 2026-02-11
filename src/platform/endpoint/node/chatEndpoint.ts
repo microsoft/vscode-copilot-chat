@@ -17,7 +17,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
-import { isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
+import { isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled } from '../../networking/common/anthropic';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
@@ -186,8 +186,8 @@ export class ChatEndpoint implements IChatEndpoint {
 				betaFeatures.push('interleaved-thinking-2025-05-14');
 			}
 
-			// Add context management beta if enabled
-			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService)) {
+			// Add context management beta if enabled (required for both context editing and built-in memory tool)
+			if (isAnthropicContextEditingEnabled(this.model, this._configurationService, this._expService) || isAnthropicMemoryToolEnabled(this.model, this._configurationService, this._expService)) {
 				betaFeatures.push('context-management-2025-06-27');
 			}
 

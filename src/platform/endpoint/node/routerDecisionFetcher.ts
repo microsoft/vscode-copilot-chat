@@ -9,6 +9,7 @@ import { IValidator, vArray, vEnum, vNumber, vObj, vRequired, vString } from '..
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 
 interface RouterDecisionResponse {
 	predicted_label: 'needs_reasoning' | 'no_reasoning';
@@ -48,7 +49,8 @@ export class RouterDecisionFetcher extends Disposable {
 		private readonly _fetcherService: IFetcherService,
 		private readonly _logService: ILogService,
 		private readonly _configurationService: IConfigurationService,
-		private readonly _experimentationService: IExperimentationService
+		private readonly _experimentationService: IExperimentationService,
+		private readonly _telemetryService: ITelemetryService
 	) {
 		super();
 	}
@@ -104,6 +106,26 @@ export class RouterDecisionFetcher extends Disposable {
 
 			this._logService.trace(`[RouterDecisionFetcher] Prediction: ${result.predicted_label}, model: ${result.chosen_model} (confidence: ${(result.confidence * 100).toFixed(1)}%, scores: needs_reasoning=${(result.scores.needs_reasoning * 100).toFixed(1)}%, no_reasoning=${(result.scores.no_reasoning * 100).toFixed(1)}%) (latency_ms: ${result.latency_ms}, candidate models: ${result.candidate_models.join(', ')}, preferred models: ${preferredModels.join(', ')})`);
 
+			/* __GDPR__
+				"automode.routerDecision" : {
+					"owner": "tyleonha",
+					"comment": "Reports the routing decision made by the auto mode router API",
+					"predictedLabel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The predicted classification label (needs_reasoning or no_reasoning)" },
+					"chosenModel": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model selected by the router" },
+					"confidence": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The confidence score of the routing decision" },
+					"latencyMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "The latency of the router API call in milliseconds" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('automode.routerDecision',
+				{
+					predictedLabel: result.predicted_label,
+					chosenModel: result.chosen_model,
+				},
+				{
+					confidence: result.confidence,
+					latencyMs: result.latency_ms,
+				}
+			);
 			return result.chosen_model;
 		}
 

@@ -21,7 +21,7 @@ import { BugIndicatingError } from '../../src/util/vs/base/common/errors';
 import { IDisposable } from '../../src/util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { CHAT_ML_CACHE_SALT } from '../cacheSalt';
+import { CHAT_ML_CACHE_SALT_PER_MODEL } from '../cacheSalt';
 import { IJSONOutputPrinter } from '../jsonOutputPrinter';
 import { OutputType } from '../simulation/shared/sharedTypes';
 import { logger } from '../simulationLogger';
@@ -43,7 +43,8 @@ export class CacheableChatRequest {
 		extraCacheProperties: any | undefined
 	) {
 		this.obj = { messages: rawMessageToCAPI(messages), model, requestOptions, extraCacheProperties };
-		this.hash = computeSHA256(CHAT_ML_CACHE_SALT + JSON.stringify(this.obj));
+		const salt = CHAT_ML_CACHE_SALT_PER_MODEL[model] ?? CHAT_ML_CACHE_SALT_PER_MODEL['DEFAULT'];
+		this.hash = computeSHA256(salt + JSON.stringify(this.obj));
 
 		// To aid in reading cache entries, we will write objects to disk splitting each message by new lines
 		// We do this after the sha computation to avoid invalidating all the existing caches

@@ -16,7 +16,7 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { NextCursorLinePrediction } from '../../../platform/inlineEdits/common/dataTypes/nextCursorLinePrediction';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { LanguageContextLanguages, LanguageContextOptions, PromptingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { isAggressivenessStrategy, LanguageContextLanguages, LanguageContextOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IInlineEditsModelService } from '../../../platform/inlineEdits/common/inlineEditsModelService';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
@@ -55,6 +55,7 @@ import { LintErrors } from '../common/lintErrors';
 import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
+import { TerminalMonitor } from '../common/terminalOutput';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
@@ -86,6 +87,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private readonly userInteractionMonitor: UserInteractionMonitor;
 
+	private readonly terminalMonitor: TerminalMonitor;
+
 	private forceUseDefaultModel: boolean = false;
 
 	private nextCursorPredictor: XtabNextCursorPredictor;
@@ -103,6 +106,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
 		this.userInteractionMonitor = this.instaService.createInstance(UserInteractionMonitor);
+		this.terminalMonitor = this.instaService.createInstance(TerminalMonitor);
 		this.nextCursorPredictor = this.instaService.createInstance(XtabNextCursorPredictor, XtabProvider.computeTokens);
 	}
 
@@ -275,10 +279,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const { aggressivenessLevel, userHappinessScore } = this.userInteractionMonitor.getAggressivenessLevel();
 
-		// Log aggressiveness level and user happiness score when using XtabAggressiveness, Xtab275EditIntent, or Xtab275EditIntentShort prompting strategy
-		if (promptOptions.promptingStrategy === PromptingStrategy.XtabAggressiveness ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntent ||
-			promptOptions.promptingStrategy === PromptingStrategy.Xtab275EditIntentShort) {
+		// Log aggressiveness level and user happiness score when using an aggressiveness-aware prompting strategy
+		if (isAggressivenessStrategy(promptOptions.promptingStrategy)) {
 			telemetryBuilder.setXtabAggressivenessLevel(aggressivenessLevel);
 			if (userHappinessScore !== undefined) {
 				telemetryBuilder.setXtabUserHappinessScore(userHappinessScore);
@@ -342,11 +344,15 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return new NoNextEditReason.GotCancelled('afterDebounce');
 		}
 
-		// Fire-and-forget: collect lint errors for telemetry in background to avoid blocking the main path
+		// Fire-and-forget: collect lint errors and terminal output for telemetry in background to avoid blocking the main path
 		Promise.resolve().then(() => {
 			const lintErrorsData = lintErrors.getData();
 			telemetryBuilder.setLintErrors(lintErrorsData);
 			logContext.setDiagnosticsData(lintErrorsData);
+
+			const terminalOutputData = this.terminalMonitor.getData();
+			telemetryBuilder.setTerminalOutput(terminalOutputData);
+			logContext.setTerminalData(terminalOutputData);
 		});
 
 		request.fetchIssued = true;
@@ -1156,6 +1162,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case xtabPromptOptions.PromptingStrategy.PatchBased01:
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
+			case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:
 			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
 			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
 				return xtab275SystemPrompt;

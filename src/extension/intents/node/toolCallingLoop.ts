@@ -253,10 +253,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeStopHook(input: StopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StopHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('Stop', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('Stop', this.options.request.hooks, input, sessionId, token);
 
 			const blockingReasons = new Set<string>();
 			processHookResults({
@@ -323,10 +320,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StartHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SessionStart', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SessionStart', this.options.request.hooks, input, sessionId, token);
 
 			const additionalContexts: string[] = [];
 			processHookResults({
@@ -368,10 +362,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStartHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SubagentStart', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SubagentStart', this.options.request.hooks, input, sessionId, token);
 
 			const additionalContexts: string[] = [];
 			processHookResults({
@@ -413,10 +404,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 */
 	protected async executeSubagentStopHook(input: SubagentStopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStopHookResult> {
 		try {
-			const results = await this._chatHookService.executeHook('SubagentStop', {
-				toolInvocationToken: this.options.request.toolInvocationToken,
-				input: input
-			}, sessionId, token);
+			const results = await this._chatHookService.executeHook('SubagentStop', this.options.request.hooks, input, sessionId, token);
 
 			const blockingReasons = new Set<string>();
 			processHookResults({
@@ -492,6 +480,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	public async runStartHooks(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<void> {
 		const sessionId = this.options.conversation.sessionId;
 		const hasHooks = this.options.request.hasHooksEnabled;
+
+		// Report which hooks are configured for this request
+		this._chatHookService.logConfiguredHooks(this.options.request.hooks);
 
 		// Execute SubagentStart hook for subagent requests, or SessionStart hook for first turn of regular sessions
 		if (this.options.request.subAgentInvocationId) {
@@ -867,6 +858,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const toolCalls: IToolCall[] = [];
 		let thinkingItem: ThinkingDataItem | undefined;
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
+		let phase: string | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -891,6 +883,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.thinking) {
 					thinkingItem = ThinkingDataItem.createOrUpdate(thinkingItem, delta.thinking);
+				}
+				if (delta.phase) {
+					phase = delta.phase;
 				}
 				return stopEarly ? text.length : undefined;
 			},
@@ -974,7 +969,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					statefulMarker,
-					thinking: thinkingItem
+					thinking: thinkingItem,
+					phase,
+					phaseModelId: phase ? endpoint.model : undefined,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,

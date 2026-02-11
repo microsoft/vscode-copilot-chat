@@ -35,7 +35,7 @@ import { IWorkspaceService } from '../../../../../platform/workspace/common/work
 import { createServiceIdentifier } from '../../../../../util/common/services';
 import { CancellationError } from '../../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../../util/vs/base/common/map';
-import { isEqualOrParent } from '../../../../../util/vs/base/common/resources';
+import { basename, isEqualOrParent } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IFolderRepositoryManager } from '../../../../chatSessions/common/folderRepositoryManager';
 import {
@@ -105,18 +105,6 @@ export interface IClaudeCodeSessionService {
 	 * Get parse statistics from the last session load (for debugging).
 	 */
 	getLastParseStats(): ParseStats | undefined;
-
-	/**
-	 * Polls until the session's JSONL file contains a complete session
-	 * (i.e., the last message is from the assistant). This is necessary because
-	 * the CLI child process may not have flushed the JSONL to disk by the time
-	 * the parent process receives the result message via stdout.
-	 *
-	 * TODO: Is there a better way to do this? There seems to be a race condition
-	 * between Claude returning to us and it writing to disk. This could be removed
-	 * if Claude SDK gives us a way to list sessions.
-	 */
-	waitForSessionReady(resource: URI, token: CancellationToken): Promise<void>;
 }
 
 // #endregion
@@ -151,14 +139,15 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSessionInfo[]> {
 		const items: IClaudeCodeSessionInfo[] = [];
-		const slugs = this._getProjectSlugs();
+		const projectFolders = this._getProjectFolders();
 
-		for (const slug of slugs) {
+		for (const { slug, folderUri } of projectFolders) {
 			if (token.isCancellationRequested) {
 				return items;
 			}
 
 			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
+			const folderName = basename(folderUri);
 
 			// Check if we can use cached metadata
 			const cachedMetadata = await this._getCachedMetadataIfValid(projectDirUri, token);
@@ -168,7 +157,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			// Cache miss or invalid - reload metadata from disk
-			const freshMetadata = await this._loadSessionMetadataFromDisk(projectDirUri, token);
+			const freshMetadata = await this._loadSessionMetadataFromDisk(projectDirUri, folderName, token);
 			this._metadataCache.set(projectDirUri, freshMetadata);
 			items.push(...freshMetadata);
 		}
@@ -195,9 +184,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		}
 
 		const targetId = resource.path.slice(1); // Remove leading '/' from path
-		const slugs = this._getProjectSlugs();
+		const projectFolders = this._getProjectFolders();
 
-		for (const slug of slugs) {
+		for (const { slug } of projectFolders) {
 			if (token.isCancellationRequested) {
 				return undefined;
 			}
@@ -237,23 +226,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	getLastParseStats(): ParseStats | undefined {
 		return this._lastParseStats;
-	}
-
-	async waitForSessionReady(resource: URI, token: CancellationToken): Promise<void> {
-		const maxAttempts = 20; // 20 × 100ms = 2s max wait
-		for (let attempt = 0; attempt < maxAttempts; attempt++) {
-			if (token.isCancellationRequested) {
-				return;
-			}
-			const session = await this.getSession(resource, token);
-			if (session && session.messages.length > 0) {
-				const lastMsg = session.messages[session.messages.length - 1];
-				if (lastMsg.type === 'assistant') {
-					return;
-				}
-			}
-			await new Promise<void>(resolve => setTimeout(resolve, 100));
-		}
 	}
 
 	// #region Directory Discovery
@@ -297,23 +269,24 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	/**
-	 * Get the project directory slugs to scan for sessions.
+	 * Get the project directory slugs to scan for sessions, along with their
+	 * original folder URIs (needed for badge display).
 	 *
 	 * - Single-root: slug for that one folder
 	 * - Multi-root: slug for every workspace folder
 	 * - Empty workspace: slug for every folder known to the folder repository manager
 	 */
-	private _getProjectSlugs(): string[] {
+	private _getProjectFolders(): { slug: string; folderUri: URI }[] {
 		const folders = this._workspace.getWorkspaceFolders();
 
 		if (folders.length > 0) {
-			return folders.map(folder => this._computeFolderSlug(folder));
+			return folders.map(folder => ({ slug: this._computeFolderSlug(folder), folderUri: folder }));
 		}
 
 		// Empty workspace: use all known folders from the folder repository manager
 		const mruEntries = this._folderRepositoryManager.getFolderMRU();
 		if (mruEntries.length > 0) {
-			return mruEntries.map(entry => this._computeFolderSlug(entry.folder));
+			return mruEntries.map(entry => ({ slug: this._computeFolderSlug(entry.folder), folderUri: entry.folder }));
 		}
 
 		return [];
@@ -394,6 +367,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	private async _loadSessionMetadataFromDisk(
 		projectDirUri: URI,
+		folderName: string,
 		token: CancellationToken
 	): Promise<readonly IClaudeCodeSessionInfo[]> {
 		const entries = await this._tryReadDirectory(projectDirUri);
@@ -425,7 +399,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		const metadataList: IClaudeCodeSessionInfo[] = [];
 		for (const r of results) {
 			if (r.status === 'fulfilled' && r.value !== null && r.value.metadata !== null) {
-				metadataList.push(r.value.metadata);
+				metadataList.push({ ...r.value.metadata, folderName });
 
 				// Update mtime cache
 				try {
