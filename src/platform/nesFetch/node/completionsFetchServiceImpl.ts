@@ -275,7 +275,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 		this.requestLogger.addEntry({
 			type: LoggedRequestKind.MarkdownContentRequest,
-			debugName: 'GhostText Request',
+			debugName: 'Completions Request',
 			startTimeMs,
 			icon,
 			markdownContent: lines.join('\n'),
