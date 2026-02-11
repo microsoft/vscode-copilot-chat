@@ -23,10 +23,6 @@ interface McpProviderOptions {
 	registerPushNotifications?: () => Promise<void> | void;
 }
 
-interface DisposableLike {
-	dispose: () => void;
-}
-
 class AsyncLazy<T> {
 	private _value: T | undefined;
 	private _promise: Promise<T> | undefined;
