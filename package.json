@@ -2729,6 +2729,24 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.copilotCLI.addFileReference",
+				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
+				"enablement": "github.copilot.chat.copilotCLI.hasSession",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.chat.copilotCLI.acceptDiff",
+				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
+				"icon": "$(check)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.chat.copilotCLI.rejectDiff",
+				"title": "%github.copilot.command.chat.copilotCLI.rejectDiff%",
+				"icon": "$(close)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.checkoutPullRequestReroute",
 				"title": "%github.copilot.command.checkoutPullRequestReroute.title%",
 				"icon": "$(git-pull-request)",
@@ -4357,6 +4375,23 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"group": "navigation@9",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.acceptDiff",
+					"group": "navigation@1",
+					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.rejectDiff",
+					"group": "navigation@2",
+					"when": "github.copilot.chat.copilotCLI.hasActiveDiff"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"explorer/context": [
@@ -4364,6 +4399,11 @@
 					"command": "github.copilot.chat.showAsChatSession",
 					"when": "resourceFilename === 'benchRun.chatReplay.json' || resourceFilename === 'chat-export-logs.json'",
 					"group": "2_copilot@1"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "github.copilot.chat.copilotCLI.hasSession && !explorerResourceIsFolder"
 				}
 			],
 			"editor/context": [
@@ -4371,6 +4411,11 @@
 					"command": "github.copilot.chat.explain",
 					"when": "!github.copilot.interactiveSession.disabled",
 					"group": "1_chat@4"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addFileReference",
+					"group": "copilot",
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [
@@ -5177,6 +5222,12 @@
 		},
 		"keybindings": [
 			{
+				"command": "github.copilot.chat.copilotCLI.addFileReference",
+				"key": "ctrl+shift+.",
+				"mac": "cmd+shift+.",
+				"when": "github.copilot.chat.copilotCLI.hasSession && editorTextFocus"
+			},
+			{
 				"command": "github.copilot.chat.rerunWithCopilotDebug",
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
@@ -5571,6 +5622,7 @@
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
 		"@types/eslint": "^9.0.0",
+		"@types/express": "^5.0.6",
 		"@types/google-protobuf": "^3.15.12",
 		"@types/js-yaml": "^4.0.9",
 		"@types/markdown-it": "^14.0.0",
@@ -5662,6 +5714,7 @@
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
+		"@modelcontextprotocol/sdk": "^1.25.2",
 		"@sinclair/typebox": "^0.34.41",
 		"@vscode/copilot-api": "^0.2.12",
 		"@vscode/extension-telemetry": "^1.2.0",
@@ -5675,6 +5728,7 @@
 		"best-effort-json-parser": "^1.2.1",
 		"diff": "^8.0.3",
 		"dompurify": "^3.3.0",
+		"express": "^5.2.1",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
