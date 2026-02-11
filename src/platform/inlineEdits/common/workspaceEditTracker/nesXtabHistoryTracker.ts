@@ -21,44 +21,7 @@ export interface IXtabHistoryDocumentEntry {
 
 export interface IXtabHistoryEditEntry extends IXtabHistoryDocumentEntry {
 	kind: 'edit';
-	edit: RootedEdit; // document content (called .base) + edits on top of it (called .edit)
-	// example:
-	// [ entry0 , entry1, entry2 ]
-	/**
-		diff0
-		diff1
-		diff2
-		original content - entry0.documentContent
-		edited content - entry2.document
-
-
-		example:
-
-		// xtabHistory: [entry0, entry1, entry2]
-		// document v0 -> document v1
-		entry0 = [base: "", edit: "hello"]
-		// document v1 -> document v2
-		entry1 = [base: "hello", edit: "hello world"]
-		// document v2 -> document v3
-		entry2 = [base: "hello world", edit: "jello world"]
-
-		original content: "" - entry0.documentContent
-		edited content: "jello world" - entry2.documentContent.apply(entry2.edit)
-
-
-		// documentBeforeEdits, recentEdit: v0 -> v3
-		// document v0 -> document v3
-		documentBeforeEdits = entry0.documentContent - document: ""
-		recentEdit = entry0.edit + entry1.edit + entry2.edit - "jello world"
-		currentDocument = documentBeforeEdits.apply(recentEdit)
-
-
-		XTab uses [entry0, entry1, entry2]
-
-
-
-
-	 */
+	edit: RootedEdit;
 }
 
 export interface IXtabHistoryVisibleRangesEntry extends IXtabHistoryDocumentEntry {

@@ -51,10 +51,11 @@ import { UserInteractionMonitor } from '../../inlineEdits/common/userInteraction
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { isInlineSuggestion } from '../common/inlineSuggestion';
 import { LintErrors } from '../common/lintErrors';
-import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nextEditConstructPrompt, PromptPieces, SWEEP_WINDOW_LINES_ABOVE, SWEEP_WINDOW_LINES_BELOW, toUniquePath } from '../common/promptCrafting';
+import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, PromptPieces, toUniquePath } from '../common/promptCrafting';
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
+import { constructSweepPrompt, handleSweepResponse } from './sweep/sweep';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
@@ -310,7 +311,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? nextEditConstructPrompt(promptPieces) : getUserPrompt(promptPieces);
+		const userPrompt = promptOptions.promptingStrategy === 'nextEdit' ? constructSweepPrompt(promptPieces) : getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
@@ -692,62 +693,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		if (opts.responseFormat === xtabPromptOptions.ResponseFormat.EditWindowOnly) {
 			if (promptPieces.opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.nextEdit) {
-				// Smart extraction for Sweep: diff the 21-line WINDOW against model response
-				// Model outputs the updated 21-line window, so we diff window vs response
-				const responseLines: string[] = [];
-				for await (const line of linesStream) {
-					responseLines.push(line);
-				}
-
-				if (chatResponseFailure) {
-					return XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
-				}
-
-				// Strip leading/trailing empty lines
-				while (responseLines.length > 0 && responseLines[0].trim() === '') {
-					responseLines.shift();
-				}
-				while (responseLines.length > 0 && responseLines[responseLines.length - 1].trim() === '') {
-					responseLines.pop();
-				}
-
-				if (responseLines.length === 0) {
-					return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
-				}
-
-				// Compute the SAME 21-line window that was sent to the model
-				const cursorLine = promptPieces.currentDocument.cursorLineOffset;
-				const sweepWindowStart = Math.max(0, cursorLine - SWEEP_WINDOW_LINES_ABOVE);
-				const sweepWindowEnd = Math.min(promptPieces.currentDocument.lines.length, cursorLine + SWEEP_WINDOW_LINES_BELOW + 1);
-
-				// Get the 21-line window from current document (same window we sent to model)
-				const windowLines = promptPieces.currentDocument.lines.slice(sweepWindowStart, sweepWindowEnd);
-
-				tracer.trace(`Sweep window: lines ${sweepWindowStart}-${sweepWindowEnd} (cursor at ${cursorLine}), window has ${windowLines.length} lines, response has ${responseLines.length} lines`);
-
-				// Compute diff between the window and model response
-				const diffResult = await this.diffService.computeDiff(
-					windowLines.join('\n'),
-					responseLines.join('\n'),
-					{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }
-				);
-
-				tracer.trace(`Sweep smart extraction: found ${diffResult.changes.length} changes`);
-
-				// Yield only the actual changes, adjusting line numbers to full document coordinates
-				for (const change of diffResult.changes) {
-					// Adjust line numbers: diff is relative to window, convert to full document
-					const docStartLine = sweepWindowStart + change.original.startLineNumber;
-					const docEndLine = sweepWindowStart + change.original.endLineNumberExclusive;
-					const singleLineEdit = new LineReplacement(
-						new LineRange(docStartLine, docEndLine),
-						responseLines.slice(change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1)
-					);
-					tracer.trace(`Sweep edit: ${singleLineEdit.toString()}`);
-					yield { edit: singleLineEdit, isFromCursorJump, window: editWindow };
-				}
-
-				return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+				// Use Sweep module for response handling
+				return yield* handleSweepResponse({
+					linesStream,
+					promptPieces,
+					diffService: this.diffService,
+					documentBeforeEdits: request.documentBeforeEdits,
+					editWindow,
+					isFromCursorJump,
+					tracer,
+					chatResponseFailure,
+					mapChatFetcherError: XtabProvider.mapChatFetcherErrorToNoNextEditReason
+				});
 			} else {
 				cleanedLinesStream = linesStream;
 			}
