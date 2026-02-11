@@ -8,6 +8,7 @@ import { ILogger } from '../../../../platform/log/common/logService';
 
 export interface ActiveDiff {
 	diffId: string;
+	sessionId?: string;
 	tabName: string;
 	originalUri: vscode.Uri;
 	modifiedUri: vscode.Uri;
@@ -78,6 +79,19 @@ export class DiffStateManager {
 
 	hasActiveDiffs(): boolean {
 		return this._activeDiffs.size > 0;
+	}
+
+	closeAllForSession(sessionId: string): void {
+		const toClose: ActiveDiff[] = [];
+		for (const diff of this._activeDiffs.values()) {
+			if (diff.sessionId === sessionId) {
+				toClose.push(diff);
+			}
+		}
+		this._logger.info(`[DIFF] Closing ${toClose.length} diff(s) for disconnected session ${sessionId}`);
+		for (const diff of toClose) {
+			diff.resolve({ status: 'REJECTED', trigger: 'client_disconnected' });
+		}
 	}
 
 	setupContextTracking(): vscode.Disposable[] {

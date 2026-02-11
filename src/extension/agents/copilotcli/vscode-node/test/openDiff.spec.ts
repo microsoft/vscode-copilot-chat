@@ -64,7 +64,7 @@ describe('openDiff tool', () => {
 		contentProvider = new ReadonlyContentProvider();
 		server = new MockMcpServer();
 		vi.mocked(fsPromises.readFile).mockResolvedValue('original content');
-		registerOpenDiffTool(server as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer, logger, diffState, contentProvider);
+		registerOpenDiffTool(server as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer, logger, diffState, contentProvider, 'test-session');
 	});
 
 	/** Simulate accepting a diff after it's registered */

@@ -142,6 +142,28 @@ describe('hookResultProcessor', () => {
 					expect(mockStream.hookProgressCalls[0].hookType).toBe(hookType);
 					expect(mockStream.hookProgressCalls[0].stopReason).toContain('First hook aborted');
 				});
+
+				it('should throw HookAbortError when stopReason is empty string (continue: false)', () => {
+					const results: HookResult[] = [
+						{
+							resultKind: 'success',
+							output: {},
+							stopReason: '',
+						},
+					];
+
+					const onSuccess = vi.fn();
+					const options: ProcessHookResultsOptions = {
+						hookType,
+						results,
+						outputStream: mockStream as unknown as ChatResponseStream,
+						logService,
+						onSuccess,
+					};
+
+					expect(() => processHookResults(options)).toThrow(HookAbortError);
+					expect(onSuccess).not.toHaveBeenCalled();
+				});
 			});
 		});
 	});
@@ -386,6 +408,39 @@ describe('hookResultProcessor', () => {
 			expect(onError).toHaveBeenCalledWith('Stop hook blocking reason');
 			// hookProgress should NOT be called when onError is provided
 			expect(mockStream.hookProgressCalls).toHaveLength(0);
+		});
+
+		it('should continue processing remaining results after onError', () => {
+			const results: HookResult[] = [
+				{
+					resultKind: 'error',
+					output: 'First error',
+				},
+				{
+					resultKind: 'success',
+					output: { reason: 'keep going' },
+				},
+				{
+					resultKind: 'error',
+					output: 'Second error',
+				},
+			];
+
+			const onSuccess = vi.fn();
+			const onError = vi.fn();
+			processHookResults({
+				hookType: 'Stop',
+				results,
+				outputStream: mockStream as unknown as ChatResponseStream,
+				logService,
+				onSuccess,
+				onError,
+			});
+
+			expect(onError).toHaveBeenCalledTimes(2);
+			expect(onError).toHaveBeenCalledWith('First error');
+			expect(onError).toHaveBeenCalledWith('Second error');
+			expect(onSuccess).toHaveBeenCalledWith({ reason: 'keep going' });
 		});
 
 		// Other exit codes - show stderr to user only (warnings)

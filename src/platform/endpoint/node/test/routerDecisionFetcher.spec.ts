@@ -10,6 +10,8 @@ import { InMemoryConfigurationService } from '../../../configuration/test/common
 import { ILogService } from '../../../log/common/logService';
 import { IAbortController, IFetcherService, PaginationOptions } from '../../../networking/common/fetcherService';
 import { IExperimentationService, NullExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../telemetry/common/nullTelemetryService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeResponse } from '../../../test/node/fetcher';
 import { RouterDecisionFetcher } from '../routerDecisionFetcher';
 
@@ -31,6 +33,7 @@ describe('RouterDecisionFetcher', () => {
 	let logService: ILogService;
 	let configurationService: IConfigurationService;
 	let experimentationService: IExperimentationService;
+	let telemetryService: ITelemetryService;
 	let routerDecisionFetcher: RouterDecisionFetcher;
 
 	beforeEach(() => {
@@ -80,11 +83,14 @@ describe('RouterDecisionFetcher', () => {
 
 		experimentationService = new NullExperimentationService();
 
+		telemetryService = new NullTelemetryService();
+
 		routerDecisionFetcher = new RouterDecisionFetcher(
 			fetcherService,
 			logService,
 			configurationService,
-			experimentationService
+			experimentationService,
+			telemetryService
 		);
 	});
 

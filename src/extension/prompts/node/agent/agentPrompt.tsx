@@ -11,6 +11,7 @@ import { ICustomInstructionsService } from '../../../../platform/customInstructi
 import { USE_SKILL_ADHERENCE_PROMPT_SETTING } from '../../../../platform/customInstructions/common/promptTypes';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
+import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -20,6 +21,7 @@ import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isDefined, isString } from '../../../../util/vs/base/common/types';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
@@ -625,18 +627,26 @@ export class AgentTasksInstructions extends PromptElement<AgentTasksInstructions
 		props: AgentTasksInstructionsProps,
 		@ITasksService private readonly _tasksService: ITasksService,
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
+		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 	) {
 		super(props);
 	}
 
-	render() {
+	async render() {
 		const foundEnabledTaskTool = this.props.availableTools?.find(t => t.name === ToolName.CoreRunTask || t.name === ToolName.CoreCreateAndRunTask || t.name === ToolName.CoreGetTaskOutput);
 		if (!foundEnabledTaskTool) {
 			return 0;
 		}
 
 		const taskGroupsRaw = this._tasksService.getTasks();
-		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
+		const taskGroups = (await Promise.all(taskGroupsRaw.map(async ([folder, tasks]) => {
+			const tasksFile = URI.joinPath(folder, '.vscode', 'tasks.json');
+			if (await this._ignoreService.isCopilotIgnored(tasksFile)) {
+				return undefined;
+			}
+			const visibleTasks = tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide);
+			return visibleTasks.length > 0 ? [folder, visibleTasks] as const : undefined;
+		}))).filter(isDefined);
 		if (taskGroups.length === 0) {
 			return 0;
 		}

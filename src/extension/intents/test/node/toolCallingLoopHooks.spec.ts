@@ -36,6 +36,8 @@ export class MockChatHookService implements IChatHookService {
 	/** Tracks all hook calls for verification */
 	readonly hookCalls: Array<{ hookType: ChatHookType; input: unknown }> = [];
 
+	logConfiguredHooks(): void { }
+
 	/**
 	 * Configure the results that should be returned when a specific hook type is executed.
 	 */
@@ -64,9 +66,9 @@ export class MockChatHookService implements IChatHookService {
 		return this.hookCalls.filter(call => call.hookType === hookType);
 	}
 
-	async executeHook(hookType: ChatHookType, options: { input?: unknown }, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
+	async executeHook(hookType: ChatHookType, _hooks: unknown, input: unknown, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
 		// Track the call
-		this.hookCalls.push({ hookType, input: options.input });
+		this.hookCalls.push({ hookType, input });
 
 		// Check if we should throw an error
 		const error = this.hookErrors.get(hookType);

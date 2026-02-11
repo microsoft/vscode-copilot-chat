@@ -14,6 +14,7 @@ import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { basename } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ClaudeFolderInfo } from '../../agents/claude/common/claudeFolderInfo';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
@@ -49,13 +50,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
 
-	// Track the last known option values for each session to detect actual changes
-	private readonly _lastKnownOptions = new Map<string, { modelId?: string; permissionMode?: PermissionMode }>();
-
-	// Track folder selection per session (in-memory for untitled sessions)
+	// Track option selections per session (in-memory, committed to session state service on request handling)
+	private readonly _sessionModels = new Map<string, string>();
+	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
 	private readonly _sessionFolders = new Map<string, URI>();
 
 	constructor(
+		private readonly claudeAgentManager: ClaudeAgentManager,
+		private readonly sessionItemProvider: ClaudeChatSessionItemProvider,
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
@@ -78,18 +80,15 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			this._onDidChangeChatSessionProviderOptions.fire();
 		}));
 
-		// Listen for state changes and notify UI only if value actually changed
+		// Listen for state changes and notify UI only if value actually changed from local selection
 		this._register(this.sessionStateService.onDidChangeSessionState(e => {
-			const lastKnown = this._lastKnownOptions.get(e.sessionId);
 			const updates: { optionId: string; value: string }[] = [];
 
-			if (e.modelId !== undefined && e.modelId !== lastKnown?.modelId) {
+			if (e.modelId !== undefined && e.modelId !== this._sessionModels.get(e.sessionId)) {
 				updates.push({ optionId: MODELS_OPTION_ID, value: e.modelId });
-				this._updateLastKnown(e.sessionId, { modelId: e.modelId });
 			}
-			if (e.permissionMode !== undefined && e.permissionMode !== lastKnown?.permissionMode) {
+			if (e.permissionMode !== undefined && e.permissionMode !== this._sessionPermissionModes.get(e.sessionId)) {
 				updates.push({ optionId: PERMISSION_MODE_OPTION_ID, value: e.permissionMode });
-				this._updateLastKnown(e.sessionId, { permissionMode: e.permissionMode });
 			}
 
 			if (updates.length > 0) {
@@ -99,14 +98,9 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		}));
 	}
 
-	private _updateLastKnown(sessionId: string, update: { modelId?: string; permissionMode?: PermissionMode }): void {
-		const existing = this._lastKnownOptions.get(sessionId) ?? {};
-		this._lastKnownOptions.set(sessionId, { ...existing, ...update });
-	}
-
 	public override dispose(): void {
-		this._lastKnownOptions.clear();
-		this._untitledToSdkSession.clear();
+		this._sessionModels.clear();
+		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
 		super.dispose();
 	}
@@ -121,6 +115,12 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			throw new NoClaudeModelsAvailableError();
 		}
 
+		// Check local UI selection first (set via provideHandleOptionsChange)
+		const localModel = this._sessionModels.get(sessionId);
+		if (localModel) {
+			return localModel;
+		}
+
 		// Load the session to extract SDK model if needed
 		const sessionUri = ClaudeSessionUri.forSessionId(sessionId);
 		const session = await this.sessionService.getSession(sessionUri, CancellationToken.None);
@@ -133,7 +133,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	 * Gets the permission mode for a session
 	 */
 	public getPermissionModeForSession(sessionId: string): PermissionMode {
-		return this.sessionStateService.getPermissionModeForSession(sessionId);
+		return this._sessionPermissionModes.get(sessionId) ?? this.sessionStateService.getPermissionModeForSession(sessionId);
 	}
 
 	/**
@@ -215,18 +215,23 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 		if (workspaceFolders.length > 0) {
+			this._sessionFolders.set(sessionId, workspaceFolders[0]);
 			return workspaceFolders[0];
 		}
 
 		// Empty workspace: try MRU
 		const lastUsed = this.folderRepositoryManager.getLastUsedFolderIdInUntitledWorkspace();
 		if (lastUsed) {
-			return URI.file(lastUsed);
+			const last = URI.file(lastUsed);
+			this._sessionFolders.set(sessionId, last);
+			return last;
 		}
 
 		const mru = this.folderRepositoryManager.getFolderMRU();
 		if (mru.length > 0) {
-			return mru[0].folder;
+			const last = mru[0].folder;
+			this._sessionFolders.set(sessionId, last);
+			return last;
 		}
 
 		return undefined;
@@ -236,23 +241,14 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	// #region Chat Participant Handler
 
-	// Track SDK session IDs for untitled sessions that haven't been swapped yet.
-	// When VS Code yields mid-request, we can't swap yet (no complete session to display),
-	// so we store the SDK session ID to reuse on the next request.
-	private readonly _untitledToSdkSession = new Map<string, string>();
-
-	createHandler(
-		sessionType: string,
-		claudeAgentManager: ClaudeAgentManager,
-		sessionItemProvider: ClaudeChatSessionItemProvider,
-	): ChatExtendedRequestHandler {
+	createHandler(): ChatExtendedRequestHandler {
 		return async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> => {
 			const { chatSessionContext } = context;
 			if (!chatSessionContext) {
 				/* Via @claude */
 				// TODO: Think about how this should work
 				stream.markdown(vscode.l10n.t("Start a new Claude Agent session"));
-				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${sessionType}`, title: vscode.l10n.t("Start Session") });
+				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeChatSessionItemProvider.claudeSessionType}`, title: vscode.l10n.t("Start Session") });
 				return {};
 			}
 
@@ -276,42 +272,38 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const folderInfo = this.getFolderInfoForSession(sessionId);
 			const yieldRequested = () => context.yieldRequested;
 
-			// For untitled sessions, check if we have a stored SDK session from a previous yield
-			const untitledKey = chatSessionContext.isUntitled ? chatSessionContext.chatSessionItem.resource.toString() : undefined;
-			const effectiveSessionId = chatSessionContext.isUntitled
-				? this._untitledToSdkSession.get(untitledKey!)
-				: sessionId;
-
-			const result = await claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, modelId, permissionMode, folderInfo, yieldRequested);
-
+			// Resolve the effective session ID and swap untitled sessions to persistent
+			// sessions immediately, before handling the request.
+			let effectiveSessionId: string;
+			let isNewSession: boolean;
 			if (chatSessionContext.isUntitled) {
-				if (result.claudeSessionId) {
-					// Transfer folder selection from untitled session to the new real session ID
-					const untitledFolder = this._sessionFolders.get(sessionId);
-					if (untitledFolder) {
-						this._sessionFolders.set(result.claudeSessionId, untitledFolder);
-						this._sessionFolders.delete(sessionId);
-					}
+				effectiveSessionId = generateUuid();
+				isNewSession = true;
 
-					if (context.yieldRequested) {
-						// VS Code will follow up immediately - store the SDK session so the
-						// next request reuses it instead of creating a new one
-						this._untitledToSdkSession.set(untitledKey!, result.claudeSessionId);
-					} else {
-						// Done yielding (or never yielded) - swap to persistent session
-						this._untitledToSdkSession.delete(untitledKey!);
-						const swapResource = ClaudeSessionUri.forSessionId(result.claudeSessionId);
-						await this.sessionService.waitForSessionReady(swapResource, token);
-						sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-							resource: swapResource,
-							label: request.prompt ?? 'Claude Agent'
-						});
-					}
-				} else if (!result.errorDetails) {
-					// Only show generic warning if we didn't already show a specific error
-					stream.warning(vscode.l10n.t("Failed to create a new Claude Agent session."));
+				// Transfer folder selection from untitled session to the new session ID
+				const untitledFolder = this._sessionFolders.get(sessionId);
+				if (untitledFolder) {
+					this._sessionFolders.set(effectiveSessionId, untitledFolder);
+					this._sessionFolders.delete(sessionId);
 				}
+
+				// Swap to persistent session before handling the request
+				const swapResource = ClaudeSessionUri.forSessionId(effectiveSessionId);
+				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
+					resource: swapResource,
+					label: request.prompt ?? 'Claude Agent'
+				});
+			} else {
+				effectiveSessionId = sessionId;
+				isNewSession = false;
 			}
+
+			// Commit UI state to session state service before invoking agent manager
+			this.sessionStateService.setModelIdForSession(effectiveSessionId, modelId);
+			this.sessionStateService.setPermissionModeForSession(effectiveSessionId, permissionMode);
+			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
+
+			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
 
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};
@@ -388,17 +380,18 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Ignore the unavailable placeholder - it's not a real model
-				if (update.value === UNAVAILABLE_MODEL_ID) {
+				if (!update.value || update.value === UNAVAILABLE_MODEL_ID) {
 					continue;
 				}
-				// Update last known first so the event listener won't fire back to UI
-				this._updateLastKnown(sessionId, { modelId: update.value });
-				void this.claudeCodeModels.setDefaultModel(update.value);
-				this.sessionStateService.setModelIdForSession(sessionId, update.value);
+				// Store locally; committed to session state service when handling the next request
+				this._sessionModels.set(sessionId, update.value);
+				await this.claudeCodeModels.setDefaultModel(update.value);
 			} else if (update.optionId === PERMISSION_MODE_OPTION_ID) {
-				// Update last known first so the event listener won't fire back to UI
-				this._updateLastKnown(sessionId, { permissionMode: update.value as PermissionMode });
-				this.sessionStateService.setPermissionModeForSession(sessionId, update.value as PermissionMode);
+				if (!update.value) {
+					continue;
+				}
+				// Store locally; committed to session state service when handling the next request
+				this._sessionPermissionModes.set(sessionId, update.value as PermissionMode);
 			} else if (update.optionId === FOLDER_OPTION_ID && typeof update.value === 'string') {
 				this._sessionFolders.set(sessionId, URI.file(update.value));
 			}
@@ -413,22 +406,25 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			[];
 
 		let model: string | undefined;
-		try {
-			model = await this._resolveModelForSession(existingSession);
-		} catch (e) {
-			if (e instanceof NoClaudeModelsAvailableError) {
-				model = UNAVAILABLE_MODEL_ID;
-			} else {
-				throw e;
+		const localModel = this._sessionModels.get(sessionId);
+		if (localModel) {
+			model = localModel;
+		} else {
+			try {
+				model = await this._resolveModelForSession(existingSession);
+			} catch (e) {
+				if (e instanceof NoClaudeModelsAvailableError) {
+					model = UNAVAILABLE_MODEL_ID;
+				} else {
+					throw e;
+				}
 			}
 		}
 
-		const permissionMode = this.sessionStateService.getPermissionModeForSession(sessionId);
+		const permissionMode = this.getPermissionModeForSession(sessionId);
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
-		if (model) {
-			options[MODELS_OPTION_ID] = model;
-		}
+		options[MODELS_OPTION_ID] = model;
 		options[PERMISSION_MODE_OPTION_ID] = permissionMode;
 
 		// Include folder option if applicable (multi-root or empty workspace)
@@ -436,11 +432,6 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		if (workspaceFolders.length !== 1) {
 			const defaultFolder = this._getDefaultFolderForSession(sessionId);
 			if (defaultFolder) {
-				// Store the default selection so getFolderInfoForSession can use it
-				if (!this._sessionFolders.has(sessionId)) {
-					this._sessionFolders.set(sessionId, defaultFolder);
-				}
-
 				// For existing sessions (non-untitled), lock the folder option
 				if (existingSession) {
 					options[FOLDER_OPTION_ID] = {

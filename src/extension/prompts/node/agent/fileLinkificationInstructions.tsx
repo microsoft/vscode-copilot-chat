@@ -29,6 +29,7 @@ export class FileLinkificationInstructions extends PromptElement<{}> {
 			- Encode spaces only in the target (My File.md → My%20File.md).<br />
 			- Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.<br />
 			- Valid formats: [file.ts](file.ts#L10) only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10<br />
+			- Only create links for files that exist in the workspace. Do not link to files you are suggesting to create or that do not exist yet.<br />
 			<br />
 
 			USAGE EXAMPLES:<br />

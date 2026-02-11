@@ -8,6 +8,7 @@ import { ILogger, ILogService } from '../../../../platform/log/common/logService
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { registerAddFileReferenceCommand, registerDiffCommands } from './commands';
+import { registerCommandContext } from './commands/context';
 import { CopilotCLISessionTracker, ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 import { DiffStateManager } from './diffState';
 import { InProcHttpServer } from './inProcHttpServer';
@@ -33,12 +34,14 @@ export class CopilotCLIContrib extends Disposable {
 
 		// Create shared instances
 		const diffState = new DiffStateManager(logger);
-		const httpServer = new InProcHttpServer(logger, this.sessionTracker);
+		const httpServer = this._register(new InProcHttpServer(logger, this.sessionTracker));
 		const selectionState = new SelectionState();
 		const contentProvider = new ReadonlyContentProvider();
 
+		this._register(registerCommandContext(httpServer));
+
 		// Register commands
-		this._register(registerAddFileReferenceCommand(logger, httpServer));
+		this._register(registerAddFileReferenceCommand(logger, httpServer, this.sessionTracker));
 		for (const d of registerDiffCommands(logger, diffState)) {
 			this._register(d);
 		}
@@ -46,6 +49,9 @@ export class CopilotCLIContrib extends Disposable {
 			this._register(d);
 		}
 		this._register(contentProvider.register());
+		this._register(httpServer.onDidClientDisconnect(sessionId => {
+			diffState.closeAllForSession(sessionId);
+		}));
 
 		// Clean up any stale lockfiles from previous sessions
 		cleanupStaleLockFiles(logger).then(cleanedCount => {
@@ -61,12 +67,12 @@ export class CopilotCLIContrib extends Disposable {
 	}
 	private async _startMcpServer(logger: ILogger, httpServer: InProcHttpServer, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): Promise<void> {
 		try {
-			const { disposable, serverUri, headers } = await httpServer.start({
+			const { serverUri, headers } = await httpServer.start({
 				id: 'vscode-copilot-cli',
 				serverLabel: 'VS Code Copilot CLI',
 				serverVersion: '0.0.1',
-				registerTools: server => {
-					registerTools(server, logger, diffState, selectionState, contentProvider);
+				registerTools: (server, sessionId) => {
+					registerTools(server, logger, diffState, selectionState, contentProvider, this.sessionTracker, sessionId);
 				},
 				registerPushNotifications: () => {
 					for (const d of registerSelectionChangedNotification(logger, httpServer, selectionState)) {
@@ -93,7 +99,6 @@ export class CopilotCLIContrib extends Disposable {
 				void lockFile.update();
 			}));
 
-			this._register(disposable);
 			this._register({ dispose: () => { void lockFile.remove(); } });
 		} catch (err) {
 			const errMsg = err instanceof Error ? err.message : String(err);

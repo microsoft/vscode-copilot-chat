@@ -2848,7 +2848,7 @@
 			{
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"title": "%github.copilot.command.chat.copilotCLI.addFileReference%",
-				"enablement": "config.github.copilot.chat.cli.integration.enabled",
+				"enablement": "github.copilot.chat.copilotCLI.hasSession",
 				"category": "Copilot CLI"
 			},
 			{
@@ -3070,15 +3070,10 @@
 						"default": "",
 						"markdownDescription": "The currently selected completion model ID. To select from a list of available models, use the __\"Change Completions Model\"__ command or open the model picker (from the Copilot menu in the VS Code title bar, select __\"Configure Code Completions\"__ then __\"Change Completions Model\"__. The value must be a valid model ID. An empty value indicates that the default model will be used."
 					},
-					"github.copilot.chat.claudeAgent.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%"
-					},
-					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+					"github.copilot.chat.growthMessages.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
+						"markdownDescription": "Enable educational growth messages to help learn Copilot features. Reload VS Code after updating this setting."
 					}
 				}
 			},
@@ -3187,6 +3182,22 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
+					},
+					"github.copilot.chat.claudeAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"preview"
+						]
 					},
 					"github.copilot.chat.copilotMemory.enabled": {
 						"type": "boolean",
@@ -4436,15 +4447,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.cli.integration.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.cli.integration.enabled%",
-						"tags": [
-							"advanced",
-							"experimental"
-						]
-					},
 					"github.copilot.chat.cli.mcp.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4569,7 +4571,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"explorer/context": [
@@ -4581,7 +4583,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !explorerResourceIsFolder"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !explorerResourceIsFolder"
 				}
 			],
 			"editor/context": [
@@ -4593,7 +4595,7 @@
 				{
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
-					"when": "config.github.copilot.chat.cli.integration.enabled && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [
@@ -5418,7 +5420,7 @@
 				"command": "github.copilot.chat.copilotCLI.addFileReference",
 				"key": "ctrl+shift+.",
 				"mac": "cmd+shift+.",
-				"when": "config.github.copilot.chat.cli.integration.enabled && editorTextFocus"
+				"when": "github.copilot.chat.copilotCLI.hasSession && editorTextFocus"
 			},
 			{
 				"command": "github.copilot.chat.rerunWithCopilotDebug",
@@ -5627,7 +5629,7 @@
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
 				"description": "%github.copilot.session.providerDescription.claude%",
-				"when": "config.github.copilot.chat.claudeAgent.enabled",
+				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -5712,6 +5714,20 @@
 				"capabilities": {
 					"supportsFileAttachments": true
 				}
+			},
+			{
+				"type": "copilot-growth",
+				"name": "growth",
+				"displayName": "Growth",
+				"icon": "$(lightbulb)",
+				"welcomeTitle": "Learn Copilot",
+				"welcomeMessage": "Get tips and learn how to use Copilot effectively",
+				"isReadOnly": true,
+				"inputPlaceholder": "Ask about Copilot features...",
+				"order": 99,
+				"description": "Educational messages to help you learn Copilot",
+				"when": "config.github.copilot.chat.growthMessages.enabled",
+				"capabilities": {}
 			}
 		],
 		"debuggers": [
@@ -5920,7 +5936,7 @@
 		"@modelcontextprotocol/sdk": "^1.25.2",
 		"@sinclair/typebox": "^0.34.41",
 		"@vscode/copilot-api": "^0.2.12",
-		"@vscode/extension-telemetry": "^1.2.0",
+		"@vscode/extension-telemetry": "^1.5.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.6",
 		"@vscode/tree-sitter-wasm": "0.0.5-php.2",

@@ -5,25 +5,22 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import * as crypto from 'crypto';
 import type * as express from 'express';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { Disposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
 interface McpProviderOptions {
 	id: string;
 	serverLabel: string;
 	serverVersion: string;
-	registerTools: (server: McpServer) => Promise<void> | void;
+	registerTools: (server: McpServer, sessionId: string) => Promise<void> | void;
 	registerPushNotifications?: () => Promise<void> | void;
-}
-
-interface DisposableLike {
-	dispose: () => void;
 }
 
 class AsyncLazy<T> {
@@ -50,13 +47,18 @@ class AsyncLazy<T> {
 	}
 }
 
-export class InProcHttpServer {
+export class InProcHttpServer extends Disposable {
 	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
-
+	private readonly _onDidClientConnect = this._register(new vscode.EventEmitter<string>());
+	public readonly onDidClientConnect = this._onDidClientConnect.event;
+	private readonly _onDidClientDisconnect = this._register(new vscode.EventEmitter<string>());
+	public readonly onDidClientDisconnect = this._onDidClientDisconnect.event;
 	constructor(
 		private readonly _logger: ILogger,
 		private readonly _sessionTracker: ICopilotCLISessionTracker,
-	) { }
+	) {
+		super();
+	}
 
 	broadcastNotification(method: string, params: Record<string, unknown>): void {
 		const message = {
@@ -75,15 +77,37 @@ export class InProcHttpServer {
 		}
 	}
 
+	sendNotification(sessionId: string, method: string, params: Record<string, unknown>): void {
+		const transport = this._getTransport(sessionId);
+		if (!transport) {
+			this._logger.debug(`Cannot send notification "${method}": session ${sessionId} not found`);
+			return;
+		}
+
+		const message = {
+			jsonrpc: '2.0' as const,
+			method,
+			params,
+		};
+
+		transport.send(message).catch(() => {
+			this._logger.debug(`Failed to send notification "${method}" to client ${sessionId}`);
+		});
+	}
+
+	getConnectedSessionIds(): readonly string[] {
+		return Object.keys(this._transports);
+	}
+
 	async start(
 		mcpOptions: McpProviderOptions,
-	): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {
+	): Promise<{ serverUri: vscode.Uri; headers: Record<string, string> }> {
 		let socketPath: string | undefined;
 
 		this._logger.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
 
 		try {
-			const nonce = crypto.randomUUID();
+			const nonce = generateUuid();
 			socketPath = await getRandomSocketPath();
 			this._logger.trace(`Generated socket path: ${socketPath}`);
 
@@ -113,24 +137,22 @@ export class InProcHttpServer {
 				await Promise.resolve(mcpOptions.registerPushNotifications());
 			}
 
+			this._register(toDisposable(() => {
+				this._logger.info('Shutting down MCP server...');
+				for (const sessionId in this._transports) {
+					void this._transports[sessionId].close();
+					this._unregisterTransport(sessionId);
+				}
+
+				if (httpServer.listening) {
+					httpServer.close();
+					httpServer.closeAllConnections();
+				}
+
+				void tryCleanupSocket(socketPath);
+				this._logger.debug('MCP server shutdown complete');
+			}));
 			return {
-				disposable: {
-					dispose: () => {
-						this._logger.info('Shutting down MCP server...');
-						for (const sessionId in this._transports) {
-							void this._transports[sessionId].close();
-							this._unregisterTransport(sessionId);
-						}
-
-						if (httpServer.listening) {
-							httpServer.close();
-							httpServer.closeAllConnections();
-						}
-
-						void tryCleanupSocket(socketPath);
-						this._logger.debug('MCP server shutdown complete');
-					},
-				},
 				serverUri: vscode.Uri.from({
 					scheme: os.platform() === 'win32' ? 'pipe' : 'unix',
 					path: socketPath,
@@ -148,11 +170,13 @@ export class InProcHttpServer {
 
 	private _registerTransport(sessionId: string, transport: StreamableHTTPServerTransport): void {
 		this._transports[sessionId] = transport;
+		this._onDidClientConnect.fire(sessionId);
 		this._logger.info(`Client connected: ${sessionId}`);
 	}
 
 	private _unregisterTransport(sessionId: string): void {
 		delete this._transports[sessionId];
+		this._onDidClientDisconnect.fire(sessionId);
 		this._logger.info(`Client disconnected: ${sessionId}`);
 	}
 
@@ -231,7 +255,7 @@ export class InProcHttpServer {
 
 			try {
 				this._logger.debug('Registering MCP tools...');
-				await Promise.resolve(mcpOptions.registerTools(server));
+				await Promise.resolve(mcpOptions.registerTools(server, sessionId));
 			} catch (err) {
 				const errMsg = err instanceof Error ? err.message : String(err);
 				this._logger.error(`Failed to register MCP tools: ${errMsg}`);
@@ -280,7 +304,7 @@ export class InProcHttpServer {
 
 async function getRandomSocketPath(): Promise<string> {
 	if (os.platform() === 'win32') {
-		return `\\\\.\\pipe\\mcp-${crypto.randomUUID()}.sock`;
+		return `\\\\.\\pipe\\mcp-${generateUuid()}.sock`;
 	} else {
 		const prefix = path.join(os.tmpdir(), 'mcp-');
 		const tempDir = await fs.mkdtemp(prefix);

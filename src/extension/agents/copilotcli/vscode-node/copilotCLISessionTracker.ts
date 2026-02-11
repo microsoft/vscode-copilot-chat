@@ -23,6 +23,21 @@ export interface ICopilotCLISessionTracker {
 	registerSession(sessionId: string, info: SessionProcessInfo): IDisposable;
 
 	/**
+	 * Set the display name for a session (called by the CLI).
+	 */
+	setSessionName(sessionId: string, name: string): void;
+
+	/**
+	 * Get a display name for a session, falling back to the sessionId.
+	 */
+	getSessionDisplayName(sessionId: string): string;
+
+	/**
+	 * Get the IDs of all connected sessions.
+	 */
+	getSessionIds(): readonly string[];
+
+	/**
 	 * Get the terminal associated with a session.
 	 * Returns `undefined` if no matching terminal is found.
 	 */
@@ -32,14 +47,28 @@ export interface ICopilotCLISessionTracker {
 export class CopilotCLISessionTracker implements ICopilotCLISessionTracker {
 	declare _serviceBrand: undefined;
 	private readonly _sessions = new Map<string, SessionProcessInfo>();
+	private readonly _sessionNames = new Map<string, string>();
 
 	registerSession(sessionId: string, info: SessionProcessInfo): IDisposable {
 		this._sessions.set(sessionId, info);
 		return {
 			dispose: () => {
 				this._sessions.delete(sessionId);
+				this._sessionNames.delete(sessionId);
 			}
 		};
+	}
+
+	setSessionName(sessionId: string, name: string): void {
+		this._sessionNames.set(sessionId, name);
+	}
+
+	getSessionDisplayName(sessionId: string): string {
+		return this._sessionNames.get(sessionId) || sessionId;
+	}
+
+	getSessionIds(): readonly string[] {
+		return Array.from(this._sessions.keys());
 	}
 
 	async getTerminal(sessionId: string): Promise<Terminal | undefined> {

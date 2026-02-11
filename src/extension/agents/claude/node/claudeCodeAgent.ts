@@ -22,7 +22,6 @@ import { ChatReferenceBinaryData, ChatResponseThinkingProgressPart } from '../..
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
-import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 import { buildHooksFromRegistry } from '../common/claudeHookRegistry';
 import { buildMcpServersFromRegistry } from '../common/claudeMcpServerRegistry';
 import { IClaudeToolPermissionService } from '../common/claudeToolPermissionService';
@@ -30,6 +29,7 @@ import { claudeEditTools, ClaudeToolNames, getAffectedUrisForEditTool } from '..
 import { completeToolInvocation, createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
+import { IClaudeSessionStateService } from './claudeSessionStateService';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
 import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
 
@@ -50,38 +50,43 @@ export class ClaudeAgentManager extends Disposable {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 	) {
 		super();
 	}
 
 	public async handleRequest(
-		claudeSessionId: string | undefined,
+		claudeSessionId: string,
 		request: vscode.ChatRequest,
 		_context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId: string,
-		permissionMode: PermissionMode,
-		folderInfo: ClaudeFolderInfo,
+		isNewSession: boolean,
 		yieldRequested?: () => boolean
 	): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
+			// Read UI state from session state service
+			const modelId = await this.sessionStateService.getModelIdForSession(claudeSessionId);
+			const permissionMode = this.sessionStateService.getPermissionModeForSession(claudeSessionId);
+			const folderInfo = this.sessionStateService.getFolderInfoForSession(claudeSessionId);
+
+			if (!modelId || !folderInfo) {
+				throw new Error(`Session state not found for session ${claudeSessionId}. State must be committed before calling handleRequest.`);
+			}
+
 			// Get server config, start server if needed
 			const langModelServer = await this.getLangModelServer();
 			const serverConfig = langModelServer.getConfig();
 
-			const sessionIdForLog = claudeSessionId ?? 'new';
-			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}, modelId=${modelId}, permissionMode=${permissionMode}.`);
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${claudeSessionId}, modelId=${modelId}, permissionMode=${permissionMode}.`);
 			let session: ClaudeCodeSession;
-			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
+			if (this._sessions.has(claudeSessionId)) {
 				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
-				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, folderInfo);
-				if (newSession.sessionId) {
-					this._sessions.set(newSession.sessionId, newSession);
-				}
+				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${claudeSessionId}.`);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, isNewSession);
+				this._sessions.set(claudeSessionId, newSession);
 				session = newSession;
 			}
 
@@ -90,16 +95,8 @@ export class ClaudeAgentManager extends Disposable {
 				request.toolInvocationToken,
 				stream,
 				token,
-				modelId,
-				permissionMode,
 				yieldRequested
 			);
-
-			// Store the session if sessionId was assigned during invoke
-			if (session.sessionId && !this._sessions.has(session.sessionId)) {
-				this.logService.trace(`[ClaudeAgentManager] Tracking Claude session ${claudeSessionId} -> ${session.sessionId}`);
-				this._sessions.set(session.sessionId, session);
-			}
 
 			return {
 				claudeSessionId: session.sessionId
@@ -223,6 +220,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _settingsChangeTracker: ClaudeSettingsChangeTracker;
 	private _currentModelId: string;
 	private _currentPermissionMode: PermissionMode;
+	private _isResumed: boolean;
 	private _yieldInProgress = false;
 	private _sessionStarting: Promise<void> | undefined;
 
@@ -253,10 +251,10 @@ export class ClaudeCodeSession extends Disposable {
 	constructor(
 		private readonly serverConfig: IClaudeLanguageModelServerConfig,
 		private readonly langModelServer: ClaudeLanguageModelServer,
-		public sessionId: string | undefined,
+		public readonly sessionId: string,
 		initialModelId: string,
 		initialPermissionMode: PermissionMode,
-		private readonly _folderInfo: ClaudeFolderInfo,
+		isNewSession: boolean,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
@@ -264,10 +262,12 @@ export class ClaudeCodeSession extends Disposable {
 		@IToolsService private readonly toolsService: IToolsService,
 		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService,
 		@IClaudeToolPermissionService private readonly toolPermissionService: IClaudeToolPermissionService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 	) {
 		super();
 		this._currentModelId = initialModelId;
 		this._currentPermissionMode = initialPermissionMode;
+		this._isResumed = !isNewSession;
 		// Initialize edit tracker with plan directory as ignored
 		const planDirUri = URI.joinPath(this.envService.userHome, '.claude', 'plans');
 		this._editTracker = new ExternalEditTracker([planDirUri]);
@@ -339,8 +339,6 @@ export class ClaudeCodeSession extends Disposable {
 	 * @param toolInvocationToken Token for invoking tools
 	 * @param stream Response stream for sending results back to VS Code
 	 * @param token Cancellation token for request cancellation
-	 * @param modelId Model ID to use for this request
-	 * @param permissionMode Permission mode for tool execution
 	 * @param yieldRequested Function to check if the user has requested to interrupt
 	 */
 	public async invoke(
@@ -348,8 +346,6 @@ export class ClaudeCodeSession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
-		modelId: string,
-		permissionMode: PermissionMode,
 		yieldRequested?: () => boolean
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -366,8 +362,14 @@ export class ClaudeCodeSession extends Disposable {
 			await this._startSession(token);
 		}
 
+		// Read current model and permission mode from session state service
+		const modelId = await this.sessionStateService.getModelIdForSession(this.sessionId);
+		const permissionMode = this.sessionStateService.getPermissionModeForSession(this.sessionId);
+
 		// Update model and permission mode on active session if they changed
-		await this._setModel(modelId);
+		if (modelId) {
+			await this._setModel(modelId);
+		}
 		await this._setPermissionMode(permissionMode);
 
 		// Add this request to the queue and wait for completion
@@ -414,7 +416,11 @@ export class ClaudeCodeSession extends Disposable {
 	}
 
 	private async _doStartSession(token: vscode.CancellationToken): Promise<void> {
-		const { cwd, additionalDirectories } = this._folderInfo;
+		const folderInfo = this.sessionStateService.getFolderInfoForSession(this.sessionId);
+		if (!folderInfo) {
+			throw new Error(`No folder info found for session ${this.sessionId}`);
+		}
+		const { cwd, additionalDirectories } = folderInfo;
 
 		// Build options for the Claude Code SDK
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
@@ -439,7 +445,10 @@ export class ClaudeCodeSession extends Disposable {
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
-			resume: this.sessionId,
+			// Use sessionId for new sessions, resume for existing ones (mutually exclusive)
+			...(this._isResumed
+				? { resume: this.sessionId }
+				: { sessionId: this.sessionId }),
 			// Pass the model selection to the SDK
 			model: this._currentModelId,
 			// Pass the permission mode to the SDK
@@ -555,7 +564,7 @@ export class ClaudeCodeSession extends Disposable {
 					content: request.prompt
 				},
 				parent_tool_use_id: null,
-				session_id: this.sessionId ?? ''
+				session_id: this.sessionId
 			};
 
 			// Wait for this request to complete before yielding the next one
@@ -590,9 +599,10 @@ export class ClaudeCodeSession extends Disposable {
 					throw new Error('Request was cancelled');
 				}
 
-				// Capture session_id BEFORE yield check so restart uses correct session
-				if (message.session_id) {
-					this.sessionId = message.session_id;
+				// Mark session as resumed after first SDK message confirms session exists on disk.
+				// This ensures future restarts (yield, settings change) use `resume` instead of `sessionId`.
+				if (message.session_id && !this._isResumed) {
+					this._isResumed = true;
 				}
 
 				// Check yield before processing to avoid streaming partial responses
@@ -724,6 +734,7 @@ export class ClaudeCodeSession extends Disposable {
 		this._queryGenerator = undefined;
 		this._abortController.abort();
 		this._abortController = new AbortController();
+		this._isResumed = true;
 		// Note: We don't clear the prompt queue or pending prompts here
 		// because we're not erroring out, just restarting for settings reload
 	}

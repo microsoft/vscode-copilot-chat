@@ -23,7 +23,12 @@ declare module 'vscode' {
 		/**
 		 * The chat session is currently in progress.
 		 */
-		InProgress = 2
+		InProgress = 2,
+
+		/**
+		 * The chat session needs user input (e.g. an unresolved confirmation).
+		 */
+		NeedsInput = 3
 	}
 
 	export namespace chat {
@@ -449,6 +454,7 @@ declare module 'vscode' {
 	export interface ChatSessionContext {
 		readonly chatSessionItem: ChatSessionItem; // Maps to URI of chat session editor (could be 'untitled-1', etc..)
 		readonly isUntitled: boolean;
+		readonly initialSessionOptions?: ReadonlyArray<{ optionId: string; value: string | { id: string; name: string } }>;
 	}
 
 	export interface ChatSessionCapabilities {
