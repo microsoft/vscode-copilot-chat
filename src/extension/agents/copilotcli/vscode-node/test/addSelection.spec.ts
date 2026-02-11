@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import type { InProcHttpServer } from '../inProcHttpServer';
-import { MockHttpServer, MockSessionTracker, createMockEditor } from './testHelpers';
+import { MockHttpServer, MockSessionTracker, createMockEditor, createMockEditorWithScheme } from './testHelpers';
 
 const { mockRegisterCommand, mockActiveTextEditor, mockShowQuickPick } = vi.hoisted(() => ({
 	mockRegisterCommand: vi.fn(),
@@ -28,32 +28,6 @@ vi.mock('vscode', () => ({
 import * as vscode from 'vscode';
 import { ADD_SELECTION_COMMAND, registerAddSelectionCommand } from '../commands/addSelection';
 import { ADD_FILE_REFERENCE_NOTIFICATION } from '../commands/sendContext';
-
-/**
- * Creates a mock editor with a specific URI scheme.
- */
-function createMockEditorWithScheme(
-	filePath: string,
-	content: string,
-	startLine: number,
-	startChar: number,
-	endLine: number,
-	endChar: number,
-	scheme: string,
-) {
-	const editor = createMockEditor(filePath, content, startLine, startChar, endLine, endChar);
-	return {
-		...editor,
-		document: {
-			...editor.document,
-			uri: {
-				...editor.document.uri,
-				scheme,
-				toString: () => `${scheme}://${filePath}`,
-			},
-		},
-	};
-}
 
 describe('addSelection command', () => {
 	const logger = new TestLogService();

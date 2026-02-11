@@ -114,6 +114,32 @@ export function createMockUri(path: string) {
 }
 
 /**
+* Creates a mock VS Code text editor with a specific URI scheme for testing.
+*/
+export function createMockEditorWithScheme(
+	filePath: string,
+	content: string,
+	startLine: number,
+	startChar: number,
+	endLine: number,
+	endChar: number,
+	scheme: string,
+) {
+	const editor = createMockEditor(filePath, content, startLine, startChar, endLine, endChar);
+	return {
+		...editor,
+		document: {
+			...editor.document,
+			uri: {
+				...editor.document.uri,
+				scheme,
+				toString: () => `${scheme}://${filePath}`,
+			},
+		},
+	};
+}
+
+/**
 * Creates a mock VS Code Diagnostic for testing.
 */
 export function createMockDiagnostic(

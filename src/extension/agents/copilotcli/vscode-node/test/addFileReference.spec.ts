@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestLogService } from '../../../../../platform/testing/common/testLogService';
 import type { InProcHttpServer } from '../inProcHttpServer';
-import { MockHttpServer, MockSessionTracker, createMockEditor } from './testHelpers';
+import { MockHttpServer, MockSessionTracker, createMockEditor, createMockEditorWithScheme } from './testHelpers';
 
 const { mockRegisterCommand, mockActiveTextEditor, mockShowQuickPick } = vi.hoisted(() => ({
 	mockRegisterCommand: vi.fn(),
@@ -230,29 +230,6 @@ describe('addFileReference command', () => {
 	});
 
 	describe('URI scheme validation', () => {
-		function createMockEditorWithScheme(
-			filePath: string,
-			content: string,
-			startLine: number,
-			startChar: number,
-			endLine: number,
-			endChar: number,
-			scheme: string,
-		) {
-			const editor = createMockEditor(filePath, content, startLine, startChar, endLine, endChar);
-			return {
-				...editor,
-				document: {
-					...editor.document,
-					uri: {
-						...editor.document.uri,
-						scheme,
-						toString: () => `${scheme}://${filePath}`,
-					},
-				},
-			};
-		}
-
 		it('should reject output scheme from editor with warning', async () => {
 			mockActiveTextEditor.value = createMockEditorWithScheme('/Output', 'content', 0, 0, 0, 7, 'output');
 
