@@ -152,4 +152,7 @@
 	"githubPullRequests.codingAgent.uiIntegration": true,
 	"python-envs.defaultEnvManager": "ms-python.python:system",
 	"python-envs.pythonProjects": [],
+	"chat.tools.terminal.autoApprove": {
+		"npx vitest": true
+	}
 }

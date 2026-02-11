@@ -175,6 +175,10 @@ export enum PromptingStrategy {
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
 	XtabAggressiveness = 'xtabAggressiveness',
+	/**
+	 * Xtab275 prompt + aggressiveness level tag.
+	 */
+	Xtab275Aggressiveness = 'xtab275Aggressiveness',
 	PatchBased = 'patchBased',
 	PatchBased01 = 'patchBased01',
 	/**
@@ -195,6 +199,13 @@ export function isPromptingStrategy(value: string): value is PromptingStrategy {
 	return (Object.values(PromptingStrategy) as string[]).includes(value);
 }
 
+export function isAggressivenessStrategy(strategy: PromptingStrategy | undefined): boolean {
+	return strategy === PromptingStrategy.XtabAggressiveness
+		|| strategy === PromptingStrategy.Xtab275Aggressiveness
+		|| strategy === PromptingStrategy.Xtab275EditIntent
+		|| strategy === PromptingStrategy.Xtab275EditIntentShort;
+}
+
 export enum ResponseFormat {
 	CodeBlock = 'codeBlock',
 	UnifiedWithXml = 'unifiedWithXml',
@@ -213,6 +224,7 @@ export namespace ResponseFormat {
 				return ResponseFormat.UnifiedWithXml;
 			case PromptingStrategy.Xtab275:
 			case PromptingStrategy.XtabAggressiveness:
+			case PromptingStrategy.Xtab275Aggressiveness:
 				return ResponseFormat.EditWindowOnly;
 			case PromptingStrategy.PatchBased:
 				return ResponseFormat.CustomDiffPatch;
@@ -400,6 +412,14 @@ export const USER_HAPPINESS_SCORE_CONFIGURATION_VALIDATOR: IValidator<UserHappin
 			return { content: undefined, error: { message: 'acceptedScore must be greater than rejectedScore to prevent division by zero' } };
 		}
 
+		// Validate acceptedScore >= ignoredScore >= rejectedScore to prevent exceeding bounds
+		if (config.ignoredScore < config.rejectedScore) {
+			return { content: undefined, error: { message: 'ignoredScore must be greater than or equal to rejectedScore to prevent exceeding bounds' } };
+		}
+		if (config.acceptedScore < config.ignoredScore) {
+			return { content: undefined, error: { message: 'acceptedScore must be greater than or equal to ignoredScore to prevent exceeding bounds' } };
+		}
+
 		// Validate highThreshold > mediumThreshold for logical consistency
 		if (config.highThreshold <= config.mediumThreshold) {
 			return { content: undefined, error: { message: 'highThreshold must be greater than mediumThreshold' } };
@@ -435,4 +455,8 @@ export function parseUserHappinessScoreConfigurationString(optionString: string)
 export enum SpeculativeRequestsEnablement {
 	On = 'on',
 	Off = 'off',
+}
+
+export namespace SpeculativeRequestsEnablement {
+	export const VALIDATOR = vEnum(SpeculativeRequestsEnablement.On, SpeculativeRequestsEnablement.Off);
 }

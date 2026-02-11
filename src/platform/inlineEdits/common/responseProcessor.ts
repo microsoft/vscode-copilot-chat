@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
@@ -66,7 +65,7 @@ export namespace ResponseProcessor {
 	 * @param modifiedLines
 	 * @param cursorOriginalLinesOffset offset of cursor within original lines
 	 */
-	export async function* diff(originalLines: string[], modifiedLines: AsyncIterableObject<string>, cursorOriginalLinesOffset: number, params: DiffParams): AsyncIterable<LineReplacement> {
+	export async function* diff(originalLines: string[], modifiedLines: AsyncIterable<string>, cursorOriginalLinesOffset: number, params: DiffParams): AsyncIterable<LineReplacement> {
 
 		const lineToIdxs = new ArrayMap<string, number>();
 		for (const [i, line] of originalLines.entries()) {

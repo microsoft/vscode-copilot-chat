@@ -4,17 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, it } from 'vitest';
-import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { AsyncIterUtils } from '../../../../util/common/asyncIterableUtils';
 import { XtabCustomDiffPatchResponseHandler } from '../../node/xtabCustomDiffPatchResponseHandler';
 
 describe('XtabCustomDiffPatchResponseHandler', () => {
 
 	async function collectPatches(patchText: string): Promise<string> {
-		const linesStream = AsyncIterableObject.fromArray(patchText.split('\n'));
-		const patches: string[] = [];
-		for await (const patch of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
-			patches.push(patch.toString());
-		}
+		const linesStream = AsyncIterUtils.fromArray(patchText.split('\n'));
+		const patches = await AsyncIterUtils.toArray(XtabCustomDiffPatchResponseHandler.extractEdits(linesStream));
 		return patches.map(p => p.toString()).join('\n');
 	}
 

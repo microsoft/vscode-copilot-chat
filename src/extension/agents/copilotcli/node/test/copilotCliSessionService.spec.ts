@@ -35,6 +35,7 @@ export class MockCliSdkSession {
 	public aborted = false;
 	public messages: {}[] = [];
 	public events: {}[] = [];
+	public summary?: string;
 	constructor(public readonly sessionId: string, public readonly startTime: Date) { }
 	getChatContextMessages(): Promise<{}[]> { return Promise.resolve(this.messages); }
 	getEvents(): {}[] { return this.events; }
@@ -63,7 +64,7 @@ export class MockCliSdkSessionManager {
 		return Promise.resolve(undefined);
 	}
 	listSessions() {
-		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime })));
+		return Promise.resolve(Array.from(this.sessions.values()).map(s => ({ sessionId: s.sessionId, startTime: s.startTime, modifiedTime: s.startTime, summary: s.summary })));
 	}
 	deleteSession(id: string) { this.sessions.delete(id); return Promise.resolve(); }
 	closeSession(_id: string) { return Promise.resolve(); }
@@ -178,6 +179,15 @@ describe('CopilotCLISessionService', () => {
 			expect(existingSession?.object).toBeDefined();
 			expect(existingSession?.object).not.toBe(session);
 			expect(existingSession?.object.sessionId).toBe(session.object.sessionId);
+		});
+
+		it('passes clientName: vscode to session manager', async () => {
+			const createSessionSpy = vi.spyOn(manager, 'createSession');
+			await service.createSession({ model: 'gpt-test', workingDirectory: URI.file('/tmp') }, CancellationToken.None);
+
+			expect(createSessionSpy).toHaveBeenCalledWith(expect.objectContaining({
+				clientName: 'vscode'
+			}));
 		});
 	});
 
@@ -314,6 +324,99 @@ describe('CopilotCLISessionService', () => {
 			const item = sessions.find(i => i.id === 'lab1');
 			expect(item?.label).includes('Line1');
 			expect(item?.label).includes('Line2');
+		});
+
+		it('uses clean summary from metadata without loading the full session', async () => {
+			const s = new MockCliSdkSession('summary1', new Date());
+			s.summary = 'Fix the login bug';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the login bug in auth.ts' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+
+			const item = sessions.find(i => i.id === 'summary1');
+			expect(item?.label).toBe('Fix the login bug');
+			// Should not have loaded the full session since summary was clean
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('falls through to session load when summary contains angle bracket', async () => {
+			const s = new MockCliSdkSession('truncated1', new Date());
+			s.summary = 'Fix the bug... <current_dateti...';
+			s.events.push({ type: 'user.message', data: { content: 'Fix the bug in the parser' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+			const sessions = await service.getAllSessions(() => true, CancellationToken.None);
+
+			const item = sessions.find(i => i.id === 'truncated1');
+			expect(item?.label).toBe('Fix the bug in the parser');
+			// Should have loaded the full session because summary had '<'
+			expect(getSessionSpy).toHaveBeenCalled();
+		});
+
+		it('uses cached label on second call without loading session again', async () => {
+			const s = new MockCliSdkSession('cache1', new Date());
+			// No summary forces session load on first call
+			s.events.push({ type: 'user.message', data: { content: 'Refactor the tests' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call - loads session and caches the label
+			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			const item1 = sessions1.find(i => i.id === 'cache1');
+			expect(item1?.label).toBe('Refactor the tests');
+
+			// Now spy on getSession for the second call
+			const getSessionSpy = vi.spyOn(manager, 'getSession');
+
+			// Second call - should use cached label
+			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			const item2 = sessions2.find(i => i.id === 'cache1');
+			expect(item2?.label).toBe('Refactor the tests');
+			// Should not have loaded the full session on second call
+			expect(getSessionSpy).not.toHaveBeenCalled();
+		});
+
+		it('cached label takes priority over metadata summary', async () => {
+			const s = new MockCliSdkSession('priority1', new Date());
+			// No summary initially - forces session load and caching
+			s.events.push({ type: 'user.message', data: { content: 'Original label from events' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			// First call caches label from events
+			const sessions1 = await service.getAllSessions(() => true, CancellationToken.None);
+			expect(sessions1.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
+
+			// Now add a summary to the metadata - the cached label should still be used
+			s.summary = 'Different summary label';
+
+			const sessions2 = await service.getAllSessions(() => true, CancellationToken.None);
+			expect(sessions2.find(i => i.id === 'priority1')?.label).toBe('Original label from events');
+		});
+
+		it('populates cache after loading session for label', async () => {
+			const s = new MockCliSdkSession('populate1', new Date());
+			s.events.push({ type: 'user.message', data: { content: 'Add unit tests for auth' }, timestamp: Date.now().toString() });
+			manager.sessions.set(s.sessionId, s);
+
+			await service.getAllSessions(() => true, CancellationToken.None);
+
+			// Verify the internal cache was populated
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.get('populate1')).toBe('Add unit tests for auth');
+		});
+
+		it('does not cache when using clean summary from metadata directly', async () => {
+			const s = new MockCliSdkSession('nocache1', new Date());
+			s.summary = 'Clean summary without brackets';
+			manager.sessions.set(s.sessionId, s);
+
+			await service.getAllSessions(() => true, CancellationToken.None);
+
+			// The cache should not have an entry since the summary was used directly
+			const labelCache = (service as any)._sessionLabels as Map<string, string>;
+			expect(labelCache.has('nocache1')).toBe(false);
 		});
 	});
 

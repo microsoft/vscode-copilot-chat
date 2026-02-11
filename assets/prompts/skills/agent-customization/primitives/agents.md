@@ -16,22 +16,27 @@ Custom personas with specific tools, instructions, and behaviors. Use for orches
 description: "<required>"    # For agent picker and subagent discovery
 name: "Agent Name"           # Optional, defaults to filename
 tools: ["search", "web"]     # Optional: aliases, MCP (<server>/*), extension tools
-model: "Claude Sonnet 4"     # Optional, uses picker default
+model: "Claude Sonnet 4"     # Optional, uses picker default; supports array for fallback
 argument-hint: "Task..."     # Optional, input guidance
 agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
-infer: "all"                 # Optional: "all"|true, "user"|false, "agent", "hidden"
+user-invokable: true         # Optional, show in agent picker (default: true)
+disable-model-invocation: false  # Optional, prevent subagent invocation (default: false)
 handoffs: [...]              # Optional, transitions to other agents
 ---
 ```
 
-### `infer` Values
+### Invocation Control
 
-| Value | Behavior |
-|-------|----------|
-| `"all"` or `true` | Available in agent picker AND as subagent (default) |
-| `"user"` or `false` | Only in agent picker, not as subagent |
-| `"agent"` | Only as subagent, hidden from picker |
-| `"hidden"` | Not available anywhere |
+| Attribute | Default | Effect |
+|-----------|---------|--------|
+| `user-invokable: false` | `true` | Hide from agent picker, only accessible as subagent |
+| `disable-model-invocation: true` | `false` | Prevent other agents from invoking as subagent |
+
+### Model Fallback
+
+```yaml
+model: ['Claude Sonnet 4.5 (copilot)', 'GPT-5 (copilot)']  # First available model is used
+```
 
 ## Tools
 
@@ -68,7 +73,7 @@ To discover available tools, check your current tool list or use `#tool:` syntax
 ---
 description: "{Use when... trigger phrases for subagent discovery}"
 tools: ["{minimal set of tool aliases}"]
-infer: "agent"
+user-invokable: false
 ---
 You are a specialist at {specific task}. Your job is to {clear purpose}.
 

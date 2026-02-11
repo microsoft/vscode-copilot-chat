@@ -10,6 +10,8 @@ import { InMemoryConfigurationService } from '../../../../platform/configuration
 import { AggressivenessLevel, DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION, UserHappinessScoreConfiguration } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../../platform/telemetry/common/telemetry';
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { ActionKind, MAX_INTERACTIONS_CONSIDERED, MAX_INTERACTIONS_STORED, UserInteractionMonitor } from '../../common/userInteractionMonitor';
 
@@ -32,6 +34,13 @@ class TestUserInteractionMonitor extends UserInteractionMonitor {
 	getActionsForTiming(): { time: number; kind: ActionKind.Accepted | ActionKind.Rejected }[] {
 		return [...this._recentUserActionsForTiming];
 	}
+
+	/**
+	 * Get the parsed user happiness score configuration.
+	 */
+	getUserHappinessScoreConfiguration(): UserHappinessScoreConfiguration {
+		return this._getUserHappinessScoreConfiguration();
+	}
 }
 
 /**
@@ -43,17 +52,40 @@ class MockConfigurationService extends InMemoryConfigurationService {
 	}
 }
 
+interface TelemetryCall {
+	eventName: string;
+	properties?: TelemetryEventProperties;
+	measurements?: TelemetryEventMeasurements;
+}
+
+/**
+ * Mock telemetry service that records telemetry events for verification.
+ */
+class MockTelemetryService extends NullTelemetryService {
+	readonly msftEvents: TelemetryCall[] = [];
+
+	override sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void {
+		this.msftEvents.push({ eventName, properties, measurements });
+	}
+
+	reset(): void {
+		this.msftEvents.length = 0;
+	}
+}
+
 describe('UserInteractionMonitor', () => {
 	let configurationService: MockConfigurationService;
 	let experimentationService: IExperimentationService;
 	let logService: ILogService;
+	let telemetryService: ITelemetryService;
 	let monitor: TestUserInteractionMonitor;
 
 	beforeEach(() => {
 		configurationService = new MockConfigurationService();
 		experimentationService = new NullExperimentationService();
 		logService = new TestLogService();
-		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
+		telemetryService = new NullTelemetryService();
+		monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService, telemetryService);
 	});
 
 	describe('history logging', () => {
@@ -166,8 +198,7 @@ describe('UserInteractionMonitor', () => {
 
 	describe('aggressiveness level calculation', () => {
 		test('returns neutral aggressiveness with no history', () => {
-			// With no data, score is 0.5, which is between low and medium thresholds
-			// Default: highThreshold = 0.6, mediumThreshold = 0.4
+			// With no data, score is 0.5, which is between low and medium thresholds for the default config
 			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect(level).toBe(AggressivenessLevel.Medium);
 		});
@@ -219,7 +250,7 @@ describe('UserInteractionMonitor', () => {
 			const levelRejectionsRecent = monitor.getAggressivenessLevel().aggressivenessLevel;
 
 			// Reset and do opposite order
-			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService);
+			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService, telemetryService);
 			for (let i = 0; i < 5; i++) {
 				monitor.handleRejection();
 			}
@@ -287,6 +318,110 @@ describe('UserInteractionMonitor', () => {
 			// Only 2 ignored should be counted due to limit
 			const level = monitor.getAggressivenessLevel().aggressivenessLevel;
 			expect([AggressivenessLevel.Medium, AggressivenessLevel.High]).toContain(level);
+		});
+	});
+
+	describe('config parse error telemetry', () => {
+		let mockTelemetryService: MockTelemetryService;
+
+		beforeEach(() => {
+			mockTelemetryService = new MockTelemetryService();
+			monitor = new TestUserInteractionMonitor(configurationService, experimentationService, logService, mockTelemetryService);
+		});
+
+		test('emits telemetry event when config is invalid JSON', () => {
+			configurationService.setConfig(
+				ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString,
+				'not valid json'
+			);
+
+			monitor.getAggressivenessLevel();
+
+			expect(mockTelemetryService.msftEvents).toHaveLength(1);
+			expect(mockTelemetryService.msftEvents[0].eventName).toBe('incorrectNesAdaptiveAggressivenessConfig');
+			expect(mockTelemetryService.msftEvents[0].properties).toMatchObject({
+				configName: ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString.id,
+				configValue: 'not valid json',
+			});
+			expect(mockTelemetryService.msftEvents[0].properties?.errorMessage).toBeDefined();
+		});
+
+		test('emits telemetry event when config has missing required fields', () => {
+			// Missing ignoredLimit and other required fields
+			const incompleteConfig = JSON.stringify({
+				acceptedScore: 1,
+				rejectedScore: 0,
+			});
+			configurationService.setConfig(
+				ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString,
+				incompleteConfig
+			);
+
+			monitor.getAggressivenessLevel();
+
+			expect(mockTelemetryService.msftEvents).toHaveLength(1);
+			expect(mockTelemetryService.msftEvents[0].eventName).toBe('incorrectNesAdaptiveAggressivenessConfig');
+			expect(mockTelemetryService.msftEvents[0].properties?.configValue).toBe(incompleteConfig);
+		});
+
+		test('emits telemetry event when config has invalid score relationships', () => {
+			// acceptedScore must be greater than rejectedScore
+			const invalidConfig = JSON.stringify({
+				acceptedScore: 0.3,
+				rejectedScore: 0.7,
+				ignoredScore: 0.5,
+				highThreshold: 0.7,
+				mediumThreshold: 0.4,
+				includeIgnored: false,
+				ignoredLimit: 0,
+				limitConsecutiveIgnored: false,
+				limitTotalIgnored: true,
+			});
+			configurationService.setConfig(
+				ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString,
+				invalidConfig
+			);
+
+			monitor.getAggressivenessLevel();
+
+			expect(mockTelemetryService.msftEvents).toHaveLength(1);
+			expect(mockTelemetryService.msftEvents[0].eventName).toBe('incorrectNesAdaptiveAggressivenessConfig');
+			expect(mockTelemetryService.msftEvents[0].properties?.errorMessage).toContain('acceptedScore must be greater than rejectedScore');
+		});
+
+		test('returns default config when parse fails', () => {
+			configurationService.setConfig(
+				ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString,
+				'invalid'
+			);
+
+			// Get the config that was parsed (should fall back to default)
+			const parsedConfig = monitor.getUserHappinessScoreConfiguration();
+
+			// Should be exactly equal to the default config
+			expect(parsedConfig).toEqual(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+		});
+
+		test('does not emit telemetry for valid config', () => {
+			const validConfig: UserHappinessScoreConfiguration = {
+				...DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION,
+				acceptedScore: 0.9,
+				rejectedScore: 0.1,
+			};
+			configurationService.setConfig(
+				ConfigKey.TeamInternal.InlineEditsUserHappinessScoreConfigurationString,
+				JSON.stringify(validConfig)
+			);
+
+			// Get the config that was parsed
+			const parsedConfig = monitor.getUserHappinessScoreConfiguration();
+
+			// Should be exactly equal to the custom config (not the default)
+			expect(parsedConfig).toEqual(validConfig);
+			expect(parsedConfig).not.toEqual(DEFAULT_USER_HAPPINESS_SCORE_CONFIGURATION);
+
+			// No telemetry should be emitted
+			expect(mockTelemetryService.msftEvents).toHaveLength(0);
 		});
 	});
 });

@@ -301,6 +301,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					} else if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+						this._stream?.push(responsePart);
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -319,8 +322,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 
+				// Just complete the tool invocation - the part was already pushed with partial updates enabled
 				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+				if (responsePart) {
+					if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+					}
 					this._stream?.push(responsePart);
 				}
 
@@ -434,12 +441,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
 		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
-		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
-			// TODO:@rebornix @lszomoru
-			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
-			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-
+		// Sometimes we don't get a tool call id for the edit permission request
+		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 

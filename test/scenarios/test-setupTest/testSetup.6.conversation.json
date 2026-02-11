@@ -1,7 +1,7 @@
 [
   {
     "name": "nodeExpressApp",
-    "question": "@workspace /setupTests jest",
+    "question": "/setupTests jest",
     "expectations": {
       "filePatterns": ["^jest\\.config\\.js$", "^.*\\.test\\.js$"],
       "installCommandPattern": "npm i.* jest",

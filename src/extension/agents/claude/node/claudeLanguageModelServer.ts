@@ -520,6 +520,18 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		return this.base.supportsThinkingContentInHistory;
 	}
 
+	public get supportsAdaptiveThinking(): boolean | undefined {
+		return this.base.supportsAdaptiveThinking;
+	}
+
+	public get minThinkingBudget(): number | undefined {
+		return this.base.minThinkingBudget;
+	}
+
+	public get maxThinkingBudget(): number | undefined {
+		return this.base.maxThinkingBudget;
+	}
+
 	public get supportsToolCalls(): boolean {
 		return this.base.supportsToolCalls;
 	}
@@ -534,10 +546,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 
 	public get supportedEditTools(): readonly EndpointEditToolName[] | undefined {
 		return this.base.supportedEditTools;
-	}
-
-	public get policy(): IChatEndpoint['policy'] {
-		return this.base.policy;
 	}
 
 	public async processResponseFromChatEndpoint(
@@ -592,10 +600,6 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		});
 	}
 
-	public acceptChatPolicy(): Promise<boolean> {
-		return this.base.acceptChatPolicy();
-	}
-
 	public makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -624,6 +628,14 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		options: ICreateEndpointBodyOptions
 	): IEndpointBody {
 		const base = this.base.createRequestBody(options);
+
+		// Claude models don't support both temperature and top_p simultaneously.
+		// If the SDK request specifies either, clear both from base to avoid conflicts.
+		if (this.requestBody.temperature !== undefined || this.requestBody.top_p !== undefined) {
+			delete base.temperature;
+			delete base.top_p;
+		}
+
 		// Merge with original request body to preserve any additional properties
 		// i.e. default thinking budget.
 		return {

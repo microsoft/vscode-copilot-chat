@@ -96,6 +96,7 @@ export const nonDeferredToolNames = new Set([
 	// Misc
 	'ask_questions',
 	'switch_agent',
+	'memory'
 ]);
 
 export const TOOL_SEARCH_TOOL_NAME = 'tool_search_tool_regex';
@@ -155,6 +156,7 @@ export interface ContextManagementResponse {
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)
@@ -167,13 +169,15 @@ export function modelSupportsContextEditing(modelId: string): boolean {
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
 }
 
 /**
- * Tool search is only supported by:
+ * Tool search is supported by:
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * @param modelId The model ID to check
  * @returns true if the model supports tool search
@@ -183,7 +187,8 @@ export function modelSupportsToolSearch(modelId: string): boolean {
 	const normalized = modelId.toLowerCase().replace(/\./g, '-');
 	// TODO: Enable sonnet tool search when supported by all providers
 	// return normalized.startsWith('claude-sonnet-4-5') ||
-	return normalized.startsWith('claude-opus-4-5');
+	return normalized.startsWith('claude-opus-4-6') ||
+		normalized.startsWith('claude-opus-4-5');
 }
 
 /**
@@ -209,6 +214,7 @@ export function modelSupportsInterleavedThinking(modelId: string): boolean {
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)
  * - Claude Sonnet 4.5 (claude-sonnet-4-5-* or claude-sonnet-4.5-*)
  * - Claude Sonnet 4 (claude-sonnet-4-*)
+ * - Claude Opus 4.6 (claude-opus-4-6-* or claude-opus-4.6-*)
  * - Claude Opus 4.5 (claude-opus-4-5-* or claude-opus-4.5-*)
  * - Claude Opus 4.1 (claude-opus-4-1-* or claude-opus-4.1-*)
  * - Claude Opus 4 (claude-opus-4-*)
@@ -220,6 +226,7 @@ export function modelSupportsMemory(modelId: string): boolean {
 	return normalized.startsWith('claude-haiku-4-5') ||
 		normalized.startsWith('claude-sonnet-4-5') ||
 		normalized.startsWith('claude-sonnet-4') ||
+		normalized.startsWith('claude-opus-4-6') ||
 		normalized.startsWith('claude-opus-4-5') ||
 		normalized.startsWith('claude-opus-4-1') ||
 		normalized.startsWith('claude-opus-4');
@@ -250,6 +257,18 @@ export function isAnthropicContextEditingEnabled(
 		return false;
 	}
 	return configurationService.getExperimentBasedConfig(ConfigKey.AnthropicContextEditingEnabled, experimentationService);
+}
+
+export function isAnthropicMemoryToolEnabled(
+	endpoint: IChatEndpoint | string,
+	configurationService: IConfigurationService,
+	experimentationService: IExperimentationService,
+): boolean {
+	const effectiveModelId = typeof endpoint === 'string' ? endpoint : endpoint.model;
+	if (!modelSupportsMemory(effectiveModelId)) {
+		return false;
+	}
+	return configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, experimentationService);
 }
 
 export interface ContextEditingConfig {

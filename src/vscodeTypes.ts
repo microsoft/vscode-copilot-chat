@@ -26,6 +26,8 @@ export import ChatVariableLevel = vscode.ChatVariableLevel;
 export import ChatResponseClearToPreviousToolInvocationReason = vscode.ChatResponseClearToPreviousToolInvocationReason;
 export import ChatResponseMarkdownPart = vscode.ChatResponseMarkdownPart;
 export import ChatResponseThinkingProgressPart = vscode.ChatResponseThinkingProgressPart;
+export import ChatResponseHookPart = vscode.ChatResponseHookPart;
+export import ChatHookType = vscode.ChatHookType;
 export import ChatResponseFileTreePart = vscode.ChatResponseFileTreePart;
 export import ChatResponseAnchorPart = vscode.ChatResponseAnchorPart;
 export import ChatResponseProgressPart = vscode.ChatResponseProgressPart;
@@ -94,6 +96,7 @@ export import LanguageModelChatToolMode = vscode.LanguageModelChatToolMode;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
+export import ChatSubagentToolInvocationData = vscode.ChatSubagentToolInvocationData;
 export import ChatMcpToolInvocationData = vscode.ChatMcpToolInvocationData;
 export import McpToolInvocationContentData = vscode.McpToolInvocationContentData;
 export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
@@ -106,6 +109,7 @@ export import FileType = vscode.FileType;
 export import ChatSessionStatus = vscode.ChatSessionStatus;
 export import McpHttpServerDefinition = vscode.McpHttpServerDefinition;
 export import McpStdioServerDefinition = vscode.McpStdioServerDefinition;
+export import ThemeIcon = vscode.ThemeIcon;
 
 export const l10n = {
 	/**

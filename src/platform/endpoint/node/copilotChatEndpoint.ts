@@ -38,10 +38,6 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		super(
 			modelMetadata,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,

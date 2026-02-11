@@ -120,14 +120,16 @@ All interactions are displayed through VS Code's native chat UI, providing a sea
 - Provides dependency injection for testability
 - Enables mocking in unit tests
 
-### `node/claudeCodeSessionService.ts`
+### `node/sessionParser/claudeCodeSessionService.ts`
 
 **IClaudeCodeSessionService / ClaudeCodeSessionService**
 - Loads and manages persisted Claude Code sessions from disk
 - Reads `.jsonl` session files from `~/.claude/projects/<workspace-slug>/`
 - Builds message chains from leaf nodes to reconstruct full conversations
+- Discovers and parses subagent sessions from `{session-id}/subagents/agent-*.jsonl`
 - Provides session caching with mtime-based invalidation
 - Used to resume previous Claude Code conversations
+- See `node/sessionParser/README.md` for detailed documentation
 
 ### `common/claudeTools.ts`
 
@@ -168,6 +170,52 @@ Claude Code sessions are persisted to `~/.claude/projects/<workspace-slug>/` as 
 - Load all sessions for the current workspace
 - Resume a previous session by ID
 - Cache sessions with mtime-based invalidation
+
+## Folder and Working Directory Management
+
+The integration deterministically resolves the working directory (`cwd`) and additional directories for each Claude session, rather than inheriting from `process.cwd()`. This is managed by the `ClaudeChatSessionContentProvider` and exposed through the `ClaudeFolderInfo` interface.
+
+### `ClaudeFolderInfo` (`common/claudeFolderInfo.ts`)
+
+```typescript
+interface ClaudeFolderInfo {
+  readonly cwd: string;                  // Primary working directory
+  readonly additionalDirectories: string[]; // Extra directories Claude can access
+}
+```
+
+### Folder Resolution by Workspace Type
+
+| Workspace Type | cwd | additionalDirectories | Folder Picker |
+|---|---|---|---|
+| **Single-root** (1 folder) | That folder | `[]` | Hidden |
+| **Multi-root** (2+ folders) | Selected folder (default: first) | All other workspace folders | Shown with workspace folders |
+| **Empty** (0 folders) | Selected MRU folder | `[]` | Shown with MRU entries |
+
+### Data Flow
+
+1. **`ClaudeChatSessionContentProvider`** resolves `ClaudeFolderInfo` via `getFolderInfoForSession(sessionId)`
+2. The folder info is passed through `ClaudeAgentManager.handleRequest()` to `ClaudeCodeSession`
+3. `ClaudeCodeSession._startSession()` uses `folderInfo.cwd` and `folderInfo.additionalDirectories` when building SDK `Options`
+
+### Folder Picker UI
+
+In multi-root and empty workspaces, a folder picker option appears in the chat session options:
+- **Multi-root**: Lists all workspace folders; selecting one makes it `cwd`, the rest become `additionalDirectories`
+- **Empty workspace**: Lists MRU folders from `IFolderRepositoryManager` (max 10 entries)
+- The folder option is **locked** for existing (non-untitled) sessions to prevent cwd changes mid-conversation
+
+### Session Discovery Across Folders
+
+`ClaudeCodeSessionService._getProjectSlugs()` generates workspace slugs for **all** workspace folders, enabling session discovery across all project directories in multi-root workspaces. For empty workspaces, it generates slugs for all folders known to `IFolderRepositoryManager` (MRU entries).
+
+### Key Files
+
+- **`common/claudeFolderInfo.ts`**: `ClaudeFolderInfo` interface
+- **`../../chatSessions/vscode-node/claudeChatSessionContentProvider.ts`**: Folder resolution, picker options, and handler integration
+- **`../../chatSessions/vscode-node/folderRepositoryManagerImpl.ts`**: `FolderRepositoryManager` (abstract base) with `ClaudeFolderRepositoryManager` subclass — the Claude subclass does not depend on `ICopilotCLISessionService` (CopilotCLI has its own subclass `CopilotCLIFolderRepositoryManager`)
+- **`node/claudeCodeAgent.ts`**: Consumes `ClaudeFolderInfo` in `ClaudeCodeSession._startSession()`
+- **`node/sessionParser/claudeCodeSessionService.ts`**: `_getProjectSlugs()` generates slugs for all folders
 
 ## Testing
 
@@ -274,6 +322,36 @@ Tool permission handlers control what actions Claude can take without user confi
 - All other tools show a confirmation dialog via VS Code's chat API
 - User denials send appropriate messages back to Claude
 
+### MCP Server Registry
+
+**Location:** `common/claudeMcpServerRegistry.ts`
+
+The MCP server registry allows contributing MCP (Model Context Protocol) server configurations to the Claude SDK Options. Contributors provide server configurations that are merged and passed to the SDK at session start.
+
+**Key Features:**
+- Register contributors using `registerClaudeMcpServerContributor(ctor)`
+- Contributors are constructed via dependency injection using `IInstantiationService`
+- Contributors implement `IClaudeMcpServerContributor` with an async `getMcpServers()` method
+- Server configurations are merged into a single `Record<string, McpServerConfig>` for the SDK
+
+**Contributor Interface:**
+```typescript
+interface IClaudeMcpServerContributor {
+	getMcpServers(): Promise<Record<string, McpServerConfig>>;
+}
+```
+
+**Supported Server Types:**
+- `McpStdioServerConfig` - Standard input/output process transport (`{ command, args?, env? }`)
+- `McpSSEServerConfig` - Server-Sent Events (`{ type: 'sse', url, headers? }`)
+- `McpHttpServerConfig` - HTTP transport (`{ type: 'http', url, headers? }`)
+- `McpSdkServerConfigWithInstance` - In-process SDK servers
+
+**Index Chain:**
+- `common/mcpServers/index.ts` → Platform-agnostic contributors
+- `node/mcpServers/index.ts` → Node-specific contributors (imports common first)
+- `vscode-node/mcpServers/index.ts` → VS Code-specific contributors (imports node first)
+
 **Extending the Registries:**
 
 To add new functionality:
@@ -301,10 +379,27 @@ To add new functionality:
    - Implement tool approval logic
    - Import your handler module in `index.ts` to trigger registration
 
+4. **New MCP Server Contributor:**
+   - Create a class implementing `IClaudeMcpServerContributor`
+   - Call `registerClaudeMcpServerContributor(YourContributor)` at module load time
+   - Import your contributor module in the appropriate `mcpServers/index.ts` (common/node/vscode-node)
+
 ## Configuration
 
 The integration respects VS Code settings:
 - `github.copilot.advanced.claudeCodeDebugEnabled`: Enables debug logging from Claude Code SDK
+
+## Upgrading Anthropic SDK Packages
+
+For the complete upgrade process, use the **anthropic-sdk-upgrader** Claude Code agent. The agent provides step-by-step guidance for upgrading `@anthropic-ai/claude-agent-sdk` and `@anthropic-ai/sdk` packages, including:
+
+- Checking changelogs and summarizing changes
+- Categorizing changes by impact level
+- Fixing compilation errors in key files
+- Complete testing checklist
+- Troubleshooting common issues
+
+See `.claude/agents/anthropic-sdk-upgrader.md` for the full process.
 
 ## Dependencies
 
