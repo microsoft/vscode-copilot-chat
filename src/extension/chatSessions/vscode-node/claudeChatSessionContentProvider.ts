@@ -510,7 +510,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private async _resolveModelForSession(session: IClaudeCodeSession | undefined): Promise<string> {
 		// 1. Check stored session state (user's explicit selection or cached value)
 		if (session) {
-			const cachedModel = await this.sessionStateService.getModelIdForSession(session.id);
+			const cachedModel = this.sessionStateService.getModelIdForSession(session.id);
 			if (cachedModel) {
 				// Keep the global default in sync with user's selection
 				await this.claudeCodeModels.setDefaultModel(cachedModel);
@@ -645,9 +645,13 @@ export class ClaudeChatSessionItemController extends Disposable {
 		// TODO: How do we handle cleanup? It's not too important to start
 		// since on reload this will get cleared anyway.
 		const sessions = await this._claudeCodeSessionService.getAllSessions(token);
-		for (const session of sessions) {
-			const item = this._createClaudeChatSessionItem(session);
-			this._controller.items.add(item);
+		const items = sessions.map(session => this._createClaudeChatSessionItem(session));
+		// If there are already items, use add() to update in place and avoid re-rendering the whole list.
+		// TODO: Could we see if the sessions are the same and only update changed ones?
+		if (this._controller.items.size > 0) {
+			items.forEach(i => this._controller.items.add(i));
+		} else {
+			this._controller.items.replace(items);
 		}
 	}
 

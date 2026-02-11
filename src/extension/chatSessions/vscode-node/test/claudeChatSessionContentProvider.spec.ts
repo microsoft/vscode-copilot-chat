@@ -310,7 +310,7 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
-			mockSessionStateService.getModelIdForSession = vi.fn().mockResolvedValue('claude-sonnet-4-20250514');
+			mockSessionStateService.getModelIdForSession = vi.fn().mockReturnValue('claude-sonnet-4-20250514');
 
 			const sessionUri = createClaudeSessionUri('test-session');
 			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
