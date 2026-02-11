@@ -5,9 +5,10 @@
 
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { ChatRequestTurn2 } from '../../../vscodeTypes';
+import { URI } from '../../../util/vs/base/common/uri';
+import { ChatReferenceBinaryData, ChatRequestTurn2 } from '../../../vscodeTypes';
 import { completeToolInvocation, createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
-import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ISubagentSession, StoredMessage, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { AssistantMessageContent, ContentBlock, IClaudeCodeSession, ImageBlock, ISubagentSession, StoredMessage, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 
 // #region Types
 
@@ -34,6 +35,10 @@ function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
 
 function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
 	return block.type === 'tool_result';
+}
+
+function isImageBlock(block: ContentBlock): block is ImageBlock {
+	return block.type === 'image';
 }
 
 // #endregion
@@ -111,6 +116,55 @@ function processToolResults(content: string | ContentBlock[], toolContext: ToolC
 
 // #endregion
 
+// #region Image Reference Extraction
+
+/**
+ * Extracts image blocks from user message contents and converts them to
+ * ChatPromptReference objects.
+ *
+ * - Base64 images become ChatReferenceBinaryData values (binary data for display).
+ * - URL images become URI values (the API stored a URL rather than inline data).
+ */
+function extractImageReferences(contents: readonly (string | ContentBlock[])[]): vscode.ChatPromptReference[] {
+	const references: vscode.ChatPromptReference[] = [];
+	let imageIndex = 0;
+	for (const content of contents) {
+		if (typeof content === 'string') {
+			continue;
+		}
+		for (const block of content) {
+			if (!isImageBlock(block)) {
+				continue;
+			}
+			const id = `image-${imageIndex + 1}`;
+			if (block.source.type === 'base64') {
+				const source = block.source;
+				// NOTE: The API does not give us any metadata about the image beyond the media type, so
+				// we use a generic name and the media type as the MIME type for the binary reference.
+				references.push({
+					id,
+					name: id,
+					value: new ChatReferenceBinaryData(
+						source.media_type,
+						() => Promise.resolve(Buffer.from(source.data, 'base64'))
+					),
+				});
+				imageIndex++;
+			} else if (block.source.type === 'url') {
+				references.push({
+					id,
+					name: id,
+					value: URI.parse(block.source.url),
+				});
+				imageIndex++;
+			}
+		}
+	}
+	return references;
+}
+
+// #endregion
+
 // #region Turn Extraction
 
 /**
@@ -127,9 +181,10 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vsc
 	}
 
 	const combinedText = textParts.join('\n\n');
+	const imageReferences = extractImageReferences(contents);
 
-	// If no visible text, don't create a request turn
-	if (!combinedText.trim()) {
+	// If no visible text and no images, don't create a request turn
+	if (!combinedText.trim() && imageReferences.length === 0) {
 		return;
 	}
 
@@ -138,7 +193,7 @@ function extractUserRequest(contents: readonly (string | ContentBlock[])[]): vsc
 		return;
 	}
 
-	return new ChatRequestTurn2(combinedText, undefined, [], '', [], undefined, undefined);
+	return new ChatRequestTurn2(combinedText, undefined, imageReferences, '', [], undefined, undefined);
 }
 
 /**

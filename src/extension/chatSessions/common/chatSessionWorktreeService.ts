@@ -41,6 +41,7 @@ export interface IChatSessionWorktreeService {
 	createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined>;
 
 	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
+	getWorktreeProperties(folder: vscode.Uri): ChatSessionWorktreeProperties | undefined;
 	setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void>;
 
 	getWorktreeRepository(sessionId: string): Promise<RepoContext | undefined>;

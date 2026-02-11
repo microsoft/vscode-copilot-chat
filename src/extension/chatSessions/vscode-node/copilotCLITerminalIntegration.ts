@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
+import { Terminal, TerminalLocation, TerminalOptions, TerminalProfile, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -24,9 +24,11 @@ const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
 const COPILOT_ICON = new ThemeIcon('copilot');
 
+export type TerminalOpenLocation = 'panel' | 'editor' | 'editorBeside';
+
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
-	openTerminal(name: string, cliArgs?: string[], cwd?: string): Promise<void>;
+	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<void>;
 }
 
 type IShellInfo = {
@@ -96,7 +98,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			if (!shellInfo) {
 				return;
 			}
-			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile');
+			this.sendTerminalOpenTelemetry('new', shellInfo.shell, 'newFromTerminalProfile', 'panel');
 			return new TerminalProfile({
 				name: 'GitHub Copilot CLI',
 				shellPath: shellInfo.shellPath,
@@ -108,7 +110,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string) {
+	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor') {
 		// Capture session type before mutating cliArgs.
 		// If cliArgs are provided (e.g. --resume), we are resuming a session; otherwise it's a new session.
 		const sessionType = cliArgs.length > 0 ? 'resume' : 'new';
@@ -122,7 +124,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			this.initialization
 		]);
 
-		const options = await getCommonTerminalOptions(name, this._authenticationService);
+		const options = await getCommonTerminalOptions(name, this._authenticationService, location);
 		options.cwd = cwd;
 		if (shellPathAndArgs) {
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
@@ -134,7 +136,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				this._register(terminal);
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
-				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal');
+				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
 				return;
 			}
 		}
@@ -144,7 +146,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			cliArgs.shift(); // Remove --clear as we can't run it without a shell integration
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
-			this.sendTerminalOpenTelemetry(sessionType, 'unknown', 'fallbackTerminal');
+			this.sendTerminalOpenTelemetry(sessionType, 'unknown', 'fallbackTerminal', location);
 			return;
 		}
 
@@ -155,24 +157,26 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.shellArgs = shellPathAndArgs.shellArgs;
 			const terminal = this._register(this.terminalService.createTerminal(options));
 			terminal.show();
-			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal');
+			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
 		}
 	}
 
-	private sendTerminalOpenTelemetry(sessionType: string, shell: string, terminalCreationMethod: string): void {
+	private sendTerminalOpenTelemetry(sessionType: string, shell: string, terminalCreationMethod: string, location: TerminalOpenLocation): void {
 		/* __GDPR__
 			"copilotcli.terminal.open" : {
 				"owner": "DonJayamanne",
 				"comment": "Event sent when a Copilot CLI terminal is opened.",
 				"sessionType" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the terminal is for a new session or resuming an existing one." },
 				"shell" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The shell type used for the terminal." },
-				"terminalCreationMethod" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the terminal was created." }
+				"terminalCreationMethod" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "How the terminal was created." },
+				"location" : { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Where the terminal was opened - panel, editor area (active), or editor area (beside)." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('copilotcli.terminal.open', {
 			sessionType,
 			shell,
-			terminalCreationMethod
+			terminalCreationMethod,
+			location
 		});
 	}
 
@@ -329,13 +333,17 @@ function quoteArgsForShell(shellScript: string, args: string[]): string {
 	return args.length ? `${escapeArg(shellScript)} ${escapedArgs.join(' ')}` : escapeArg(shellScript);
 }
 
-async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService): Promise<TerminalOptions> {
+async function getCommonTerminalOptions(name: string, authenticationService: IAuthenticationService, location: TerminalOpenLocation = 'editor'): Promise<TerminalOptions> {
 	const options: TerminalOptions = {
 		name,
 		iconPath: new ThemeIcon('terminal'),
-		location: { viewColumn: ViewColumn.Active },
 		hideFromUser: false
 	};
+	if (location === 'panel') {
+		options.location = TerminalLocation.Panel;
+	} else {
+		options.location = { viewColumn: location === 'editorBeside' ? ViewColumn.Beside : ViewColumn.Active };
+	}
 	const session = await authenticationService.getGitHubSession('any', { silent: true });
 	if (session) {
 		options.env = {

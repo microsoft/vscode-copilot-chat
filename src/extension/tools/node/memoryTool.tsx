@@ -5,19 +5,25 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { createDirectoryIfNotExists, IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { IAgentMemoryService, RepoMemoryEntry } from '../common/agentMemoryService';
+import { IMemoryCleanupService } from '../common/memoryCleanupService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 const MEMORY_BASE_DIR = 'memory-tool/memories';
 const REPO_PATH_PREFIX = '/memories/repo';
+const SESSION_PATH_PREFIX = '/memories/session';
+
+type MemoryScope = 'user' | 'session';
 
 interface IViewParams {
 	command: 'view';
@@ -62,8 +68,16 @@ interface IRenameParams {
 
 type MemoryToolParams = IViewParams | ICreateParams | IStrReplaceParams | IInsertParams | IDeleteParams | IRenameParams;
 
+function normalizePath(path: string): string {
+	return path.endsWith('/') ? path : path + '/';
+}
+
+function isMemoriesRoot(path: string): boolean {
+	return normalizePath(path) === '/memories/';
+}
+
 function validatePath(path: string): string | undefined {
-	if (!path.startsWith('/memories/')) {
+	if (!normalizePath(path).startsWith('/memories/')) {
 		return 'Error: All memory paths must start with /memories/';
 	}
 	if (path.includes('..')) {
@@ -85,11 +99,15 @@ function isRepoPath(path: string): boolean {
 	return path === REPO_PATH_PREFIX || path.startsWith(REPO_PATH_PREFIX + '/');
 }
 
+function isSessionPath(path: string): boolean {
+	return path === SESSION_PATH_PREFIX || path.startsWith(SESSION_PATH_PREFIX + '/');
+}
+
 /**
  * Extracts a safe directory name from a chatSessionResource URI string.
  * The URI is typically like `vscode-chat-session://local/<sessionId>`.
  */
-function extractSessionId(sessionResource: string): string {
+export function extractSessionId(sessionResource: string): string {
 	const parsed = URI.parse(sessionResource);
 	// Extract the last path segment as the session ID
 	const segments = parsed.path.replace(/^\//, '').split('/');
@@ -126,25 +144,35 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 	constructor(
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IAgentMemoryService private readonly agentMemoryService: IAgentMemoryService,
+		@IMemoryCleanupService private readonly memoryCleanupService: IMemoryCleanupService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
-	) { }
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		if (this.configurationService.getExperimentBasedConfig(ConfigKey.MemoryToolEnabled, this.experimentationService)) {
+			this.memoryCleanupService.start();
+		}
+	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<MemoryToolParams>, _token: CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const command = options.input.command;
+		const path = command === 'rename' ? (options.input as IRenameParams).old_path ?? (options.input as IRenameParams).path : options.input.path;
+		const fileName = path ? path.split('/').pop() || path : undefined;
+		const suffix = fileName && !isRepoPath(path!) ? ` ${fileName}` : '';
 		switch (command) {
 			case 'view':
-				return { invocationMessage: l10n.t`Reading memory`, pastTenseMessage: l10n.t`Read memory` };
+				return { invocationMessage: l10n.t('Reading memory{0}', suffix), pastTenseMessage: l10n.t('Read memory{0}', suffix) };
 			case 'create':
-				return { invocationMessage: l10n.t`Creating memory file`, pastTenseMessage: l10n.t`Created memory file` };
+				return { invocationMessage: l10n.t('Creating memory file{0}', suffix), pastTenseMessage: l10n.t('Created memory file{0}', suffix) };
 			case 'str_replace':
-				return { invocationMessage: l10n.t`Updating memory file`, pastTenseMessage: l10n.t`Updated memory file` };
+				return { invocationMessage: l10n.t('Updating memory file{0}', suffix), pastTenseMessage: l10n.t('Updated memory file{0}', suffix) };
 			case 'insert':
-				return { invocationMessage: l10n.t`Inserting into memory file`, pastTenseMessage: l10n.t`Inserted into memory file` };
+				return { invocationMessage: l10n.t('Inserting into memory file{0}', suffix), pastTenseMessage: l10n.t('Inserted into memory file{0}', suffix) };
 			case 'delete':
-				return { invocationMessage: l10n.t`Deleting memory`, pastTenseMessage: l10n.t`Deleted memory` };
+				return { invocationMessage: l10n.t('Deleting memory{0}', suffix), pastTenseMessage: l10n.t('Deleted memory{0}', suffix) };
 			case 'rename':
-				return { invocationMessage: l10n.t`Renaming memory`, pastTenseMessage: l10n.t`Renamed memory` };
+				return { invocationMessage: l10n.t('Renaming memory{0}', suffix), pastTenseMessage: l10n.t('Renamed memory{0}', suffix) };
 			default:
 				return { invocationMessage: l10n.t`Updating memory`, pastTenseMessage: l10n.t`Updated memory` };
 		}
@@ -173,7 +201,10 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			return this._dispatchRepo(params, path);
 		}
 
-		return this._dispatchLocal(params, sessionResource);
+		// Route /memories/session/* to session-scoped local storage
+		// Everything else under /memories/* goes to user-scoped storage
+		const scope: MemoryScope = isSessionPath(path) ? 'session' : 'user';
+		return this._dispatchLocal(params, scope, sessionResource);
 	}
 
 	private async _dispatchRepo(params: MemoryToolParams, path: string): Promise<string> {
@@ -231,44 +262,74 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 	}
 
-	private _resolveUri(memoryPath: string, sessionResource?: string): URI {
-		const storageUri = this.extensionContext.storageUri;
-		if (!storageUri) {
-			throw new Error('No workspace storage available. Memory operations require an active workspace.');
+	private _resolveUri(memoryPath: string, scope: MemoryScope, sessionResource?: string): URI {
+		// Validate path format and extract relative path components safely
+		const pathError = validatePath(memoryPath);
+		if (pathError) {
+			throw new Error(pathError);
 		}
-		// memoryPath is like /memories/foo.md → strip /memories/ prefix, normalize to a safe relative path
-		const relativePath = memoryPath.replace(/^\/memories\/?/, '').replace(/^\/+/, '');
-		const baseUri = URI.from(storageUri);
-		let resolved: URI;
-		if (sessionResource) {
-			const sessionId = extractSessionId(sessionResource);
-			resolved = URI.joinPath(baseUri, MEMORY_BASE_DIR, sessionId, relativePath);
-		} else {
-			resolved = URI.joinPath(baseUri, MEMORY_BASE_DIR, relativePath);
+
+		// Extract path components by splitting, skipping empty and special segments
+		const segments = memoryPath.split('/').filter(s => s.length > 0);
+		// segments[0] is 'memories', segments[1] might be 'session', rest are file path components
+		let relativeSegments: string[];
+
+		if (scope === 'session') {
+			const storageUri = this.extensionContext.storageUri;
+			if (!storageUri) {
+				throw new Error('No workspace storage available. Session memory operations require an active workspace.');
+			}
+			// For session paths: /memories/session/foo.md → ['memories', 'session', 'foo.md']
+			// Skip 'memories' and 'session', keep rest
+			relativeSegments = segments.slice(2);
+
+			const baseUri = URI.from(storageUri);
+			let resolved: URI;
+			if (sessionResource) {
+				const sessionId = extractSessionId(sessionResource);
+				resolved = relativeSegments.length > 0
+					? URI.joinPath(baseUri, MEMORY_BASE_DIR, sessionId, ...relativeSegments)
+					: URI.joinPath(baseUri, MEMORY_BASE_DIR, sessionId);
+			} else {
+				resolved = relativeSegments.length > 0
+					? URI.joinPath(baseUri, MEMORY_BASE_DIR, ...relativeSegments)
+					: URI.joinPath(baseUri, MEMORY_BASE_DIR);
+			}
+			if (!this.memoryCleanupService.isMemoryUri(resolved)) {
+				throw new Error('Resolved path escapes the memory storage directory.');
+			}
+			return resolved;
 		}
-		// Verify the resolved URI is still under the base storage directory
-		const basePath = URI.joinPath(baseUri, MEMORY_BASE_DIR).path;
-		if (!resolved.path.startsWith(basePath + '/') && resolved.path !== basePath) {
-			throw new Error('Resolved path escapes the memory storage directory.');
+
+		// User scope: /memories/foo.md → ['memories', 'foo.md']
+		// Skip 'memories', keep rest
+		relativeSegments = segments.slice(1);
+
+		const globalStorageUri = this.extensionContext.globalStorageUri;
+		if (!globalStorageUri) {
+			throw new Error('No global storage available. User memory operations require global storage.');
 		}
+		const resolved = relativeSegments.length > 0
+			? URI.joinPath(globalStorageUri, MEMORY_BASE_DIR, ...relativeSegments)
+			: URI.joinPath(globalStorageUri, MEMORY_BASE_DIR);
 		return resolved;
 	}
 
-	private async _dispatchLocal(params: MemoryToolParams, sessionResource?: string): Promise<string> {
+	private async _dispatchLocal(params: MemoryToolParams, scope: MemoryScope, sessionResource?: string): Promise<string> {
 		try {
 			switch (params.command) {
 				case 'view':
-					return this._localView(params.path, params.view_range, sessionResource);
+					return this._localView(params.path, params.view_range, scope, sessionResource);
 				case 'create':
-					return this._localCreate(params, sessionResource);
+					return this._localCreate(params, scope, sessionResource);
 				case 'str_replace':
-					return this._localStrReplace(params, sessionResource);
+					return this._localStrReplace(params, scope, sessionResource);
 				case 'insert':
-					return this._localInsert(params, sessionResource);
+					return this._localInsert(params, scope, sessionResource);
 				case 'delete':
-					return this._localDelete(params.path, sessionResource);
+					return this._localDelete(params.path, scope, sessionResource);
 				case 'rename':
-					return this._localRename(params, sessionResource);
+					return this._localRename(params, scope, sessionResource);
 				default:
 					return `Error: Unknown command '${(params as MemoryToolParams).command}'.`;
 			}
@@ -278,14 +339,26 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 	}
 
-	private async _localView(path: string, viewRange?: [number, number], sessionResource?: string): Promise<string> {
-		const uri = this._resolveUri(path, sessionResource);
+	private async _localView(path: string, viewRange?: [number, number], scope: MemoryScope = 'user', sessionResource?: string): Promise<string> {
+		// When viewing the top-level /memories/ directory with user scope, merge user + session contents
+		if (scope === 'user' && isMemoriesRoot(path)) {
+			return this._localViewMergedRoot(path, sessionResource);
+		}
+
+		const uri = this._resolveUri(path, scope, sessionResource);
+		if (scope === 'session') {
+			this.memoryCleanupService.markAccessed(uri);
+		}
 
 		let fileStat: vscode.FileStat;
 		try {
 			fileStat = await this.fileSystemService.stat(uri);
 		} catch {
-			return `The path ${path} does not exist. Please provide a valid path.`;
+			this.logService.debug(`[MemoryTool] Failed to stat ${path}`);
+			if (isMemoriesRoot(path)) {
+				return 'No memories found.';
+			}
+			return `No memories found in ${path}.`;
 		}
 
 		if (fileStat.type === FileType.Directory) {
@@ -295,6 +368,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		// Read file contents with line numbers
 		const content = await this.fileSystemService.readFile(uri);
 		const text = new TextDecoder().decode(content);
+		this.logService.debug(`[MemoryTool] Viewed memory file: ${path}`);
 
 		if (viewRange) {
 			const lines = text.split('\n');
@@ -311,6 +385,65 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		return formatFileContent(path, text);
+	}
+
+	private async _localViewMergedRoot(path: string, sessionResource?: string): Promise<string> {
+		const lines: string[] = [];
+
+		// List user-scoped files
+		try {
+			const userUri = this._resolveUri('/memories/', 'user');
+			const userEntries = await this.fileSystemService.readDirectory(userUri);
+			for (const [name, type] of userEntries) {
+				if (name.startsWith('.')) {
+					continue;
+				}
+				if (type === FileType.Directory) {
+					lines.push(`/memories/${name}/`);
+				} else {
+					lines.push(`/memories/${name}`);
+				}
+			}
+		} catch {
+			// User storage may not exist yet
+		}
+
+		// List current session's files under session/
+		if (sessionResource) {
+			try {
+				const sessionUri = this._resolveUri('/memories/session/', 'session', sessionResource);
+				const sessionEntries = await this.fileSystemService.readDirectory(sessionUri);
+				const sessionFiles: string[] = [];
+				for (const [name, type] of sessionEntries) {
+					if (name.startsWith('.')) {
+						continue;
+					}
+					if (type === FileType.File) {
+						sessionFiles.push(`/memories/session/${name}`);
+					}
+				}
+				// Add session/ header if there are files
+				if (sessionFiles.length > 0) {
+					lines.push('/memories/session/');
+					lines.push(...sessionFiles);
+				} else {
+					// Add session/ entry even if empty, to show it exists
+					lines.push('/memories/session/');
+				}
+			} catch {
+				// Session storage may not exist yet, but still mention it
+				lines.push('/memories/session/');
+			}
+		} else {
+			// No session resource, still mention session directory exists
+			lines.push('/memories/session/');
+		}
+
+		if (lines.length === 0 || (lines.length === 1 && lines[0] === '/memories/session/')) {
+			return 'No memories found.';
+		}
+
+		return `Here are the files and directories in ${path}:\n${lines.join('\n')}`;
 	}
 
 	private async _listDirectory(path: string, uri: URI, maxDepth: number = 2, currentDepth: number = 0): Promise<string> {
@@ -361,34 +494,48 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		return lines.join('\n');
 	}
 
-	private async _localCreate(params: ICreateParams, sessionResource?: string): Promise<string> {
-		const uri = this._resolveUri(params.path, sessionResource);
+	private async _localCreate(params: ICreateParams, scope: MemoryScope, sessionResource?: string): Promise<string> {
+		const uri = this._resolveUri(params.path, scope, sessionResource);
 
 		// Check if file exists
 		try {
 			await this.fileSystemService.stat(uri);
+			this.logService.debug(`[MemoryTool] Create failed - file already exists: ${params.path}`);
 			return `Error: File ${params.path} already exists`;
 		} catch {
 			// File doesn't exist — good
 		}
 
-		// Ensure parent directory exists
-		const parentUri = URI.joinPath(uri, '..');
-		await createDirectoryIfNotExists(this.fileSystemService, parentUri);
+		try {
+			// Ensure parent directory exists
+			const parentUri = URI.joinPath(uri, '..');
+			await createDirectoryIfNotExists(this.fileSystemService, parentUri);
 
-		const content = new TextEncoder().encode(params.file_text);
-		await this.fileSystemService.writeFile(uri, content);
-		return `File created successfully at: ${params.path}`;
+			const content = new TextEncoder().encode(params.file_text);
+			await this.fileSystemService.writeFile(uri, content);
+			if (scope === 'session') {
+				this.memoryCleanupService.markAccessed(uri);
+			}
+			this.logService.debug(`[MemoryTool] Created memory file: ${params.path}`);
+			return `File created successfully at: ${params.path}`;
+		} catch (error) {
+			this.logService.error(`[MemoryTool] Failed to create file ${params.path}:`, error);
+			throw error;
+		}
 	}
 
-	private async _localStrReplace(params: IStrReplaceParams, sessionResource?: string): Promise<string> {
-		const uri = this._resolveUri(params.path, sessionResource);
+	private async _localStrReplace(params: IStrReplaceParams, scope: MemoryScope, sessionResource?: string): Promise<string> {
+		const uri = this._resolveUri(params.path, scope, sessionResource);
+		if (scope === 'session') {
+			this.memoryCleanupService.markAccessed(uri);
+		}
 
 		let content: string;
 		try {
 			const buffer = await this.fileSystemService.readFile(uri);
 			content = new TextDecoder().decode(buffer);
 		} catch {
+			this.logService.debug(`[MemoryTool] str_replace failed - file not found: ${params.path}`);
 			return `The path ${params.path} does not exist. Please provide a valid path.`;
 		}
 
@@ -405,23 +552,31 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		}
 
 		if (occurrences.length === 0) {
+			this.logService.debug(`[MemoryTool] str_replace failed - pattern not found in ${params.path}`);
 			return `No replacement was performed, old_str \`${params.old_str}\` did not appear verbatim in ${params.path}.`;
 		}
 
 		if (occurrences.length > 1) {
+			this.logService.debug(`[MemoryTool] str_replace failed - multiple matches in ${params.path}`);
 			return `No replacement was performed. Multiple occurrences of old_str \`${params.old_str}\` in lines: ${occurrences.join(', ')}. Please ensure it is unique.`;
 		}
 
 		const newContent = content.replace(params.old_str, params.new_str);
 		await this.fileSystemService.writeFile(uri, new TextEncoder().encode(newContent));
+		this.logService.debug(`[MemoryTool] Updated memory file: ${params.path}`);
 		return makeSnippet(newContent, occurrences[0], params.path);
 	}
 
-	private async _localInsert(params: IInsertParams, sessionResource?: string): Promise<string> {
-		const uri = this._resolveUri(params.path, sessionResource);
+	private async _localInsert(params: IInsertParams, scope: MemoryScope, sessionResource?: string): Promise<string> {
+		const uri = this._resolveUri(params.path, scope, sessionResource);
+		if (scope === 'session') {
+			this.memoryCleanupService.markAccessed(uri);
+		}
+
 		// The model may send `new_str` instead of `insert_text`
 		const insertText = params.insert_text ?? params.new_str;
 		if (!insertText) {
+			this.logService.debug(`[MemoryTool] insert failed - missing insert_text for ${params.path}`);
 			return 'Error: Missing required insert_text parameter for insert.';
 		}
 
@@ -430,6 +585,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			const buffer = await this.fileSystemService.readFile(uri);
 			content = new TextDecoder().decode(buffer);
 		} catch {
+			this.logService.debug(`[MemoryTool] insert failed - file not found: ${params.path}`);
 			return `Error: The path ${params.path} does not exist`;
 		}
 
@@ -437,6 +593,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		const nLines = lines.length;
 
 		if (params.insert_line < 0 || params.insert_line > nLines) {
+			this.logService.debug(`[MemoryTool] insert failed - invalid line number ${params.insert_line} for file with ${nLines} lines`);
 			return `Error: Invalid \`insert_line\` parameter: ${params.insert_line}. It should be within the range of lines of the file: [0, ${nLines}].`;
 		}
 
@@ -445,26 +602,30 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 		const newContent = lines.join('\n');
 		await this.fileSystemService.writeFile(uri, new TextEncoder().encode(newContent));
+		this.logService.debug(`[MemoryTool] Inserted into memory file: ${params.path}`);
 		return makeSnippet(newContent, params.insert_line + 1, params.path);
 	}
 
-	private async _localDelete(path: string, sessionResource?: string): Promise<string> {
-		const uri = this._resolveUri(path, sessionResource);
+	private async _localDelete(path: string, scope: MemoryScope, sessionResource?: string): Promise<string> {
+		const uri = this._resolveUri(path, scope, sessionResource);
 
 		try {
 			await this.fileSystemService.stat(uri);
 		} catch {
+			this.logService.debug(`[MemoryTool] delete failed - path not found: ${path}`);
 			return `Error: The path ${path} does not exist`;
 		}
 
 		await this.fileSystemService.delete(uri, { recursive: true });
+		this.logService.debug(`[MemoryTool] Deleted memory file: ${path}`);
 		return `Successfully deleted ${path}`;
 	}
 
-	private async _localRename(params: IRenameParams, sessionResource?: string): Promise<string> {
+	private async _localRename(params: IRenameParams, scope: MemoryScope, sessionResource?: string): Promise<string> {
 		// The model may send `path` instead of `old_path`
 		const oldPath = params.old_path ?? params.path;
 		if (!oldPath) {
+			this.logService.debug(`[MemoryTool] rename failed - missing old_path`);
 			return 'Error: Missing required old_path parameter for rename.';
 		}
 
@@ -473,17 +634,25 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 			return newPathError;
 		}
 
-		const srcUri = this._resolveUri(oldPath, sessionResource);
-		const destUri = this._resolveUri(params.new_path, sessionResource);
+		// Prevent renaming across different scopes
+		const newScope: MemoryScope = isSessionPath(params.new_path) ? 'session' : 'user';
+		if (scope !== newScope) {
+			return 'Error: Cannot rename across different memory scopes (user vs session).';
+		}
+
+		const srcUri = this._resolveUri(oldPath, scope, sessionResource);
+		const destUri = this._resolveUri(params.new_path, scope, sessionResource);
 
 		try {
 			await this.fileSystemService.stat(srcUri);
 		} catch {
+			this.logService.debug(`[MemoryTool] rename failed - source not found: ${oldPath}`);
 			return `Error: The path ${oldPath} does not exist`;
 		}
 
 		try {
 			await this.fileSystemService.stat(destUri);
+			this.logService.debug(`[MemoryTool] rename failed - destination exists: ${params.new_path}`);
 			return `Error: The destination ${params.new_path} already exists`;
 		} catch {
 			// Destination doesn't exist — good
@@ -494,6 +663,10 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 		await createDirectoryIfNotExists(this.fileSystemService, destParent);
 
 		await this.fileSystemService.rename(srcUri, destUri);
+		if (scope === 'session') {
+			this.memoryCleanupService.markAccessed(destUri);
+		}
+		this.logService.debug(`[MemoryTool] Renamed memory file: ${oldPath} → ${params.new_path}`);
 		return `Successfully renamed ${oldPath} to ${params.new_path}`;
 	}
 }
