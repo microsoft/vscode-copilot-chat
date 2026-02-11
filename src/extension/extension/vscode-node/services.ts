@@ -27,7 +27,9 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
+// Azure-only fork: replaced AutomodeService with NullAutomodeService
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
+import { NullAutomodeService } from '../../../platform/azure/common/nullAutomodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
@@ -53,12 +55,17 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
+// Azure-only fork: replaced ProxyModelsService with NullProxyModelsService
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
-import { ProxyModelsService } from '../../../platform/proxyModels/node/proxyModelsService';
+import { NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
-import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
+// Azure-only fork: replaced GithubCodeSearchService with NullGithubCodeSearchService
+import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
+import { NullGithubCodeSearchService } from '../../../platform/azure/common/nullGithubCodeSearch';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
-import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
+// Azure-only fork: replaced VsCodeCodeSearchAuthenticationService with NullCodeSearchAuthenticationService
+// import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
+import { NullCodeSearchAuthenticationService } from '../../../platform/azure/common/nullCodeSearchAuth';
 // Azure-only fork: DocsSearchClient removed (depends on GitHub CAPI)
 // import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
 // import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
@@ -120,7 +127,9 @@ import { IPromptCategorizerService, PromptCategorizerService } from '../../promp
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { DevContainerConfigurationServiceImpl } from '../../prompt/vscode-node/devContainerConfigurationServiceImpl';
-import { ProductionEndpointProvider } from '../../prompt/vscode-node/endpointProviderImpl';
+// Azure-only fork: replaced ProductionEndpointProvider with AzureEndpointProvider
+// import { ProductionEndpointProvider } from '../../prompt/vscode-node/endpointProviderImpl';
+import { AzureEndpointProvider } from '../../../platform/azure/common/azureEndpointProvider';
 import { GitCommitMessageServiceImpl } from '../../prompt/vscode-node/gitCommitMessageServiceImpl';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
@@ -154,7 +163,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	registerCommonServices(builder, extensionContext);
 
-	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
+	// Azure-only fork: null automode (no CAPI /models/session)
+	builder.define(IAutomodeService, new NullAutomodeService());
 	builder.define(IConversationStore, new ConversationStore());
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
@@ -194,7 +204,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
-		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
+		// Azure-only fork: static model definitions from AzureEndpointProvider
+		builder.define(IEndpointProvider, new SyncDescriptor(AzureEndpointProvider));
 		// Azure-only fork: use local-only ignore service (no CAPI remote exclusions)
 		builder.define(IIgnoreService, new SyncDescriptor(LocalIgnoreService));
 	}
@@ -229,7 +240,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
-	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
+	// Azure-only fork: no GitHub remote code search
+	builder.define(IGithubCodeSearchService, new NullGithubCodeSearchService());
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
 	builder.define(ISettingsEditorSearchService, new SyncDescriptor(SettingsEditorSearchServiceImpl));
@@ -246,13 +258,15 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ILanguageContextService, new SyncDescriptor(LanguageContextServiceImpl));
 	builder.define(ILanguageContextProviderService, new SyncDescriptor(LanguageContextProviderService));
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
-	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
+	// Azure-only fork: no GitHub sign-in prompts for code search
+	builder.define(ICodeSearchAuthenticationService, new NullCodeSearchAuthenticationService());
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	// Azure-only fork: always returns text3small_512 (no GitHub CAPI dependency)
 	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(AzureAvailableEmbeddingTypesService));
 	builder.define(IAzureSearchClient, new SyncDescriptor(AzureSearchClient));
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
-	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
+	// Azure-only fork: null proxy models (no CAPI /models for NES)
+	builder.define(IProxyModelsService, new NullProxyModelsService());
 	builder.define(IPowerService, new SyncDescriptor(PowerService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));

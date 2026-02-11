@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
-import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
+// Azure-only fork: AuthenticationContrib removed (GitHub permission upgrade prompts)
+// import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 // Azure-only fork: quota management removed (GitHub-specific)
 // import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
@@ -68,7 +69,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
-	asContributionFactory(AuthenticationContrib),
+	// Azure-only fork: removed AuthenticationContrib (GitHub permission upgrade)
+	// asContributionFactory(AuthenticationContrib),
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
 	asContributionFactory(PowerStateLogger),
