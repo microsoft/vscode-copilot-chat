@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 import { URI } from '../../../../../util/vs/base/common/uri';
-import { ChatToolInvocationPart } from '../../../../../vscodeTypes';
+import { ChatSubagentToolInvocationData, ChatToolInvocationPart } from '../../../../../vscodeTypes';
 import { ClaudeToolNames } from '../claudeTools';
 import { completeToolInvocation, createFormattedToolInvocation } from '../toolInvocationFormatter';
 
@@ -38,7 +38,7 @@ describe('createFormattedToolInvocation', () => {
 			expect(result).toBeDefined();
 			expect(result!.toolName).toBe(ClaudeToolNames.Bash);
 			expect(result!.toolCallId).toBe('test-tool-id-123');
-			expect(result!.isConfirmed).toBe(true);
+			expect(result!.isConfirmed).toBeUndefined();
 			expect(result!.invocationMessage).toBe('');
 			expect(result!.toolSpecificData).toEqual({
 				commandLine: { original: 'npm install' },
@@ -67,7 +67,7 @@ describe('createFormattedToolInvocation', () => {
 
 			expect(result).toBeDefined();
 			expect(result!.toolName).toBe(ClaudeToolNames.Read);
-			expect(result!.isConfirmed).toBe(true);
+			expect(result!.isConfirmed).toBeUndefined();
 			expect(result!.invocationMessage).toBeDefined();
 			const message = result!.invocationMessage as { value: string };
 			expect(message.value).toContain(URI.file('/path/to/file.ts').toString());
@@ -247,7 +247,25 @@ describe('createFormattedToolInvocation', () => {
 	});
 
 	describe('common properties', () => {
-		it('sets isConfirmed to true for all non-suppressed tools', () => {
+		it('sets isConfirmed to true when complete=true is passed', () => {
+			const tools = [
+				ClaudeToolNames.Bash,
+				ClaudeToolNames.Read,
+				ClaudeToolNames.Glob,
+				ClaudeToolNames.Grep,
+				ClaudeToolNames.LS,
+				ClaudeToolNames.ExitPlanMode,
+				ClaudeToolNames.Task
+			];
+
+			for (const tool of tools) {
+				const toolUse = createToolUseBlock(tool, {});
+				const result = createFormattedToolInvocation(toolUse, true);
+				expect(result?.isConfirmed).toBe(true);
+			}
+		});
+
+		it('leaves isConfirmed undefined when complete is not passed', () => {
 			const tools = [
 				ClaudeToolNames.Bash,
 				ClaudeToolNames.Read,
@@ -261,7 +279,7 @@ describe('createFormattedToolInvocation', () => {
 			for (const tool of tools) {
 				const toolUse = createToolUseBlock(tool, {});
 				const result = createFormattedToolInvocation(toolUse);
-				expect(result?.isConfirmed).toBe(true);
+				expect(result?.isConfirmed).toBeUndefined();
 			}
 		});
 
@@ -446,6 +464,46 @@ describe('completeToolInvocation', () => {
 			completeToolInvocation(toolUse, toolResult, invocation);
 
 			expect(invocation.toolSpecificData).toBeUndefined();
+		});
+	});
+
+	describe('Task tool', () => {
+		it('sets result on existing ChatSubagentToolInvocationData', () => {
+			const toolUse = createToolUseBlock(ClaudeToolNames.Task, {
+				description: 'Run tests',
+				subagent_type: 'runner',
+				prompt: 'run the tests'
+			});
+			const toolResult = createToolResultBlock('test-tool-id-123', 'All 42 tests passed');
+			// Simulate the live agent flow: createFormattedToolInvocation sets toolSpecificData,
+			// then completeToolInvocation is called with the result
+			const invocation = createFormattedToolInvocation(toolUse)!;
+
+			completeToolInvocation(toolUse, toolResult, invocation);
+
+			expect(invocation.toolSpecificData).toBeInstanceOf(ChatSubagentToolInvocationData);
+			const data = invocation.toolSpecificData as ChatSubagentToolInvocationData;
+			expect(data.description).toBe('Run tests');
+			expect(data.agentName).toBe('runner');
+			expect(data.prompt).toBe('run the tests');
+			expect(data.result).toBe('All 42 tests passed');
+		});
+
+		it('preserves existing toolSpecificData when result is empty', () => {
+			const toolUse = createToolUseBlock(ClaudeToolNames.Task, {
+				description: 'Empty result task',
+				subagent_type: 'worker',
+				prompt: 'do something'
+			});
+			const toolResult = createToolResultBlock('test-tool-id-123', '');
+			const invocation = createFormattedToolInvocation(toolUse)!;
+
+			completeToolInvocation(toolUse, toolResult, invocation);
+
+			expect(invocation.toolSpecificData).toBeInstanceOf(ChatSubagentToolInvocationData);
+			const data = invocation.toolSpecificData as ChatSubagentToolInvocationData;
+			expect(data.description).toBe('Empty result task');
+			expect(data.result).toBe('');
 		});
 	});
 

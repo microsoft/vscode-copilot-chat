@@ -271,6 +271,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				family: endpoint.family,
 				tooltip: modelTooltip,
 				multiplier: endpoint instanceof AutoChatEndpoint ? modelDetail : multiplier,
+				multiplierNumeric: endpoint instanceof AutoChatEndpoint ? undefined : endpoint.multiplier,
 				detail: modelDetail,
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,

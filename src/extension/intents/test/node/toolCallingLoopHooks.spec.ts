@@ -36,6 +36,8 @@ export class MockChatHookService implements IChatHookService {
 	/** Tracks all hook calls for verification */
 	readonly hookCalls: Array<{ hookType: ChatHookType; input: unknown }> = [];
 
+	logConfiguredHooks(): void { }
+
 	/**
 	 * Configure the results that should be returned when a specific hook type is executed.
 	 */
@@ -64,9 +66,9 @@ export class MockChatHookService implements IChatHookService {
 		return this.hookCalls.filter(call => call.hookType === hookType);
 	}
 
-	async executeHook(hookType: ChatHookType, options: { input?: unknown }, _token?: CancellationToken): Promise<ChatHookResult[]> {
+	async executeHook(hookType: ChatHookType, _hooks: unknown, input: unknown, _sessionId?: string, _token?: CancellationToken): Promise<ChatHookResult[]> {
 		// Track the call
-		this.hookCalls.push({ hookType, input: options.input });
+		this.hookCalls.push({ hookType, input });
 
 		// Check if we should throw an error
 		const error = this.hookErrors.get(hookType);
@@ -76,6 +78,14 @@ export class MockChatHookService implements IChatHookService {
 
 		// Return configured results or empty array
 		return this.hookResults.get(hookType) || [];
+	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
 	}
 }
 
@@ -103,7 +113,7 @@ class TestToolCallingLoop extends ToolCallingLoop<IToolCallingLoopOptions> {
 
 	// Expose the protected method for testing
 	public async testRunStartHooks(token: CancellationToken): Promise<void> {
-		await this.runStartHooks(token);
+		await this.runStartHooks(undefined, token);
 	}
 
 	// Expose additionalHookContext for verification
@@ -252,8 +262,8 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 1' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 			]);
 
@@ -279,16 +289,16 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 1' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 2' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 2' } },
 				},
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 3' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -314,16 +324,16 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 1' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
-					success: true,
+					resultKind: 'success',
 					output: {}, // No additionalContext
 				},
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 3' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -343,22 +353,22 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
 		});
 
-		it('should ignore failed hook results', async () => {
+		it('should silently ignore failed hook results (blocking errors are ignored)', async () => {
 			const conversation = createTestConversation(1);
 			const request = createMockChatRequest();
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 1' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
 				},
 				{
-					success: false,
+					resultKind: 'error',
 					output: 'Hook error message',
 				},
 				{
-					success: true,
-					output: { additionalContext: 'Context from hook 3' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
 				},
 			]);
 
@@ -372,8 +382,48 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			);
 			disposables.add(loop);
 
-			await loop.testRunStartHooks(tokenSource.token);
+			// Should NOT throw - blocking errors are silently ignored for SessionStart
+			await expect(loop.testRunStartHooks(tokenSource.token)).resolves.not.toThrow();
 
+			// Only non-error results should be processed
+			const additionalContext = loop.getAdditionalHookContext();
+			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
+		});
+
+		it('should silently ignore stopReason (continue: false) from hook results', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest();
+
+			mockChatHookService.setHookResults('SessionStart', [
+				{
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 1' } },
+				},
+				{
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 2' } },
+					stopReason: 'Build failed, should be ignored',
+				},
+				{
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from hook 3' } },
+				},
+			]);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			// Should NOT throw - stopReason is silently ignored for SessionStart
+			await expect(loop.testRunStartHooks(tokenSource.token)).resolves.not.toThrow();
+
+			// Results with stopReason are skipped, only other results are processed
 			const additionalContext = loop.getAdditionalHookContext();
 			expect(additionalContext).toBe('Context from hook 1\nContext from hook 3');
 		});
@@ -434,8 +484,8 @@ describe('ToolCallingLoop SessionStart hook', () => {
 
 			mockChatHookService.setHookResults('SessionStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Custom context for prompt' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Custom context for prompt' } },
 				},
 			]);
 
@@ -454,6 +504,34 @@ describe('ToolCallingLoop SessionStart hook', () => {
 			// Verify the context is available through createPromptContext
 			const promptContext = loop.getAdditionalHookContext();
 			expect(promptContext).toBe('Custom context for prompt');
+		});
+
+		it('should combine SessionStart and appended hook context', async () => {
+			const conversation = createTestConversation(1);
+			const request = createMockChatRequest();
+
+			mockChatHookService.setHookResults('SessionStart', [
+				{
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Context from SessionStart' } },
+				},
+			]);
+
+			const loop = instantiationService.createInstance(
+				TestToolCallingLoop,
+				{
+					conversation,
+					toolCallLimit: 10,
+					request,
+				}
+			);
+			disposables.add(loop);
+
+			await loop.testRunStartHooks(tokenSource.token);
+			loop.appendAdditionalHookContext('Context from UserPromptSubmit');
+
+			const additionalContext = loop.getAdditionalHookContext();
+			expect(additionalContext).toBe('Context from SessionStart\nContext from UserPromptSubmit');
 		});
 	});
 });
@@ -548,8 +626,8 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
-					success: true,
-					output: { additionalContext: 'Subagent-specific context' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Subagent-specific context' } },
 				},
 			]);
 
@@ -578,12 +656,12 @@ describe('ToolCallingLoop SubagentStart hook', () => {
 
 			mockChatHookService.setHookResults('SubagentStart', [
 				{
-					success: true,
-					output: { additionalContext: 'First subagent context' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'First subagent context' } },
 				},
 				{
-					success: true,
-					output: { additionalContext: 'Second subagent context' },
+					resultKind: 'success',
+					output: { hookSpecificOutput: { additionalContext: 'Second subagent context' } },
 				},
 			]);
 

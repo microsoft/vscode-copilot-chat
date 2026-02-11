@@ -107,6 +107,7 @@ import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/t
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
+import { ITerminalService, NullTerminalService } from '../../platform/terminal/common/terminalService';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -172,6 +173,7 @@ export interface INESProviderOptions {
 	readonly workspace: ObservableWorkspace;
 	readonly fetcher: IFetcher;
 	readonly copilotTokenManager: ICopilotTokenManager;
+	readonly terminalService: ITerminalService;
 	readonly telemetrySender: ITelemetrySender;
 	readonly logTarget?: ILogTarget;
 	/**
@@ -380,6 +382,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
+	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	return builder.seal();
 }
 
@@ -477,6 +480,9 @@ class SingleFetcherService implements IFetcherService {
 	}
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);

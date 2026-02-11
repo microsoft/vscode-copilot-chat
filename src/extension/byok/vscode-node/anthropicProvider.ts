@@ -10,7 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
+import { ContextManagementResponse, getContextManagementFromConfig, isAnthropicContextEditingEnabled, isAnthropicMemoryToolEnabled, isAnthropicToolSearchEnabled, nonDeferredToolNames, TOOL_SEARCH_TOOL_NAME, TOOL_SEARCH_TOOL_TYPE, ToolSearchToolResult, ToolSearchToolSearchResult } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger, retrieveCapturingTokenByCorrelation, runWithCapturingToken } from '../../../platform/requestLogger/node/requestLogger';
@@ -130,7 +130,7 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					},
 				});
 
-			let hasMemoryTool = false;
+			const memoryToolEnabled = isAnthropicMemoryToolEnabled(model.id, this._configurationService, this._experimentationService);
 
 			const toolSearchEnabled = isAnthropicToolSearchEnabled(model.id, this._configurationService, this._experimentationService);
 
@@ -145,10 +145,11 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 					defer_loading: false
 				} as Anthropic.Beta.BetaToolUnion);
 			}
-
+			let hasMemoryTool = false;
 			for (const tool of (options.tools ?? [])) {
-				// Handle native Anthropic memory tool
-				if (tool.name === 'memory') {
+				// Handle native Anthropic memory tool (only for models that support it)
+				if (tool.name === 'memory' && memoryToolEnabled) {
+
 					hasMemoryTool = true;
 					tools.push({
 						name: 'memory',
@@ -226,15 +227,20 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 
 			const thinkingBudget = this._getThinkingBudget(model.id, model.maxOutputTokens);
 
+			// Check if model supports adaptive thinking
+			const modelCapabilities = this._knownModels?.[model.id];
+			const supportsAdaptiveThinking = modelCapabilities?.adaptiveThinking ?? false;
+
 			// Build context management configuration
+			const thinkingEnabled = supportsAdaptiveThinking || (thinkingBudget ?? 0) > 0;
 			const contextManagement = isAnthropicContextEditingEnabled(model.id, this._configurationService, this._experimentationService) ? getContextManagementFromConfig(
 				this._configurationService,
-				(thinkingBudget ?? 0) > 0
+				thinkingEnabled
 			) : undefined;
 
-			// Build betas array for beta API features
+			// Build betas array for beta API features (adaptive thinking doesn't need interleaved-thinking beta)
 			const betas: string[] = [];
-			if (thinkingBudget) {
+			if (thinkingBudget && !supportsAdaptiveThinking) {
 				betas.push('interleaved-thinking-2025-05-14');
 			}
 			if (hasMemoryTool || contextManagement) {
@@ -244,6 +250,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				betas.push('advanced-tool-use-2025-11-20');
 			}
 
+			const effort = supportsAdaptiveThinking
+				? this._configurationService.getConfig(ConfigKey.AnthropicThinkingEffort)
+				: undefined;
+
 			const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 				model: model.id,
 				messages: convertedMessages,
@@ -251,10 +261,10 @@ export class AnthropicLMProvider extends AbstractLanguageModelChatProvider {
 				stream: true,
 				system: [system],
 				tools: tools.length > 0 ? tools : undefined,
-				thinking: thinkingBudget ? {
-					type: 'enabled',
-					budget_tokens: thinkingBudget
-				} : undefined,
+				thinking: supportsAdaptiveThinking
+					? { type: 'adaptive' as const }
+					: thinkingBudget ? { type: 'enabled' as const, budget_tokens: thinkingBudget } : undefined,
+				...(effort ? { output_config: { effort } } : {}),
 				context_management: contextManagement as Anthropic.Beta.Messages.BetaContextManagementConfig | undefined,
 			};
 

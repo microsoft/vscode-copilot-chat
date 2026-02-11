@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatPromptReference, ChatRequest, ExtendedChatResponsePart, Uri } from 'vscode';
+import type { ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseTurn, ExtendedChatResponsePart, Uri } from 'vscode';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { MarkdownString } from '../../../util/vs/base/common/htmlContent';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -24,6 +24,7 @@ export class TestChatRequest implements ChatRequest {
 	public tools = new Map();
 	public id = generateUuid();
 	public sessionId = generateUuid();
+	public hasHooksEnabled = false;
 
 	constructor(
 		public prompt: string,
@@ -34,6 +35,16 @@ export class TestChatRequest implements ChatRequest {
 		this.attempt = 0;
 		this.enableCommandDetection = false;
 		this.isParticipantDetected = false;
+	}
+}
+
+export class TestChatContext implements ChatContext {
+	readonly history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>;
+	readonly yieldRequested: boolean;
+
+	constructor(history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn> = [], yieldRequested = false) {
+		this.history = history;
+		this.yieldRequested = yieldRequested;
 	}
 }
 

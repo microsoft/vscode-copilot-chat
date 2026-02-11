@@ -562,6 +562,11 @@ export class InlineEditRequestLogContext {
 		this._fileDiagnostics = fileDiagnostics;
 	}
 
+	private _terminalOutput: string | undefined;
+	setTerminalData(terminalOutput: string): void {
+		this._terminalOutput = terminalOutput;
+	}
+
 	private _languageContext: LanguageContextResponse | undefined;
 	setLanguageContext(langCtx: LanguageContextResponse): void {
 		this._languageContext = langCtx;
@@ -594,6 +599,7 @@ export class InlineEditRequestLogContext {
 			isAccepted: this._isAccepted,
 			languageContext: this._languageContext ? serializeLanguageContext(this._languageContext) : undefined,
 			diagnostics: this._fileDiagnostics,
+			terminalOutput: this._terminalOutput,
 		};
 	}
 }
@@ -639,4 +645,5 @@ export interface ISerializedInlineEditLogContext {
 	isAccepted: boolean | undefined;
 	languageContext: SerializedContextResponse | undefined;
 	diagnostics: string | undefined;
+	terminalOutput: string | undefined;
 }

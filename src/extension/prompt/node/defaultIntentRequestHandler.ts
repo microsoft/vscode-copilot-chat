@@ -8,9 +8,10 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
-import { IChatHookService, UserPromptSubmitHookInput } from '../../../platform/chat/common/chatHookService';
+import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
@@ -36,6 +37,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
+import { formatHookErrorMessage, HookAbortError, isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
@@ -167,6 +169,9 @@ export class DefaultIntentRequestHandler {
 			} else if (isCancellationError(err)) {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
+				return {};
+			} else if (isHookAbortError(err)) {
+				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
 
@@ -341,16 +346,35 @@ export class DefaultIntentRequestHandler {
 
 		try {
 			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
-			try {
-				await loop.runStartHooks(this.token);
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing start hooks', error);
+			await loop.runStartHooks(this.stream, this.token);
+
+			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
+			const additionalContexts: string[] = [];
+			processHookResults({
+				hookType: 'UserPromptSubmit',
+				results: userPromptSubmitResults,
+				outputStream: this.stream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+					if (additionalContext) {
+						additionalContexts.push(additionalContext);
+					}
+					// Check for block decision output
+					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
+						const blockReason = typedOutput.reason || l10n.t('No reason provided');
+						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+						throw new HookAbortError('UserPromptSubmit', blockReason);
+					}
+				},
+			});
+
+			if (additionalContexts.length > 0) {
+				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
 			}
-			try {
-				await this._chatHookService.executeHook('UserPromptSubmit', { toolInvocationToken: this.request.toolInvocationToken, input: { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput });
-			} catch (error) {
-				this._logService.error('[DefaultIntentRequestHandler] Error executing UserPromptSubmit hook', error);
-			}
+
 			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
@@ -550,8 +574,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {

@@ -5,6 +5,7 @@
 
 import sinon from 'sinon';
 import { afterEach, assert, beforeEach, describe, it } from 'vitest';
+import type { ClaudeFolderInfo } from '../../common/claudeFolderInfo';
 import { ClaudeSessionStateService, SessionStateChangeEvent } from '../claudeSessionStateService';
 
 describe('ClaudeSessionStateService', () => {
@@ -116,6 +117,78 @@ describe('ClaudeSessionStateService', () => {
 
 			const modelId = await service.getModelIdForSession('session-1');
 			assert.strictEqual(modelId, 'claude-opus-4-20250514');
+		});
+	});
+
+	describe('getFolderInfoForSession', () => {
+		it('should return undefined when no folder info is set', () => {
+			const folderInfo = service.getFolderInfoForSession('session-1');
+			assert.strictEqual(folderInfo, undefined);
+		});
+
+		it('should return the set folder info', () => {
+			const info: ClaudeFolderInfo = { cwd: '/home/user', additionalDirectories: ['/tmp'] };
+			service.setFolderInfoForSession('session-1', info);
+			const folderInfo = service.getFolderInfoForSession('session-1');
+			assert.deepStrictEqual(folderInfo, info);
+		});
+	});
+
+	describe('setFolderInfoForSession', () => {
+		it('should fire onDidChangeSessionState event when folder info is set', () => {
+			const events: SessionStateChangeEvent[] = [];
+			service.onDidChangeSessionState(e => events.push(e));
+
+			const info: ClaudeFolderInfo = { cwd: '/home/user', additionalDirectories: [] };
+			service.setFolderInfoForSession('session-1', info);
+
+			assert.strictEqual(events.length, 1);
+			assert.strictEqual(events[0].sessionId, 'session-1');
+			assert.deepStrictEqual(events[0].folderInfo, info);
+			assert.strictEqual(events[0].modelId, undefined);
+			assert.strictEqual(events[0].permissionMode, undefined);
+		});
+
+		it('should not fire event when folder info is unchanged', () => {
+			const info: ClaudeFolderInfo = { cwd: '/home/user', additionalDirectories: ['/tmp'] };
+			service.setFolderInfoForSession('session-1', info);
+
+			const events: SessionStateChangeEvent[] = [];
+			service.onDidChangeSessionState(e => events.push(e));
+
+			service.setFolderInfoForSession('session-1', { cwd: '/home/user', additionalDirectories: ['/tmp'] });
+			assert.strictEqual(events.length, 0);
+		});
+
+		it('should fire event when cwd changes', () => {
+			service.setFolderInfoForSession('session-1', { cwd: '/home/user', additionalDirectories: [] });
+
+			const events: SessionStateChangeEvent[] = [];
+			service.onDidChangeSessionState(e => events.push(e));
+
+			service.setFolderInfoForSession('session-1', { cwd: '/home/other', additionalDirectories: [] });
+			assert.strictEqual(events.length, 1);
+		});
+
+		it('should fire event when additionalDirectories change', () => {
+			service.setFolderInfoForSession('session-1', { cwd: '/home/user', additionalDirectories: ['/tmp'] });
+
+			const events: SessionStateChangeEvent[] = [];
+			service.onDidChangeSessionState(e => events.push(e));
+
+			service.setFolderInfoForSession('session-1', { cwd: '/home/user', additionalDirectories: ['/tmp', '/var'] });
+			assert.strictEqual(events.length, 1);
+		});
+
+		it('should preserve other state when setting folder info', async () => {
+			service.setModelIdForSession('session-1', 'claude-opus-4-20250514');
+			service.setPermissionModeForSession('session-1', 'bypassPermissions');
+			service.setFolderInfoForSession('session-1', { cwd: '/home/user', additionalDirectories: [] });
+
+			const modelId = await service.getModelIdForSession('session-1');
+			assert.strictEqual(modelId, 'claude-opus-4-20250514');
+			const permissionMode = service.getPermissionModeForSession('session-1');
+			assert.strictEqual(permissionMode, 'bypassPermissions');
 		});
 	});
 
