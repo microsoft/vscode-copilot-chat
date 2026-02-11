@@ -92,7 +92,8 @@ import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLo
 // import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { AzureAvailableEmbeddingTypesService } from '../../../platform/azure/common/azureAvailableEmbeddingTypes';
-import { AzureSearchClient, IAzureSearchClient } from '../../../platform/azure/common/azureSearchClient';
+// Azure-only fork: Azure AI Search removed — using local embeddings only
+// import { AzureSearchClient, IAzureSearchClient } from '../../../platform/azure/common/azureSearchClient';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
@@ -263,7 +264,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	// Azure-only fork: always returns text3small_512 (no GitHub CAPI dependency)
 	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(AzureAvailableEmbeddingTypesService));
-	builder.define(IAzureSearchClient, new SyncDescriptor(AzureSearchClient));
+	// Azure-only fork: Azure AI Search removed — using local embeddings only
+	// builder.define(IAzureSearchClient, new SyncDescriptor(AzureSearchClient));
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
 	// Azure-only fork: null proxy models (no CAPI /models for NES)
 	builder.define(IProxyModelsService, new NullProxyModelsService());

@@ -2955,26 +2955,6 @@
 							}
 						}
 					},
-					"yourcompany.ai.searchEndpoint": {
-						"type": "string",
-						"default": "",
-						"description": "Azure AI Search endpoint URL for workspace indexing (e.g. https://your-search.search.windows.net)"
-					},
-					"yourcompany.ai.searchApiKey": {
-						"type": "string",
-						"default": "",
-						"description": "Azure AI Search admin API key for indexing and querying"
-					},
-					"yourcompany.ai.searchIndexName": {
-						"type": "string",
-						"default": "copilot-workspace",
-						"description": "Azure AI Search index name for workspace embeddings"
-					},
-					"yourcompany.ai.autoIndex": {
-						"type": "boolean",
-						"default": false,
-						"description": "Automatically index workspace files for @workspace semantic search"
-					},
 					"yourcompany.ai.customInstructions": {
 						"oneOf": [
 							{

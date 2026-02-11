@@ -14,10 +14,8 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { extname } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IAzureSearchClient } from '../../azure/common/azureSearchClient';
 import { FileChunk, FileChunkAndScore, FileChunkWithEmbedding, FileChunkWithOptionalEmbedding } from '../../chunking/common/chunk';
 import { ComputeBatchInfo, EmbeddingsComputeQos, IChunkingEndpointClient } from '../../chunking/common/chunkingEndpointClient';
 import { distance, Embedding, EmbeddingType, rankEmbeddings } from '../../embeddings/common/embeddingsComputer';
@@ -56,7 +54,6 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IWorkspaceFileIndex private readonly _workspaceIndex: IWorkspaceFileIndex,
 		@IChunkingEndpointClient private readonly _chunkingEndpointClient: IChunkingEndpointClient,
-		@IAzureSearchClient private readonly _azureSearchClient: IAzureSearchClient,
 	) {
 		super();
 
@@ -166,29 +163,6 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		token: CancellationToken,
 	): Promise<FileChunkAndScore[]> {
 		return logExecTime(this._logService, 'WorkspaceChunkEmbeddingIndex.searchWorkspace', async () => {
-			// Azure AI Search path: use vector search if configured
-			if (this._azureSearchClient.isConfigured()) {
-				try {
-					const queryEmbedding = await raceCancellationError(query, token);
-					const results = await this._azureSearchClient.vectorSearch([...queryEmbedding.value], maxResults);
-					if (results.length > 0) {
-						this._logService.debug(`Azure Search returned ${results.length} results for workspace search`);
-						return results.map(r => ({
-							chunk: {
-								text: r.content,
-								rawText: r.content,
-								file: URI.file(r.filePath),
-								range: new Range(r.startLine, 1, r.endLine, 1),
-							} as FileChunk,
-							distance: { embeddingType: this._embeddingType, value: r.score },
-						}));
-					}
-				} catch (err) {
-					this._logService.warn(`Azure Search failed, falling back to local search: ${(err as Error).message}`);
-				}
-			}
-
-			// Local search fallback
 			const [queryEmbedding, fileChunksAndEmbeddings] = await raceCancellationError(Promise.all([
 				query,
 				this.getAllWorkspaceEmbeddings('manual', options.globPatterns ?? {}, telemetryInfo, token)
