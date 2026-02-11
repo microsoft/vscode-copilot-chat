@@ -3240,6 +3240,15 @@
 							"onExp"
 						],
 						"description": "%github.copilot.config.alternateAnthropicPrompt.enabled%"
+					},
+					"github.copilot.chat.backgroundCompaction": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.backgroundCompaction%",
+						"tags": [
+							"preview",
+							"onExp"
+						]
 					}
 				}
 			},
