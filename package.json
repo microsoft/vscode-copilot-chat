@@ -2323,6 +2323,10 @@
 				"enablement": "github.copilot.chat.replay.workspaceEditTracing"
 			},
 			{
+				"command": "github.copilot.chat.compact",
+				"title": "%github.copilot.command.compactConversation%"
+			},
+			{
 				"command": "github.copilot.chat.explain",
 				"title": "%github.copilot.command.explainThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled",
@@ -4656,6 +4660,11 @@
 					"group": "navigation@0"
 				}
 			],
+			"chat/contextUsage/actions": [
+				{
+					"command": "github.copilot.chat.compact"
+				}
+			],
 			"chat/newSession": [
 				{
 					"command": "github.copilot.cli.newSession",
@@ -5924,7 +5933,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.2.37",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.39",
 		"@anthropic-ai/sdk": "^0.74.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.406",

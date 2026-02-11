@@ -306,6 +306,11 @@ export class InlineEditRequestLogContext {
 		this._icon = Icon.skipped;
 	}
 
+	public markAsFromCache() {
+		this._isVisible = true;
+		this._icon = Icon.database;
+	}
+
 	public markAsNoSuggestions() {
 		this._isVisible = true;
 		this._icon = Icon.circleSlash;

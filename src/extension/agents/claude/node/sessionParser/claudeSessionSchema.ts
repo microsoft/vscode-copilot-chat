@@ -497,11 +497,8 @@ export interface ISubagentSession {
 /**
  * A parsed Claude Code session ready for use.
  */
-export interface IClaudeCodeSession {
-	readonly id: string;
-	readonly label: string;
+export interface IClaudeCodeSession extends IClaudeCodeSessionInfo {
 	readonly messages: readonly StoredMessage[];
-	readonly timestamp: Date;
 	readonly subagents: readonly ISubagentSession[];
 }
 
@@ -513,7 +510,6 @@ export interface IClaudeCodeSession {
 export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
-	readonly timestamp: Date;
 	/** Timestamp of the first message in the session (for timing.created) */
 	readonly firstMessageTimestamp: Date;
 	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
