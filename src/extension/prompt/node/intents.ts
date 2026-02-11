@@ -100,6 +100,7 @@ export interface IIntent {
 		location: ChatLocation,
 		chatTelemetry: ChatTelemetryBuilder,
 		onPaused: Event<boolean>,
+		yieldRequested: () => boolean,
 	): Promise<vscode.ChatResult>;
 }
 
