@@ -5972,7 +5972,6 @@
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
 		"typescript-eslint": "^8.36.0",
-		"typescript-formatter": "github:jrieken/typescript-formatter#497efb26bc40b5fa59a350e6eab17bce650a7e4b",
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
