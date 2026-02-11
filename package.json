@@ -2852,6 +2852,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.chat.copilotCLI.addSelection",
+				"title": "%github.copilot.command.chat.copilotCLI.addSelection%",
+				"enablement": "github.copilot.chat.copilotCLI.hasSession",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.copilotCLI.acceptDiff",
 				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
 				"icon": "$(check)",
@@ -4605,6 +4611,11 @@
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
 					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addSelection",
+					"group": "copilot",
+					"when": "github.copilot.chat.copilotCLI.hasSession && editorHasSelection && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [

@@ -77,6 +77,7 @@ export function createMockEditor(
 		document: {
 			uri: {
 				fsPath: filePath,
+				scheme: 'file',
 				toString: () => `file://${filePath}`,
 			},
 			getText: (range?: { start: { line: number; character: number }; end: { line: number; character: number } }) => {

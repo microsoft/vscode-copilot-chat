@@ -26,7 +26,8 @@ vi.mock('vscode', () => ({
 }));
 
 import * as vscode from 'vscode';
-import { ADD_FILE_REFERENCE_COMMAND, ADD_FILE_REFERENCE_NOTIFICATION, registerAddFileReferenceCommand } from '../commands/addFileReference';
+import { ADD_FILE_REFERENCE_COMMAND, registerAddFileReferenceCommand } from '../commands/addFileReference';
+import { ADD_FILE_REFERENCE_NOTIFICATION } from '../commands/sendContext';
 
 describe('addFileReference command', () => {
 	const logger = new TestLogService();
@@ -60,6 +61,7 @@ describe('addFileReference command', () => {
 
 		const uri = {
 			fsPath: '/test/explorer-file.ts',
+			scheme: 'file',
 			toString: () => 'file:///test/explorer-file.ts',
 		};
 
@@ -150,6 +152,7 @@ describe('addFileReference command', () => {
 
 		const explorerUri = {
 			fsPath: '/test/explorer-file.ts',
+			scheme: 'file',
 			toString: () => 'file:///test/explorer-file.ts',
 		};
 		await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!(explorerUri);
@@ -167,6 +170,7 @@ describe('addFileReference command', () => {
 
 	it('should show warning when no sessions are connected', async () => {
 		httpServer.setConnectedSessionIds([]);
+		mockActiveTextEditor.value = createMockEditor('/test/file.ts', 'content', 0, 0, 0, 0);
 
 		registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
 		await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!();
@@ -185,6 +189,7 @@ describe('addFileReference command', () => {
 
 		const uri = {
 			fsPath: '/test/file.ts',
+			scheme: 'file',
 			toString: () => 'file:///test/file.ts',
 		};
 		await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!(uri);
@@ -202,6 +207,7 @@ describe('addFileReference command', () => {
 		sessionTracker.setSessionName('session-1', 'My CLI');
 		sessionTracker.setSessionName('session-2', 'session-2');
 		mockShowQuickPick.mockResolvedValue({ sessionId: 'session-1', label: 'My CLI' });
+		mockActiveTextEditor.value = createMockEditor('/test/file.ts', 'content', 0, 0, 0, 0);
 
 		registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
 		await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!();
@@ -221,5 +227,71 @@ describe('addFileReference command', () => {
 		await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!();
 
 		expect(httpServer.sendNotification).not.toHaveBeenCalled();
+	});
+
+	describe('URI scheme validation', () => {
+		function createMockEditorWithScheme(
+			filePath: string,
+			content: string,
+			startLine: number,
+			startChar: number,
+			endLine: number,
+			endChar: number,
+			scheme: string,
+		) {
+			const editor = createMockEditor(filePath, content, startLine, startChar, endLine, endChar);
+			return {
+				...editor,
+				document: {
+					...editor.document,
+					uri: {
+						...editor.document.uri,
+						scheme,
+						toString: () => `${scheme}://${filePath}`,
+					},
+				},
+			};
+		}
+
+		it('should reject output scheme from editor with warning', async () => {
+			mockActiveTextEditor.value = createMockEditorWithScheme('/Output', 'content', 0, 0, 0, 7, 'output');
+
+			registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
+			await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!();
+
+			expect(httpServer.sendNotification).not.toHaveBeenCalled();
+			expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+				'Cannot send virtual files to Copilot CLI.',
+			);
+		});
+
+		it('should reject virtual scheme from explorer URI with warning', async () => {
+			registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
+
+			const uri = {
+				fsPath: '/block',
+				scheme: 'vscode-chat-code-block',
+				toString: () => 'vscode-chat-code-block:///block',
+			};
+			await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!(uri);
+
+			expect(httpServer.sendNotification).not.toHaveBeenCalled();
+			expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+				'Cannot send virtual files to Copilot CLI.',
+			);
+		});
+
+		it('should allow vscode-remote scheme from explorer URI', async () => {
+			registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
+
+			const uri = {
+				fsPath: '/remote/file.ts',
+				scheme: 'vscode-remote',
+				toString: () => 'vscode-remote:///remote/file.ts',
+			};
+			await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!(uri);
+
+			expect(httpServer.sendNotification).toHaveBeenCalled();
+		});
 	});
 });

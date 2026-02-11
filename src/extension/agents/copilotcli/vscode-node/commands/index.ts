@@ -6,9 +6,20 @@
 export {
 	registerAddFileReferenceCommand,
 	ADD_FILE_REFERENCE_COMMAND,
+} from './addFileReference';
+
+export {
 	ADD_FILE_REFERENCE_NOTIFICATION,
 	FileReferenceInfo,
-} from './addFileReference';
+	sendToSession,
+	sendEditorContextToSession,
+	sendUriToSession,
+} from './sendContext';
+
+export {
+	registerAddSelectionCommand,
+	ADD_SELECTION_COMMAND,
+} from './addSelection';
 
 export {
 	registerDiffCommands,
