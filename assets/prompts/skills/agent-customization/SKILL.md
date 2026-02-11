@@ -20,13 +20,13 @@ description: 'Create, update, review, fix, or debug VS Code agent customization 
 
 Consult the reference docs for templates, domain examples, advanced frontmatter options, asset organization, anti-patterns, and creation checklists.
 
-| Type | File | Location | Key Field | Reference |
-|------|------|----------|-----------|---------|
-| Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | N/A (always applies) | [Link](./primitives/workspace-instructions.md) |
-| File Instructions | `*.instructions.md` | `.github/instructions/` | `applyTo` (explicit), `description` (on-demand) | [Link](./primitives/instructions.md) |
-| Prompts | `*.prompt.md` | `.github/prompts/` | `description` (user-invoked) | [Link](./primitives/prompts.md) |
-| Custom Agents | `*.agent.md` | `.github/agents/` | `description` (on-demand), `infer` (subagent) | [Link](./primitives/agents.md) |
-| Skills | `SKILL.md` | `.github/skills/<name>/` | `description` (on-demand) | [Link](./primitives/skills.md) |
+| Type | File | Location | Reference |
+|------|------|----------|-----------|
+| Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | [Link](./primitives/workspace-instructions.md) |
+| File Instructions | `*.instructions.md` | `.github/instructions/` | [Link](./primitives/instructions.md) |
+| Prompts | `*.prompt.md` | `.github/prompts/` | [Link](./primitives/prompts.md) |
+| Custom Agents | `*.agent.md` | `.github/agents/` | [Link](./primitives/agents.md) |
+| Skills | `SKILL.md` | `.github/skills/<name>/`, `.agents/skills/<name>/`, `.claude/skills/<name>/` | [Link](./primitives/skills.md) |
 
 **User-level**: `{{USER_PROMPTS_FOLDER}}/` (*.prompt.md, *.instructions.md, *.agent.md; not skills)
 Customizations roam with user's settings sync
