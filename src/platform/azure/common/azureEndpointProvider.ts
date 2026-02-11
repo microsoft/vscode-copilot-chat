@@ -69,7 +69,7 @@ const AZURE_MODEL_DEFINITIONS: AzureModelDefinition[] = [
 			streaming: true,
 			vision: true,
 		},
-		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 	},
 	{
 		id: 'gpt-4.1',
@@ -90,7 +90,7 @@ const AZURE_MODEL_DEFINITIONS: AzureModelDefinition[] = [
 			streaming: true,
 			vision: true,
 		},
-		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 	},
 	{
 		id: 'o4-mini',
@@ -113,7 +113,7 @@ const AZURE_MODEL_DEFINITIONS: AzureModelDefinition[] = [
 			max_thinking_budget: 100000,
 			min_thinking_budget: 1024,
 		},
-		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 	},
 	{
 		id: 'gpt-5-mini',
@@ -134,7 +134,7 @@ const AZURE_MODEL_DEFINITIONS: AzureModelDefinition[] = [
 			streaming: true,
 			vision: true,
 		},
-		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 	},
 	{
 		id: 'gpt-5',
@@ -159,7 +159,7 @@ const AZURE_MODEL_DEFINITIONS: AzureModelDefinition[] = [
 			max_thinking_budget: 100000,
 			min_thinking_budget: 1024,
 		},
-		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+		supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 	},
 ];
 
@@ -262,7 +262,8 @@ export class AzureEndpointProvider implements IEndpointProvider {
 						vision: config.supportsVision,
 						thinking: config.supportsThinking,
 					},
-					supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+					// Azure OpenAI only supports Chat Completions API, never Responses API
+					supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions],
 				});
 			}
 		}

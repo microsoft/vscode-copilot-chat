@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { authentication, AuthenticationGetSessionOptions, AuthenticationSession, AuthenticationSessionsChangeEvent } from 'vscode';
-import { mixin } from '../../../util/vs/base/common/objects';
-import { URI } from '../../../util/vs/base/common/uri';
 import { AuthPermissionMode, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { authProviderId, GITHUB_SCOPE_ALIGNED, GITHUB_SCOPE_READ_USER, GITHUB_SCOPE_USER_EMAIL, MinimalModeError } from '../common/authentication';
 
@@ -23,19 +21,16 @@ export type CopilotAuthenticationSession = {
 };
 
 async function getAuthSession(providerId: string, defaultScopes: string[], getSilentSession: () => Promise<AuthenticationSession | undefined>, options: AuthenticationGetSessionOptions = {}) {
-	const accounts = await authentication.getAccounts(providerId);
-	if (!accounts.length) {
-		return await authentication.getSession(providerId, defaultScopes, options);
-	}
-
-	if (options.forceNewSession) {
-		const session = await authentication.getSession(providerId, defaultScopes, {
-			...options,
-			forceNewSession: mixin({ learnMore: URI.parse('https://aka.ms/copilotRepoScope') }, options.forceNewSession),
-			// When GitHub becomes a true multi-account provider, we won't have to clearSessionPreference.
-			clearSessionPreference: true
-		});
-		return session;
+	// Azure-only fork: never trigger interactive GitHub login popups.
+	// Only allow silent session retrieval. Interactive login (createIfNone, forceNewSession)
+	// is suppressed since authentication is handled by Azure service principal.
+	if (options.forceNewSession || options.createIfNone) {
+		// Try silent first; if no session exists, return undefined instead of showing login UI
+		const silentSession = await getSilentSession();
+		if (silentSession) {
+			return silentSession;
+		}
+		return undefined;
 	}
 
 	const silentSession = await getSilentSession();
@@ -43,15 +38,8 @@ async function getAuthSession(providerId: string, defaultScopes: string[], getSi
 		return silentSession;
 	}
 
-	if (options.createIfNone) {
-		// This will force GitHub auth to present a picker to choose which account you want to log in to if there
-		// are multiple accounts.
-		// When GitHub becomes a true multi-account provider, we can change this to just createIfNone: true.
-		const session = await authentication.getSession(providerId, defaultScopes, { forceNewSession: { learnMore: URI.parse('https://aka.ms/copilotRepoScope') }, clearSessionPreference: true });
-		return session;
-	}
-	// Pass the options in as they are
-	return await authentication.getSession(providerId, defaultScopes, options);
+	// Only attempt silent session retrieval
+	return await authentication.getSession(providerId, defaultScopes, { silent: true });
 }
 
 /**
