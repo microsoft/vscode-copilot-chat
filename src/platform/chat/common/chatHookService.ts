@@ -12,6 +12,14 @@ export interface IChatHookService {
 	readonly _serviceBrand: undefined;
 
 	/**
+	 * Log telemetry about which hook types are configured for a request.
+	 * Should be called once per request to report hook configuration.
+	 *
+	 * @param hooks The resolved hook commands for the session (from request.hooks).
+	 */
+	logConfiguredHooks(hooks: vscode.ChatRequestHooks | undefined): void;
+
+	/**
 	 * Execute all hooks of the specified type for the current chat session.
 	 * Hooks are sourced from the resolved hook commands on the chat request.
 	 *

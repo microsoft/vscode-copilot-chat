@@ -481,6 +481,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const sessionId = this.options.conversation.sessionId;
 		const hasHooks = this.options.request.hasHooksEnabled;
 
+		// Report which hooks are configured for this request
+		this._chatHookService.logConfiguredHooks(this.options.request.hooks);
+
 		// Execute SubagentStart hook for subagent requests, or SessionStart hook for first turn of regular sessions
 		if (this.options.request.subAgentInvocationId) {
 			const startHookResult = await this.executeSubagentStartHook({
