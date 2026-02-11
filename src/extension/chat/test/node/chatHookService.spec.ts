@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ChatHookCommand, ChatHookResult, ChatHookResultKind, ChatRequestHooks, Uri } from 'vscode';
 import { IPostToolUseHookResult, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 import { HookCommandResultKind, IHookCommandResult } from '../../../../platform/chat/common/hookExecutor';
+import { IToolValidationResult } from '../../../tools/common/toolsService';
 
 function cmd(command: string, cwd?: Uri): ChatHookCommand {
 	return { command, cwd } as ChatHookCommand;
@@ -385,6 +386,7 @@ function hookResult(output: unknown, kind: ChatHookResultKind = 'success'): Chat
  */
 class TestableChatHookService {
 	public hookResults: ChatHookResult[] = [];
+	public validateToolInputFn: ((name: string, input: string) => IToolValidationResult) | undefined;
 
 	async executeHook(): Promise<ChatHookResult[]> {
 		return this.hookResults;
@@ -398,7 +400,24 @@ class TestableChatHookService {
 		sessionId?: string,
 	): Promise<IPreToolUseHookResult | undefined> {
 		const results = await this.executeHook();
-		return collapsePreToolUseHookResults(results);
+		const collapsed = collapsePreToolUseHookResults(results);
+		if (!collapsed) {
+			return undefined;
+		}
+
+		// Validate updatedInput against the tool's input schema, mirroring the real ChatHookService
+		if (collapsed.updatedInput && this.validateToolInputFn) {
+			const validationResult = this.validateToolInputFn(toolName, JSON.stringify(collapsed.updatedInput));
+			if ('error' in validationResult) {
+				collapsed.updatedInput = undefined;
+			}
+		}
+
+		if (!collapsed.permissionDecision && !collapsed.updatedInput && !collapsed.additionalContext?.length) {
+			return undefined;
+		}
+
+		return collapsed;
 	}
 }
 
@@ -526,6 +545,38 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
 		expect(result?.updatedInput).toEqual({ modified: true });
 		expect(result?.permissionDecision).toBeUndefined();
+	});
+
+	it('discards updatedInput when schema validation fails', async () => {
+		service.validateToolInputFn = () => ({ error: 'Missing required property "command"' });
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { permissionDecision: 'allow', updatedInput: { invalidField: 'wrong' } } }),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result?.permissionDecision).toBe('allow');
+		expect(result?.updatedInput).toBeUndefined();
+	});
+
+	it('keeps updatedInput when schema validation passes', async () => {
+		service.validateToolInputFn = (_name, input) => ({ inputObj: JSON.parse(input) });
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { permissionDecision: 'allow', updatedInput: { command: 'safe' } } }),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result?.permissionDecision).toBe('allow');
+		expect(result?.updatedInput).toEqual({ command: 'safe' });
+	});
+
+	it('returns undefined when only updatedInput is present but fails validation', async () => {
+		service.validateToolInputFn = () => ({ error: 'invalid' });
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { updatedInput: { bad: true } } }),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result).toBeUndefined();
 	});
 
 	it('collects additionalContext from all hooks', async () => {
