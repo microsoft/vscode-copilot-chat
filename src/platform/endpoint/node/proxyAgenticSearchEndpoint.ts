@@ -34,7 +34,7 @@ export class ProxyAgenticSearchEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getConfig(ConfigKey.Advanced.AgenticSearchModelName);
+		const model = configurationService.getConfig(ConfigKey.Advanced.AgenticProxySearchModelName);
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
