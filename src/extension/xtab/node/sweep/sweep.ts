@@ -482,6 +482,12 @@ export function constructSweepPrompt(promptPieces: PromptPieces): string {
 	// Use rebase approach: compose all user edits and map window bounds back to original
 	const cursorLine = currentDocument.cursorLineOffset;
 
+	// If original is empty (file created during session), skip Sweep entirely
+	// The model doesn't work well without an original baseline to compare against
+	if (originalContent.trim().length === 0) {
+		return '';
+	}
+
 	// Extract current window (this is straightforward)
 	const currentSection = extract21LineWindow(currentContent, cursorLine);
 

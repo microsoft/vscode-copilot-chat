@@ -313,6 +313,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const userPrompt = getUserPrompt(promptPieces);
 
+		// Sweep: skip suggestion for newly created files (empty original)
+		if (promptOptions.promptingStrategy === xtabPromptOptions.PromptingStrategy.Sweep && !userPrompt) {
+			return new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+		}
+
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 
 		const prediction = this.getPredictedOutput(activeDocument, editWindowLines, responseFormat);
