@@ -112,10 +112,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 
-	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
+	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, initialFolder: vscode.Uri | undefined, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
 		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)?.uri
-			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
+			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : initialFolder;
 
 		// If no folder selected and we have a single workspace folder, use active repository
 		let repositoryUri: vscode.Uri | undefined;
@@ -229,12 +229,12 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 */
 	async initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; initialFolder?: vscode.Uri },
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo> {
-		const { stream, toolInvocationToken } = options;
+		const { stream, toolInvocationToken, initialFolder } = options;
 
-		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
+		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, stream, initialFolder, token);
 		if (trusted === false) {
 			return { folder, repository, worktree, worktreeProperties, trusted };
 		}
