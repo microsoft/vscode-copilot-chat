@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { commands, extensions, window } from 'vscode';
-import { IAuthenticationService, MinimalModeError } from '../../../platform/authentication/common/authentication';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -193,19 +193,9 @@ export class ContextKeysContribution extends Disposable {
 	}
 
 	private async _updatePermissiveSessionContext() {
-		let hasPermissiveSession = false;
-		let missingPermissiveSession = false;
-		if (!this._authenticationService.isMinimalMode) {
-			try {
-				hasPermissiveSession = !!(await this._authenticationService.getGitHubSession('permissive', { silent: true }));
-			} catch (error) {
-				if (!(error instanceof MinimalModeError)) {
-					this._logService.trace(`[context keys] Failed to resolve permissive session: ${error instanceof Error ? error.message : String(error)}`);
-					hasPermissiveSession = !!this._authenticationService.permissiveGitHubSession;
-				}
-			}
-			missingPermissiveSession = !hasPermissiveSession;
-		}
-		commands.executeCommand('setContext', missingPermissiveSessionContextKey, missingPermissiveSession);
+		// Azure-only fork: Never show "missing permissive session" UI.
+		// Authentication is handled by Azure AD service principal, not GitHub sessions.
+		// Setting this to false prevents the "Enable AI Features" / "Sign in to GitHub" prompts.
+		commands.executeCommand('setContext', missingPermissiveSessionContextKey, false);
 	}
 }

@@ -19,6 +19,9 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EmbeddingEndpoint } from '../../endpoint/node/embeddingsEndpoint';
 import { IModelRouter } from './modelRouter';
+import { OpenAIEndpoint } from '../../../extension/byok/node/openAIEndpoint';
+import { ServicePrincipalAuthService } from './servicePrincipalAuth';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 
 /**
  * Model definition for the Azure model picker.
@@ -170,19 +173,59 @@ export class AzureEndpointProvider implements IEndpointProvider {
 	private readonly _onDidModelsRefresh = new Emitter<void>();
 	readonly onDidModelsRefresh: Event<void> = this._onDidModelsRefresh.event;
 
-	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
 	private _embeddingEndpoints: Map<string, IEmbeddingsEndpoint> = new Map();
+	/** Lightweight CopilotChatEndpoint instances used only for model picker display */
+	private _pickerEndpoints: Map<string, IChatEndpoint> = new Map();
+
+	private _authService: ServicePrincipalAuthService | undefined;
 
 	constructor(
 		@IModelRouter private readonly _modelRouter: IModelRouter,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IAuthenticationService _authService: IAuthenticationService,
+		@IAuthenticationService private readonly _copilotAuthService: IAuthenticationService,
 		@IExperimentationService _expService: IExperimentationService,
 		@ITelemetryService _telemetryService: ITelemetryService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		this._logService.info('AzureEndpointProvider: initialized with static model definitions');
+	}
+
+	private _getAuthService(): ServicePrincipalAuthService {
+		if (!this._authService) {
+			this._authService = new ServicePrincipalAuthService(
+				(url: string, init: RequestInit) => globalThis.fetch(url, init)
+			);
+			this._authService.setExtensionContext(this._extensionContext);
+		}
+		const tenantId = this._configService.getNonExtensionConfig<string>('yourcompany.ai.tenantId') || '';
+		const clientId = this._configService.getNonExtensionConfig<string>('yourcompany.ai.clientId') || '';
+		this._authService.setConfig({ tenantId, clientId });
+		return this._authService;
+	}
+
+	/**
+	 * Get a fresh Azure AD bearer token for Azure OpenAI requests.
+	 * Falls back to CopilotToken if service principal auth is not configured.
+	 */
+	private async _getBearerToken(): Promise<string> {
+		try {
+			const auth = this._getAuthService();
+			const token = await auth.getToken(ServicePrincipalAuthService.SCOPE_COGNITIVE_SERVICES);
+			this._logService.debug('AzureEndpointProvider: obtained service principal token');
+			return token;
+		} catch (err) {
+			this._logService.warn(`AzureEndpointProvider: service principal auth failed, falling back to CopilotToken. ${(err as Error).message}`);
+			// Fall back to CopilotToken (which AzureCopilotTokenManager may provide)
+			try {
+				const copilotToken = await this._copilotAuthService.getCopilotToken();
+				return copilotToken.token;
+			} catch {
+				this._logService.error('AzureEndpointProvider: no authentication available');
+				return '';
+			}
+		}
 	}
 
 	/**
@@ -271,11 +314,32 @@ export class AzureEndpointProvider implements IEndpointProvider {
 		return allModels;
 	}
 
-	private _getOrCreateChatEndpoint(modelInfo: IChatModelInformation): IChatEndpoint {
-		let endpoint = this._chatEndpoints.get(modelInfo.id);
+	/**
+	 * Create an OpenAIEndpoint with a fresh Azure AD bearer token.
+	 * Unlike CopilotChatEndpoint, OpenAIEndpoint:
+	 * - Sets the Authorization header correctly via getExtraHeaders()
+	 * - Sanitizes the request body for Azure (removes non-standard fields)
+	 * - Forces Chat Completions API (not Responses API) with _useBearerAuth
+	 * - Handles max_completion_tokens vs max_tokens for reasoning models
+	 */
+	private async _createAzureChatEndpoint(modelInfo: IChatModelInformation): Promise<IChatEndpoint> {
+		const bearerToken = await this._getBearerToken();
+		const url = typeof modelInfo.urlOrRequestMetadata === 'string'
+			? modelInfo.urlOrRequestMetadata
+			: '';
+		this._logService.debug(`AzureEndpointProvider: creating OpenAIEndpoint for ${modelInfo.id} → ${url}`);
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, bearerToken, url, true);
+	}
+
+	/**
+	 * Get or create a lightweight CopilotChatEndpoint for model picker display only.
+	 * These are NOT used for actual requests - just for listing models in the picker.
+	 */
+	private _getOrCreatePickerEndpoint(modelInfo: IChatModelInformation): IChatEndpoint {
+		let endpoint = this._pickerEndpoints.get(modelInfo.id);
 		if (!endpoint) {
 			endpoint = this._instantiationService.createInstance(CopilotChatEndpoint, modelInfo);
-			this._chatEndpoints.set(modelInfo.id, endpoint);
+			this._pickerEndpoints.set(modelInfo.id, endpoint);
 		}
 		return endpoint;
 	}
@@ -292,7 +356,7 @@ export class AzureEndpointProvider implements IEndpointProvider {
 			const directUrl = endpoint
 				? `${endpoint.replace(/\/$/, '')}/openai/deployments/${overriddenModel}/chat/completions?api-version=${routing.apiVersion}`
 				: undefined;
-			return this._getOrCreateChatEndpoint({
+			return this._createAzureChatEndpoint({
 				id: overriddenModel,
 				name: 'Custom Override',
 				version: '1.0.0',
@@ -315,7 +379,7 @@ export class AzureEndpointProvider implements IEndpointProvider {
 			// Family-based lookup
 			const family = requestOrFamilyOrModel;
 			const def = models.find(m => m.family === family) || models.find(m => m.isDefault) || models[0];
-			return this._getOrCreateChatEndpoint(this._buildModelInfo(def));
+			return this._createAzureChatEndpoint(this._buildModelInfo(def));
 		}
 
 		// Model picker or ChatRequest
@@ -324,17 +388,17 @@ export class AzureEndpointProvider implements IEndpointProvider {
 			// Auto mode: pick the default model
 			if (model.id === 'copilot-chat-auto') {
 				const def = models.find(m => m.isDefault) || models[0];
-				return this._getOrCreateChatEndpoint(this._buildModelInfo(def));
+				return this._createAzureChatEndpoint(this._buildModelInfo(def));
 			}
 			// Specific model from picker
 			const def = models.find(m => m.id === model.id);
 			if (def) {
-				return this._getOrCreateChatEndpoint(this._buildModelInfo(def));
+				return this._createAzureChatEndpoint(this._buildModelInfo(def));
 			}
 			// Fallback to default
 			this._logService.trace(`AzureEndpointProvider: model ${model.id} not found, using default`);
 			const defaultDef = models.find(m => m.isDefault) || models[0];
-			return this._getOrCreateChatEndpoint(this._buildModelInfo(defaultDef));
+			return this._createAzureChatEndpoint(this._buildModelInfo(defaultDef));
 		}
 
 		if (model) {
@@ -345,7 +409,7 @@ export class AzureEndpointProvider implements IEndpointProvider {
 
 		// No model specified: use default
 		const defaultDef = models.find(m => m.isDefault) || models[0];
-		return this._getOrCreateChatEndpoint(this._buildModelInfo(defaultDef));
+		return this._createAzureChatEndpoint(this._buildModelInfo(defaultDef));
 	}
 
 	async getEmbeddingsEndpoint(_family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
@@ -374,14 +438,29 @@ export class AzureEndpointProvider implements IEndpointProvider {
 	}
 
 	async getAllCompletionModels(_forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
-		// No completions models in Azure-only mode
-		return [];
+		// Azure-only fork: provide completion models backed by Azure OpenAI deployments.
+		// The completions-core URL rewriting in networkConfiguration.ts converts
+		// /completions → /chat/completions for Azure endpoints.
+		const routing = this._modelRouter.getDeployment('completions');
+		return [{
+			id: routing.deploymentName,
+			name: routing.deploymentName,
+			model_picker_enabled: false,
+			is_chat_default: true,
+			is_chat_fallback: true,
+			version: '1.0.0',
+			capabilities: {
+				type: 'completion' as const,
+				family: routing.deploymentName,
+				tokenizer: TokenizerType.O200K,
+			},
+		}];
 	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models = this._getModelDefinitions();
 		return models
 			.filter(m => m.showInPicker)
-			.map(m => this._getOrCreateChatEndpoint(this._buildModelInfo(m)));
+			.map(m => this._getOrCreatePickerEndpoint(this._buildModelInfo(m)));
 	}
 }
