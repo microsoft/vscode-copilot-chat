@@ -1356,8 +1356,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const diskSession: IClaudeCodeSessionInfo = {
 				id: 'disk-session',
 				label: 'Disk Session Label',
-				firstMessageTimestamp: new Date('2024-01-01T00:00:00Z'),
-				lastMessageTimestamp: new Date('2024-01-01T01:00:00Z'),
+				created: new Date('2024-01-01T00:00:00Z').getTime(),
+				lastRequestEnded: new Date('2024-01-01T01:00:00Z').getTime(),
 				folderName: 'my-project',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(diskSession as any);
@@ -1424,8 +1424,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const diskSession: IClaudeCodeSessionInfo = {
 				id: 'disk-session',
 				label: 'Disk Label',
-				firstMessageTimestamp: new Date('2024-06-01T12:00:00Z'),
-				lastMessageTimestamp: new Date('2024-06-01T13:00:00Z'),
+				created: new Date('2024-06-01T12:00:00Z').getTime(),
+				lastRequestEnded: new Date('2024-06-01T13:00:00Z').getTime(),
 				folderName: undefined,
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(diskSession as any);
@@ -1435,7 +1435,7 @@ describe('ClaudeChatSessionItemController', () => {
 			const item = getItem('disk-session');
 			expect(item!.label).toBe('Disk Label');
 			expect(item!.tooltip).toBe('Claude Code session: Disk Label');
-			// timing.created is derived from firstMessageTimestamp
+			// timing.created is derived from created
 			expect(item!.timing!.created).toBe(new Date('2024-06-01T12:00:00Z').getTime());
 		});
 	});
@@ -1451,8 +1451,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test',
 				label: 'Test',
-				firstMessageTimestamp: new Date(),
-				lastMessageTimestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				folderName: 'project',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1469,8 +1469,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test',
 				label: 'Test',
-				firstMessageTimestamp: new Date(),
-				lastMessageTimestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				folderName: 'project-a',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1489,8 +1489,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test',
 				label: 'Test',
-				firstMessageTimestamp: new Date(),
-				lastMessageTimestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				folderName: 'my-folder',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1508,8 +1508,8 @@ describe('ClaudeChatSessionItemController', () => {
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test',
 				label: 'Test',
-				firstMessageTimestamp: new Date(),
-				lastMessageTimestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				folderName: 'project',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1536,12 +1536,12 @@ describe('ClaudeChatSessionItemController', () => {
 			vi.mocked(mockSessionService.getSession)
 				.mockResolvedValueOnce({
 					id: 'session-1', label: 'S1',
-					firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+					created: Date.now(), lastRequestEnded: Date.now(),
 					folderName: 'frontend',
 				} as any)
 				.mockResolvedValueOnce({
 					id: 'session-2', label: 'S2',
-					firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+					created: Date.now(), lastRequestEnded: Date.now(),
 					folderName: 'backend',
 				} as any);
 
@@ -1562,7 +1562,7 @@ describe('ClaudeChatSessionItemController', () => {
 
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test', label: 'Test',
-				firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+				created: Date.now(), lastRequestEnded: Date.now(),
 				folderName: 'repo1',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1584,7 +1584,7 @@ describe('ClaudeChatSessionItemController', () => {
 
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test', label: 'Test',
-				firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+				created: Date.now(), lastRequestEnded: Date.now(),
 				folderName: 'main',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1609,7 +1609,7 @@ describe('ClaudeChatSessionItemController', () => {
 
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test', label: 'Test',
-				firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+				created: Date.now(), lastRequestEnded: Date.now(),
 				folderName: 'repo1',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
@@ -1643,7 +1643,7 @@ describe('ClaudeChatSessionItemController', () => {
 
 			const sessionInfo: IClaudeCodeSessionInfo = {
 				id: 'test', label: 'Test',
-				firstMessageTimestamp: new Date(), lastMessageTimestamp: new Date(),
+				created: Date.now(), lastRequestEnded: Date.now(),
 				folderName: 'repo1',
 			};
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);

@@ -30,6 +30,7 @@ import {
 	isAssistantMessageEntry,
 	isChainLinkEntry,
 	isSummaryEntry,
+	isUserRequest,
 	ISubagentSession,
 	isUserMessageEntry,
 	ParseError,
@@ -407,8 +408,9 @@ function buildSessionFromLeaf(
 		id: leafMessage.sessionId,
 		label: generateSessionLabel(summaryEntry, messageChain),
 		messages: messageChain,
-		firstMessageTimestamp: messageChain[0].timestamp,
-		lastMessageTimestamp: messageChain[messageChain.length - 1].timestamp,
+		created: messageChain[0].timestamp.getTime(),
+		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
+		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
 		subagents: [],
 	};
 
@@ -548,6 +550,21 @@ function getFirstNonEmptyLine(text: string): string {
 }
 
 /**
+ * Find the timestamp of the last genuine user request in a message chain.
+ * A genuine user request is a user message whose content is NOT solely tool_result blocks.
+ * Returns undefined if no genuine user request is found.
+ */
+function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): number | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (msg.type === 'user' && msg.message.role === 'user' && isUserRequest(msg.message.content)) {
+			return msg.timestamp.getTime();
+		}
+	}
+	return undefined;
+}
+
+/**
  * Deduplicate sessions by ID, keeping the one with the most messages.
  * This handles orphaned branches from parallel tool calls.
  */
@@ -667,8 +684,9 @@ export function extractSessionMetadata(
 ): IClaudeCodeSessionInfo | null {
 	const state = {
 		summary: undefined as string | undefined,
-		firstMessageTimestamp: undefined as Date | undefined,
-		lastMessageTimestamp: undefined as Date | undefined,
+		firstMessageTimestamp: undefined as number | undefined,
+		lastMessageTimestamp: undefined as number | undefined,
+		lastRequestStartedTimestamp: undefined as number | undefined,
 		firstUserMessageContent: undefined as string | undefined,
 		foundSessionId: false,
 	};
@@ -691,8 +709,9 @@ export function extractSessionMetadata(
  */
 interface MetadataExtractionState {
 	summary: string | undefined;
-	firstMessageTimestamp: Date | undefined;
-	lastMessageTimestamp: Date | undefined;
+	firstMessageTimestamp: number | undefined;
+	lastMessageTimestamp: number | undefined;
+	lastRequestStartedTimestamp: number | undefined;
 	firstUserMessageContent: string | undefined;
 	foundSessionId: boolean;
 }
@@ -748,7 +767,7 @@ function processLineForMetadata(
 		const messageResult = vMessageEntry.validate(parsed);
 		if (!messageResult.error) {
 			const entry = messageResult.content;
-			const messageTimestamp = new Date(entry.timestamp);
+			const messageTimestamp = new Date(entry.timestamp).getTime();
 
 			// Track first message timestamp and content
 			if (state.firstMessageTimestamp === undefined) {
@@ -771,6 +790,11 @@ function processLineForMetadata(
 						state.firstUserMessageContent = textParts.join('\n');
 					}
 				}
+			}
+
+			// Track last genuine user request timestamp
+			if (entry.type === 'user' && isUserRequest(entry.message.content)) {
+				state.lastRequestStartedTimestamp = messageTimestamp;
 			}
 
 			// Always update last message timestamp (messages are chronological in file)
@@ -809,8 +833,9 @@ function buildMetadataResult(
 	return {
 		id: sessionId,
 		label,
-		firstMessageTimestamp: state.firstMessageTimestamp,
-		lastMessageTimestamp: state.lastMessageTimestamp,
+		created: state.firstMessageTimestamp,
+		lastRequestStarted: state.lastRequestStartedTimestamp,
+		lastRequestEnded: state.lastMessageTimestamp,
 	};
 }
 
@@ -840,6 +865,7 @@ export async function extractSessionMetadataStreaming(
 		summary: undefined,
 		firstMessageTimestamp: undefined,
 		lastMessageTimestamp: undefined,
+		lastRequestStartedTimestamp: undefined,
 		firstUserMessageContent: undefined,
 		foundSessionId: false,
 	};
