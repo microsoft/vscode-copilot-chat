@@ -91,10 +91,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IChatSessionWorkspaceFolderService, new SyncDescriptor(ChatSessionWorkspaceFolderService)],
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
 			));
-
-		// const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
-		// this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
-
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider.createHandler());

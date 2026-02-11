@@ -164,7 +164,7 @@ function createProviderWithServices(
 	mocks: ReturnType<typeof createDefaultMocks>,
 	agentManager?: ClaudeAgentManager,
 ): { provider: ClaudeChatSessionContentProvider; accessor: ITestingServicesAccessor } {
-	const serviceCollection = store.add(createExtensionUnitTestingServices());
+	const serviceCollection = store.add(createExtensionUnitTestingServices(store));
 
 	const workspaceService = new TestWorkspaceService(workspaceFolders);
 	serviceCollection.set(IWorkspaceService, workspaceService);
@@ -1038,6 +1038,79 @@ describe('ChatSessionContentProvider', () => {
 			expect(sessionIdA).not.toBe(sessionIdB);
 			expect(sessionIdA).not.toBe('untitled-a');
 			expect(sessionIdB).not.toBe('untitled-b');
+		});
+
+		it('provideHandleOptionsChange after mapping writes to the effective session ID', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// First message establishes the untitled→effective mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			// Now change the model via the untitled resource (as the UI would)
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			// The model should be readable via the effective session ID
+			const modelId = await handlerProvider.getModelIdForSession(effectiveSessionId);
+			expect(modelId).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('provideChatSessionContent after mapping reads from the effective session ID', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// Establish mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			// Change the model via the untitled resource (writes to effective key)
+			const untitledUri = createClaudeSessionUri('untitled-1');
+			await handlerProvider.provideHandleOptionsChange(
+				untitledUri,
+				[{ optionId: 'model', value: 'claude-3-5-haiku-20241022' }],
+				CancellationToken.None,
+			);
+
+			// Read content via the untitled resource (should resolve to effective key and find the model)
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			const result = await handlerProvider.provideChatSessionContent(untitledUri, CancellationToken.None);
+
+			expect(result.options?.['model']).toBe('claude-3-5-haiku-20241022');
+		});
+
+		it('onDidChangeSessionState fires event with untitled resource for mapped sessions', async () => {
+			const handler = handlerProvider.createHandler();
+			const context = createChatContext('untitled-1', true);
+			const stream = new MockChatResponseStream();
+
+			// Establish mapping
+			await handler(new TestChatRequest('hello'), context, stream, CancellationToken.None);
+
+			const handleRequestMock = vi.mocked(mockAgentManager.handleRequest);
+			const [effectiveSessionId] = handleRequestMock.mock.calls[0];
+
+			// Listen for option change events
+			const firedEvents: vscode.ChatSessionOptionChangeEvent[] = [];
+			handlerProvider.onDidChangeChatSessionOptions(e => firedEvents.push(e));
+
+			// Simulate the session state service updating the model on the effective ID
+			// (as would happen from the agent SDK side)
+			const sessionStateService = handlerAccessor.get(IClaudeSessionStateService);
+			sessionStateService.setModelIdForSession(effectiveSessionId, 'claude-3-5-haiku-20241022');
+
+			// The event should fire with the untitled resource, not the effective ID
+			expect(firedEvents).toHaveLength(1);
+			expect(ClaudeSessionUri.getId(firedEvents[0].resource)).toBe('untitled-1');
+			expect(firedEvents[0].updates).toContainEqual({ optionId: 'model', value: 'claude-3-5-haiku-20241022' });
 		});
 	});
 

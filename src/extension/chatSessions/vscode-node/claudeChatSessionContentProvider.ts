@@ -57,8 +57,17 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 	// Map untitled session IDs to their effective (persistent) session IDs
 	private readonly _untitledToEffectiveSessionId = new Map<string, string>();
+	private readonly _effectiveToUntitledSessionId = new Map<string, string>();
 
 	private readonly _controller: ClaudeChatSessionItemController;
+
+	/**
+	 * Resolves the effective session ID for a given session ID.
+	 * For untitled sessions, returns the mapped effective ID; otherwise returns the same ID.
+	 */
+	private _resolveEffectiveSessionId(sessionId: string): string {
+		return this._untitledToEffectiveSessionId.get(sessionId) ?? sessionId;
+	}
 
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
@@ -98,7 +107,8 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			if (updates.length > 0) {
-				const resource = ClaudeSessionUri.forSessionId(e.sessionId);
+				const untitledId = this._effectiveToUntitledSessionId.get(e.sessionId);
+				const resource = ClaudeSessionUri.forSessionId(untitledId ?? e.sessionId);
 				this._onDidChangeChatSessionOptions.fire({ resource, updates });
 			}
 		}));
@@ -109,6 +119,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
 		this._untitledToEffectiveSessionId.clear();
+		this._effectiveToUntitledSessionId.clear();
 		super.dispose();
 	}
 
@@ -281,6 +292,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 					effectiveSessionId = generateUuid();
 					isNewSession = true;
 					this._untitledToEffectiveSessionId.set(sessionId, effectiveSessionId);
+					this._effectiveToUntitledSessionId.set(effectiveSessionId, sessionId);
 
 					// Transfer all session property selections from the untitled
 					// session ID to the effective (persistent) session ID.
@@ -384,7 +396,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideHandleOptionsChange(resource: vscode.Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, _token: vscode.CancellationToken): Promise<void> {
-		const sessionId = ClaudeSessionUri.getId(resource);
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(resource));
 		for (const update of updates) {
 			if (update.optionId === MODELS_OPTION_ID) {
 				// Ignore the unavailable placeholder - it's not a real model
@@ -407,7 +419,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	async provideChatSessionContent(sessionResource: vscode.Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const sessionId = ClaudeSessionUri.getId(sessionResource);
+		const sessionId = this._resolveEffectiveSessionId(ClaudeSessionUri.getId(sessionResource));
 		const existingSession = await this.sessionService.getSession(sessionResource, token);
 		const history = existingSession ?
 			buildChatHistory(existingSession) :
@@ -579,11 +591,11 @@ export class ClaudeChatSessionItemController extends Disposable {
 		// may be incomplete while the git extension is still initializing.
 		this._register(_gitService.onDidOpenRepository(() => {
 			this._showBadge = this._computeShowBadge();
-			this._refreshItems(CancellationToken.None);
+			void this._refreshItems(CancellationToken.None);
 		}));
 		this._register(_gitService.onDidCloseRepository(() => {
 			this._showBadge = this._computeShowBadge();
-			this._refreshItems(CancellationToken.None);
+			void this._refreshItems(CancellationToken.None);
 		}));
 	}
 
@@ -630,6 +642,8 @@ export class ClaudeChatSessionItemController extends Disposable {
 	}
 
 	private async _refreshItems(token: vscode.CancellationToken): Promise<void> {
+		// TODO: How do we handle cleanup? It's not too important to start
+		// since on reload this will get cleared anyway.
 		const sessions = await this._claudeCodeSessionService.getAllSessions(token);
 		for (const session of sessions) {
 			const item = this._createClaudeChatSessionItem(session);
