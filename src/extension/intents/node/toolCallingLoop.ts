@@ -7,8 +7,10 @@ import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { IChatHookService, SessionStartHookInput, SessionStartHookOutput, StopHookInput, StopHookOutput, SubagentStartHookInput, SubagentStartHookOutput, SubagentStopHookInput, SubagentStopHookOutput } from '../../../platform/chat/common/chatHookService';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -43,8 +45,8 @@ import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/p
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
+import { isHookAbortError, processHookResults } from './hookResultProcessor';
 import { PauseController } from './pauseController';
-
 
 export const enum ToolCallLimitBehavior {
 	Confirm,
@@ -95,6 +97,57 @@ export interface IToolCallingBuiltPromptEvent {
 
 export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'disableThinking'>;
 
+interface StartHookResult {
+	/**
+	 * Additional context to add to the agent's context, if any.
+	 */
+	readonly additionalContext?: string;
+}
+
+interface StopHookResult {
+	/**
+	 * Whether the agent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reasons the agent should continue, if shouldContinue is true.
+	 * Multiple hooks may block with different reasons.
+	 */
+	readonly reasons?: readonly string[];
+}
+
+interface SubagentStartHookResult {
+	/**
+	 * Additional context to add to the subagent's context, if any.
+	 */
+	readonly additionalContext?: string;
+}
+
+interface SubagentStopHookResult {
+	/**
+	 * Whether the subagent should continue (not stop).
+	 */
+	readonly shouldContinue: boolean;
+	/**
+	 * The reasons the subagent should continue, if shouldContinue is true.
+	 * Multiple hooks may block with different reasons.
+	 */
+	readonly reasons?: readonly string[];
+}
+
+/**
+ * Formats a hook context message from blocking reasons.
+ * @param reasons The reasons hooks blocked the agent from stopping
+ * @returns A formatted message for the model to address the requirements
+ */
+function formatHookContext(reasons: readonly string[]): string {
+	if (reasons.length === 1) {
+		return `You were about to complete but a hook blocked you with the following message: "${reasons[0]}". Please address this requirement before completing.`;
+	}
+	const formattedReasons = reasons.map((reason, i) => `${i + 1}. ${reason}`).join('\n');
+	return `You were about to complete but multiple hooks blocked you with the following messages:\n${formattedReasons}\n\nPlease address all of these requirements before completing.`;
+}
+
 /**
  * This is a base class that can be used to implement a tool calling loop
  * against a model. It requires only that you build a prompt and is decoupled
@@ -106,6 +159,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	private toolCallResults: Record<string, LanguageModelToolResult2> = Object.create(null);
 	private toolCallRounds: IToolCallRound[] = [];
+	private stopHookReason: string | undefined;
+	private additionalHookContext: string | undefined;
+	private stopHookUserInitiated = false;
+
+	public appendAdditionalHookContext(context: string): void {
+		if (!context) {
+			return;
+		}
+		this.additionalHookContext = this.additionalHookContext
+			? `${this.additionalHookContext}\n${context}`
+			: context;
+	}
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -127,6 +192,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
+		@IChatHookService private readonly _chatHookService: IChatHookService,
+		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
 	) {
 		super();
 	}
@@ -142,10 +209,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
-		const isContinuation = this.turn.isContinuation;
-		const query = isContinuation ?
-			'Please continue' :
-			this.turn.request.message;
+		const isContinuation = this.turn.isContinuation || !!this.stopHookReason;
+		let query: string;
+		let hasStopHookQuery = false;
+		if (this.stopHookReason) {
+			// Include the stop hook reason as a user message so the model knows what to do.
+			// Wrap with context so the model understands it needs to take action.
+			query = formatHookContext([this.stopHookReason]);
+			this._logService.info(`[ToolCallingLoop] Using stop hook reason as query: ${query}`);
+			this.stopHookReason = undefined; // Clear after use
+			hasStopHookQuery = true;
+		} else if (isContinuation) {
+			query = 'Please continue';
+		} else {
+			query = this.turn.request.message;
+		}
 		// exclude turns from the history that errored due to prompt filtration
 		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.PromptFiltered);
 
@@ -166,7 +244,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				availableTools
 			},
 			isContinuation,
+			hasStopHookQuery,
 			modeInstructions: this.options.request.modeInstructions2,
+			additionalHookContext: this.additionalHookContext,
 		};
 	}
 
@@ -175,16 +255,320 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
+	/**
+	 * Called before the loop stops to give hooks a chance to block the stop.
+	 * @param input The stop hook input containing stop_hook_active flag
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result indicating whether to continue and the reasons
+	 */
+	protected async executeStopHook(input: StopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<StopHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('Stop', this.options.request.hooks, input, sessionId, token);
+
+			const blockingReasons = new Set<string>();
+			processHookResults({
+				hookType: 'Stop',
+				results,
+				outputStream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as StopHookOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[ToolCallingLoop] Stop hook blocked: ${hookOutput.reason}`);
+							blockingReasons.add(hookOutput.reason);
+						}
+					}
+				},
+				// Collect errors as blocking reasons (stderr from exit code != 0)
+				onError: (errorMessage) => {
+					if (errorMessage) {
+						this._logService.trace(`[ToolCallingLoop] Stop hook error collected as blocking reason: ${errorMessage}`);
+						blockingReasons.add(errorMessage);
+					}
+				},
+			});
+
+			if (blockingReasons.size > 0) {
+				return { shouldContinue: true, reasons: [...blockingReasons] };
+			}
+			return { shouldContinue: false };
+		} catch (error) {
+			if (isHookAbortError(error)) {
+				throw error;
+			}
+			this._logService.error('[ToolCallingLoop] Error executing Stop hook', error);
+			return { shouldContinue: false };
+		}
+	}
+
+	/**
+	 * Shows a message when the stop hook blocks the agent from stopping.
+	 * Override in subclasses to customize the display.
+	 * @param outputStream The output stream for displaying messages
+	 * @param reasons The reasons the stop hook blocked stopping
+	 */
+	protected showStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
+		if (outputStream) {
+			if (reasons.length === 1) {
+				outputStream.hookProgress?.('Stop', reasons[0]);
+			} else {
+				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
+				outputStream.hookProgress?.('Stop', formattedReasons);
+			}
+		}
+		this._logService.trace(`[ToolCallingLoop] Stop hook blocked stopping: ${reasons.join('; ')}`);
+	}
+
+	/**
+	 * Called when a session starts to allow hooks to provide additional context.
+	 * @param input The session start hook input containing source
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result containing additional context from hooks
+	 */
+	protected async executeSessionStartHook(input: SessionStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<StartHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SessionStart', this.options.request.hooks, input, sessionId, token);
+
+			const additionalContexts: string[] = [];
+			processHookResults({
+				hookType: 'SessionStart',
+				results,
+				outputStream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SessionStartHookOutput;
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${additionalContext.substring(0, 100)}...`);
+						}
+					}
+				},
+				// SessionStart blocking errors and stopReason are silently ignored
+				ignoreErrors: true,
+			});
+
+			return {
+				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
+			};
+		} catch (error) {
+			if (isHookAbortError(error)) {
+				throw error;
+			}
+			this._logService.error('[ToolCallingLoop] Error executing SessionStart hook', error);
+			return {};
+		}
+	}
+
+	/**
+	 * Called when a subagent starts to allow hooks to provide additional context.
+	 * @param input The subagent start hook input containing agent_id and agent_type
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result containing additional context from hooks
+	 */
+	protected async executeSubagentStartHook(input: SubagentStartHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStartHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SubagentStart', this.options.request.hooks, input, sessionId, token);
+
+			const additionalContexts: string[] = [];
+			processHookResults({
+				hookType: 'SubagentStart',
+				results,
+				outputStream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SubagentStartHookOutput;
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${additionalContext.substring(0, 100)}...`);
+						}
+					}
+				},
+				// SubagentStart blocking errors and stopReason are silently ignored
+				ignoreErrors: true,
+			});
+
+			return {
+				additionalContext: additionalContexts.length > 0 ? additionalContexts.join('\n') : undefined
+			};
+		} catch (error) {
+			if (isHookAbortError(error)) {
+				throw error;
+			}
+			this._logService.error('[ToolCallingLoop] Error executing SubagentStart hook', error);
+			return {};
+		}
+	}
+
+	/**
+	 * Called before a subagent stops to give hooks a chance to block the stop.
+	 * @param input The subagent stop hook input containing agent_id, agent_type, and stop_hook_active flag
+	 * @param outputStream The output stream for displaying messages
+	 * @param token Cancellation token
+	 * @returns Result indicating whether to continue and the reasons
+	 */
+	protected async executeSubagentStopHook(input: SubagentStopHookInput, sessionId: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<SubagentStopHookResult> {
+		try {
+			const results = await this._chatHookService.executeHook('SubagentStop', this.options.request.hooks, input, sessionId, token);
+
+			const blockingReasons = new Set<string>();
+			processHookResults({
+				hookType: 'SubagentStop',
+				results,
+				outputStream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					if (typeof output === 'object' && output !== null) {
+						const hookOutput = output as SubagentStopHookOutput;
+						this._logService.trace(`[ToolCallingLoop] Checking SubagentStop hook output: decision=${hookOutput.decision}, reason=${hookOutput.reason}`);
+						if (hookOutput.decision === 'block' && hookOutput.reason) {
+							this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked: ${hookOutput.reason}`);
+							blockingReasons.add(hookOutput.reason);
+						}
+					}
+				},
+				// Collect errors as blocking reasons (stderr from exit code != 0)
+				onError: (errorMessage) => {
+					if (errorMessage) {
+						this._logService.trace(`[ToolCallingLoop] SubagentStop hook error collected as blocking reason: ${errorMessage}`);
+						blockingReasons.add(errorMessage);
+					}
+				},
+			});
+
+			if (blockingReasons.size > 0) {
+				return { shouldContinue: true, reasons: [...blockingReasons] };
+			}
+			return { shouldContinue: false };
+		} catch (error) {
+			if (isHookAbortError(error)) {
+				throw error;
+			}
+			this._logService.error('[ToolCallingLoop] Error executing SubagentStop hook', error);
+			return { shouldContinue: false };
+		}
+	}
+
+	/**
+	 * Shows a message when the subagent stop hook blocks the subagent from stopping.
+	 * Override in subclasses to customize the display.
+	 * @param outputStream The output stream for displaying messages
+	 * @param reasons The reasons the subagent stop hook blocked stopping
+	 */
+	protected showSubagentStopHookBlockedMessage(outputStream: ChatResponseStream | undefined, reasons: readonly string[]): void {
+		if (outputStream) {
+			if (reasons.length === 1) {
+				outputStream.hookProgress?.('SubagentStop', reasons[0]);
+			} else {
+				const formattedReasons = reasons.map((r, i) => `${i + 1}. ${r}`).join('\n');
+				outputStream.hookProgress?.('SubagentStop', formattedReasons);
+			}
+		}
+		this._logService.trace(`[ToolCallingLoop] SubagentStop hook blocked stopping: ${reasons.join('; ')}`);
+	}
+
 	private async throwIfCancelled(token: CancellationToken | PauseController) {
 		if (await this.checkAsync(token)) {
 			throw new CancellationError();
 		}
 	}
 
+	/**
+	 * Executes start hooks (SessionStart for regular sessions, SubagentStart for subagents).
+	 * Should be called before run() to allow hooks to provide context before the first prompt.
+	 *
+	 * - For subagents: Always executes SubagentStart hook
+	 * - For regular sessions: Only executes SessionStart hook on the first turn
+	 * @throws HookAbortError if a hook requests the session/subagent to abort
+	 */
+	public async runStartHooks(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<void> {
+		const sessionId = this.options.conversation.sessionId;
+		const hasHooks = this.options.request.hasHooksEnabled;
+
+		// Report which hooks are configured for this request
+		this._chatHookService.logConfiguredHooks(this.options.request.hooks);
+
+		// Execute SubagentStart hook for subagent requests, or SessionStart hook for first turn of regular sessions
+		if (this.options.request.subAgentInvocationId) {
+			const startHookResult = await this.executeSubagentStartHook({
+				agent_id: this.options.request.subAgentInvocationId,
+				agent_type: this.options.request.subAgentName ?? 'default',
+			}, sessionId, outputStream, token);
+			if (startHookResult.additionalContext) {
+				this.additionalHookContext = startHookResult.additionalContext;
+				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
+			}
+		} else {
+			const isFirstTurn = this.options.conversation.turns.length === 1;
+
+			if (hasHooks) {
+				// Build history from prior turns (excluding the current one) for transcript replay
+				const priorTurns = this.options.conversation.turns.slice(0, -1);
+				const history: IHistoricalTurn[] = priorTurns.map(turn => ({
+					userMessage: turn.request.message,
+					timestamp: turn.startTime,
+					rounds: turn.rounds.map(round => ({
+						response: round.response,
+						toolCalls: round.toolCalls.map(tc => ({
+							name: tc.name,
+							arguments: tc.arguments,
+							id: tc.id,
+						})),
+						reasoningText: round.thinking
+							? (Array.isArray(round.thinking.text) ? round.thinking.text.join('') : round.thinking.text)
+							: undefined,
+						timestamp: round.timestamp,
+					})),
+				}));
+
+				// Start the transcript (will replay history if no file exists yet)
+				await this._sessionTranscriptService.startSession(sessionId, undefined, history.length > 0 ? history : undefined);
+			}
+
+			if (isFirstTurn) {
+				const startHookResult = await this.executeSessionStartHook({
+					source: 'new',
+				}, sessionId, outputStream, token);
+				if (startHookResult.additionalContext) {
+					this.additionalHookContext = startHookResult.additionalContext;
+					this._logService.info('[ToolCallingLoop] SessionStart hook provided context for session');
+				}
+			}
+		}
+
+		// Log the user message for the transcript (no-ops if session was not started)
+		this._sessionTranscriptService.logUserMessage(
+			sessionId,
+			this.turn.request.message,
+		);
+	}
+
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		let stopHookActive = false;
+		const sessionId = this.options.conversation.sessionId;
+
+		// Execute SubagentStart hook for subagent requests to get additional context
+		if (this.options.request.subAgentInvocationId) {
+			const startHookResult = await this.executeSubagentStartHook({
+				agent_id: this.options.request.subAgentInvocationId,
+				agent_type: this.options.request.subAgentName ?? 'default',
+			}, sessionId, outputStream, token);
+			if (startHookResult.additionalContext) {
+				this.additionalHookContext = startHookResult.additionalContext;
+				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
+			}
+		}
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -198,6 +582,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 
 			try {
+				const turnId = String(i);
+				this._sessionTranscriptService.logAssistantTurnStart(sessionId, turnId);
 				const result = await this.runOne(outputStream, i, token);
 				if (lastRequestMessagesStartingIndexForRun === undefined) {
 					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
@@ -208,7 +594,45 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				};
 
 				this.toolCallRounds.push(result.round);
+				this._sessionTranscriptService.logAssistantTurnEnd(sessionId, turnId);
 				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+					// Before stopping, execute the stop hook
+					if (this.options.request.subAgentInvocationId) {
+						const stopHookResult = await this.executeSubagentStopHook({
+							agent_id: this.options.request.subAgentInvocationId,
+							agent_type: this.options.request.subAgentName ?? 'default',
+							stop_hook_active: stopHookActive,
+						}, sessionId, outputStream, token);
+						const joinedReasons = stopHookResult.reasons?.join('; ');
+						this._logService.info(`[ToolCallingLoop] Subagent stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
+							// The stop hook blocked stopping - show reasons and continue
+							this.showSubagentStopHookBlockedMessage(outputStream, stopHookResult.reasons);
+							// Store the joined reasons so it can be passed to the model in the next prompt
+							this.stopHookReason = joinedReasons;
+							// Also persist on the round so it survives across turns
+							result.round.hookContext = formatHookContext(stopHookResult.reasons);
+							this._logService.info(`[ToolCallingLoop] Subagent stop hook blocked, continuing with reasons: ${joinedReasons}`);
+							stopHookActive = true;
+							continue;
+						}
+					} else {
+						const stopHookResult = await this.executeStopHook({ stop_hook_active: stopHookActive }, sessionId, outputStream, token);
+						const joinedReasons = stopHookResult.reasons?.join('; ');
+						this._logService.info(`[ToolCallingLoop] Stop hook result: shouldContinue=${stopHookResult.shouldContinue}, reasons=${joinedReasons}`);
+						if (stopHookResult.shouldContinue && stopHookResult.reasons?.length) {
+							// The stop hook blocked stopping - show reasons and continue
+							this.showStopHookBlockedMessage(outputStream, stopHookResult.reasons);
+							// Store the joined reasons so it can be passed to the model in the next prompt
+							this.stopHookReason = joinedReasons;
+							// Also persist on the round so it survives across turns
+							result.round.hookContext = formatHookContext(stopHookResult.reasons);
+							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reasons: ${joinedReasons}`);
+							stopHookActive = true;
+							this.stopHookUserInitiated = true;
+							continue;
+						}
+					}
 					lastResult = lastResult;
 					break;
 				}
@@ -501,9 +925,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId,
+			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookUserInitiated,
 			disableThinking,
-		}, token);
+		}, token).finally(() => {
+			this.stopHookUserInitiated = false;
+		});
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: buildPromptResult.messages,
@@ -550,6 +976,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 
 			thinkingItem?.updateWithFetchResult(fetchResult);
+
+			// Log the assistant message to the transcript
+			const transcriptToolRequests: ToolRequest[] = toolCalls.map(tc => ({
+				toolCallId: tc.id,
+				name: tc.name,
+				arguments: tc.arguments,
+				type: 'function' as const,
+			}));
+			this._sessionTranscriptService.logAssistantMessage(
+				this.options.conversation.sessionId,
+				fetchResult.value,
+				transcriptToolRequests,
+				thinkingItem ? (Array.isArray(thinkingItem.text) ? thinkingItem.text.join('') : thinkingItem.text) : undefined,
+			);
+
 			return {
 				response: fetchResult,
 				round: ToolCallRound.create({

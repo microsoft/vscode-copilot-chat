@@ -89,6 +89,7 @@
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
+		"chatHooks@6",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -118,7 +119,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@12",
+		"chatParticipantPrivate@13",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",

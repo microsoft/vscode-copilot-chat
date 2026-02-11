@@ -360,6 +360,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			tools: new Map(),
 			id: '1',
 			sessionId: '1',
+			hasHooksEnabled: false,
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];
