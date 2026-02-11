@@ -67,7 +67,7 @@ export class CopilotCLIContrib extends Disposable {
 	}
 	private async _startMcpServer(logger: ILogger, httpServer: InProcHttpServer, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): Promise<void> {
 		try {
-			const { disposable, serverUri, headers } = await httpServer.start({
+			const { serverUri, headers } = await httpServer.start({
 				id: 'vscode-copilot-cli',
 				serverLabel: 'VS Code Copilot CLI',
 				serverVersion: '0.0.1',
@@ -99,7 +99,6 @@ export class CopilotCLIContrib extends Disposable {
 				void lockFile.update();
 			}));
 
-			this._register(disposable);
 			this._register({ dispose: () => { void lockFile.remove(); } });
 		} catch (err) {
 			const errMsg = err instanceof Error ? err.message : String(err);

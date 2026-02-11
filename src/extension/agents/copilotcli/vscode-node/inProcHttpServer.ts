@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, toDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
@@ -105,7 +105,7 @@ export class InProcHttpServer extends Disposable {
 
 	async start(
 		mcpOptions: McpProviderOptions,
-	): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {
+	): Promise<{ serverUri: vscode.Uri; headers: Record<string, string> }> {
 		let socketPath: string | undefined;
 
 		this._logger.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
@@ -141,24 +141,22 @@ export class InProcHttpServer extends Disposable {
 				await Promise.resolve(mcpOptions.registerPushNotifications());
 			}
 
+			this._register(toDisposable(() => {
+				this._logger.info('Shutting down MCP server...');
+				for (const sessionId in this._transports) {
+					void this._transports[sessionId].close();
+					this._unregisterTransport(sessionId);
+				}
+
+				if (httpServer.listening) {
+					httpServer.close();
+					httpServer.closeAllConnections();
+				}
+
+				void tryCleanupSocket(socketPath);
+				this._logger.debug('MCP server shutdown complete');
+			}));
 			return {
-				disposable: {
-					dispose: () => {
-						this._logger.info('Shutting down MCP server...');
-						for (const sessionId in this._transports) {
-							void this._transports[sessionId].close();
-							this._unregisterTransport(sessionId);
-						}
-
-						if (httpServer.listening) {
-							httpServer.close();
-							httpServer.closeAllConnections();
-						}
-
-						void tryCleanupSocket(socketPath);
-						this._logger.debug('MCP server shutdown complete');
-					},
-				},
 				serverUri: vscode.Uri.from({
 					scheme: os.platform() === 'win32' ? 'pipe' : 'unix',
 					path: socketPath,
