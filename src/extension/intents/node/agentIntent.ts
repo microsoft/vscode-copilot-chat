@@ -562,8 +562,8 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 				} else {
 					this.logService.debug(`[Agent] post-render background compaction finished but produced no usable result`);
 				}
-			} else if (postRenderRatio >= 0.75 && backgroundSummarizer.state === BackgroundSummarizationState.Idle) {
-				// At ≥ 75% with no running compaction — kick off background work.
+			} else if (postRenderRatio >= 0.75 && (backgroundSummarizer.state === BackgroundSummarizationState.Idle || backgroundSummarizer.state === BackgroundSummarizationState.Failed)) {
+				// At ≥ 75% with no running compaction (or a previous failure) — kick off background work.
 				this._startBackgroundSummarization(backgroundSummarizer, props, endpoint, token, postRenderRatio);
 			}
 		}
@@ -643,13 +643,18 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		});
 		const bgProgress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart> = { report: () => { } };
 		backgroundSummarizer.start(async () => {
-			const bgRenderResult = await bgRenderer.render(bgProgress, token);
-			const summaryMetadata = bgRenderResult.metadata.get(SummarizedConversationHistoryMetadata);
-			if (!summaryMetadata) {
-				throw new Error('Background compaction produced no summary metadata');
+			try {
+				const bgRenderResult = await bgRenderer.render(bgProgress, token);
+				const summaryMetadata = bgRenderResult.metadata.get(SummarizedConversationHistoryMetadata);
+				if (!summaryMetadata) {
+					throw new Error('Background compaction produced no summary metadata');
+				}
+				this.logService.debug(`[Agent] background compaction completed successfully (roundId=${summaryMetadata.toolCallRoundId})`);
+				return { summary: summaryMetadata.text, toolCallRoundId: summaryMetadata.toolCallRoundId };
+			} catch (err) {
+				this.logService.error(err, `[Agent] background compaction failed`);
+				throw err;
 			}
-			this.logService.debug(`[Agent] background compaction completed successfully (roundId=${summaryMetadata.toolCallRoundId})`);
-			return { summary: summaryMetadata.text, toolCallRoundId: summaryMetadata.toolCallRoundId };
 		});
 	}
 
