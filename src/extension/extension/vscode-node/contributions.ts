@@ -93,6 +93,10 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(SearchPanelCommands),
 	// Azure-only fork: removed ChatQuotaContribution (GitHub-specific)
 	// asContributionFactory(ChatQuotaContribution),
+	// Azure-only fork: BYOKContrib moved here from vscodeNodeChatContributions so that
+	// the Azure model provider and yourcompany.ai.updateSecret command are always
+	// registered, even before authentication succeeds.
+	asContributionFactory(BYOKContrib),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
 	asContributionFactory(ScmContextProviderContribution),
@@ -126,7 +130,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(SetupTestsContribution),
 	asContributionFactory(FixTestFailureContribution),
 	asContributionFactory(IgnoredFileProviderContribution),
-	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),
