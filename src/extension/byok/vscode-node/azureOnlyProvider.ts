@@ -5,8 +5,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider, LanguageModelResponsePart2, PrepareLanguageModelChatModelOptions, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { ServicePrincipalAuthService } from '../../../platform/azure/common/servicePrincipalAuth';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -35,15 +37,30 @@ export class AzureOnlyModelProvider implements LanguageModelChatProvider<AzureOn
 	static readonly providerName = 'azure-openai';
 
 	private readonly _lmWrapper: CopilotLanguageModelWrapper;
+	private _authService: ServicePrincipalAuthService | undefined;
 
 	constructor(
 		@IFetcherService _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService _expService: IExperimentationService
+		@IExperimentationService _expService: IExperimentationService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
+	}
+
+	private getAuthService(): ServicePrincipalAuthService {
+		if (!this._authService) {
+			this._authService = new ServicePrincipalAuthService(
+				(url: string, init: RequestInit) => globalThis.fetch(url, init)
+			);
+			this._authService.setExtensionContext(this._extensionContext);
+		}
+		const tenantId = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.tenantId') || '';
+		const clientId = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.clientId') || '';
+		this._authService.setConfig({ tenantId, clientId });
+		return this._authService;
 	}
 
 	private getEndpoint(): string {
@@ -106,8 +123,9 @@ export class AzureOnlyModelProvider implements LanguageModelChatProvider<AzureOn
 		const modelInfo = this.getModelInfo(model);
 		const base = model.endpoint.replace(/\/$/, '');
 		const url = `${base}/openai/deployments/${model.deploymentName}/chat/completions?api-version=${model.apiVersion}`;
-		// Pass empty string for API key since auth is handled via bearer token from service principal
-		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, '', url);
+		const auth = this.getAuthService();
+		const bearerToken = await auth.getToken(ServicePrincipalAuthService.SCOPE_COGNITIVE_SERVICES);
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, bearerToken, url);
 	}
 
 	private getModelInfo(model: AzureOnlyModelInfo): IChatModelInformation {

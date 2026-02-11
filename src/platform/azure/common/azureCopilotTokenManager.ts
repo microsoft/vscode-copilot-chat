@@ -9,6 +9,7 @@
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 // Azure-only fork: IFetcherService not needed - use globalThis.fetch for auth
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { CopilotToken, createTestExtendedTokenInfo } from '../../authentication/common/copilotToken';
 import { ICopilotTokenManager } from '../../authentication/common/copilotTokenManager';
@@ -28,6 +29,7 @@ export class AzureCopilotTokenManager implements ICopilotTokenManager {
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) { }
 
 	private getAuthService(): ServicePrincipalAuthService {
@@ -35,6 +37,7 @@ export class AzureCopilotTokenManager implements ICopilotTokenManager {
 			this._authService = new ServicePrincipalAuthService(
 				(url: string, init: RequestInit) => globalThis.fetch(url, init)
 			);
+			this._authService.setExtensionContext(this._extensionContext);
 		}
 		const tenantId = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.tenantId') || '';
 		const clientId = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.clientId') || '';

@@ -7,6 +7,7 @@
 import type { CancellationToken } from 'vscode';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { IConfigurationService } from '../../configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ILogService } from '../../log/common/logService';
 import {
@@ -35,6 +36,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) { }
 
 	private getEndpoint(): string {
@@ -55,6 +57,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 			this._authService = new ServicePrincipalAuthService(
 				(url: string, init: RequestInit) => globalThis.fetch(url, init)
 			);
+			this._authService.setExtensionContext(this._extensionContext);
 		}
 		// Always refresh config from settings
 		const tenantId = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.tenantId') || '';
