@@ -64,7 +64,7 @@ export class CopilotCLISessionTracker implements ICopilotCLISessionTracker {
 	}
 
 	getSessionDisplayName(sessionId: string): string {
-		return this._sessionNames.get(sessionId) ?? sessionId;
+		return this._sessionNames.get(sessionId) || sessionId;
 	}
 
 	getSessionIds(): readonly string[] {

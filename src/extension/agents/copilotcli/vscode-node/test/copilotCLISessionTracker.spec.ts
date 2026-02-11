@@ -144,6 +144,52 @@ describe('CopilotCLISessionTracker', () => {
 		});
 	});
 
+	describe('setSessionName and getSessionDisplayName', () => {
+		it('should return sessionId when no name is set', () => {
+			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
+			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+		});
+
+		it('should return sessionId when name is empty string', () => {
+			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
+			tracker.setSessionName('session-1', '');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+		});
+
+		it('should return custom name after setSessionName', () => {
+			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
+			tracker.setSessionName('session-1', 'Fix Login Bug');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Fix Login Bug');
+		});
+
+		it('should update name when setSessionName called multiple times', () => {
+			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
+			tracker.setSessionName('session-1', 'First Name');
+			tracker.setSessionName('session-1', 'Second Name');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Second Name');
+		});
+
+		it('should clear name when session is disposed', () => {
+			const disposable = tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
+			tracker.setSessionName('session-1', 'My Session');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('My Session');
+
+			disposable.dispose();
+			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+		});
+
+		it('should track names independently for different sessions', () => {
+			tracker.registerSession('session-1', { pid: 1000, ppid: 2000 });
+			tracker.registerSession('session-2', { pid: 3000, ppid: 4000 });
+
+			tracker.setSessionName('session-1', 'Session One');
+			tracker.setSessionName('session-2', 'Session Two');
+
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Session One');
+			expect(tracker.getSessionDisplayName('session-2')).toBe('Session Two');
+		});
+	});
+
 	describe('dispose lifecycle', () => {
 		it('disposing first registration does not affect second registration with different id', async () => {
 			const disposable1 = tracker.registerSession('session-1', { pid: 1000, ppid: 2000 });

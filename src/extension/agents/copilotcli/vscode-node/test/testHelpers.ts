@@ -183,10 +183,9 @@ export class MockSessionTracker {
 
 	readonly registerSession = vi.fn().mockReturnValue({ dispose: () => { } });
 	readonly getTerminal = vi.fn().mockResolvedValue(undefined);
-
-	setDisplayName(sessionId: string, name: string): void {
+	readonly setSessionName = vi.fn((sessionId: string, name: string) => {
 		this._displayNames.set(sessionId, name);
-	}
+	});
 
 	getSessionDisplayName(sessionId: string): string {
 		return this._displayNames.get(sessionId) || sessionId;
