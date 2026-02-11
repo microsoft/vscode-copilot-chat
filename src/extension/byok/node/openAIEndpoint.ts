@@ -231,6 +231,16 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return trimmed;
 	}
 
+	protected override get useResponsesApi(): boolean {
+		// Azure OpenAI with bearer auth uses Chat Completions API, not Responses API.
+		// The /chat/completions endpoint rejects Responses API body format with
+		// "400 Unsupported data type".
+		if (this._useBearerAuth) {
+			return false;
+		}
+		return super.useResponsesApi;
+	}
+
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
@@ -268,30 +278,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		// Azure OpenAI rejects non-standard fields with "400 Unsupported data type".
 		if (this._useBearerAuth && body) {
 			this._sanitizeBodyForAzure(body);
-			// Dump full sanitized body for debugging Azure 400 errors
-			try {
-				const bodySnapshot = JSON.parse(JSON.stringify(body));
-				// Truncate long message content for logging
-				if (bodySnapshot.messages) {
-					for (const msg of bodySnapshot.messages) {
-						if (typeof msg.content === 'string' && msg.content.length > 200) {
-							msg.content = msg.content.substring(0, 200) + '...[truncated]';
-						} else if (Array.isArray(msg.content)) {
-							for (const part of msg.content) {
-								if (part.type === 'text' && part.text?.length > 200) {
-									part.text = part.text.substring(0, 200) + '...[truncated]';
-								}
-								if (part.type === 'image_url') {
-									part.image_url = { url: '[image data]' };
-								}
-							}
-						}
-					}
-				}
-				this.logService.info('[AzureOpenAI] FULL sanitized body: ' + JSON.stringify(bodySnapshot, null, 2));
-			} catch (e) {
-				this.logService.error('[AzureOpenAI] Failed to serialize body for logging: ' + (e as Error).message);
-			}
 		}
 
 		// TODO @lramos15 - We should do this for all models and not just here
