@@ -43,7 +43,7 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	private _log(requestId: number, hookType: string, message: string): void {
-		this._outputChannel.appendLine(`${new Date().toISOString()} [#${requestId}] [${hookType}] ${message}`);
+		this._outputChannel.appendLine(`[#${requestId}] [${hookType}] ${message}`);
 	}
 
 	private _redactForLogging(input: Record<string, unknown>): Record<string, unknown> {
@@ -57,16 +57,17 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	private _logCommandResult(requestId: number, hookType: string, commandResult: IHookCommandResult, elapsed: number): void {
+		const elapsedRounded = Math.round(elapsed);
 		const resultKindStr = commandResult.kind === HookCommandResultKind.Success ? 'Success'
 			: commandResult.kind === HookCommandResultKind.NonBlockingError ? 'NonBlockingError'
 				: 'Error';
 		const resultStr = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
 		const hasOutput = resultStr.length > 0 && resultStr !== '{}' && resultStr !== '[]';
 		if (hasOutput) {
-			this._log(requestId, hookType, `Completed (${resultKindStr}) in ${elapsed}ms`);
+			this._log(requestId, hookType, `Completed (${resultKindStr}) in ${elapsedRounded}ms`);
 			this._log(requestId, hookType, `Output: ${resultStr}`);
 		} else {
-			this._log(requestId, hookType, `Completed (${resultKindStr}) in ${elapsed}ms, no output`);
+			this._log(requestId, hookType, `Completed (${resultKindStr}) in ${elapsedRounded}ms, no output`);
 		}
 	}
 
@@ -290,7 +291,11 @@ export class ChatHookService implements IChatHookService {
 				}
 
 				const decision = hookSpecificOutput.permissionDecision;
-				if (decision && (mostRestrictiveDecision === undefined || (permissionPriority[decision] ?? 0) > (permissionPriority[mostRestrictiveDecision] ?? 0))) {
+				if (decision && !(decision in permissionPriority)) {
+					const message = `Invalid permissionDecision value '${String(decision)}'. Expected 'allow', 'deny', or 'ask'. Field was ignored.`;
+					this._logService.warn(`[ChatHookService] ${message}`);
+					this._outputChannel.appendLine(`[PreToolUse] ${message}`);
+				} else if (decision && (mostRestrictiveDecision === undefined || (permissionPriority[decision] ?? 0) > (permissionPriority[mostRestrictiveDecision] ?? 0))) {
 					mostRestrictiveDecision = decision;
 					winningReason = hookSpecificOutput.permissionDecisionReason;
 				}
@@ -310,7 +315,7 @@ export class ChatHookService implements IChatHookService {
 			if (isToolValidationError(validationResult)) {
 				const message = `Discarding updatedInput for tool '${toolName}': schema validation failed: ${validationResult.error}`;
 				this._logService.warn(`[ChatHookService] ${message}`);
-				this._outputChannel.appendLine(`${new Date().toISOString()} [PreToolUse] ${message}`);
+				this._outputChannel.appendLine(`[PreToolUse] ${message}`);
 				lastUpdatedInput = undefined;
 			}
 		}
@@ -385,6 +390,10 @@ export class ChatHookService implements IChatHookService {
 				if (hookOutput.decision === 'block' && !hasBlock) {
 					hasBlock = true;
 					blockReason = hookOutput.reason;
+				} else if (hookOutput.decision !== undefined && hookOutput.decision !== 'block') {
+					const message = `Invalid PostToolUse decision value '${String(hookOutput.decision)}'. Expected 'block'. Field was ignored.`;
+					this._logService.warn(`[ChatHookService] ${message}`);
+					this._outputChannel.appendLine(`[PostToolUse] ${message}`);
 				}
 			},
 			// Exit code 2 (error) means block the tool result
