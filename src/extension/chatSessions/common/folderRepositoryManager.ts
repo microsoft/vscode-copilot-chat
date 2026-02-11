@@ -137,7 +137,7 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; initialFolder?: vscode.Uri },
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 

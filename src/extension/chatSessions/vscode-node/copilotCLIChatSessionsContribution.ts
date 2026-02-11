@@ -969,10 +969,12 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const existingSessionId = this.untitledSessionIdMapping.get(SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource));
 			const id = existingSessionId ?? SessionIdForCLI.parse(chatSessionContext.chatSessionItem.resource);
 			const isNewSession = chatSessionContext.isUntitled && !existingSessionId;
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const initialFolder = Uri.file('/Users/donjayamanne/development/vsc/vscode-copilot-chat/src/extension/chatSessions/vscode-node'); //(chatSessionContext as any).folder as Uri | undefined;
 
 			if (isNewSession) {
 				// Use FolderRepositoryManager to initialize folder/repository with worktree creation
-				const folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken }, token);
+				const folderInfo = await this.folderRepositoryManager.initializeFolderRepository(id, { stream, toolInvocationToken, initialFolder }, token);
 
 				if (folderInfo.trusted === false || folderInfo.cancelled) {
 					return { isolationEnabled: false, workingDirectory: undefined, worktreeProperties: undefined, cancelled: true, trusted: folderInfo.trusted !== false };
