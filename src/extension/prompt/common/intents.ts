@@ -31,6 +31,8 @@ export interface IToolCallRound {
 	toolCalls: IToolCall[];
 	thinking?: ThinkingData;
 	statefulMarker?: string;
+	/** Compaction data from the Responses API, round-tripped in outgoing requests */
+	compaction?: import('../../../platform/networking/common/anthropic').OpenAIContextManagementResponse;
 	/** Epoch millis (`Date.now()`) when this round started. */
 	timestamp?: number;
 	/**

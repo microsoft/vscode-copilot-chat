@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
-import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse, OpenAIContextManagementResponse } from './anthropic';
 import { IHeaders } from './fetcherService';
 import { ChoiceLogProbs, FilterReason } from './openai';
 
@@ -157,7 +157,7 @@ export interface IResponseDelta {
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 	/** Context management information from Anthropic Messages API */
-	contextManagement?: ContextManagementResponse;
+	contextManagement?: ContextManagementResponse | OpenAIContextManagementResponse;
 	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
 	serverToolCalls?: IServerToolCall[];
 }

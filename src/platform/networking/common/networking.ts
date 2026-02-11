@@ -20,7 +20,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { AnthropicMessagesTool, ContextManagement } from './anthropic';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams, Prediction } from './fetch';
 import { FetcherId, FetchOptions, IAbortController, IFetcherService, PaginationOptions, Response } from './fetcherService';
-import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
+import { ChatCompletion, OpenAIContextManagement, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using
@@ -69,6 +69,7 @@ export interface IEndpointBody {
 	temperature?: number;
 	top_p?: number;
 	stream?: boolean;
+	context_management?: ContextManagement | OpenAIContextManagement[];
 	prediction?: Prediction;
 	messages?: any[];
 	n?: number;
@@ -115,7 +116,6 @@ export interface IEndpointBody {
 	output_config?: {
 		effort?: 'low' | 'medium' | 'high';
 	};
-	context_management?: ContextManagement;
 
 	/** ChatCompletions API for Anthropic models */
 	thinking_budget?: number;

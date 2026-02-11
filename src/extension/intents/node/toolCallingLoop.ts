@@ -16,6 +16,7 @@ import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCa
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
+import { OpenAIContextManagementResponse } from '../../../platform/networking/common/anthropic';
 import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -859,6 +860,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let thinkingItem: ThinkingDataItem | undefined;
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		let phase: string | undefined;
+		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -886,6 +888,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.phase) {
 					phase = delta.phase;
+				}
+				if (delta.contextManagement && delta.contextManagement.type === 'compaction') {
+					compaction = delta.contextManagement as OpenAIContextManagementResponse;
 				}
 				return stopEarly ? text.length : undefined;
 			},
@@ -972,6 +977,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					thinking: thinkingItem,
 					phase,
 					phaseModelId: phase ? endpoint.model : undefined,
+					compaction,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,

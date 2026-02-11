@@ -87,6 +87,11 @@ export interface APIErrorResponse {
 	metadata?: Record<string, any>;
 }
 
+export interface OpenAIContextManagement {
+	type: 'compaction';
+	compact_threshold: number;
+}
+
 
 export enum ChatRole {
 	System = 'system',

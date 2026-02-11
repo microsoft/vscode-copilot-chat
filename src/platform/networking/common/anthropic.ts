@@ -150,6 +150,11 @@ export interface ContextManagementResponse {
 	applied_edits: AppliedContextEdit[];
 }
 
+export interface OpenAIContextManagementResponse {
+	encrypted_content: string;
+	type: 'compaction';
+}
+
 /**
  * Context editing is supported by:
  * - Claude Haiku 4.5 (claude-haiku-4-5-* or claude-haiku-4.5-*)

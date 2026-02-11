@@ -23,6 +23,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
+import { rawPartAsCompactionData } from '../common/compactionDataContainer';
 import { rawPartAsPhaseData } from '../common/phaseDataContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
@@ -36,6 +37,10 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
+		context_management: [{
+			'type': 'compaction',
+			'compact_threshold': 1000
+		}],
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
 			type: 'function',
@@ -94,6 +99,7 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
 					input.push(...extractThinkingData(message.content));
+					input.push(...extractCompactionData(message.content));
 					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
 					if (asstContent.length) {
 						const assistantMessage: ResponseOutputMessageWithPhase = {
@@ -197,6 +203,25 @@ function extractPhaseData(content: Raw.ChatCompletionContentPart[]): string | un
 		}
 	}
 	return undefined;
+}
+
+/**
+ * Extracts compaction data from opaque content parts and converts them to
+ * Responses API input items for round-tripping.
+ */
+function extractCompactionData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseInputItem[] {
+	return coalesce(content.map(part => {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const compaction = rawPartAsCompactionData(part);
+			if (compaction) {
+				return {
+					type: 'compaction',
+					id: compaction.encrypted_content,
+					encrypted_content: compaction.encrypted_content,
+				} as unknown as OpenAI.Responses.ResponseInputItem;
+			}
+		}
+	}));
 }
 
 /**
@@ -431,6 +456,16 @@ export class OpenAIResponsesProcessor {
 				});
 			}
 			case 'response.output_item.added':
+				if (chunk.item.type.toString() === 'compaction') {
+					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
+					return onProgress({
+						text: '',
+						contextManagement: {
+							type: 'compaction',
+							encrypted_content: chunk.item.id || '',
+						}
+					});
+				}
 				if (chunk.item.type === 'function_call') {
 					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
 					onProgress({
@@ -455,6 +490,16 @@ export class OpenAIResponsesProcessor {
 				return;
 			}
 			case 'response.output_item.done':
+				if (chunk.item.type.toString() === 'compaction') {
+					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
+					return onProgress({
+						text: '',
+						contextManagement: {
+							type: 'compaction',
+							encrypted_content: chunk.item.id || '',
+						}
+					});
+				}
 				if (chunk.item.type === 'function_call') {
 					this.toolCallInfo.delete(chunk.output_index);
 					onProgress({
@@ -504,6 +549,19 @@ export class OpenAIResponsesProcessor {
 				});
 			case 'response.completed':
 				onProgress({ text: '', statefulMarker: chunk.response.id });
+				// Emit compaction items from the final output so they are captured for round-tripping
+				for (const item of chunk.response.output) {
+					if (checkIfItemIsCompactionType(item)) {
+						const compactionItem = item as unknown as { encrypted_content: string; id: string; type: 'compaction' };
+						onProgress({
+							text: '',
+							contextManagement: {
+								type: 'compaction',
+								encrypted_content: compactionItem.encrypted_content,
+							}
+						});
+					}
+				}
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
@@ -539,6 +597,11 @@ export class OpenAIResponsesProcessor {
 		}
 	}
 }
+
+function checkIfItemIsCompactionType(responseOutputItem: OpenAI.Responses.ResponseOutputItem): boolean {
+	return responseOutputItem.type.toString() === 'compaction';
+}
+
 function mapLogProp(text: Lazy<Uint8Array>, lp: OpenAI.Responses.ResponseTextDeltaEvent.Logprob.TopLogprob): TokenLogProb {
 	let bytes: number[] = [];
 	if (lp.token) {

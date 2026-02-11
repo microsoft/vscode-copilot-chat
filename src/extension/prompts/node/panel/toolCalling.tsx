@@ -11,6 +11,7 @@ import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/ch
 import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { CompactionDataContainer } from '../../../../platform/endpoint/common/compactionDataContainer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { PhaseDataContainer } from '../../../../platform/endpoint/common/phaseDataContainer';
@@ -117,11 +118,13 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		const phase = (round.phase && round.phaseModelId === this.promptEndpoint.model) ? <PhaseDataContainer phase={round.phase} /> : undefined;
+		const compaction = round.compaction && <CompactionDataContainer compaction={round.compaction} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
 				{thinking}
 				{phase}
+				{compaction}
 				{round.response}
 			</AssistantMessage>);
 
