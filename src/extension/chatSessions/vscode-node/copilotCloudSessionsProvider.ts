@@ -1278,7 +1278,11 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	}
 
 	private getPullRequestBadge(repoIds: GithubRepoId[] | undefined, pr: PullRequestSearchItem): vscode.MarkdownString | undefined {
-		if (vscode.workspace.workspaceFolders === undefined || (repoIds && repoIds.length > 1)) {
+		if (
+			vscode.workspace.workspaceFolders === undefined || // empty window
+			vscode.workspace.isAgentSessionsWorkspace ||       // agent sessions workspace
+			(repoIds && repoIds.length > 1)                    // multiple repositories
+		) {
 			const badgeLabel = `${pr.repository.owner.login}/${pr.repository.name}`;
 			const badge = new vscode.MarkdownString(`$(repo) ${badgeLabel}`, true);
 			badge.supportThemeIcons = true;
