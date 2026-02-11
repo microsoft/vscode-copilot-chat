@@ -14,6 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
+import { formatHookErrorMessage, processHookResults } from '../../intents/node/hookResultProcessor';
 import { IToolsService, isToolValidationError } from '../../tools/common/toolsService';
 import { ChatHookTelemetry } from './chatHookTelemetry';
 
@@ -234,7 +235,7 @@ export class ChatHookService implements IChatHookService {
 		}
 	}
 
-	async executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined> {
+	async executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken, outputStream?: vscode.ChatResponseStream): Promise<IPreToolUseHookResult | undefined> {
 		const hookInput: IPreToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
@@ -259,44 +260,49 @@ export class ChatHookService implements IChatHookService {
 		let lastUpdatedInput: object | undefined;
 		const allAdditionalContext: string[] = [];
 
-		for (const result of results) {
+		processHookResults({
+			hookType: 'PreToolUse',
+			results,
+			outputStream,
+			logService: this._logService,
+			onSuccess: (output) => {
+				if (typeof output !== 'object' || output === null) {
+					return;
+				}
+
+				const hookOutput = output as { hookSpecificOutput?: IPreToolUseHookSpecificCommandOutput };
+				const hookSpecificOutput = hookOutput.hookSpecificOutput;
+				if (!hookSpecificOutput) {
+					return;
+				}
+
+				// Skip results from other hook event types
+				if (hookSpecificOutput.hookEventName !== undefined && hookSpecificOutput.hookEventName !== 'PreToolUse') {
+					return;
+				}
+
+				if (hookSpecificOutput.additionalContext) {
+					allAdditionalContext.push(hookSpecificOutput.additionalContext);
+				}
+
+				if (hookSpecificOutput.updatedInput) {
+					lastUpdatedInput = hookSpecificOutput.updatedInput;
+				}
+
+				const decision = hookSpecificOutput.permissionDecision;
+				if (decision && (mostRestrictiveDecision === undefined || (permissionPriority[decision] ?? 0) > (permissionPriority[mostRestrictiveDecision] ?? 0))) {
+					mostRestrictiveDecision = decision;
+					winningReason = hookSpecificOutput.permissionDecisionReason;
+				}
+			},
 			// Exit code 2 (error) means deny the tool
-			if (result.resultKind === 'error') {
-				const reason = typeof result.output === 'string' ? result.output : undefined;
+			onError: (errorMessage) => {
+				const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+				outputStream?.hookProgress?.('PreToolUse', formatHookErrorMessage(messageWithTool));
 				mostRestrictiveDecision = 'deny';
-				winningReason = reason ?? winningReason;
-				break;
-			}
-
-			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
-				continue;
-			}
-
-			const output = result.output as { hookSpecificOutput?: IPreToolUseHookSpecificCommandOutput };
-			const hookSpecificOutput = output.hookSpecificOutput;
-			if (!hookSpecificOutput) {
-				continue;
-			}
-
-			// Skip results from other hook event types
-			if (hookSpecificOutput.hookEventName !== undefined && hookSpecificOutput.hookEventName !== 'PreToolUse') {
-				continue;
-			}
-
-			if (hookSpecificOutput.additionalContext) {
-				allAdditionalContext.push(hookSpecificOutput.additionalContext);
-			}
-
-			if (hookSpecificOutput.updatedInput) {
-				lastUpdatedInput = hookSpecificOutput.updatedInput;
-			}
-
-			const decision = hookSpecificOutput.permissionDecision;
-			if (decision && (mostRestrictiveDecision === undefined || (permissionPriority[decision] ?? 0) > (permissionPriority[mostRestrictiveDecision] ?? 0))) {
-				mostRestrictiveDecision = decision;
-				winningReason = hookSpecificOutput.permissionDecisionReason;
-			}
-		}
+				winningReason = messageWithTool || winningReason;
+			},
+		});
 
 		// Validate updatedInput against the tool's input schema before returning it
 		if (lastUpdatedInput) {
@@ -325,7 +331,7 @@ export class ChatHookService implements IChatHookService {
 		return hookResult;
 	}
 
-	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined> {
+	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken, outputStream?: vscode.ChatResponseStream): Promise<IPostToolUseHookResult | undefined> {
 		const hookInput: IPostToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
@@ -349,43 +355,51 @@ export class ChatHookService implements IChatHookService {
 		let blockReason: string | undefined;
 		const allAdditionalContext: string[] = [];
 
-		for (const result of results) {
+		processHookResults({
+			hookType: 'PostToolUse',
+			results,
+			outputStream,
+			logService: this._logService,
+			onSuccess: (output) => {
+				if (typeof output !== 'object' || output === null) {
+					return;
+				}
+
+				const hookOutput = output as {
+					decision?: string;
+					reason?: string;
+					hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
+				};
+
+				// Skip results from other hook event types
+				if (hookOutput.hookSpecificOutput?.hookEventName !== undefined && hookOutput.hookSpecificOutput.hookEventName !== 'PostToolUse') {
+					return;
+				}
+
+				// Collect additionalContext from hookSpecificOutput
+				if (hookOutput.hookSpecificOutput?.additionalContext) {
+					allAdditionalContext.push(hookOutput.hookSpecificOutput.additionalContext);
+				}
+
+				// Track the first block decision
+				if (hookOutput.decision === 'block' && !hasBlock) {
+					hasBlock = true;
+					blockReason = hookOutput.reason;
+				}
+			},
 			// Exit code 2 (error) means block the tool result
-			if (result.resultKind === 'error') {
-				const reason = typeof result.output === 'string' ? result.output : undefined;
+			onError: (errorMessage) => {
 				if (!hasBlock) {
 					hasBlock = true;
-					blockReason = reason;
+					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					blockReason = messageWithTool || undefined;
+					outputStream?.hookProgress?.('PostToolUse', formatHookErrorMessage(messageWithTool));
+				} else {
+					const messageWithTool = errorMessage ? `Tried to use ${toolName} - ${errorMessage}` : `Tried to use ${toolName}`;
+					outputStream?.hookProgress?.('PostToolUse', undefined, formatHookErrorMessage(messageWithTool));
 				}
-				break;
-			}
-
-			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
-				continue;
-			}
-
-			const output = result.output as {
-				decision?: string;
-				reason?: string;
-				hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
-			};
-
-			// Skip results from other hook event types
-			if (output.hookSpecificOutput?.hookEventName !== undefined && output.hookSpecificOutput.hookEventName !== 'PostToolUse') {
-				continue;
-			}
-
-			// Collect additionalContext from hookSpecificOutput
-			if (output.hookSpecificOutput?.additionalContext) {
-				allAdditionalContext.push(output.hookSpecificOutput.additionalContext);
-			}
-
-			// Track the first block decision
-			if (output.decision === 'block' && !hasBlock) {
-				hasBlock = true;
-				blockReason = output.reason;
-			}
-		}
+			},
+		});
 
 		if (!hasBlock && allAdditionalContext.length === 0) {
 			return undefined;
