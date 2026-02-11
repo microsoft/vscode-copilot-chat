@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService, INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -76,6 +77,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		@ILogService private readonly logService: ILogService,
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
 		@IEnvService private readonly envService: IEnvService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
 
@@ -160,11 +162,13 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService, copilotCLIWorktreeManagerService, gitService, copilotCLIWorkspaceFolderSessions, copilotcliChatSessionContentProvider, folderRepositoryManager, nativeEnvService, fileSystemService));
 
 		// #region Growth Chat Sessions
-		const growthProvider = this._register(instantiationService.createInstance(GrowthChatSessionProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionProvider.sessionType, growthProvider));
-		const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionProvider.sessionType, growthProvider.createHandler());
-		growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
-		this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionProvider.sessionType, growthProvider, growthParticipant));
+		if (configurationService.getConfig(ConfigKey.GrowthMessagesEnabled)) {
+			const growthProvider = this._register(instantiationService.createInstance(GrowthChatSessionProvider));
+			this._register(vscode.chat.registerChatSessionItemProvider(GrowthChatSessionProvider.sessionType, growthProvider));
+			const growthParticipant = vscode.chat.createChatParticipant(GrowthChatSessionProvider.sessionType, growthProvider.createHandler());
+			growthParticipant.iconPath = new vscode.ThemeIcon('lightbulb');
+			this._register(vscode.chat.registerChatSessionContentProvider(GrowthChatSessionProvider.sessionType, growthProvider, growthParticipant));
+		}
 		// #endregion
 	}
 

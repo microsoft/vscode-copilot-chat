@@ -3083,7 +3083,7 @@
 					"github.copilot.chat.growthMessages.enabled": {
 						"type": "boolean",
 						"default": false,
-						"markdownDescription": "Enable educational growth messages to help learn Copilot features."
+						"markdownDescription": "Enable educational growth messages to help learn Copilot features. Reload VS Code after updating this setting."
 					}
 				}
 			},

@@ -9,6 +9,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
+// TODO: Just for demonstration
 const tips: string[] = [
 	'**Inline suggestions** — As you type, Copilot suggests code completions in gray text. Press `Tab` to accept, or `Esc` to dismiss. You can also press `Alt+]` / `Option+]` to cycle through alternatives.',
 	'**Ask mode vs Agent mode** — Use *Ask* mode when you want explanations or answers without changing files. Switch to *Agent* mode when you want Copilot to plan and make edits across your project autonomously.',
@@ -45,13 +46,6 @@ export class GrowthChatSessionProvider extends Disposable implements vscode.Chat
 	private readonly _created = Date.now();
 	private _seen = false;
 
-	/**
-	 * Grace period (ms) after registration during which {@link markSeen} is
-	 * ignored. This prevents VS Code's eager preloading from clearing the
-	 * badge before the user has a chance to see it.
-	 */
-	private static readonly PRELOAD_GRACE_PERIOD_MS = 2000;
-
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 	) {
@@ -61,31 +55,27 @@ export class GrowthChatSessionProvider extends Disposable implements vscode.Chat
 	// #region ChatSessionItemProvider
 
 	/**
-	 * Mark the session as seen (opened by the user). Clears the NeedsInput
-	 * attention badge without requiring any confirmation click.
-	 *
-	 * Calls within the first few seconds after registration are ignored to
-	 * avoid VS Code's eager content preloading from clearing the badge.
+	 * Mark the session as seen (interacted with by the user). Clears the
+	 * NeedsInput attention badge. Only called when the user actually sends
+	 * a message, never from content preloading.
 	 */
-	public markSeen(): void {
-		const elapsed = Date.now() - this._created;
-		if (elapsed < GrowthChatSessionProvider.PRELOAD_GRACE_PERIOD_MS) {
-			this._logService.trace(`[GrowthProvider] markSeen() ignored — still in grace period (${elapsed}ms < ${GrowthChatSessionProvider.PRELOAD_GRACE_PERIOD_MS}ms)`);
-			return;
-		}
+	private _markSeen(): void {
 		if (!this._seen) {
-			this._logService.trace('[GrowthProvider] markSeen() — clearing attention');
+			this._logService.trace(`[GrowthProvider] _markSeen() — clearing attention, hasListeners=${this._onDidChangeChatSessionItems.hasListeners()}`);
 			this._seen = true;
 			this._onDidChangeChatSessionItems.fire();
+			this._logService.trace('[GrowthProvider] _markSeen() — fire() completed');
 		}
 	}
 
 	public async provideChatSessionItems(_token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		const status = this._seen ? vscode.ChatSessionStatus.Completed : vscode.ChatSessionStatus.NeedsInput;
+		this._logService.trace(`[GrowthProvider] provideChatSessionItems called, _seen=${this._seen}, status=${status}`);
 		return [{
 			resource: GrowthSessionUri.forSessionId(GrowthChatSessionProvider.sessionId),
 			label: 'Try Copilot',
 			description: 'GitHub Copilot is now enabled. Try for free?',
-			status: this._seen ? vscode.ChatSessionStatus.Completed : vscode.ChatSessionStatus.NeedsInput,
+			status,
 			timing: {
 				created: this._created,
 				lastRequestStarted: this._created,
@@ -110,9 +100,8 @@ export class GrowthChatSessionProvider extends Disposable implements vscode.Chat
 			return { history: [], requestHandler: undefined };
 		}
 
-		// Opening the session clears the NeedsInput attention badge.
-		// (markSeen() has a grace period to ignore eager preloading calls)
-		this.markSeen();
+		// Opening the session content clears the NeedsInput attention badge.
+		this._markSeen();
 
 		const history: (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[] = [
 			new vscode.ChatRequestTurn2(
@@ -163,6 +152,7 @@ export class GrowthChatSessionProvider extends Disposable implements vscode.Chat
 		stream: vscode.ChatResponseStream,
 		_token: vscode.CancellationToken
 	): Promise<vscode.ChatResult | void> {
+		this._markSeen();
 		const tip = tips[Math.floor(Math.random() * tips.length)];
 		stream.markdown(tip + '\n\n*Send a message to get another GitHub Copilot tip.*');
 		return {};
