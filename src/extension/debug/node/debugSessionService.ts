@@ -118,7 +118,8 @@ export function buildSessionFromRequestLogger(
 		const token = getToken(info);
 
 		// Skip debug subagent's internal turns if requested
-		if (options?.excludeDebugSubagent && token?.subAgentName === 'debug') {
+		// Check for both 'debug' (chat-invoked) and 'debug-panel' (panel-invoked)
+		if (options?.excludeDebugSubagent && (token?.subAgentName === 'debug' || token?.subAgentName === 'debug-panel')) {
 			continue;
 		}
 
@@ -244,12 +245,17 @@ export function buildSessionFromRequestLogger(
 
 	// When excluding debug subagent, filter out debug tool calls from allToolCalls and allRequests
 	let filteredToolCalls = allToolCalls;
-	const filteredRequests = allRequests;
+	let filteredRequests = allRequests;
 	if (options?.excludeDebugSubagent) {
 		filteredToolCalls = allToolCalls.filter(tc =>
 			!tc.name.startsWith('debug_') &&
 			tc.name !== 'debug_subagent' &&
 			!(tc.name === 'tool_search_tool_regex [server]' && tc.args && String(tc.args).includes('debug'))
+		);
+		// Filter out requests from debug subagent (identified by debugName)
+		filteredRequests = allRequests.filter(req =>
+			req.name !== 'debugSubagentTool' &&
+			!req.name.startsWith('debug')
 		);
 	}
 
@@ -707,8 +713,8 @@ function convertToolCall(entry: ILoggedToolCall, turnId: string): DebugToolCall 
 		args: entry.args as Record<string, unknown> || {},
 		result: result?.substring(0, 200),
 		fullResult: result,
-		durationMs: entry.time,
-		timestamp: undefined,
+		durationMs: undefined, // ILoggedToolCall doesn't track duration, only timestamp
+		timestamp: entry.time ? new Date(entry.time) : undefined,
 		status,
 		error,
 		turnId,

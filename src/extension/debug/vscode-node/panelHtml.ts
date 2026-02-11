@@ -591,11 +591,29 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			div.innerHTML = html;
 			content.appendChild(div);
 
-			// Render mermaid diagrams
-			if (message.mermaid) {
+			// Convert mermaid code blocks from markdown to mermaid-renderable format
+			// marked converts \`\`\`mermaid to <pre><code class="language-mermaid">
+			const mermaidCodeBlocks = div.querySelectorAll('code.language-mermaid');
+			mermaidCodeBlocks.forEach(codeBlock => {
+				const pre = codeBlock.parentElement;
+				if (pre && pre.tagName === 'PRE') {
+					// Create a new mermaid container
+					const container = document.createElement('div');
+					container.className = 'mermaid-container';
+					const mermaidPre = document.createElement('pre');
+					mermaidPre.className = 'mermaid';
+					mermaidPre.textContent = codeBlock.textContent;
+					container.appendChild(mermaidPre);
+					pre.replaceWith(container);
+				}
+			});
+
+			// Render all mermaid diagrams (both from message.mermaid and markdown code blocks)
+			const mermaidElements = div.querySelectorAll('.mermaid');
+			if (mermaidElements.length > 0) {
 				try {
 					await mermaid.run({
-						nodes: div.querySelectorAll('.mermaid')
+						nodes: mermaidElements
 					});
 				} catch (err) {
 					console.error('Mermaid rendering error:', err);

@@ -184,6 +184,18 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 
 		lines.push(`# Session Timeline (${turns.length} of ${totalTurns} turns)\n`);
 
+		// Helper to format time as HH:mm:ss
+		const formatTime = (date: Date) => date.toTimeString().substring(0, 8);
+
+		// Helper to add duration to a date and return new time string
+		const addDuration = (date: Date, durationMs: number) => {
+			const endDate = new Date(date.getTime() + durationMs);
+			return formatTime(endDate);
+		};
+
+		// Helper to escape label for mermaid (remove special chars, limit length)
+		const escapeLabel = (text: string) => text.substring(0, 20).replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'task';
+
 		// Mermaid gantt chart for timeline visualization
 		if (turns.some(t => t.timestamp)) {
 			lines.push('```mermaid');
@@ -196,24 +208,30 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 			for (const turn of turns) {
 				if (turn.timestamp) {
 					const status = turn.status === 'failure' ? 'crit, ' : '';
-					const time = turn.timestamp.toTimeString().substring(0, 8);
+					const startTime = formatTime(turn.timestamp);
 					const duration = turn.durationMs || 1000;
-					const label = turn.prompt.substring(0, 20).replace(/[^a-zA-Z0-9 ]/g, '');
-					lines.push(`        ${label} : ${status}${time}, ${duration}ms`);
+					const endTime = addDuration(turn.timestamp, duration);
+					const label = escapeLabel(turn.prompt);
+					lines.push(`        ${label} : ${status}${startTime}, ${endTime}`);
 				}
 			}
 
 			if (includeToolCalls) {
-				lines.push('');
-				lines.push('    section Tool Calls');
+				const toolCallsWithTimestamp = turns.flatMap(t => t.toolCalls).filter(tc => tc.timestamp);
+				if (toolCallsWithTimestamp.length > 0) {
+					lines.push('');
+					lines.push('    section Tool Calls');
 
-				for (const turn of turns) {
-					for (const tc of turn.toolCalls.slice(0, 3)) {
-						if (tc.timestamp) {
-							const status = tc.status === 'failure' ? 'crit, ' : '';
-							const time = tc.timestamp.toTimeString().substring(0, 8);
-							const duration = tc.durationMs || 100;
-							lines.push(`        ${tc.name} : ${status}${time}, ${duration}ms`);
+					for (const turn of turns) {
+						for (const tc of turn.toolCalls.slice(0, 3)) {
+							if (tc.timestamp) {
+								const status = tc.status === 'failure' ? 'crit, ' : '';
+								const startTime = formatTime(tc.timestamp);
+								const duration = tc.durationMs || 100;
+								const endTime = addDuration(tc.timestamp, duration);
+								const label = escapeLabel(tc.name);
+								lines.push(`        ${label} : ${status}${startTime}, ${endTime}`);
+							}
 						}
 					}
 				}

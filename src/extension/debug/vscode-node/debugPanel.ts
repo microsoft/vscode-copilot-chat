@@ -8,6 +8,7 @@ import { IVSCodeExtensionContext } from '../../../platform/extContext/common/ext
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IAgentTrajectory } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReplayExport } from '../../replay/common/chatReplayTypes';
 import { IDebugContextService } from '../common/debugContextService';
 import { DebugQueryType, DebugSession } from '../common/debugTypes';
@@ -18,7 +19,7 @@ import {
 	buildSessionFromTrajectory,
 	buildSessionFromTranscript
 } from '../node/debugSessionService';
-import { DirectDebugInvoker } from './directDebugInvoker';
+import { DebugSubagentInvoker } from './debugSubagentInvoker';
 import { getDebugPanelHtml } from './panelHtml';
 
 /**
@@ -53,16 +54,17 @@ export class DebugPanelManager extends Disposable {
 	private _session: DebugSession | undefined;
 	private _loadedFromFile = false;
 	private readonly _disposables = this._register(new DisposableStore());
-	private readonly _directInvoker: DirectDebugInvoker;
+	private readonly _subagentInvoker: DebugSubagentInvoker;
 
 	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IDebugContextService private readonly _debugContextService: IDebugContextService
 	) {
 		super();
 
-		this._directInvoker = new DirectDebugInvoker(this._debugContextService);
+		this._subagentInvoker = new DebugSubagentInvoker(instantiationService, this._debugContextService, this._requestLogger);
 
 		// Subscribe to request logger changes for live updates
 		this._disposables.add(this._requestLogger.onDidChangeRequests(() => {
@@ -89,14 +91,14 @@ export class DebugPanelManager extends Disposable {
 	 */
 	public show(): void {
 		if (this._panel) {
-			this._panel.reveal(vscode.ViewColumn.Two);
+			this._panel.reveal(vscode.ViewColumn.One);
 			return;
 		}
 
 		this._panel = vscode.window.createWebviewPanel(
 			'copilot.debugPanel',
 			'Debug Panel',
-			vscode.ViewColumn.Two,
+			vscode.ViewColumn.One,
 			{
 				enableScripts: true,
 				retainContextWhenHidden: true,
@@ -199,7 +201,7 @@ export class DebugPanelManager extends Disposable {
 
 		try {
 			// Execute directly without going through chat
-			await this._directInvoker.executeQuery(query);
+			await this._subagentInvoker.executeQuery(query);
 			// Response will arrive via the onDebugSubagentResponse event subscription
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);

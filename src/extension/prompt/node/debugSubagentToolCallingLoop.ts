@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
-import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
+import type { CancellationToken, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -27,7 +27,11 @@ import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
 
 export interface IDebugSubagentToolCallingLoopOptions extends IToolCallingLoopOptions {
-	request: ChatRequest;
+	/**
+	 * Model family to use for endpoint selection as a fallback.
+	 * Defaults to 'gpt-4.1'.
+	 */
+	modelFamily?: ChatEndpointFamily;
 	location: ChatLocation;
 	promptText: string;
 	/** Optional pre-generated subagent invocation ID. If not provided, a new UUID will be generated. */
@@ -69,8 +73,16 @@ export class DebugSubagentToolCallingLoop extends ToolCallingLoop<IDebugSubagent
 		return context;
 	}
 
+	/**
+	 * Get the endpoint using the request or falling back to modelFamily.
+	 */
+	private async _getEndpoint() {
+		// Use modelFamily as fallback if request doesn't have model preference
+		return this.endpointProvider.getChatEndpoint(this.options.modelFamily ?? this.options.request);
+	}
+
 	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+		const endpoint = await this._getEndpoint();
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
@@ -84,7 +96,7 @@ export class DebugSubagentToolCallingLoop extends ToolCallingLoop<IDebugSubagent
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+		const endpoint = await this._getEndpoint();
 
 		// Use the filter parameter to force-enable debug tools that aren't in the request's tool picker
 		const allTools = this.toolsService.getEnabledTools(this.options.request, endpoint, (tool) => {
@@ -93,12 +105,11 @@ export class DebugSubagentToolCallingLoop extends ToolCallingLoop<IDebugSubagent
 			}
 			return undefined; // Let default logic handle other tools
 		});
-
 		return allTools.filter(tool => DEBUG_ALLOWED_TOOLS.has(tool.name as ToolName));
 	}
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
-		const endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+		const endpoint = await this._getEndpoint();
 		return endpoint.makeChatRequest2({
 			debugName: DebugSubagentToolCallingLoop.ID,
 			messages,
