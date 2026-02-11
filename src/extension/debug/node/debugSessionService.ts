@@ -77,11 +77,38 @@ export interface IDebugSessionService {
 }
 
 /**
+ * Options for building a DebugSession from IRequestLogger
+ */
+export interface BuildSessionOptions {
+	/** Exclude turns from the debug subagent (to avoid showing its own calls in analysis) */
+	excludeDebugSubagent?: boolean;
+}
+
+/**
+ * Check if a turn should be excluded because it's a debug-related turn
+ */
+function isDebugRelatedTurn(toolCalls: DebugToolCall[], promptText: string): boolean {
+	// Exclude turns that call debug_subagent or debug_ prefixed tools
+	const hasDebugToolCall = toolCalls.some(tc =>
+		tc.name === 'debug_subagent' ||
+		tc.name.startsWith('debug_') ||
+		// Also catch tool_search_tool_regex searching for debug tools
+		(tc.name === 'tool_search_tool_regex [server]' && tc.args && String(tc.args).includes('debug'))
+	);
+
+	// Exclude turns triggered by debug.prompt.md
+	const isDebugPrompt = promptText.includes('debug.prompt.md');
+
+	return hasDebugToolCall || isDebugPrompt;
+}
+
+/**
  * Build a DebugSession from IRequestLogger data
  */
 export function buildSessionFromRequestLogger(
 	requestLogger: IRequestLogger,
-	sessionId: string = 'live'
+	sessionId: string = 'live',
+	options?: BuildSessionOptions
 ): DebugSession {
 	const requests = requestLogger.getRequests();
 
@@ -89,6 +116,12 @@ export function buildSessionFromRequestLogger(
 	const turnMap = new Map<CapturingToken | undefined, LoggedInfo[]>();
 	for (const info of requests) {
 		const token = getToken(info);
+
+		// Skip debug subagent's internal turns if requested
+		if (options?.excludeDebugSubagent && token?.subAgentName === 'debug') {
+			continue;
+		}
+
 		if (!turnMap.has(token)) {
 			turnMap.set(token, []);
 		}
@@ -173,6 +206,11 @@ export function buildSessionFromRequestLogger(
 			turnStatus = DebugItemStatus.Failure;
 		}
 
+		// Skip debug-related turns if requested (turns that call debug_subagent or are from debug prompts)
+		if (options?.excludeDebugSubagent && isDebugRelatedTurn(turnToolCalls, promptText)) {
+			continue;
+		}
+
 		const turn: DebugTurn = {
 			id: turnId,
 			prompt: promptText,
@@ -189,18 +227,32 @@ export function buildSessionFromRequestLogger(
 		turnIndex++;
 	}
 
-	// Build sub-agent hierarchy
-	const rootSubAgents = buildSubAgentHierarchy(subAgentMap);
+	// Build sub-agent hierarchy (filter out debug subagents if requested)
+	let rootSubAgents = buildSubAgentHierarchy(subAgentMap);
+	if (options?.excludeDebugSubagent) {
+		rootSubAgents = rootSubAgents.filter(sa => sa.name !== 'debug');
+	}
+
+	// When excluding debug subagent, filter out debug tool calls from allToolCalls and allRequests
+	let filteredToolCalls = allToolCalls;
+	const filteredRequests = allRequests;
+	if (options?.excludeDebugSubagent) {
+		filteredToolCalls = allToolCalls.filter(tc =>
+			!tc.name.startsWith('debug_') &&
+			tc.name !== 'debug_subagent' &&
+			!(tc.name === 'tool_search_tool_regex [server]' && tc.args && String(tc.args).includes('debug'))
+		);
+	}
 
 	// Calculate metrics
-	const metrics = calculateMetrics(turns, allToolCalls, allRequests, rootSubAgents);
+	const metrics = calculateMetrics(turns, filteredToolCalls, filteredRequests, rootSubAgents);
 
 	return {
 		sessionId,
 		source: 'live',
 		turns,
-		toolCalls: allToolCalls,
-		requests: allRequests,
+		toolCalls: filteredToolCalls,
+		requests: filteredRequests,
 		subAgents: rootSubAgents,
 		metrics,
 		startTime: turns[0]?.timestamp,

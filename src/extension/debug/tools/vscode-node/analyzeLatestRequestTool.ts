@@ -22,6 +22,8 @@ interface IAnalyzeLatestRequestParams {
 	includeLLMDetails?: boolean;
 	/** Focus area: 'all' (default), 'errors', 'tools', 'performance' */
 	focus?: 'all' | 'errors' | 'tools' | 'performance';
+	/** Exclude debug subagent's own calls from the analysis (default: true) */
+	excludeDebugSubagent?: boolean;
 }
 
 /**
@@ -42,11 +44,12 @@ class AnalyzeLatestRequestTool implements ICopilotTool<IAnalyzeLatestRequestPara
 			turn = 'last',
 			includeFullToolDetails = true,
 			includeLLMDetails = false,
-			focus = 'all'
+			focus = 'all',
+			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
 		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live');
+		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
 
 		if (session.turns.length === 0) {
 			return new LanguageModelToolResult([

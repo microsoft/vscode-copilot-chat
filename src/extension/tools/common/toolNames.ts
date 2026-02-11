@@ -81,6 +81,7 @@ export enum ToolName {
 	DebugGetCurrentSession = 'debug_getCurrentSession',
 	DebugGetSessionHistory = 'debug_getSessionHistory',
 	DebugAnalyzeLatestRequest = 'debug_analyzeLatestRequest',
+	DebugSubagent = 'debug_subagent',
 }
 
 export enum ContributedToolName {
@@ -249,6 +250,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.DebugGetCurrentSession]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugGetSessionHistory]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugAnalyzeLatestRequest]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugSubagent]: ToolCategory.RedundantButSpecific,
 } as const;
 
 

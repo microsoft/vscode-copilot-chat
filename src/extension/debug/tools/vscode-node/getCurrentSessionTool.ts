@@ -21,6 +21,8 @@ interface IGetCurrentSessionParams {
 	includeRequests?: boolean;
 	/** Maximum number of turns to return (default: 20) */
 	maxTurns?: number;
+	/** Exclude debug subagent's own calls from the analysis (default: true when called from debug subagent) */
+	excludeDebugSubagent?: boolean;
 }
 
 /**
@@ -41,11 +43,12 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 			format = 'summary',
 			includeToolCalls = true,
 			includeRequests = false,
-			maxTurns = 20
+			maxTurns = 20,
+			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
 		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live');
+		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
 
 		if (session.turns.length === 0) {
 			return new LanguageModelToolResult([

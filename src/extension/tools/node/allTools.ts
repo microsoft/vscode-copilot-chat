@@ -7,6 +7,7 @@ import './applyPatchTool';
 import './codebaseTool';
 import './createDirectoryTool';
 import './createFileTool';
+import './debugSubagentTool';
 import './docTool';
 import './editNotebookTool';
 import './findFilesTool';
@@ -39,3 +40,4 @@ import './toolReplayTool';
 import './usagesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+

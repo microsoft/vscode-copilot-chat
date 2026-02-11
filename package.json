@@ -207,6 +207,274 @@
 				}
 			},
 			{
+				"name": "debug_subagent",
+				"toolReferenceName": "debugSubagent",
+				"displayName": "Debug Subagent",
+				"canBeReferencedInPrompt": true,
+				"icon": "$(debug)",
+				"userDescription": "Analyze agent trajectories, debug session failures, and investigate tool call patterns",
+				"modelDescription": "Launch a debug-focused subagent that analyzes agent trajectories, session data, and tool call patterns. Use this for debugging agent execution, finding failures, and understanding orchestration flows.\n\nThe subagent has access to debug tools like debugCurrentSession, debugTrajectories, debugFailures, debugToolCalls, and debugAnalyzeRequest.\n\nInput fields:\n- query: Natural language description of what to debug or analyze.\n- description: Short user-visible invocation message.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Natural language description of what to debug or analyze."
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the debug task."
+						}
+					},
+					"required": [
+						"query",
+						"description"
+					]
+				}
+			},
+			{
+				"name": "debug_getCurrentSession",
+				"displayName": "Debug: Get Current Session",
+				"icon": "$(debug)",
+				"userDescription": "Get current live session data from the request logger",
+				"modelDescription": "Get the current live session data including turns, tool calls, and metrics. Use this to analyze what has happened in the current chat session.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"format": {
+							"type": "string",
+							"enum": ["summary", "detailed", "metrics"],
+							"description": "Output format: 'summary' (default), 'detailed', or 'metrics'"
+						},
+						"includeToolCalls": {
+							"type": "boolean",
+							"description": "Include individual tool call details (default: true)"
+						},
+						"includeRequests": {
+							"type": "boolean",
+							"description": "Include request/response details (default: false)"
+						},
+						"maxTurns": {
+							"type": "number",
+							"description": "Maximum number of turns to return (default: 20)"
+						},
+						"excludeDebugSubagent": {
+							"type": "boolean",
+							"description": "Exclude debug subagent's own calls from analysis (default: true)"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_getSessionHistory",
+				"displayName": "Debug: Get Session History",
+				"icon": "$(debug)",
+				"userDescription": "Get conversation history from the current session",
+				"modelDescription": "Get the conversation history from the current session with configurable detail level.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"lastN": {
+							"type": "number",
+							"description": "Number of most recent turns to retrieve (default: 10)"
+						},
+						"includeToolCalls": {
+							"type": "boolean",
+							"description": "Include tool call summaries for each turn (default: true)"
+						},
+						"includeTokenUsage": {
+							"type": "boolean",
+							"description": "Include token usage statistics (default: false)"
+						},
+						"includeTiming": {
+							"type": "boolean",
+							"description": "Include timing information (default: true)"
+						},
+						"failedOnly": {
+							"type": "boolean",
+							"description": "Filter to only show failed turns (default: false)"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["conversation", "timeline", "compact"],
+							"description": "Output format: 'conversation' (default), 'timeline', or 'compact'"
+						},
+						"excludeDebugSubagent": {
+							"type": "boolean",
+							"description": "Exclude debug subagent's own calls from analysis (default: true)"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_analyzeLatestRequest",
+				"displayName": "Debug: Analyze Latest Request",
+				"icon": "$(debug)",
+				"userDescription": "Analyze a specific request/turn from the session in detail",
+				"modelDescription": "Analyze a specific request/turn from the current session in detail, including tool calls, errors, and performance.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"turn": {
+							"description": "Which turn to analyze: 'last' (default), or a specific turn number"
+						},
+						"includeFullToolDetails": {
+							"type": "boolean",
+							"description": "Include full tool call arguments and results (default: true)"
+						},
+						"includeLLMDetails": {
+							"type": "boolean",
+							"description": "Include LLM request/response details (default: false)"
+						},
+						"focus": {
+							"type": "string",
+							"enum": ["all", "errors", "tools", "performance"],
+							"description": "Focus area: 'all' (default), 'errors', 'tools', 'performance'"
+						},
+						"excludeDebugSubagent": {
+							"type": "boolean",
+							"description": "Exclude debug subagent's own calls from analysis (default: true)"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_getTrajectories",
+				"displayName": "Debug: Get Trajectories",
+				"icon": "$(debug)",
+				"userDescription": "List all available agent trajectories",
+				"modelDescription": "List all available trajectories (live session or loaded from files). Returns trajectory IDs, agent names, and summary statistics.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"agentName": {
+							"type": "string",
+							"description": "Optional: only return trajectories matching this agent name"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_getTrajectory",
+				"displayName": "Debug: Get Trajectory",
+				"icon": "$(debug)",
+				"userDescription": "Get details of a specific trajectory by session ID",
+				"modelDescription": "Get detailed information about a specific trajectory including steps, tool calls, and metrics.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "The session ID of the trajectory to retrieve"
+						},
+						"includeFullResults": {
+							"type": "boolean",
+							"description": "Whether to include full tool call results (may be large)"
+						}
+					},
+					"required": ["sessionId"]
+				}
+			},
+			{
+				"name": "debug_getHierarchy",
+				"displayName": "Debug: Get Hierarchy",
+				"icon": "$(debug)",
+				"userDescription": "Get the sub-agent hierarchy tree",
+				"modelDescription": "Get the hierarchy tree showing parent-child relationships between agents and sub-agents.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional session ID to get hierarchy from a specific root"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["tree", "mermaid", "detailed"],
+							"description": "Output format: 'tree' (default), 'mermaid', or 'detailed'"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_getFailures",
+				"displayName": "Debug: Get Failures",
+				"icon": "$(debug)",
+				"userDescription": "Find and analyze failures across trajectories",
+				"modelDescription": "Find and analyze failures across loaded trajectories. Can filter by session ID and failure type.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional session ID to scope failures to a specific trajectory"
+						},
+						"failureType": {
+							"type": "string",
+							"description": "Filter by failure type: 'tool_error', 'api_error', 'validation_error', etc."
+						},
+						"limit": {
+							"type": "number",
+							"description": "Maximum number of failures to return (default: 20)"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_getToolCalls",
+				"displayName": "Debug: Get Tool Calls",
+				"icon": "$(debug)",
+				"userDescription": "Get and filter tool call information across trajectories",
+				"modelDescription": "Get tool call information across trajectories with filtering options. Can sort by duration, filter by status, or filter by tool name.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"sessionId": {
+							"type": "string",
+							"description": "Optional session ID to scope tool calls to a specific trajectory"
+						},
+						"toolName": {
+							"type": "string",
+							"description": "Filter by tool name (partial match)"
+						},
+						"failedOnly": {
+							"type": "boolean",
+							"description": "Only show failed tool calls (default: false)"
+						},
+						"limit": {
+							"type": "number",
+							"description": "Maximum number of tool calls to return (default: 50)"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["summary", "detailed", "timeline"],
+							"description": "Output format: 'summary' (default), 'detailed', or 'timeline'"
+						}
+					}
+				}
+			},
+			{
+				"name": "debug_loadTrajectoryFile",
+				"displayName": "Debug: Load Trajectory File",
+				"icon": "$(debug)",
+				"userDescription": "Load trajectory data from a file for analysis",
+				"modelDescription": "Load trajectory data from an ATIF JSON file for analysis. Once loaded, you can use other debug tools to analyze the trajectory.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Path to the trajectory file (ATIF JSON format)"
+						},
+						"append": {
+							"type": "boolean",
+							"description": "Whether to append to existing loaded trajectories or replace them (default: false)"
+						}
+					},
+					"required": ["filePath"]
+				}
+			},
+			{
 				"name": "copilot_searchWorkspaceSymbols",
 				"toolReferenceName": "symbols",
 				"displayName": "%copilot.tools.searchWorkspaceSymbols.name%",
@@ -5959,6 +6227,9 @@
 			},
 			{
 				"path": "./assets/prompts/init.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/debug.prompt.md"
 			}
 		],
 		"terminal": {

@@ -26,6 +26,8 @@ interface IGetSessionHistoryParams {
 	failedOnly?: boolean;
 	/** Output format: 'conversation' (default), 'timeline', 'compact' */
 	format?: 'conversation' | 'timeline' | 'compact';
+	/** Exclude debug subagent's own calls from the analysis (default: true) */
+	excludeDebugSubagent?: boolean;
 }
 
 /**
@@ -48,11 +50,12 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 			includeTokenUsage = false,
 			includeTiming = true,
 			failedOnly = false,
-			format = 'conversation'
+			format = 'conversation',
+			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
 		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live');
+		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
 
 		if (session.turns.length === 0) {
 			return new LanguageModelToolResult([
