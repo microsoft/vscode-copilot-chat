@@ -8,7 +8,7 @@ const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
 import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
-import { EmitMode, Priorities, SpeculativeKind } from './protocol';
+import { EmitMode, Priorities, SpeculativeKind, Stability } from './protocol';
 import tss, { ClassDeclarations, ReferencedByVisitor, Symbols, type DirectSuperSymbolInfo } from './typescripts';
 
 export type TypeInfo = {
@@ -263,8 +263,8 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 
 	private readonly classDeclaration: tt.ClassDeclaration;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Inherited) {
-		super(session, languageService, context, 'SuperClassRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration) {
+		super(session, languageService, context, 'SuperClassRunnable', SnippetLocation.Primary, Priorities.Inherited, Stability.High, ComputeCost.Medium);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -274,7 +274,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
 	}
 
 	protected override run(_result: RunnableResult, _token: tt.CancellationToken): void {
@@ -309,8 +309,8 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 
 	private readonly classDeclaration: tt.ClassDeclaration;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, 'SimilarClassRunnable', SnippetLocation.Primary, priority, ComputeCost.High);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration) {
+		super(session, languageService, context, 'SimilarClassRunnable', SnippetLocation.Primary, Priorities.Blueprints, Stability.High, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -319,7 +319,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

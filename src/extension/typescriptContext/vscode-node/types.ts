@@ -12,6 +12,7 @@ export type ResolvedRunnableResult = {
 	id: protocol.ContextRunnableResultId;
 	state: protocol.ContextRunnableState;
 	priority: number;
+	stability: number;
 	items: protocol.FullContextItem[];
 	cache?: protocol.CacheInfo;
 	debugPath?: protocol.ContextRunnableResultId | undefined;
@@ -22,6 +23,7 @@ export namespace ResolvedRunnableResult {
 			id: result.id,
 			state: result.state,
 			priority: result.priority,
+			stability: result.stability,
 			items: items,
 			cache: result.cache,
 			debugPath: result.debugPath

@@ -8,7 +8,7 @@ const ts = TS();
 
 import { ImportsRunnable, TypeOfExpressionRunnable, TypeOfLocalsRunnable, TypesOfNeighborFilesRunnable } from './baseContextProviders';
 import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
-import { CacheScopeKind, EmitMode, Priorities, SpeculativeKind } from './protocol';
+import { CacheScopeKind, EmitMode, Priorities, SpeculativeKind, Stability } from './protocol';
 import tss, { type TokenInfo } from './typescripts';
 
 
@@ -25,7 +25,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	private readonly tokenInfo: TokenInfo;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: TokenInfo) {
-		super(session, languageService, context, 'GlobalsRunnable', SnippetLocation.Secondary, Priorities.Globals, ComputeCost.Medium);
+		super(session, languageService, context, 'GlobalsRunnable', SnippetLocation.Secondary, Priorities.Globals, Stability.High, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -34,7 +34,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
 	}
 
 	protected override run(_result: RunnableResult, token: tt.CancellationToken): void {

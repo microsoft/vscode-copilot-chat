@@ -18,6 +18,7 @@ import {
 	CacheScopeKind, ContextRunnableState, EmitMode, Priorities,
 	Range,
 	SpeculativeKind,
+	Stability,
 	Trait, TraitKind, type CachedContextRunnableResult, type CacheInfo, type CacheScope,
 	type ContextItemKey
 } from './protocol';
@@ -38,7 +39,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	private readonly sourceFile: tt.SourceFile;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, sourceFile: tt.SourceFile) {
-		super(session, languageService, context, 'CompilerOptionsRunnable', SnippetLocation.Primary, Priorities.Traits, ComputeCost.Low);
+		super(session, languageService, context, 'CompilerOptionsRunnable', SnippetLocation.Primary, Priorities.Traits, Stability.High, ComputeCost.Low);
 		this.sourceFile = sourceFile;
 	}
 
@@ -47,7 +48,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	}
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } };
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
@@ -82,8 +83,8 @@ export abstract class FunctionLikeContextRunnable<T extends tt.FunctionLikeDecla
 	protected readonly declaration: T;
 	protected readonly sourceFile: tt.SourceFile;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: string, declaration: T, priority: number, cost: ComputeCost) {
-		super(session, languageService, context, id, SnippetLocation.Primary, priority, cost);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: string, declaration: T, priority: number, stability: number, cost: ComputeCost) {
+		super(session, languageService, context, id, SnippetLocation.Primary, priority, stability, cost);
 		this.declaration = declaration;
 		this.sourceFile = declaration.getSourceFile();
 	}
@@ -103,13 +104,13 @@ export abstract class FunctionLikeContextRunnable<T extends tt.FunctionLikeDecla
 export class SignatureRunnable extends FunctionLikeContextRunnable {
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.FunctionLikeDeclarationBase) {
-		super(session, languageService, context, SignatureRunnable.computeId(session, declaration), declaration, Priorities.Locals, ComputeCost.Low);
+		super(session, languageService, context, SignatureRunnable.computeId(session, declaration), declaration, Priorities.Locals, Stability.Medium, ComputeCost.Low);
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		const runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		const runnableResult = result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 		runnableResult.debugPath = this.getDebugPath();
 		return runnableResult;
 	}
@@ -178,7 +179,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 	private runnableResult: RunnableResult | undefined;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined) {
-		super(session, languageService, context, 'TypeOfLocalsRunnable', SnippetLocation.Primary, Priorities.Locals, ComputeCost.Medium);
+		super(session, languageService, context, 'TypeOfLocalsRunnable', SnippetLocation.Primary, Priorities.Locals, Stability.Medium, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.cacheScope = cacheScope;
@@ -191,7 +192,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = this.cacheScope !== undefined ? { emitMode: EmitMode.ClientBasedOnTimeout, scope: this.cacheScope } : undefined;
-		this.runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -252,7 +253,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 	private static SymbolsToInclude: number = ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo) {
-		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, Priorities.NeighborFiles, ComputeCost.Medium);
+		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, Priorities.NeighborFiles, Stability.High, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -262,7 +263,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.NeighborFiles } };
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, cancellationToken: tt.CancellationToken): void {
@@ -316,7 +317,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	]);
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>) {
-		super(session, languageService, context, 'ImportsRunnable', SnippetLocation.Secondary, Priorities.Imports, ComputeCost.Medium);
+		super(session, languageService, context, 'ImportsRunnable', SnippetLocation.Secondary, Priorities.Imports, Stability.High, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.runnableResult = undefined;
@@ -349,7 +350,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		this.runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, this.cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, this.cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -472,7 +473,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	private readonly expression: tt.Expression;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression) {
-		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, Priorities.Expression, ComputeCost.Low);
+		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, Priorities.Expression, Stability.Low, ComputeCost.Low);
 		this.expression = expression;
 	}
 
@@ -514,7 +515,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.ignore);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.ignore);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

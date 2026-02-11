@@ -12,7 +12,7 @@ import {
 	AbstractContextRunnable, ComputeCost, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
-import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
+import { EmitMode, Priorities, SpeculativeKind, Stability, type CacheInfo } from './protocol';
 import { RecoverableError } from './types';
 import tss, { ClassDeclarations, Declarations, Symbols, Traversal, type StateProvider, type TokenInfo } from './typescripts';
 
@@ -429,14 +429,14 @@ class FindMethodInHierarchySearch extends MethodBlueprintSearch {
 
 abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.ConstructorDeclaration> extends FunctionLikeContextRunnable<T> {
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: T, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, 'SimilarPropertyRunnable', declaration, priority, ComputeCost.High);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: T) {
+		super(session, languageService, context, 'SimilarPropertyRunnable', declaration, Priorities.Blueprints, Stability.High, ComputeCost.High);
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -510,8 +510,8 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 
 	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, priority: number = Priorities.Properties) {
-		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration) {
+		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Secondary, Priorities.Properties, Stability.High, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
 
@@ -521,7 +521,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(this.declaration) };
-		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, this.stability, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

@@ -115,6 +115,12 @@ export enum Priorities {
 	Globals = 0.2
 }
 
+export enum Stability {
+	High = 1.0,
+	Medium = 0.5,
+	Low = 0.0
+}
+
 export enum SpeculativeKind {
 	emit = 'emit',
 	ignore = 'ignore'
@@ -270,6 +276,13 @@ export type ContextRunnableResult = {
 	 * Priorities of the items.
 	 */
 	priority: number;
+
+	/**
+	 * The stability of the items. Value range is [0, 1].
+	 * A higher value indicates more stable results across
+	 * repeated computations.
+	 */
+	stability: number;
 
 	/**
 	 * The items.

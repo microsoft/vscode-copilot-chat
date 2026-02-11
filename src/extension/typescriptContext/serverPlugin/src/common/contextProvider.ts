@@ -317,12 +317,14 @@ export class RunnableResult {
 	private cache: CacheInfo | undefined;
 
 	public readonly priority: number;
+	public readonly stability: number;
 	public readonly items: ContextItem[];
 	public debugPath: string | undefined;
 
-	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
+	constructor(id: ContextRunnableResultId, priority: number, stability: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
 		this.priority = priority;
+		this.stability = stability;
 		this.runnableResultContext = runnableResultContext;
 		this.primaryBudget = primaryBudget;
 		this.secondaryBudget = secondaryBudget;
@@ -398,6 +400,7 @@ export class RunnableResult {
 			id: this.id,
 			state: this.state,
 			priority: this.priority,
+			stability: this.stability,
 			items: this.items,
 			cache: this.cache,
 			speculativeKind: this.speculativeKind,
@@ -477,9 +480,9 @@ export class ContextResult {
 		this.timedOut = timedOut;
 	}
 
-	public createRunnableResult(id: ContextRunnableResultId, priority: number, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
+	public createRunnableResult(id: ContextRunnableResultId, priority: number, stability: number, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(id, priority, this, this.primaryBudget, this.secondaryBudget, speculativeKind, cache);
+		const result = new RunnableResult(id, priority, stability, this, this.primaryBudget, this.secondaryBudget, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -712,6 +715,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 	public readonly id: ContextRunnableResultId;
 	protected readonly location: SnippetLocation;
 	public readonly priority: number;
+	public readonly stability: number;
 	public readonly cost: ComputeCost;
 
 	protected readonly languageService: tt.LanguageService;
@@ -719,7 +723,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 	private readonly program: tt.Program | undefined;
 	private result: RunnableResult | undefined;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: ContextRunnableResultId, location: SnippetLocation, priority: number, cost: ComputeCost) {
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: ContextRunnableResultId, location: SnippetLocation, priority: number, stability: number, cost: ComputeCost) {
 		this.session = session;
 		this.languageService = languageService;
 		this.program = languageService.getProgram();
@@ -728,6 +732,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.id = id;
 		this.location = location;
 		this.priority = priority;
+		this.stability = stability;
 		this.cost = cost;
 	}
 
