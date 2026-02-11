@@ -162,11 +162,20 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 	}
 
 	// Step 4: Build original/current sections with 21-line window around cursor
-	// 10 lines above cursor, cursor line, 10 lines below = 21 lines total
+	// Use rebase approach: compose all user edits and map window bounds back to original
 	const cursorLine = currentDocument.cursorLineOffset;
 
-	const originalSection = extract21LineWindow(originalContent, cursorLine);
+	// Extract current window (this is straightforward)
 	const currentSection = extract21LineWindow(currentContent, cursorLine);
+
+	// For original window, use the rebase approach:
+	// Map the window bounds from current-file-space to original-file-space using edit history
+	const originalSection = extractOriginalWindowViaRebase(
+		originalContent,
+		currentContent,
+		cursorLine,
+		editEntries
+	);
 
 	// Step 5: Calculate remaining budget for context files
 	const diffTokensUsed = DIFF_BUDGET - diffTokenBudget;
@@ -222,6 +231,129 @@ function extract21LineWindow(content: string, cursorLine: number): string {
 
 	// Extract the window
 	return lines.slice(startLine, endLine).join('\n');
+}
+
+/**
+ * Get byte offset for the start of a line (0-based line number).
+ */
+function getLineStartOffset(content: string, lineNumber: number): number {
+	const lines = content.split('\n');
+	let offset = 0;
+	for (let i = 0; i < lineNumber && i < lines.length; i++) {
+		offset += lines[i].length + 1; // +1 for newline
+	}
+	return offset;
+}
+
+/**
+ * Get byte offset for the end of a line (0-based line number).
+ */
+function getLineEndOffset(content: string, lineNumber: number): number {
+	const lines = content.split('\n');
+	let offset = 0;
+	for (let i = 0; i <= lineNumber && i < lines.length; i++) {
+		offset += lines[i].length + 1; // +1 for newline
+	}
+	return offset - 1; // -1 to exclude the trailing newline of last line
+}
+
+/**
+ * Extract the original window using the rebase approach.
+ *
+ * Algorithm:
+ * 1. Compose all user edits to get E_user (original → current transformation)
+ * 2. Compute window bounds in current file (byte offsets)
+ * 3. Use applyInverseToOffset to map these bounds back to original file space
+ * 4. Extract the window from original content using these mapped offsets
+ *
+ * This is more precise than diff-based line mapping because it uses the
+ * actual edit history rather than recomputing a diff.
+ */
+function extractOriginalWindowViaRebase(
+	originalContent: string,
+	currentContent: string,
+	cursorLine: number,
+	editEntries: readonly IXtabHistoryEditEntry[]
+): string {
+	// If no edits, files are identical - just extract the same window
+	if (editEntries.length === 0 || originalContent === currentContent) {
+		return extract21LineWindow(originalContent, cursorLine);
+	}
+
+	// If original is empty, return empty
+	if (originalContent.length === 0) {
+		return '';
+	}
+
+	// Step 1: Compose all user edits into a single edit (original → current)
+	// Each editEntry.edit is a RootedEdit with .edit being a StringEdit
+	// We need to compose them in order
+	let composedEdit = StringEdit.empty;
+	for (const entry of editEntries) {
+		composedEdit = composedEdit.compose(entry.edit.edit);
+	}
+
+	// Step 2: Calculate window bounds in current file (byte offsets)
+	const currentLines = currentContent.split('\n');
+	const windowStartLine = Math.max(0, cursorLine - CURSOR_WINDOW_LINES_ABOVE);
+	const windowEndLine = Math.min(currentLines.length - 1, cursorLine + CURSOR_WINDOW_LINES_BELOW);
+
+	const currentWindowStart = getLineStartOffset(currentContent, windowStartLine);
+	const currentWindowEnd = getLineEndOffset(currentContent, windowEndLine);
+
+	// Step 3: Map these offsets back to original file space using inverse transformation
+	const originalWindowStart = composedEdit.applyInverseToOffset(currentWindowStart);
+	const originalWindowEnd = composedEdit.applyInverseToOffset(currentWindowEnd);
+
+	// Clamp to valid range
+	const clampedStart = Math.max(0, Math.min(originalWindowStart, originalContent.length));
+	const clampedEnd = Math.max(clampedStart, Math.min(originalWindowEnd, originalContent.length));
+
+	// Step 4: Extract content and expand to full lines
+	// Find line boundaries around the mapped offsets
+	const originalLines = originalContent.split('\n');
+	let startLineIdx = 0;
+	let endLineIdx = 0;
+	let offset = 0;
+
+	// Find which line contains clampedStart
+	for (let i = 0; i < originalLines.length; i++) {
+		const lineEnd = offset + originalLines[i].length;
+		if (clampedStart <= lineEnd) {
+			startLineIdx = i;
+			break;
+		}
+		offset += originalLines[i].length + 1;
+	}
+
+	// Find which line contains clampedEnd
+	offset = 0;
+	for (let i = 0; i < originalLines.length; i++) {
+		const lineEnd = offset + originalLines[i].length;
+		endLineIdx = i;
+		if (clampedEnd <= lineEnd) {
+			break;
+		}
+		offset += originalLines[i].length + 1;
+	}
+
+	// Ensure we have at least some content and roughly 21 lines
+	// Expand if needed to match the expected window size
+	const expectedLines = CURSOR_WINDOW_LINES_ABOVE + 1 + CURSOR_WINDOW_LINES_BELOW;
+	const currentWindowLines = endLineIdx - startLineIdx + 1;
+
+	if (currentWindowLines < expectedLines) {
+		// Try to expand equally on both sides
+		const linesToAdd = expectedLines - currentWindowLines;
+		const addAbove = Math.floor(linesToAdd / 2);
+		const addBelow = linesToAdd - addAbove;
+
+		startLineIdx = Math.max(0, startLineIdx - addAbove);
+		endLineIdx = Math.min(originalLines.length - 1, endLineIdx + addBelow);
+	}
+
+	// Extract the window
+	return originalLines.slice(startLineIdx, endLineIdx + 1).join('\n');
 }
 
 /**
