@@ -903,9 +903,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookUserInitiated,
 			disableThinking,
-		}, token);
-
-		this.stopHookUserInitiated = false;
+		}, token).finally(() => {
+			this.stopHookUserInitiated = false;
+		});
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: buildPromptResult.messages,
