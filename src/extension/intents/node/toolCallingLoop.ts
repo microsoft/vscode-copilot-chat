@@ -339,8 +339,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				logService: this._logService,
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
-						const hookOutput = output as SessionStartHookOutput & { additionalContext?: string };
-						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext ?? hookOutput.additionalContext;
+						const hookOutput = output as SessionStartHookOutput;
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
 						if (additionalContext) {
 							additionalContexts.push(additionalContext);
 							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${additionalContext.substring(0, 100)}...`);
@@ -382,8 +382,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				logService: this._logService,
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
-						const hookOutput = output as SubagentStartHookOutput & { additionalContext?: string };
-						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext ?? hookOutput.additionalContext;
+						const hookOutput = output as SubagentStartHookOutput;
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
 						if (additionalContext) {
 							additionalContexts.push(additionalContext);
 							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${additionalContext.substring(0, 100)}...`);
