@@ -92,12 +92,79 @@ function runNpm(args: string[], label: string) {
 	return true;
 }
 
+function runBrew(label: string) {
+	const result = spawnSync('brew', ['install', 'copilot-cli'], { stdio: 'inherit', env });
+	if (result.error) {
+		warn(`${label} via brew failed: ${result.error.message}`);
+		return false;
+	}
+	if (result.status !== 0) {
+		warn(`${label} via brew failed with exit code ${result.status}`);
+		return false;
+	}
+	return true;
+}
+
+function runCurl(label: string) {
+	const result = spawnSync('bash', ['-c', 'curl -fsSL https://gh.io/copilot-install | bash'], { stdio: 'inherit', env });
+	if (result.error) {
+		warn(`${label} via curl failed: ${result.error.message}`);
+		return false;
+	}
+	if (result.status !== 0) {
+		warn(`${label} via curl failed with exit code ${result.status}`);
+		return false;
+	}
+	return true;
+}
+
+function runWget(label: string) {
+	const result = spawnSync('bash', ['-c', 'wget -qO- https://gh.io/copilot-install | bash'], { stdio: 'inherit', env });
+	if (result.error) {
+		warn(`${label} via wget failed: ${result.error.message}`);
+		return false;
+	}
+	if (result.status !== 0) {
+		warn(`${label} via wget failed with exit code ${result.status}`);
+		return false;
+	}
+	return true;
+}
+
+function hasCommand(cmd: string) {
+	const result = spawnSync('which', [cmd], { env, encoding: 'utf8' });
+	return !result.error && result.status === 0;
+}
+
+function installCopilotCLI(label: string): boolean {
+	// Try npm first
+	if (hasCommand('npm') && runNpm(['install', '-g', PACKAGE_NAME], label)) {
+		return true;
+	}
+	// Try brew
+	if (hasCommand('brew')) {
+		log('npm is not available or installation failed. Trying brew...');
+		if (runBrew(label)) { return true; }
+	}
+	// Try curl
+	if (hasCommand('curl')) {
+		log('Trying install script via curl...');
+		if (runCurl(label)) { return true; }
+	}
+	// Try wget
+	if (hasCommand('wget')) {
+		log('Trying install script via wget...');
+		if (runWget(label)) { return true; }
+	}
+	return false;
+}
+
 async function ensureInstalled() {
 	const version = getCopilotInfo();
 	if (!version) {
 		warn('Cannot find GitHub Copilot CLI (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)');
 		if (await promptYes('Install GitHub Copilot CLI?')) {
-			if (runNpm(['install', '-g', PACKAGE_NAME], 'Installing')) {
+			if (installCopilotCLI('Installing')) {
 				return ensureInstalled();
 			}
 			await pressKeyToExit();
@@ -113,7 +180,7 @@ async function validateVersion(version: string) {
 		warn(`GitHub Copilot CLI version ${version} is not compatible.`);
 		log(`Version ${REQUIRED_VERSION} or later is required.`);
 		if (await promptYes('Update GitHub Copilot CLI?')) {
-			if (runNpm(['update', '-g', PACKAGE_NAME], 'Update')) {
+			if (installCopilotCLI('Update')) {
 				return true;
 			}
 			await pressKeyToExit();
@@ -140,7 +207,7 @@ async function pressKeyToExit(message: string = 'Press Enter to exit...'): Promi
 	}
 	if (!info) {
 		warn('Error: Could not locate Copilot CLI after update.');
-		await pressKeyToExit(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME} (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)`);
+		await pressKeyToExit('Try manually reinstalling (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)');
 	}
 	const args = process.argv.slice(2);
 
