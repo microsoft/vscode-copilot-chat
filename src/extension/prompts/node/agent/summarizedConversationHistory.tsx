@@ -604,6 +604,7 @@ class ConversationHistorySummarizer {
 			tokenizer,
 			tools: this.props.tools ?? undefined,
 			totalPromptTokens: summaryResponse.type === ChatFetchResponseType.Success ? summaryResponse.usage?.prompt_tokens : undefined,
+			maxOutputTokens: endpoint.maxOutputTokens,
 		});
 
 		return {
