@@ -344,6 +344,22 @@ function networkRequest(
 		endpoint.interceptBody(body);
 	}
 
+	// Debug: dump the full request body for Azure endpoints
+	if (typeof endpoint.urlOrRequestMetadata === 'string' && endpoint.urlOrRequestMetadata.includes('openai.azure')) {
+		try {
+			const bodyJson = JSON.stringify(body);
+			const url = endpoint.urlOrRequestMetadata;
+			console.error(`[AzureOpenAI DEBUG] URL: ${url}`);
+			console.error(`[AzureOpenAI DEBUG] Body length: ${bodyJson.length}`);
+			// Log first 3000 chars of body
+			console.error(`[AzureOpenAI DEBUG] Body (truncated): ${bodyJson.substring(0, 3000)}`);
+			// Log all header keys (not values for security)
+			console.error(`[AzureOpenAI DEBUG] Header keys: ${Object.keys(headers).join(', ')}`);
+		} catch (e) {
+			console.error(`[AzureOpenAI DEBUG] Failed to serialize: ${e}`);
+		}
+	}
+
 	const endpointFetchOptions = endpoint.getEndpointFetchOptions?.();
 	const request: FetchOptions = {
 		method: requestType,

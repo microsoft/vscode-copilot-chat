@@ -268,12 +268,29 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		// Azure OpenAI rejects non-standard fields with "400 Unsupported data type".
 		if (this._useBearerAuth && body) {
 			this._sanitizeBodyForAzure(body);
-			this.logService.debug('[AzureOpenAI] Sanitized request body keys: ' + Object.keys(body).join(', '));
-			if (body.messages) {
-				for (let i = 0; i < Math.min(body.messages.length, 3); i++) {
-					const msg = body.messages[i];
-					this.logService.debug(`[AzureOpenAI] Message ${i}: role=${msg.role}, content type=${typeof msg.content}, keys=${Object.keys(msg).join(',')}`);
+			// Dump full sanitized body for debugging Azure 400 errors
+			try {
+				const bodySnapshot = JSON.parse(JSON.stringify(body));
+				// Truncate long message content for logging
+				if (bodySnapshot.messages) {
+					for (const msg of bodySnapshot.messages) {
+						if (typeof msg.content === 'string' && msg.content.length > 200) {
+							msg.content = msg.content.substring(0, 200) + '...[truncated]';
+						} else if (Array.isArray(msg.content)) {
+							for (const part of msg.content) {
+								if (part.type === 'text' && part.text?.length > 200) {
+									part.text = part.text.substring(0, 200) + '...[truncated]';
+								}
+								if (part.type === 'image_url') {
+									part.image_url = { url: '[image data]' };
+								}
+							}
+						}
+					}
 				}
+				this.logService.info('[AzureOpenAI] FULL sanitized body: ' + JSON.stringify(bodySnapshot, null, 2));
+			} catch (e) {
+				this.logService.error('[AzureOpenAI] Failed to serialize body for logging: ' + (e as Error).message);
 			}
 		}
 
@@ -344,26 +361,35 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (typeof content === 'string') {
 			return content;
 		}
+		if (content === null || content === undefined) {
+			return null;
+		}
 		if (!Array.isArray(content)) {
-			return String(content ?? '');
+			return String(content);
 		}
-		// Filter to only standard OpenAI content part types and simplify if possible
-		const filtered = content.filter((part: any) =>
-			part.type === 'text' || part.type === 'image_url'
-		);
+		// Build clean content parts with only standard OpenAI properties
+		const cleaned: any[] = [];
+		for (const part of content) {
+			if (part.type === 'text') {
+				cleaned.push({ type: 'text', text: part.text ?? '' });
+			} else if (part.type === 'image_url') {
+				cleaned.push({ type: 'image_url', image_url: part.image_url });
+			}
+			// Drop all other content part types (cache_breakpoint, opaque, etc.)
+		}
 		// If only one text part, simplify to string
-		if (filtered.length === 1 && filtered[0].type === 'text') {
-			return filtered[0].text;
+		if (cleaned.length === 1 && cleaned[0].type === 'text') {
+			return cleaned[0].text;
 		}
-		if (filtered.length === 0) {
-			// Extract text from all parts as fallback
+		if (cleaned.length === 0) {
+			// No standard parts found - extract text as fallback
 			const text = content
-				.filter((part: any) => part.type === 'text')
-				.map((part: any) => part.text)
+				.filter((p: any) => p.text)
+				.map((p: any) => String(p.text))
 				.join('');
 			return text || '';
 		}
-		return filtered;
+		return cleaned;
 	}
 
 	private static readonly _azureAllowedBodyFields = new Set([
