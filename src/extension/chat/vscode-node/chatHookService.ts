@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { IChatHookService, IPostToolUseHookResult, IPreToolUseHookResult } from '../../../platform/chat/common/chatHookService';
+import { IPostToolUseHookCommandInput, IPostToolUseHookSpecificCommandOutput, IPreToolUseHookCommandInput, IPreToolUseHookSpecificCommandOutput } from '../../../platform/chat/common/hookCommandTypes';
 import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../../platform/chat/common/hookExecutor';
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
@@ -15,20 +16,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { ChatHookTelemetry } from './chatHookTelemetry';
 
-interface IPreToolUseHookSpecificOutput {
-	hookEventName?: string;
-	permissionDecision?: 'allow' | 'deny' | 'ask';
-	permissionDecisionReason?: string;
-	updatedInput?: object;
-	additionalContext?: string;
-}
-
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
-
-interface IPostToolUseHookSpecificOutput {
-	hookEventName?: string;
-	additionalContext?: string;
-}
 
 /**
  * Keys that should be redacted when logging hook input.
@@ -182,12 +170,12 @@ export class ChatHookService implements IChatHookService {
 	private _toHookResult(commandResult: IHookCommandResult): vscode.ChatHookResult {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
-				// Exit code 2 - blocking error, stop processing
+				// Exit code 2 - blocking error
+				// Callers handle this based on hook type (e.g., deny for PreToolUse, blocking reason for Stop)
 				const message = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
 				return {
 					resultKind: 'error',
-					stopReason: message,
-					output: undefined,
+					output: message,
 				};
 			}
 			case HookCommandResultKind.NonBlockingError: {
@@ -245,7 +233,7 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	async executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined> {
-		const hookInput = {
+		const hookInput: IPreToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
 			tool_use_id: toolCallId,
@@ -270,11 +258,19 @@ export class ChatHookService implements IChatHookService {
 		const allAdditionalContext: string[] = [];
 
 		for (const result of results) {
+			// Exit code 2 (error) means deny the tool
+			if (result.resultKind === 'error') {
+				const reason = typeof result.output === 'string' ? result.output : undefined;
+				mostRestrictiveDecision = 'deny';
+				winningReason = reason ?? winningReason;
+				break;
+			}
+
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 				continue;
 			}
 
-			const output = result.output as { hookSpecificOutput?: IPreToolUseHookSpecificOutput };
+			const output = result.output as { hookSpecificOutput?: IPreToolUseHookSpecificCommandOutput };
 			const hookSpecificOutput = output.hookSpecificOutput;
 			if (!hookSpecificOutput) {
 				continue;
@@ -317,7 +313,7 @@ export class ChatHookService implements IChatHookService {
 	}
 
 	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined> {
-		const hookInput = {
+		const hookInput: IPostToolUseHookCommandInput = {
 			tool_name: toolName,
 			tool_input: toolInput,
 			tool_response: toolResponseText,
@@ -341,6 +337,16 @@ export class ChatHookService implements IChatHookService {
 		const allAdditionalContext: string[] = [];
 
 		for (const result of results) {
+			// Exit code 2 (error) means block the tool result
+			if (result.resultKind === 'error') {
+				const reason = typeof result.output === 'string' ? result.output : undefined;
+				if (!hasBlock) {
+					hasBlock = true;
+					blockReason = reason;
+				}
+				break;
+			}
+
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 				continue;
 			}
@@ -348,7 +354,7 @@ export class ChatHookService implements IChatHookService {
 			const output = result.output as {
 				decision?: string;
 				reason?: string;
-				hookSpecificOutput?: IPostToolUseHookSpecificOutput;
+				hookSpecificOutput?: IPostToolUseHookSpecificCommandOutput;
 			};
 
 			// Skip results from other hook event types

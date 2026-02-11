@@ -78,7 +78,7 @@ class TestableExecuteHookService {
 		switch (commandResult.kind) {
 			case HookCommandResultKind.Error: {
 				const message = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
-				return { resultKind: 'error', stopReason: message, output: undefined };
+				return { resultKind: 'error', output: message };
 			}
 			case HookCommandResultKind.NonBlockingError: {
 				const errorMessage = typeof commandResult.result === 'string' ? commandResult.result : JSON.stringify(commandResult.result);
@@ -146,13 +146,31 @@ describe('ChatHookService.executeHook', () => {
 		expect(results[0].output).toEqual({ decision: 'block', reason: 'test' });
 	});
 
-	it('converts exit code 2 to error result with stopReason', async () => {
+	it('converts exit code 2 to error result with message in output', async () => {
 		service.executorHandler = () => ({ kind: HookCommandResultKind.Error, result: 'fatal error' });
 		const results = await service.executeHook('Stop', { Stop: [cmd('fail')] }, {});
 
 		expect(results).toHaveLength(1);
 		expect(results[0].resultKind).toBe('error');
-		expect(results[0].stopReason).toBe('fatal error');
+		expect(results[0].output).toBe('fatal error');
+		expect(results[0].stopReason).toBeUndefined();
+	});
+
+	it('does not stop processing on error results (callers decide)', async () => {
+		let callCount = 0;
+		service.executorHandler = () => {
+			callCount++;
+			if (callCount === 1) {
+				return { kind: HookCommandResultKind.Error, result: 'error from first' };
+			}
+			return { kind: HookCommandResultKind.Success, result: 'second ok' };
+		};
+		const results = await service.executeHook('Stop', { Stop: [cmd('first'), cmd('second')] }, {});
+
+		expect(results).toHaveLength(2);
+		expect(callCount).toBe(2);
+		expect(results[0].resultKind).toBe('error');
+		expect(results[1].resultKind).toBe('success');
 	});
 
 	it('converts non-blocking error to warning', async () => {
@@ -308,6 +326,14 @@ function collapsePreToolUseHookResults(results: ChatHookResult[]): IPreToolUseHo
 	const allAdditionalContext: string[] = [];
 
 	for (const result of results) {
+		// Exit code 2 (error) means deny the tool
+		if (result.resultKind === 'error') {
+			const reason = typeof result.output === 'string' ? result.output : undefined;
+			mostRestrictiveDecision = 'deny';
+			winningReason = reason ?? winningReason;
+			break;
+		}
+
 		if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 			continue;
 		}
@@ -535,9 +561,31 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		});
 	});
 
-	it('skips non-success results', async () => {
+	it('treats error results (exit code 2) as deny', async () => {
 		service.hookResults = [
-			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'error'),
+			hookResult('hook blocked this tool', 'error'),
+			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result?.permissionDecision).toBe('deny');
+		expect(result?.permissionDecisionReason).toBe('hook blocked this tool');
+	});
+
+	it('preserves context from prior hooks when error denies', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { permissionDecision: 'allow', additionalContext: 'context from first hook' } }),
+			hookResult('second hook errored', 'error'),
+		];
+
+		const result = await service.executePreToolUseHook('tool', {}, 'call-1', undefined);
+		expect(result?.permissionDecision).toBe('deny');
+		expect(result?.additionalContext).toEqual(['context from first hook']);
+	});
+
+	it('skips warning results', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'warning'),
 			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }),
 		];
 
@@ -565,9 +613,9 @@ describe('ChatHookService.executePreToolUseHook', () => {
 		expect(result?.permissionDecision).toBe('deny');
 	});
 
-	it('returns undefined when all results are non-success', async () => {
+	it('returns undefined when all results are warnings', async () => {
 		service.hookResults = [
-			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'error'),
+			hookResult({ hookSpecificOutput: { permissionDecision: 'deny' } }, 'warning'),
 			hookResult({ hookSpecificOutput: { permissionDecision: 'allow' } }, 'warning'),
 		];
 
@@ -591,6 +639,16 @@ function collapsePostToolUseHookResults(results: ChatHookResult[]): IPostToolUse
 	const allAdditionalContext: string[] = [];
 
 	for (const result of results) {
+		// Exit code 2 (error) means block the tool result
+		if (result.resultKind === 'error') {
+			const reason = typeof result.output === 'string' ? result.output : undefined;
+			if (!hasBlock) {
+				hasBlock = true;
+				blockReason = reason;
+			}
+			break;
+		}
+
 		if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
 			continue;
 		}
@@ -739,9 +797,31 @@ describe('ChatHookService.executePostToolUseHook', () => {
 		expect(result?.additionalContext).toEqual(['No event name']);
 	});
 
-	it('skips non-success results', async () => {
+	it('treats error results (exit code 2) as block', async () => {
 		service.hookResults = [
-			hookResult({ decision: 'block', reason: 'Should be ignored' }, 'error'),
+			hookResult('hook errored', 'error'),
+			hookResult({ hookSpecificOutput: { additionalContext: 'Valid context' } }),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBe('block');
+		expect(result?.reason).toBe('hook errored');
+	});
+
+	it('preserves context from prior hooks when error blocks', async () => {
+		service.hookResults = [
+			hookResult({ hookSpecificOutput: { additionalContext: 'context from first' } }),
+			hookResult('second errored', 'error'),
+		];
+
+		const result = await service.executePostToolUseHook('tool', {}, 'output', 'call-1', undefined);
+		expect(result?.decision).toBe('block');
+		expect(result?.additionalContext).toEqual(['context from first']);
+	});
+
+	it('skips warning results', async () => {
+		service.hookResults = [
+			hookResult({ decision: 'block', reason: 'Should be ignored' }, 'warning'),
 			hookResult({ hookSpecificOutput: { additionalContext: 'Valid context' } }),
 		];
 
@@ -760,9 +840,9 @@ describe('ChatHookService.executePostToolUseHook', () => {
 		expect(result?.decision).toBe('block');
 	});
 
-	it('returns undefined when all results are non-success', async () => {
+	it('returns undefined when all results are warnings', async () => {
 		service.hookResults = [
-			hookResult({ decision: 'block' }, 'error'),
+			hookResult({ decision: 'block' }, 'warning'),
 			hookResult({ hookSpecificOutput: { additionalContext: 'ctx' } }, 'warning'),
 		];
 
