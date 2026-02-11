@@ -12,6 +12,7 @@ import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamI
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseNotebookEditPart, ChatResponseTextEditPart, ChatToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
+import { IDebugContextService } from '../../debug/common/debugContextService';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { DebugSubagentToolCallingLoop } from '../../prompt/node/debugSubagentToolCallingLoop';
@@ -32,6 +33,7 @@ class DebugSubagentTool implements ICopilotTool<IDebugSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IDebugContextService private readonly debugContextService: IDebugContextService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IDebugSubagentParams>, token: vscode.CancellationToken) {
@@ -82,11 +84,21 @@ class DebugSubagentTool implements ICopilotTool<IDebugSubagentParams> {
 		};
 
 		let subagentResponse = '';
+		let success = false;
 		if (loopResult.response.type === ChatFetchResponseType.Success) {
 			subagentResponse = loopResult.toolCallRounds.at(-1)?.response ?? loopResult.round.response ?? '';
+			success = true;
 		} else {
 			subagentResponse = `The debug subagent request failed with this message:\n${loopResult.response.type}: ${loopResult.response.reason}`;
 		}
+
+		// Fire event for debug panel to receive the response
+		this.debugContextService.fireDebugSubagentResponse({
+			query: options.input.query,
+			response: subagentResponse,
+			success,
+			timestamp: new Date()
+		});
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentResponse)]);
 		result.toolMetadata = toolMetadata;

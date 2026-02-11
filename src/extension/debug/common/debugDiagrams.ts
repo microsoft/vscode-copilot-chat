@@ -15,12 +15,19 @@ const MAX_NODES_BEFORE_SIMPLIFICATION = 50;
  */
 function escapeLabel(text: string): string {
 	return text
-		.replace(/"/g, '\'')
-		.replace(/\[/g, '(')
+		.replace(/"/g, '\'')     // Quotes
+		.replace(/\[/g, '(')     // Square brackets
 		.replace(/\]/g, ')')
-		.replace(/</g, '&lt;')
+		.replace(/</g, '&lt;')   // Angle brackets - HTML entities
 		.replace(/>/g, '&gt;')
-		.replace(/\n/g, ' ')
+		.replace(/\{/g, '(')     // Curly braces
+		.replace(/\}/g, ')')
+		.replace(/\|/g, '/')     // Pipes are used for node shapes
+		.replace(/:/g, '-')      // Colons can break Mermaid syntax
+		.replace(/#/g, '')       // Hash can be interpreted as IDs
+		.replace(/&(?!lt;|gt;|amp;|quot;)/g, '&amp;')  // Ampersand (but not entities)
+		.replace(/\n/g, ' ')     // Newlines
+		.replace(/\r/g, '')      // Carriage returns
 		.substring(0, 50);
 }
 

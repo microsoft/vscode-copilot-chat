@@ -73,12 +73,36 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			font-weight: 600;
 		}
 
+		.header-spacer {
+			flex: 1;
+		}
+
+		.mode-toggle {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			font-size: 11px;
+		}
+
+		.mode-toggle label {
+			cursor: pointer;
+			opacity: 0.8;
+		}
+
+		.mode-toggle input[type="checkbox"] {
+			cursor: pointer;
+		}
+
 		.session-badge {
 			font-size: 11px;
 			padding: 2px 6px;
 			border-radius: 3px;
 			background-color: var(--vscode-badge-background);
 			color: var(--vscode-badge-foreground);
+		}
+
+		.ai-badge {
+			background-color: var(--vscode-testing-iconPassed);
 		}
 
 		.content {
@@ -99,6 +123,30 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 
 		.output-item:last-child {
 			border-bottom: none;
+		}
+
+		.output-item.ai-response {
+			background-color: var(--vscode-editor-selectionBackground);
+			border-radius: 8px;
+			padding: 16px;
+			border-left: 3px solid var(--vscode-testing-iconPassed);
+			margin-left: -16px;
+			margin-right: -16px;
+			padding-left: 16px;
+			padding-right: 16px;
+		}
+
+		.ai-indicator {
+			display: inline-flex;
+			align-items: center;
+			gap: 4px;
+			font-size: 10px;
+			padding: 2px 6px;
+			border-radius: 3px;
+			background-color: var(--vscode-testing-iconPassed);
+			color: var(--vscode-editor-background);
+			margin-left: 8px;
+			vertical-align: middle;
 		}
 
 		.output-title {
@@ -316,13 +364,20 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 	<div class="header">
 		<h1>Debug Panel</h1>
 		<span class="session-badge" id="session-badge">No Session</span>
+		<div class="header-spacer"></div>
+		<div class="mode-toggle">
+			<input type="checkbox" id="ai-mode" />
+			<label for="ai-mode">AI Mode</label>
+			<span class="session-badge ai-badge" id="ai-badge" style="display: none;">AI</span>
+		</div>
 	</div>
 
 	<div class="content" id="content">
 		<div class="welcome">
 			<h2>Welcome to the Debug Panel</h2>
 			<p>Analyze and visualize agent sessions, tool calls, and trajectories.</p>
-			<p>Type a command below or click a quick action to get started.</p>
+			<p><strong>Local Mode:</strong> Type commands like /summary, /flow, /errors for quick analysis.</p>
+			<p><strong>AI Mode:</strong> Enable AI mode to ask natural language questions about your session.</p>
 		</div>
 	</div>
 
@@ -331,7 +386,7 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			<input type="text" class="query-input" id="query-input" placeholder="Enter a command (e.g., /summary, /flow, /errors)" />
 			<button class="submit-btn" id="submit-btn">Run</button>
 		</div>
-		<div class="quick-actions">
+		<div class="quick-actions" id="quick-actions">
 			<button class="quick-btn" data-command="/summary">Summary</button>
 			<button class="quick-btn" data-command="/tools">Tools</button>
 			<button class="quick-btn" data-command="/errors">Errors</button>
@@ -342,6 +397,13 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			<button class="quick-btn" data-command="/transcript">Transcript</button>
 			<button class="quick-btn" data-command="/load">Load File</button>
 			<button class="quick-btn" data-command="/help">Help</button>
+		</div>
+		<div class="quick-actions" id="ai-quick-actions" style="display: none;">
+			<button class="quick-btn" data-ai-query="What went wrong in my last request?">What went wrong?</button>
+			<button class="quick-btn" data-ai-query="Show me the agent hierarchy as a diagram">Show hierarchy</button>
+			<button class="quick-btn" data-ai-query="Analyze token usage and suggest optimizations">Token analysis</button>
+			<button class="quick-btn" data-ai-query="What tools were called and how long did they take?">Tool performance</button>
+			<button class="quick-btn" data-ai-query="Summarize the conversation flow">Summarize flow</button>
 		</div>
 	</div>
 
@@ -376,6 +438,23 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 		const input = document.getElementById('query-input');
 		const submitBtn = document.getElementById('submit-btn');
 		const sessionBadge = document.getElementById('session-badge');
+		const aiModeToggle = document.getElementById('ai-mode');
+		const aiBadge = document.getElementById('ai-badge');
+		const quickActions = document.getElementById('quick-actions');
+		const aiQuickActions = document.getElementById('ai-quick-actions');
+
+		let isAiMode = false;
+
+		// Handle AI mode toggle
+		aiModeToggle.addEventListener('change', () => {
+			isAiMode = aiModeToggle.checked;
+			aiBadge.style.display = isAiMode ? 'inline' : 'none';
+			quickActions.style.display = isAiMode ? 'none' : 'flex';
+			aiQuickActions.style.display = isAiMode ? 'flex' : 'none';
+			input.placeholder = isAiMode
+				? 'Ask a question about your session (e.g., What went wrong?)'
+				: 'Enter a command (e.g., /summary, /flow, /errors)';
+		});
 
 		// Handle form submission
 		function submitQuery() {
@@ -385,13 +464,16 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			// Add loading indicator
 			const loadingDiv = document.createElement('div');
 			loadingDiv.className = 'loading';
-			loadingDiv.textContent = 'Processing';
+			loadingDiv.textContent = isAiMode ? 'Analyzing with AI' : 'Processing';
 			content.appendChild(loadingDiv);
 			content.scrollTop = content.scrollHeight;
 
 			// Send to extension
 			if (command.toLowerCase() === '/load') {
 				vscode.postMessage({ type: 'load' });
+			} else if (isAiMode || !command.startsWith('/')) {
+				// AI mode or natural language query
+				vscode.postMessage({ type: 'aiQuery', query: command });
 			} else {
 				vscode.postMessage({ type: 'query', command });
 			}
@@ -404,8 +486,8 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			if (e.key === 'Enter') submitQuery();
 		});
 
-		// Handle quick action buttons
-		document.querySelectorAll('.quick-btn').forEach(btn => {
+		// Handle quick action buttons (local commands)
+		document.querySelectorAll('.quick-btn[data-command]').forEach(btn => {
 			btn.addEventListener('click', () => {
 				const cmd = btn.getAttribute('data-command');
 				if (cmd === '/load') {
@@ -413,6 +495,24 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 				} else {
 					vscode.postMessage({ type: 'query', command: cmd });
 				}
+			});
+		});
+
+		// Handle AI quick action buttons
+		document.querySelectorAll('.quick-btn[data-ai-query]').forEach(btn => {
+			btn.addEventListener('click', () => {
+				const query = btn.getAttribute('data-ai-query');
+				// Add loading indicator
+				const loadingDiv = document.createElement('div');
+				loadingDiv.className = 'loading';
+				loadingDiv.textContent = 'Analyzing with AI';
+				content.appendChild(loadingDiv);
+				content.scrollTop = content.scrollHeight;
+				// Remove welcome
+				const welcome = content.querySelector('.welcome');
+				if (welcome) welcome.remove();
+
+				vscode.postMessage({ type: 'aiQuery', query });
 			});
 		});
 
@@ -466,12 +566,16 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 
 		async function addResultOutput(message) {
 			const div = document.createElement('div');
-			div.className = 'output-item';
+			div.className = message.isAiResponse ? 'output-item ai-response' : 'output-item';
 
 			let html = '';
 
 			if (message.title) {
-				html += '<div class="output-title">' + escapeHtml(message.title) + '</div>';
+				html += '<div class="output-title">' + escapeHtml(message.title);
+				if (message.isAiResponse) {
+					html += '<span class="ai-indicator">✨ AI</span>';
+				}
+				html += '</div>';
 			}
 
 			if (message.markdown) {

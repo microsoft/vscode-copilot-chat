@@ -17,6 +17,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
+import { DEBUG_ALLOWED_TOOLS } from '../../debug/common/debugConstants';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { DebugSubagentPrompt } from '../../prompts/node/agent/debugSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -85,34 +86,15 @@ export class DebugSubagentToolCallingLoop extends ToolCallingLoop<IDebugSubagent
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
 		const endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
 
-		// Only include debug tools, read, and search tools
-		const allowedDebugTools = new Set<string>([
-			// Debug tools
-			ToolName.DebugGetTrajectories,
-			ToolName.DebugGetTrajectory,
-			ToolName.DebugGetHierarchy,
-			ToolName.DebugGetFailures,
-			ToolName.DebugGetToolCalls,
-			ToolName.DebugLoadTrajectoryFile,
-			ToolName.DebugGetCurrentSession,
-			ToolName.DebugGetSessionHistory,
-			ToolName.DebugAnalyzeLatestRequest,
-			// Basic tools for context
-			ToolName.ReadFile,
-			ToolName.FindTextInFiles,
-			// External tools for visualization
-			'vscode.mermaid-chat-features/renderMermaidDiagram',
-		]);
-
 		// Use the filter parameter to force-enable debug tools that aren't in the request's tool picker
 		const allTools = this.toolsService.getEnabledTools(this.options.request, endpoint, (tool) => {
-			if (allowedDebugTools.has(tool.name as ToolName)) {
+			if (DEBUG_ALLOWED_TOOLS.has(tool.name as ToolName)) {
 				return true; // Force-enable debug tools
 			}
 			return undefined; // Let default logic handle other tools
 		});
 
-		return allTools.filter(tool => allowedDebugTools.has(tool.name as ToolName));
+		return allTools.filter(tool => DEBUG_ALLOWED_TOOLS.has(tool.name as ToolName));
 	}
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {

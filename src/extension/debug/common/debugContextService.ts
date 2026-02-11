@@ -11,6 +11,20 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 export const IDebugContextService = createServiceIdentifier<IDebugContextService>('IDebugContextService');
 
 /**
+ * Event data for debug subagent responses
+ */
+export interface IDebugSubagentResponse {
+	/** The original query that was sent */
+	readonly query: string;
+	/** The response from the debug subagent */
+	readonly response: string;
+	/** Whether the query was successful */
+	readonly success: boolean;
+	/** Timestamp of the response */
+	readonly timestamp: Date;
+}
+
+/**
  * Represents a node in the trajectory hierarchy
  */
 export interface ITrajectoryNode {
@@ -153,6 +167,17 @@ export interface IDebugContextService {
 	 * Check if any trajectories are loaded
 	 */
 	hasTrajectories(): boolean;
+
+	/**
+	 * Event fired when a debug subagent completes its response
+	 */
+	readonly onDebugSubagentResponse: Event<IDebugSubagentResponse>;
+
+	/**
+	 * Fire an event when a debug subagent completes its response
+	 * @param response The response data
+	 */
+	fireDebugSubagentResponse(response: IDebugSubagentResponse): void;
 }
 
 export class DebugContextService extends Disposable implements IDebugContextService {
@@ -161,6 +186,13 @@ export class DebugContextService extends Disposable implements IDebugContextServ
 	private readonly _trajectories = new Map<string, IAgentTrajectory>();
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
+
+	private readonly _onDebugSubagentResponse = this._register(new Emitter<IDebugSubagentResponse>());
+	readonly onDebugSubagentResponse = this._onDebugSubagentResponse.event;
+
+	fireDebugSubagentResponse(response: IDebugSubagentResponse): void {
+		this._onDebugSubagentResponse.fire(response);
+	}
 
 	loadTrajectories(trajectories: Map<string, IAgentTrajectory>): void {
 		this._trajectories.clear();

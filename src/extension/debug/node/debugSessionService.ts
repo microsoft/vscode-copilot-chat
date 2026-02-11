@@ -135,6 +135,15 @@ export function buildSessionFromRequestLogger(
 
 	let turnIndex = 0;
 	for (const [token, entries] of turnMap) {
+		// Skip entries without a token that don't have any tool calls
+		// These are usually initialization/setup requests that aren't part of a real user turn
+		if (!token) {
+			const hasToolCalls = entries.some(e => e.kind === LoggedInfoKind.ToolCall);
+			if (!hasToolCalls) {
+				continue;
+			}
+		}
+
 		const turnId = token?.label || `turn-${turnIndex}`;
 		const turnToolCalls: DebugToolCall[] = [];
 		const turnRequests: DebugRequest[] = [];

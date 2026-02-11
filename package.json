@@ -3798,6 +3798,22 @@
 							"experimental"
 						]
 					},
+					"github.copilot.debug.aiQueryOutputDestination": {
+						"type": "string",
+						"enum": [
+							"chat",
+							"both"
+						],
+						"enumDescriptions": [
+							"AI queries from the debug panel are sent to the chat panel only",
+							"AI queries are sent to chat and results are also shown in the debug panel"
+						],
+						"default": "chat",
+						"markdownDescription": "Where to show results from AI-powered debug queries. 'chat' shows results only in the chat panel, 'both' shows results in both the chat panel and the debug panel.",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,

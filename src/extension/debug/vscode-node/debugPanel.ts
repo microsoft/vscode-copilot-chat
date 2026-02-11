@@ -9,6 +9,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { IAgentTrajectory } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { ChatReplayExport } from '../../replay/common/chatReplayTypes';
+import { IDebugContextService } from '../common/debugContextService';
 import { DebugQueryType, DebugSession } from '../common/debugTypes';
 import { executeQuery, parseQuery } from '../node/debugQueryHandler';
 import {
@@ -17,14 +18,16 @@ import {
 	buildSessionFromTrajectory,
 	buildSessionFromTranscript
 } from '../node/debugSessionService';
+import { DirectDebugInvoker } from './directDebugInvoker';
 import { getDebugPanelHtml } from './panelHtml';
 
 /**
  * Messages sent from webview to extension
  */
 interface WebviewToExtensionMessage {
-	type: 'query' | 'load' | 'ready';
+	type: 'query' | 'load' | 'ready' | 'aiQuery';
 	command?: string;
+	query?: string;
 }
 
 /**
@@ -38,6 +41,8 @@ interface ExtensionToWebviewMessage {
 	error?: string;
 	sessionSource?: string;
 	sessionFile?: string;
+	/** True if this is an AI-generated response */
+	isAiResponse?: boolean;
 }
 
 /**
@@ -48,17 +53,33 @@ export class DebugPanelManager extends Disposable {
 	private _session: DebugSession | undefined;
 	private _loadedFromFile = false;
 	private readonly _disposables = this._register(new DisposableStore());
+	private readonly _directInvoker: DirectDebugInvoker;
 
 	constructor(
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
-		@IRequestLogger private readonly _requestLogger: IRequestLogger
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IDebugContextService private readonly _debugContextService: IDebugContextService
 	) {
 		super();
 
+		this._directInvoker = new DirectDebugInvoker(this._debugContextService);
+
 		// Subscribe to request logger changes for live updates
-		this._disposables.add(_requestLogger.onDidChangeRequests(() => {
+		this._disposables.add(this._requestLogger.onDidChangeRequests(() => {
 			if (!this._loadedFromFile && this._panel?.visible) {
 				this._refreshLiveSession();
+			}
+		}));
+
+		// Subscribe to debug subagent responses to show in panel
+		this._disposables.add(this._debugContextService.onDebugSubagentResponse((response) => {
+			if (this._panel?.visible) {
+				this._sendToWebview({
+					type: 'result',
+					title: response.success ? 'AI Analysis' : 'AI Analysis (Failed)',
+					markdown: response.response,
+					isAiResponse: true
+				});
 			}
 		}));
 	}
@@ -118,6 +139,12 @@ export class DebugPanelManager extends Disposable {
 				}
 				break;
 
+			case 'aiQuery':
+				if (message.query) {
+					await this._executeAiQuery(message.query);
+				}
+				break;
+
 			case 'load':
 				await this._loadFile();
 				break;
@@ -157,6 +184,30 @@ export class DebugPanelManager extends Disposable {
 			mermaid: result.mermaid,
 			error: result.error
 		});
+	}
+
+	/**
+	 * Execute an AI-powered query directly without showing in chat UI
+	 */
+	private async _executeAiQuery(query: string): Promise<void> {
+		// Notify webview that query is being processed
+		this._sendToWebview({
+			type: 'result',
+			title: 'Processing',
+			markdown: `**Query:** ${query}\n\n*Analyzing with AI... Please wait.*`
+		});
+
+		try {
+			// Execute directly without going through chat
+			await this._directInvoker.executeQuery(query);
+			// Response will arrive via the onDebugSubagentResponse event subscription
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this._sendToWebview({
+				type: 'error',
+				error: `Failed to execute AI query: ${errorMsg}`
+			});
+		}
 	}
 
 	/**
