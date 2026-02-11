@@ -9,7 +9,9 @@ import { ICopilotTokenManager } from '../../../platform/authentication/common/co
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { createStaticGitHubTokenProvider, getOrCreateTestingCopilotTokenManager } from '../../../platform/authentication/node/copilotTokenManager';
 import { AuthenticationService } from '../../../platform/authentication/vscode-node/authenticationService';
-import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+// Azure-only fork: replaced VSCodeCopilotTokenManager with AzureCopilotTokenManager
+// import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+import { AzureCopilotTokenManager } from '../../../platform/azure/common/azureCopilotTokenManager';
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
@@ -57,8 +59,9 @@ import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/r
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
-import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
-import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
+// Azure-only fork: DocsSearchClient removed (depends on GitHub CAPI)
+// import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
+// import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/scopeSelectionImpl';
@@ -181,7 +184,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(ICopilotTokenManager, getOrCreateTestingCopilotTokenManager(env.devDeviceId));
 	} else {
 		setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey);
-		builder.define(ICopilotTokenManager, new SyncDescriptor(VSCodeCopilotTokenManager));
+		// Azure-only fork: service principal token instead of GitHub copilot token
+		builder.define(ICopilotTokenManager, new SyncDescriptor(AzureCopilotTokenManager));
 	}
 
 	if (isScenarioAutomation) {
@@ -206,7 +210,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	// Azure-only fork: local chunking + Azure OpenAI embeddings
 	builder.define(IChunkingEndpointClient, new SyncDescriptor(AzureChunkingEndpointClient));
 	builder.define(ICommandService, new SyncDescriptor(CommandServiceImpl));
-	builder.define(IDocsSearchClient, new SyncDescriptor(DocsSearchClient));
+	// Azure-only fork: DocsSearchClient removed (depends on GitHub CAPI)
+	// builder.define(IDocsSearchClient, new SyncDescriptor(DocsSearchClient));
 	builder.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
 	builder.define(ITestDepsResolver, new SyncDescriptor(TestDepsResolver));
 	builder.define(ISetupTestsDetector, new SyncDescriptor(SetupTestsDetector));

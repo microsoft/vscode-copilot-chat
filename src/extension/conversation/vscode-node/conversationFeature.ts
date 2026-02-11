@@ -37,7 +37,8 @@ import { NotebookCellLinkifier } from '../../linkify/vscode-node/notebookCellLin
 import { SymbolLinkifier } from '../../linkify/vscode-node/symbolLinkifier';
 import { IntentDetector } from '../../prompt/node/intentDetector';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
-import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
+// Azure-only fork: GitHub PR review removed
+// import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
 import { startFeedbackCollection } from './feedbackCollection';
 import { registerNewWorkspaceIntentCommand } from './newWorkspaceFollowup';
 import { generateTerminalFixes, setLastCommandMatchResult } from './terminalFixGenerator';
@@ -285,7 +286,8 @@ export class ConversationFeature implements IExtensionContribution {
 			this.instantiationService.invokeFunction(registerInlineChatCommands),
 			this.registerTerminalQuickFixProviders(),
 			registerNewWorkspaceIntentCommand(this.newWorkspacePreviewContentManager, this.logService, options),
-			registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
+			// Azure-only fork: GitHub PR review removed
+			// registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
 			registerSearchIntentCommand(),
 		].forEach(d => disposables.add(d));
 		return disposables;
@@ -378,6 +380,7 @@ function registerSearchIntentCommand(): IDisposable {
 	});
 }
 
-function registerGitHubPullRequestTitleAndDescriptionProvider(instantiationService: IInstantiationService): IDisposable {
-	return instantiationService.createInstance(GitHubPullRequestProviders);
-}
+// Azure-only fork: GitHub PR review removed
+// function registerGitHubPullRequestTitleAndDescriptionProvider(instantiationService: IInstantiationService): IDisposable {
+// 	return instantiationService.createInstance(GitHubPullRequestProviders);
+// }

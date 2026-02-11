@@ -42,7 +42,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 	}
 
 	private getEmbeddingsDeployment(): string {
-		return this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.embeddingsDeployment') || 'text-embedding-3-small';
+		return this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.embeddingsDeployment') || 'text-embedding-3-large';
 	}
 
 	private getApiVersion(): string {
@@ -105,8 +105,8 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 					},
 					json: {
 						input: batch,
-						model: 'text-embedding-3-small',
-						dimensions: 512,
+						model: 'text-embedding-3-large',
+						dimensions: 3072,
 					},
 				});
 
@@ -125,7 +125,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 				// Sort by index to ensure correct ordering
 				const sorted = [...jsonResponse.data].sort((a, b) => a.index - b.index);
 				embeddingsOut.push(...sorted.map(item => ({
-					type: EmbeddingType.text3small_512,
+					type: EmbeddingType.text3large_3072,
 					value: item.embedding,
 				})));
 
@@ -136,6 +136,6 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 			}
 		}
 
-		return { type: EmbeddingType.text3small_512, values: embeddingsOut };
+		return { type: EmbeddingType.text3large_3072, values: embeddingsOut };
 	}
 }

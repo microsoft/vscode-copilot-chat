@@ -6,7 +6,8 @@
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
-import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
+// Azure-only fork: quota management removed (GitHub-specific)
+// import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import { ChatSessionContextContribution } from '../../chatSessionContext/vscode-node/chatSessionContextProvider';
 import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
 import * as chatBlockLanguageContribution from '../../codeBlocks/vscode-node/chatBlockLanguageFeatures.contribution';
@@ -25,7 +26,8 @@ import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmPr
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
 import { ScmContextProviderContribution } from '../../git/vscode/scmContextprovider';
-import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
+// Azure-only fork: GitHub MCP removed
+// import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
@@ -86,7 +88,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(InlineCompletionContribution),
 	asContributionFactory(NesRenameContribution),
 	asContributionFactory(SearchPanelCommands),
-	asContributionFactory(ChatQuotaContribution),
+	// Azure-only fork: removed ChatQuotaContribution (GitHub-specific)
+	// asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
 	asContributionFactory(ScmContextProviderContribution),
@@ -96,7 +99,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
-	asContributionFactory(GitHubMcpContrib)
+	// Azure-only fork: removed GitHubMcpContrib
+	// asContributionFactory(GitHubMcpContrib)
 ];
 
 /**

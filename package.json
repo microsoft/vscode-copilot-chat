@@ -2920,8 +2920,8 @@
 					},
 					"yourcompany.ai.embeddingsDeployment": {
 						"type": "string",
-						"default": "text-embedding-3-small",
-						"description": "Azure OpenAI deployment name for embeddings (text-embedding-3-small)"
+						"default": "text-embedding-3-large",
+						"description": "Azure OpenAI deployment name for embeddings (text-embedding-3-large)"
 					},
 					"yourcompany.ai.embeddingsApiVersion": {
 						"type": "string",

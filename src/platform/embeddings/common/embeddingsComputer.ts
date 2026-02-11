@@ -14,6 +14,7 @@ import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelatio
  */
 export class EmbeddingType {
 	public static readonly text3small_512 = new EmbeddingType('text-embedding-3-small-512');
+	public static readonly text3large_3072 = new EmbeddingType('text-embedding-3-large-3072');
 	public static readonly metis_1024_I16_Binary = new EmbeddingType('metis-1024-I16-Binary');
 
 	constructor(
@@ -33,6 +34,7 @@ export class EmbeddingType {
 // These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
 export const enum LEGACY_EMBEDDING_MODEL_ID {
 	TEXT3SMALL = 'text-embedding-3-small',
+	TEXT3LARGE = 'text-embedding-3-large',
 	Metis_I16_Binary = 'metis-I16-Binary'
 }
 
@@ -51,6 +53,14 @@ const wellKnownEmbeddingMetadata = Object.freeze<Record<string, EmbeddingTypeInf
 	[EmbeddingType.text3small_512.id]: {
 		model: LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL,
 		dimensions: 512,
+		quantization: {
+			query: 'float32',
+			document: 'float32'
+		},
+	},
+	[EmbeddingType.text3large_3072.id]: {
+		model: LEGACY_EMBEDDING_MODEL_ID.TEXT3LARGE,
+		dimensions: 3072,
 		quantization: {
 			query: 'float32',
 			document: 'float32'

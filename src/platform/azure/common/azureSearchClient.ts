@@ -70,7 +70,7 @@ export class AzureSearchClient implements IAzureSearchClient {
 	declare readonly _serviceBrand: undefined;
 
 	private static readonly API_VERSION = '2024-07-01';
-	private static readonly VECTOR_DIMENSIONS = 512;
+	private static readonly VECTOR_DIMENSIONS = 3072;
 	private static readonly UPSERT_BATCH_SIZE = 100;
 
 	constructor(

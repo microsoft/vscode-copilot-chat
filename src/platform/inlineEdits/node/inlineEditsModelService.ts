@@ -48,24 +48,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	_serviceBrand: undefined;
 
-	private static readonly COPILOT_NES_XTAB_MODEL: Model = {
-		modelName: 'copilot-nes-xtab',
-		promptingStrategy: PromptingStrategy.CopilotNesXtab,
-		includeTagsInCurrentFile: true,
-		source: ModelSource.HardCodedDefault,
-		lintOptions: undefined,
-	};
-
 	private static readonly COPILOT_NES_OCT: Model = {
 		modelName: 'copilot-nes-oct',
-		promptingStrategy: PromptingStrategy.Xtab275,
-		includeTagsInCurrentFile: false,
-		source: ModelSource.HardCodedDefault,
-		lintOptions: undefined,
-	};
-
-	private static readonly COPILOT_NES_CALLISTO: Model = {
-		modelName: 'nes-callisto',
 		promptingStrategy: PromptingStrategy.Xtab275,
 		includeTagsInCurrentFile: false,
 		source: ModelSource.HardCodedDefault,
@@ -326,14 +310,8 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 		}
 
-		// otherwise, use built-in defaults
-		if (copilotToken?.isFcv1()) {
-			return InlineEditsModelService.COPILOT_NES_XTAB_MODEL;
-		} else if (copilotToken?.isFreeUser || copilotToken?.isNoAuthUser) {
-			return InlineEditsModelService.COPILOT_NES_CALLISTO;
-		} else {
-			return InlineEditsModelService.COPILOT_NES_OCT;
-		}
+		// Azure-only fork: always use copilot-nes-oct as default (no GitHub tier checks)
+		return InlineEditsModelService.COPILOT_NES_OCT;
 	}
 
 	private _pickModel({
