@@ -1692,6 +1692,23 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 
 		// Look up the partner agent and model for telemetry
 		const chatResource = context.chatSessionContext?.chatSessionItem?.resource;
+
+		const initialOptions = context.chatSessionContext?.initialSessionOptions;
+		if (chatResource && initialOptions) {
+			for (const opt of initialOptions) {
+				const value = typeof opt.value === 'string' ? opt.value : opt.value.id;
+				if (opt.optionId === CUSTOM_AGENTS_OPTION_GROUP_ID) {
+					this.sessionCustomAgentMap.set(chatResource, value);
+				} else if (opt.optionId === MODELS_OPTION_GROUP_ID) {
+					this.sessionModelMap.set(chatResource, value);
+				} else if (opt.optionId === PARTNER_AGENTS_OPTION_GROUP_ID) {
+					this.sessionPartnerAgentMap.set(chatResource, value);
+				} else if (opt.optionId === REPOSITORIES_OPTION_GROUP_ID) {
+					this.sessionRepositoryMap.set(chatResource, value);
+				}
+			}
+		}
+
 		const partnerAgentId = chatResource ? this.sessionPartnerAgentMap.get(chatResource) : undefined;
 		const partnerAgent = HARDCODED_PARTNER_AGENTS.find(agent => agent.id === partnerAgentId);
 		const modelId = chatResource ? this.sessionModelMap.get(chatResource) : undefined;

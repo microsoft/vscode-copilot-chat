@@ -650,6 +650,25 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				hasDelegatePrompt: String(request.prompt.startsWith('/delegate'))
 			});
 
+			const initialOptions = chatSessionContext?.initialSessionOptions;
+			if (initialOptions) {
+				if (initialOptions && initialOptions.length > 0) {
+					const sessionResource = chatSessionContext.chatSessionItem.resource;
+					const sessionId = SessionIdForCLI.parse(sessionResource);
+					for (const opt of initialOptions) {
+						const value = typeof opt.value === 'string' ? opt.value : opt.value.id;
+						if (opt.optionId === MODELS_OPTION_ID && value) {
+							_sessionModel.set(sessionId, value);
+						} else if (opt.optionId === AGENTS_OPTION_ID) {
+							void this.copilotCLIAgents.setDefaultAgent(value);
+							void this.copilotCLIAgents.trackSessionAgent(sessionId, value);
+						} else if (opt.optionId === REPOSITORY_OPTION_ID && value && isUntitledSessionId(sessionId)) {
+							this.folderRepositoryManager.setUntitledSessionFolder(sessionId, vscode.Uri.file(value));
+						}
+					}
+				}
+			}
+
 			await this.lockRepoOptionForSession(context, token);
 
 			const confirmationResults = this.getAcceptedRejectedConfirmationData(request);
@@ -670,6 +689,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const { resource } = chatSessionContext.chatSessionItem;
 			const id = SessionIdForCLI.parse(resource);
 			const isUntitled = chatSessionContext.isUntitled;
+
 			const uncommittedChangesAction = confirmationResults.length > 0 ? this.getConfirmationResult(request) : undefined;
 			const uncommittedChangesData = this.getUncommittedChangesConfirmationData(confirmationResults);
 			const additionalReferences = uncommittedChangesData?.metadata?.references;
