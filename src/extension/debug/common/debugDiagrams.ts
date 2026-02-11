@@ -14,6 +14,9 @@ const MAX_NODES_BEFORE_SIMPLIFICATION = 50;
  * Escape special characters for Mermaid labels
  */
 function escapeLabel(text: string): string {
+	if (!text) {
+		return '';
+	}
 	return text
 		.replace(/"/g, '\'')     // Quotes
 		.replace(/\[/g, '(')     // Square brackets
@@ -25,10 +28,35 @@ function escapeLabel(text: string): string {
 		.replace(/\|/g, '/')     // Pipes are used for node shapes
 		.replace(/:/g, '-')      // Colons can break Mermaid syntax
 		.replace(/#/g, '')       // Hash can be interpreted as IDs
-		.replace(/&(?!lt;|gt;|amp;|quot;)/g, '&amp;')  // Ampersand (but not entities)
+		.replace(/;/g, ',')      // Semicolons can break syntax
+		.replace(/`/g, '\'')     // Backticks
+		.replace(/\$/g, '')      // Dollar signs
+		.replace(/&(?!lt;|gt;|amp;|quot;)/g, 'and')  // Ampersand (but not entities)
 		.replace(/\n/g, ' ')     // Newlines
 		.replace(/\r/g, '')      // Carriage returns
+		.replace(/\\/g, '/')     // Backslashes (common in Windows paths)
 		.substring(0, 50);
+}
+
+/**
+ * Escape tool names for Mermaid - more permissive than labels but still safe
+ */
+function escapeToolName(name: string): string {
+	if (!name) {
+		return 'unknown';
+	}
+	return name
+		.replace(/\[/g, '(')     // Square brackets break node syntax
+		.replace(/\]/g, ')')
+		.replace(/"/g, '\'')
+		.replace(/</g, '')
+		.replace(/>/g, '')
+		.replace(/\{/g, '(')
+		.replace(/\}/g, ')')
+		.replace(/\|/g, '/')
+		.replace(/;/g, '')
+		.replace(/\n/g, ' ')
+		.replace(/\r/g, '');
 }
 
 /**
@@ -120,10 +148,11 @@ export function generateControlFlowDiagram(session: DebugSession, detailed: bool
 				nodeIndex++;
 				const toolNodeId = nodeId('T', nodeIndex);
 				const hasError = group.tools.some(t => t.status === DebugItemStatus.Failure);
+				const escapedName = escapeToolName(group.name);
 				const label = group.count > 1
-					? `${group.count}× ${group.name}`
-					: group.name;
-				lines.push(`    ${toolNodeId}[${label}]${hasError ? ':::error' : ''}`);
+					? `${group.count}x ${escapedName}`
+					: escapedName;
+				lines.push(`    ${toolNodeId}["${label}"]${hasError ? ':::error' : ''}`);
 				lines.push(`    ${lastNodeId} --> ${toolNodeId}`);
 
 				// Check for sub-agents
@@ -133,7 +162,8 @@ export function generateControlFlowDiagram(session: DebugSession, detailed: bool
 						const subAgent = findSubAgent(session.subAgents, subTool.subAgentSessionId!);
 						if (subAgent) {
 							const subNodeId = nodeId('S', nodeIndex);
-							lines.push(`    ${subNodeId}([SubAgent: ${subAgent.name}]):::subagent`);
+							const subAgentName = escapeToolName(subAgent.name);
+							lines.push(`    ${subNodeId}(["SubAgent - ${subAgentName}"]):::subagent`);
 							lines.push(`    ${toolNodeId} -.-> ${subNodeId}`);
 							lines.push(`    ${subNodeId} -.-> ${toolNodeId}`);
 						}
@@ -148,7 +178,8 @@ export function generateControlFlowDiagram(session: DebugSession, detailed: bool
 				nodeIndex++;
 				const toolNodeId = nodeId('T', nodeIndex);
 				const statusCls = statusClass(tool.status);
-				lines.push(`    ${toolNodeId}[${tool.name}]${statusCls}`);
+				const escapedName = escapeToolName(tool.name);
+				lines.push(`    ${toolNodeId}["${escapedName}"]${statusCls}`);
 				lines.push(`    ${lastNodeId} --> ${toolNodeId}`);
 
 				// Sub-agent branching
@@ -156,7 +187,8 @@ export function generateControlFlowDiagram(session: DebugSession, detailed: bool
 					const subAgent = findSubAgent(session.subAgents, tool.subAgentSessionId);
 					if (subAgent) {
 						const subNodeId = nodeId('S', nodeIndex);
-						lines.push(`    ${subNodeId}([SubAgent: ${subAgent.name}<br/>${subAgent.toolCalls.length} tools]):::subagent`);
+						const subAgentName = escapeToolName(subAgent.name);
+						lines.push(`    ${subNodeId}(["SubAgent - ${subAgentName} - ${subAgent.toolCalls.length} tools"]):::subagent`);
 						lines.push(`    ${toolNodeId} -.-> ${subNodeId}`);
 						lines.push(`    ${subNodeId} -.-> ${toolNodeId}`);
 					}
@@ -230,24 +262,24 @@ export function generateDataFlowDiagram(session: DebugSession): string {
 
 	// Generate nodes for file reads
 	if (fileReads.size > 0) {
-		lines.push('    subgraph Reads["📖 Files Read"]');
+		lines.push('    subgraph Reads["Files Read"]');
 		for (const file of fileReads) {
 			nodeIndex++;
 			const fileName = file.split(/[/\\]/).pop() || file;
-			lines.push(`        R${nodeIndex}[${escapeLabel(fileName)}]:::file`);
+			lines.push(`        R${nodeIndex}["${escapeLabel(fileName)}"]:::file`);
 		}
 		lines.push('    end');
 	}
 
 	// Generate nodes for searches
 	if (searches.length > 0) {
-		lines.push('    subgraph Searches["🔍 Searches"]');
+		lines.push('    subgraph Searches["Searches"]');
 		for (let i = 0; i < Math.min(searches.length, 10); i++) {
 			nodeIndex++;
-			lines.push(`        S${nodeIndex}[${escapeLabel(searches[i])}]:::search`);
+			lines.push(`        S${nodeIndex}["${escapeLabel(searches[i])}"]:::search`);
 		}
 		if (searches.length > 10) {
-			lines.push(`        Smore[+${searches.length - 10} more]:::search`);
+			lines.push(`        Smore["+${searches.length - 10} more"]:::search`);
 		}
 		lines.push('    end');
 	}
@@ -265,11 +297,11 @@ export function generateDataFlowDiagram(session: DebugSession): string {
 
 	// Generate nodes for file edits
 	if (fileEdits.size > 0) {
-		lines.push('    subgraph Edits["✏️ Files Modified"]');
+		lines.push('    subgraph Edits["Files Modified"]');
 		for (const file of fileEdits) {
 			nodeIndex++;
 			const fileName = file.split(/[/\\]/).pop() || file;
-			lines.push(`        E${nodeIndex}[${escapeLabel(fileName)}]:::edit`);
+			lines.push(`        E${nodeIndex}["${escapeLabel(fileName)}"]:::edit`);
 		}
 		lines.push('    end');
 		lines.push('    Agent --> Edits');
@@ -277,13 +309,13 @@ export function generateDataFlowDiagram(session: DebugSession): string {
 
 	// Generate nodes for terminals
 	if (terminals.length > 0) {
-		lines.push('    subgraph Terminal["⚡ Commands"]');
+		lines.push('    subgraph Terminal["Commands"]');
 		for (let i = 0; i < Math.min(terminals.length, 5); i++) {
 			nodeIndex++;
-			lines.push(`        C${nodeIndex}[${escapeLabel(terminals[i])}]:::terminal`);
+			lines.push(`        C${nodeIndex}["${escapeLabel(terminals[i])}"]:::terminal`);
 		}
 		if (terminals.length > 5) {
-			lines.push(`        Cmore[+${terminals.length - 5} more]:::terminal`);
+			lines.push(`        Cmore["+${terminals.length - 5} more"]:::terminal`);
 		}
 		lines.push('    end');
 		lines.push('    Agent --> Terminal');
@@ -309,21 +341,22 @@ export function generateSubAgentTreeDiagram(session: DebugSession): string {
 
 	// Render sub-agents recursively
 	function renderSubAgent(subAgent: DebugSubAgent, parentId: string, index: number): void {
-		const nodeId = `S${index}_${subAgent.name.replace(/\W/g, '')}`;
+		const safeNodeId = `S${index}_${subAgent.name.replace(/\W/g, '')}`;
 		const toolCount = subAgent.toolCalls.length;
 		const childCount = subAgent.children.length;
+		const escapedName = escapeToolName(subAgent.name);
 
-		let label = `${subAgent.name}<br/>${toolCount} tools`;
+		let label = `${escapedName} - ${toolCount} tools`;
 		if (childCount > 0) {
-			label += `<br/>${childCount} nested`;
+			label += ` - ${childCount} nested`;
 		}
 
-		lines.push(`    ${nodeId}([${label}]):::subagent`);
-		lines.push(`    ${parentId} --> ${nodeId}`);
+		lines.push(`    ${safeNodeId}(["${label}"]):::subagent`);
+		lines.push(`    ${parentId} --> ${safeNodeId}`);
 
 		// Render children
 		subAgent.children.forEach((child, childIdx) => {
-			renderSubAgent(child, nodeId, index * 100 + childIdx);
+			renderSubAgent(child, safeNodeId, index * 100 + childIdx);
 		});
 	}
 
@@ -368,13 +401,15 @@ export function generateSequenceDiagram(session: DebugSession, detailed: boolean
 				break;
 			}
 
-			const statusIndicator = tool.status === DebugItemStatus.Failure ? ' ❌' : '';
-			lines.push(`    A->>T: ${tool.name}${statusIndicator}`);
+			const statusIndicator = tool.status === DebugItemStatus.Failure ? ' X' : '';
+			const escapedName = escapeToolName(tool.name);
+			lines.push(`    A->>T: ${escapedName}${statusIndicator}`);
 
 			if (tool.subAgentSessionId) {
 				const subAgent = findSubAgent(session.subAgents, tool.subAgentSessionId);
 				if (subAgent) {
-					lines.push(`    T->>S: invoke ${subAgent.name}`);
+					const subAgentName = escapeToolName(subAgent.name);
+					lines.push(`    T->>S: invoke ${subAgentName}`);
 					lines.push(`    S-->>T: ${subAgent.toolCalls.length} tools executed`);
 				}
 			}
@@ -385,7 +420,7 @@ export function generateSequenceDiagram(session: DebugSession, detailed: boolean
 
 		// Agent response
 		if (turn.response) {
-			const statusIndicator = turn.status === DebugItemStatus.Failure ? ' ❌' : '';
+			const statusIndicator = turn.status === DebugItemStatus.Failure ? ' X' : '';
 			const responsePreview = escapeLabel(turn.response.substring(0, 25));
 			lines.push(`    A->>U: ${responsePreview}...${statusIndicator}`);
 		}
@@ -442,7 +477,8 @@ export function generateTimelineDiagram(session: DebugSession): string {
 			const toolRelStart = turnRelStart + toolIdx;
 			const duration = Math.max(1, Math.floor((tool.durationMs || 1000) / 1000));
 			const status = tool.status === DebugItemStatus.Failure ? 'crit, ' : '';
-			lines.push(`    ${status}${tool.name} :${toolRelStart}, ${duration}s`);
+			const escapedName = escapeToolName(tool.name).substring(0, 30);
+			lines.push(`    ${status}${escapedName} :${toolRelStart}, ${duration}s`);
 			toolIdx++;
 		}
 

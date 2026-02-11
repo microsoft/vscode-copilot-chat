@@ -308,7 +308,10 @@ export class DebugPanelManager extends Disposable {
 			return;
 		}
 
-		this._session = buildSessionFromRequestLogger(this._requestLogger);
+		// Exclude debug subagent's own calls from the session data
+		this._session = buildSessionFromRequestLogger(this._requestLogger, 'live', {
+			excludeDebugSubagent: true
+		});
 	}
 
 	/**
