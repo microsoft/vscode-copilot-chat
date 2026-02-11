@@ -19,6 +19,7 @@ export function registerCloseDiffTool(server: McpServer, logger: ILogger, diffSt
 			description: 'Closes a diff tab by its tab name. Use this when the client rejects an edit to close the corresponding diff view.',
 			inputSchema: schema,
 		},
+		// @ts-ignore - TS2589: zod type instantiation too deep for server.tool() generics
 		async (args: { tab_name: string }) => {
 			const { tab_name } = args;
 			logger.debug(`Closing diff: ${tab_name}`);
