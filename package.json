@@ -1429,6 +1429,107 @@
 					},
 					"required": ["filePath"]
 				}
+			},
+			{
+				"name": "copilot_debugGetCurrentSession",
+				"displayName": "Get Current Session",
+				"icon": "$(debug-console)",
+				"toolReferenceName": "debugCurrentSession",
+				"userDescription": "Get the current live session data",
+				"modelDescription": "Get the current live session data from IRequestLogger. This provides access to all chat requests, tool calls, and timing information for the active session. Use format parameter: 'summary' for overview, 'detailed' for full turn info, or 'metrics' for statistics.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"format": {
+							"type": "string",
+							"enum": ["summary", "detailed", "metrics"],
+							"description": "Output format: 'summary' for overview, 'detailed' for full info, 'metrics' for statistics"
+						},
+						"includeToolCalls": {
+							"type": "boolean",
+							"description": "Include tool call details (default: true)"
+						},
+						"includeRequests": {
+							"type": "boolean",
+							"description": "Include LLM request details (default: false)"
+						},
+						"maxTurns": {
+							"type": "number",
+							"description": "Maximum number of turns to return (default: 20)"
+						}
+					}
+				}
+			},
+			{
+				"name": "copilot_debugGetSessionHistory",
+				"displayName": "Get Session History",
+				"icon": "$(history)",
+				"toolReferenceName": "debugSessionHistory",
+				"userDescription": "Get the conversation history",
+				"modelDescription": "Get the conversation history from the current session with user messages and assistant responses. Use to understand the flow of conversation and what the user asked. Use format parameter: 'conversation' for full history, 'timeline' for chronological view with Mermaid diagram, or 'compact' for table view.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"lastN": {
+							"type": "number",
+							"description": "Number of most recent turns to retrieve (default: 10)"
+						},
+						"includeToolCalls": {
+							"type": "boolean",
+							"description": "Include tool call summaries (default: true)"
+						},
+						"includeTokenUsage": {
+							"type": "boolean",
+							"description": "Include token usage statistics (default: false)"
+						},
+						"includeTiming": {
+							"type": "boolean",
+							"description": "Include timing information (default: true)"
+						},
+						"failedOnly": {
+							"type": "boolean",
+							"description": "Only show failed turns (default: false)"
+						},
+						"format": {
+							"type": "string",
+							"enum": ["conversation", "timeline", "compact"],
+							"description": "Output format: 'conversation', 'timeline', or 'compact'"
+						}
+					}
+				}
+			},
+			{
+				"name": "copilot_debugAnalyzeLatestRequest",
+				"displayName": "Analyze Request",
+				"icon": "$(search-fuzzy)",
+				"toolReferenceName": "debugAnalyzeRequest",
+				"userDescription": "Analyze a specific turn in detail",
+				"modelDescription": "Analyze a specific turn from the session in detail. Provides comprehensive analysis including prompt, tool calls with full arguments and results, LLM requests, errors, and diagnostic suggestions. Use focus parameter to concentrate on specific aspects: 'all' for complete analysis, 'errors' for error analysis, 'tools' for tool execution flow, or 'performance' for timing and token analysis.",
+				"when": "config.github.copilot.debug.enableDebugAgent",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"turn": {
+							"type": ["string", "number"],
+							"description": "Which turn to analyze: 'last' (default) or a specific turn number"
+						},
+						"includeFullToolDetails": {
+							"type": "boolean",
+							"description": "Include full tool call arguments and results (default: true)"
+						},
+						"includeLLMDetails": {
+							"type": "boolean",
+							"description": "Include LLM request/response details (default: false)"
+						},
+						"focus": {
+							"type": "string",
+							"enum": ["all", "errors", "tools", "performance"],
+							"description": "Focus area: 'all' for complete analysis, 'errors' for error analysis, 'tools' for tool flow, 'performance' for timing"
+						}
+					}
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -3423,7 +3524,7 @@
 					},
 					"github.copilot.debug.enableDebugAgent": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "Enable the debug agent tools for analyzing agent trajectories and orchestration failures. When enabled, provides tools for inspecting sub-agent hierarchies, tool calls, and failures.",
 						"tags": [
 							"experimental"

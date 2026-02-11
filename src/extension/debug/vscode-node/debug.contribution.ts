@@ -9,8 +9,11 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { DebugPanelManager } from './debugPanel';
 
 // Import debug tools to ensure they are registered
+import '../tools/vscode-node/analyzeLatestRequestTool';
+import '../tools/vscode-node/getCurrentSessionTool';
 import '../tools/vscode-node/getFailuresTool';
 import '../tools/vscode-node/getHierarchyTool';
+import '../tools/vscode-node/getSessionHistoryTool';
 import '../tools/vscode-node/getToolCallsTool';
 import '../tools/vscode-node/getTrajectoriesListTool';
 import '../tools/vscode-node/getTrajectoryTool';
