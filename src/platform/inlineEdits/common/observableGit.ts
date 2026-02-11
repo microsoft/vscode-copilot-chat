@@ -27,23 +27,30 @@ export class ObservableGit extends Disposable {
 	}
 
 	async init() {
-		const gitApi = await waitForState(this._gitApi);
-		if (this._store.isDisposed) {
-			return;
+		try {
+			const gitApi = await waitForState(this._gitApi);
+			if (this._store.isDisposed) {
+				return;
+			}
+
+			const repos = observableFromEvent(this, (e) => gitApi.onDidOpenRepository(e), () => {
+				const r = gitApi.repositories;
+				return Array.isArray(r) ? r : [];
+			});
+
+			await waitForState(repos, (repos) => repos.length > 0, undefined);
+			if (this._store.isDisposed) {
+				return;
+			}
+
+			mapObservableArrayCached(this, repos, (repo, store) => {
+				const stateChangeObservable = observableFromEvent(listener => repo.state.onDidChange(listener), () => repo.state.HEAD?.name);
+				store.add(autorunWithStore((reader, _store) => {
+					this.branch.set(stateChangeObservable.read(reader), undefined);
+				}));
+			}, repo => repo.rootUri.toString()).recomputeInitiallyAndOnChange(this._store);
+		} catch {
+			// Git extension may not be available or may return unexpected data
 		}
-
-		const repos = observableFromEvent(this, (e) => gitApi.onDidOpenRepository(e), () => gitApi.repositories ?? []);
-
-		await waitForState(repos, (repos) => repos.length > 0, undefined);
-		if (this._store.isDisposed) {
-			return;
-		}
-
-		mapObservableArrayCached(this, repos, (repo, store) => {
-			const stateChangeObservable = observableFromEvent(listener => repo.state.onDidChange(listener), () => repo.state.HEAD?.name);
-			store.add(autorunWithStore((reader, _store) => {
-				this.branch.set(stateChangeObservable.read(reader), undefined);
-			}));
-		}, repo => repo.rootUri.toString()).recomputeInitiallyAndOnChange(this._store);
 	}
 }
