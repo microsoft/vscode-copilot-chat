@@ -265,7 +265,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 				defaultIntentId;
 
 			const onPause = Event.chain(onRequestPaused, $ => $.filter(e => e.request === request).map(e => e.isPaused));
-			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, onPause);
+			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, onPause, () => context.yieldRequested);
 			return await handler.getResult();
 		};
 	}

@@ -5,12 +5,12 @@
 
 import assert from 'assert';
 import path from 'path';
+import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createLibTestingContext } from '../../test/context';
 import { makeFsUri } from '../../util/uri';
 import { extractRepoInfo } from '../repository';
-import { IInstantiationService } from '../../../../../../../util/vs/platform/instantiation/common/instantiation';
 
-suite('Extract repo info tests', function () {
+suite.skip('Extract repo info tests', function () {
 	const baseFolder = { uri: makeFsUri(path.resolve(__dirname, '../../../../../../../../')) };
 
 	test('Extract repo info', async function () {

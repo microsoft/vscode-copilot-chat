@@ -9,8 +9,10 @@ import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatRe
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
+import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput } from '../../../platform/chat/common/chatHookService';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
@@ -37,6 +39,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
+import { formatHookErrorMessage, HookAbortError, isHookAbortError, processHookResults } from '../../intents/node/hookResultProcessor';
 import { PauseController } from '../../intents/node/pauseController';
 import { EmptyPromptError, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
@@ -88,6 +91,7 @@ export class DefaultIntentRequestHandler {
 		private readonly chatTelemetryBuilder: ChatTelemetryBuilder,
 		private readonly handlerOptions: IDefaultIntentRequestHandlerOptions = { maxToolCallIterations: 15 },
 		private readonly onPaused: Event<boolean>, // todo: use a PauseController instead
+		private readonly yieldRequested: (() => boolean) | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions private readonly options: IConversationOptions,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -97,6 +101,7 @@ export class DefaultIntentRequestHandler {
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IChatHookService private readonly _chatHookService: IChatHookService,
 	) {
 		// Initialize properties
 		this.turn = conversation.getLatestTurn();
@@ -157,6 +162,9 @@ export class DefaultIntentRequestHandler {
 			} else if (isCancellationError(err)) {
 				return CanceledResult;
 			} else if (err instanceof EmptyPromptError) {
+				return {};
+			} else if (isHookAbortError(err)) {
+				this._logService.info(`[DefaultIntentRequestHandler] Hook ${err.hookType} aborted: ${err.stopReason}`);
 				return {};
 			}
 
@@ -307,6 +315,7 @@ export class DefaultIntentRequestHandler {
 				overrideRequestLocation: this.handlerOptions.overrideRequestLocation,
 				interactionContext: this.documentContext?.document.uri,
 				responseProcessor: typeof intentInvocation.processResponse === 'function' ? intentInvocation as IResponseProcessor : undefined,
+				yieldRequested: this.yieldRequested,
 			},
 			this.chatTelemetryBuilder,
 		));
@@ -331,6 +340,36 @@ export class DefaultIntentRequestHandler {
 		const pauseCtrl = store.add(new PauseController(this.onPaused, this.token));
 
 		try {
+			// Execute start hooks first (SessionStart/SubagentStart), then UserPromptSubmit
+			await loop.runStartHooks(this.stream, pauseCtrl);
+
+			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
+			const additionalContexts: string[] = [];
+			processHookResults({
+				hookType: 'UserPromptSubmit',
+				results: userPromptSubmitResults,
+				outputStream: this.stream,
+				logService: this._logService,
+				onSuccess: (output) => {
+					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+					if (additionalContext) {
+						additionalContexts.push(additionalContext);
+					}
+					// Check for block decision output
+					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
+						const blockReason = typedOutput.reason || l10n.t('No reason provided');
+						this._logService.info(`[DefaultIntentRequestHandler] UserPromptSubmit hook block decision: ${blockReason}`);
+						this.stream.hookProgress('UserPromptSubmit', formatHookErrorMessage(blockReason));
+						throw new HookAbortError('UserPromptSubmit', blockReason);
+					}
+				},
+			});
+
+			if (additionalContexts.length > 0) {
+				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
+			}
+
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
@@ -530,8 +569,10 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
+		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength, toolTokenCount }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {

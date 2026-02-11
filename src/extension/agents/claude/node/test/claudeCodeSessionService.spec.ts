@@ -667,6 +667,114 @@ describe('ClaudeCodeSessionService', () => {
 		});
 	});
 
+	describe('cycle detection in parent chain', () => {
+		it('handles cyclic parent references without infinite loop', async () => {
+			// This test verifies the fix for a bug where cyclic parent references
+			// (e.g., A → B → A) would cause an infinite loop and 100% CPU usage.
+			// With the fix, the cycle is detected and the loop terminates.
+			const fileName = 'cyclic-session.jsonl';
+			const timestamp = new Date().toISOString();
+
+			// Create a cycle: uuid-a → uuid-b → uuid-a
+			const fileContents = [
+				JSON.stringify({
+					parentUuid: 'uuid-b', // Points to uuid-b, creating a cycle
+					sessionId: 'cyclic-session',
+					type: 'user',
+					message: { role: 'user', content: 'message A' },
+					uuid: 'uuid-a',
+					timestamp
+				}),
+				JSON.stringify({
+					parentUuid: 'uuid-a', // Points back to uuid-a
+					sessionId: 'cyclic-session',
+					type: 'assistant',
+					message: { role: 'assistant', content: [{ type: 'text', text: 'message B' }] },
+					uuid: 'uuid-b',
+					timestamp
+				})
+			].join('\n');
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+			// Without the cycle detection fix, this would hang forever.
+			// With the fix, it should complete quickly.
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			// Should return sessions without hanging - the cycle is broken
+			expect(sessions.length).toBeGreaterThanOrEqual(0);
+		});
+
+		it('handles self-referential parent without infinite loop', async () => {
+			// Edge case: a message that references itself as parent
+			// This message is not considered a leaf (it's referenced as a parent by itself),
+			// so no session is created, but importantly it doesn't cause an infinite loop.
+			const fileName = 'self-ref-session.jsonl';
+			const timestamp = new Date().toISOString();
+
+			const fileContents = JSON.stringify({
+				parentUuid: 'uuid-self', // References itself
+				sessionId: 'self-ref-session',
+				type: 'user',
+				message: { role: 'user', content: 'self-referential message' },
+				uuid: 'uuid-self',
+				timestamp
+			});
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+			// Should complete without infinite loop
+			// No sessions returned because the self-referential message is not a leaf node
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			expect(sessions).toHaveLength(0);
+		});
+
+		it('handles longer cycles correctly', async () => {
+			// Test a longer cycle: A → B → C → A
+			const fileName = 'long-cycle-session.jsonl';
+			const timestamp = new Date().toISOString();
+
+			const fileContents = [
+				JSON.stringify({
+					parentUuid: 'uuid-c', // Points to C, completing the cycle
+					sessionId: 'long-cycle-session',
+					type: 'user',
+					message: { role: 'user', content: 'message A' },
+					uuid: 'uuid-a',
+					timestamp
+				}),
+				JSON.stringify({
+					parentUuid: 'uuid-a',
+					sessionId: 'long-cycle-session',
+					type: 'assistant',
+					message: { role: 'assistant', content: [{ type: 'text', text: 'message B' }] },
+					uuid: 'uuid-b',
+					timestamp
+				}),
+				JSON.stringify({
+					parentUuid: 'uuid-b',
+					sessionId: 'long-cycle-session',
+					type: 'user',
+					message: { role: 'user', content: 'message C' },
+					uuid: 'uuid-c',
+					timestamp
+				})
+			].join('\n');
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+			// Should complete without infinite loop
+			const sessions = await service.getAllSessions(CancellationToken.None);
+
+			// Should return sessions - exact behavior depends on which node is treated as leaf
+			expect(sessions.length).toBeGreaterThanOrEqual(0);
+		});
+	});
+
 	describe('directory read error handling', () => {
 		function createErrorWithCode(code: string): Error {
 			const error = new Error(`Directory error: ${code}`);

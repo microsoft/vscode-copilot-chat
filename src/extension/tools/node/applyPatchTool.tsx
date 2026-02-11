@@ -46,7 +46,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { formatUriForFileWidget } from '../common/toolUtils';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_added, identify_files_affected, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { canExistingFileBeEdited, createEditConfirmation, formatDiffAsUnified, logEditToolResult, openDocumentAndSnapshot } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
@@ -644,13 +644,14 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
-		const uris = [...identify_files_needed(options.input.input), ...identify_files_added(options.input.input)].map(f => URI.file(f));
+		const uris = [...identify_files_affected(options.input.input)].map(f => URI.file(f));
 
 		return this.instantiationService.invokeFunction(
 			createEditConfirmation,
 			uris,
 			this._promptContext?.allowedEditUris,
-			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token)
+			(urisNeedingConfirmation) => this.generatePatchConfirmationDetails(options, urisNeedingConfirmation, token),
+			options.forceConfirmationReason
 		);
 	}
 
@@ -687,16 +688,27 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		const diffResults = await Promise.all(
 			Object.entries(commit.changes).map(async ([file, changes]) => {
 				const uri = resolveToolInputPath(file, promptPathRepresentationService);
-				if (!urisNeedingConfirmationSet.has(uri)) {
+				const moveTo = changes.movePath ? resolveToolInputPath(changes.movePath, promptPathRepresentationService) : undefined;
+				if (!urisNeedingConfirmationSet.has(uri) && !(moveTo && urisNeedingConfirmationSet.has(moveTo))) {
 					return;
 				}
 
-				return await instantiationService.invokeFunction(
+				if (changes.type === ActionType.DELETE) {
+					return l10n.t`Delete ${formatUriForFileWidget(uri)}`;
+				}
+
+				let diff = await instantiationService.invokeFunction(
 					formatDiffAsUnified,
 					uri,
 					changes.oldContent || '',
 					changes.newContent || ''
 				);
+
+				if (moveTo) {
+					diff = l10n.t`Move from ${formatUriForFileWidget(uri)} to ${formatUriForFileWidget(moveTo)}\n\n` + diff;
+				}
+
+				return diff;
 			})
 		);
 

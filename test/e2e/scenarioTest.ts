@@ -74,7 +74,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 
 				const parsedQuery = await parseQueryForScenarioTest(accessor, testCase, simulationWorkspace);
 				const participantId = (parsedQuery.participantName && getChatParticipantIdFromName(parsedQuery.participantName)) ?? '';
-				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1' };
+				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', hasHooksEnabled: false };
 				if (testCase.tools) {
 					for (const [toolName, shouldUse] of Object.entries(testCase.tools)) {
 						request.tools.set({ name: getContributedToolName(toolName) } as LanguageModelToolInformation, shouldUse);
@@ -94,6 +94,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 								parsedQuery.participantName,
 					},
 					Event.None,
+					() => false,
 				);
 				const result = await interactiveSession.getResult();
 				assert.ok(!result.errorDetails, result.errorDetails?.message);

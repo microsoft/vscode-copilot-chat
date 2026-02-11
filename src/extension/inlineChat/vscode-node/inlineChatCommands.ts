@@ -360,6 +360,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			tools: new Map(),
 			id: '1',
 			sessionId: '1',
+			hasHooksEnabled: false,
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];
@@ -379,7 +380,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			agentId: getChatParticipantIdFromName(editorAgentName),
 			agentName: editorAgentName,
 			intentId: request.command,
-		}, Event.None);
+		}, Event.None, () => false);
 		const result = await requestHandler.getResult();
 		if (result.errorDetails) {
 			throw new Error(result.errorDetails.message);

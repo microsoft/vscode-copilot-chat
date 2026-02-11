@@ -13,6 +13,7 @@ import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
+import { encodeUrlHostname } from '../common/toolUtils';
 
 
 export interface ISimpleBrowserParams {
@@ -28,12 +29,13 @@ export class SimpleBrowserTool implements ICopilotTool<ISimpleBrowserParams> {
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ISimpleBrowserParams>, token: vscode.CancellationToken) {
-		const uri = URI.parse(options.input.url);
+		const { encoded: encodedUrl } = encodeUrlHostname(options.input.url);
+		const uri = URI.parse(encodedUrl);
 		this._alreadyApprovedDomains.add(uri);
-		this.commandService.executeCommand('simpleBrowser.show', options.input.url);
+		this.commandService.executeCommand('simpleBrowser.show', encodedUrl);
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
-				l10n.t('Simple Browser opened at {0}', options.input.url),
+				l10n.t('Simple Browser opened at {0}', encodedUrl),
 			)
 		]);
 	}
@@ -43,7 +45,8 @@ export class SimpleBrowserTool implements ICopilotTool<ISimpleBrowserParams> {
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ISimpleBrowserParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		const uri = URI.parse(options.input.url);
+		const { encoded: encodedUrl, isDifferent } = encodeUrlHostname(options.input.url);
+		const uri = URI.parse(encodedUrl);
 		if (uri.scheme !== Schemas.http && uri.scheme !== Schemas.https) {
 			throw new Error(l10n.t('Invalid URL scheme. Only HTTP and HTTPS are supported.'));
 		}
@@ -51,12 +54,13 @@ export class SimpleBrowserTool implements ICopilotTool<ISimpleBrowserParams> {
 		const urlsNeedingConfirmation = !this._alreadyApprovedDomains.has(uri);
 		let confirmationMessages: vscode.LanguageModelToolConfirmationMessages | undefined;
 		if (urlsNeedingConfirmation) {
-			confirmationMessages = { title: l10n.t`Open untrusted web page?`, message: new MarkdownString(l10n.t`${options.input.url}`) };
+			const displayUrl = isDifferent ? `${encodedUrl} (${options.input.url})` : encodedUrl;
+			confirmationMessages = { title: l10n.t`Open untrusted web page?`, message: new MarkdownString(l10n.t`${displayUrl}`) };
 		}
 
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Opening Simple Browser at ${options.input.url}`),
-			pastTenseMessage: new MarkdownString(l10n.t`Opened Simple Browser at ${options.input.url}`),
+			invocationMessage: new MarkdownString(l10n.t`Opening Simple Browser at ${encodedUrl}`),
+			pastTenseMessage: new MarkdownString(l10n.t`Opened Simple Browser at ${encodedUrl}`),
 			confirmationMessages
 		};
 	}
