@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
 import * as l10n from '@vscode/l10n';
+import * as vscode from 'vscode';
 import { ILogger } from '../../../../../platform/log/common/logService';
 import { Schemas } from '../../../../../util/vs/base/common/network';
 import { ICopilotCLISessionTracker } from '../copilotCLISessionTracker';
@@ -27,7 +27,7 @@ export const ADD_FILE_REFERENCE_NOTIFICATION = 'add_file_reference';
 /**
  * URI schemes that represent real file-system files and can be sent to CLI sessions.
  */
-const ALLOWED_SCHEMES = new Set([Schemas.file, Schemas.vscodeRemote, Schemas.vscodeNotebookCell]);
+const ALLOWED_SCHEMES = new Set([Schemas.file]);
 
 /**
  * Validates URI scheme and shows warning if not allowed.
