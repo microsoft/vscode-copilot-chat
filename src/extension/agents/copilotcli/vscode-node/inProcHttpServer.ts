@@ -5,20 +5,20 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import * as crypto from 'crypto';
 import type * as express from 'express';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ILogger } from '../../../../platform/log/common/logService';
+import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 
 interface McpProviderOptions {
 	id: string;
 	serverLabel: string;
 	serverVersion: string;
-	registerTools: (server: McpServer) => Promise<void> | void;
+	registerTools: (server: McpServer, sessionId: string) => Promise<void> | void;
 	registerPushNotifications?: () => Promise<void> | void;
 }
 
@@ -52,11 +52,28 @@ class AsyncLazy<T> {
 
 export class InProcHttpServer {
 	private readonly _transports: Record<string, StreamableHTTPServerTransport> = {};
+	private readonly _disconnectListeners: Array<(sessionId: string) => void> = [];
 
 	constructor(
 		private readonly _logger: ILogger,
 		private readonly _sessionTracker: ICopilotCLISessionTracker,
 	) { }
+
+	/**
+	 * Register a listener that fires when a client session disconnects.
+	 * Returns a disposable to remove the listener.
+	 */
+	onClientDisconnected(listener: (sessionId: string) => void): DisposableLike {
+		this._disconnectListeners.push(listener);
+		return {
+			dispose: () => {
+				const idx = this._disconnectListeners.indexOf(listener);
+				if (idx >= 0) {
+					this._disconnectListeners.splice(idx, 1);
+				}
+			},
+		};
+	}
 
 	broadcastNotification(method: string, params: Record<string, unknown>): void {
 		const message = {
@@ -75,6 +92,28 @@ export class InProcHttpServer {
 		}
 	}
 
+	sendNotification(sessionId: string, method: string, params: Record<string, unknown>): void {
+		const transport = this._getTransport(sessionId);
+		if (!transport) {
+			this._logger.debug(`Cannot send notification "${method}": session ${sessionId} not found`);
+			return;
+		}
+
+		const message = {
+			jsonrpc: '2.0' as const,
+			method,
+			params,
+		};
+
+		transport.send(message).catch(() => {
+			this._logger.debug(`Failed to send notification "${method}" to client ${sessionId}`);
+		});
+	}
+
+	getConnectedSessionIds(): readonly string[] {
+		return Object.keys(this._transports);
+	}
+
 	async start(
 		mcpOptions: McpProviderOptions,
 	): Promise<{ disposable: DisposableLike; serverUri: vscode.Uri; headers: Record<string, string> }> {
@@ -83,7 +122,7 @@ export class InProcHttpServer {
 		this._logger.debug(`Starting MCP HTTP server for ${mcpOptions.serverLabel}...`);
 
 		try {
-			const nonce = crypto.randomUUID();
+			const nonce = generateUuid();
 			socketPath = await getRandomSocketPath();
 			this._logger.trace(`Generated socket path: ${socketPath}`);
 
@@ -154,6 +193,13 @@ export class InProcHttpServer {
 	private _unregisterTransport(sessionId: string): void {
 		delete this._transports[sessionId];
 		this._logger.info(`Client disconnected: ${sessionId}`);
+		for (const listener of this._disconnectListeners) {
+			try {
+				listener(sessionId);
+			} catch (err) {
+				this._logger.error(err instanceof Error ? err : String(err), 'Error in disconnect listener');
+			}
+		}
 	}
 
 	private _getTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
@@ -171,7 +217,15 @@ export class InProcHttpServer {
 	}
 
 	private async _handlePost(mcpOptions: McpProviderOptions, req: express.Request, res: express.Response): Promise<void> {
-		const sessionId = (req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id']) as string | undefined;
+		const sessionId = req.headers['mcp-session-id'] ?? req.headers['x-copilot-session-id'];
+		if (Array.isArray(sessionId) || !sessionId || typeof sessionId !== 'string') {
+			res.status(400).json({
+				jsonrpc: '2.0',
+				error: { code: -32000, message: 'Bad Request: Session ID must be a single, defined, string value' },
+				id: null,
+			});
+			return;
+		}
 		this._logger.trace(`POST /mcp request, sessionId: ${sessionId ?? '(none)'}`);
 
 		const isInitializeRequest = await isInitializeRequestLazy.value;
@@ -180,6 +234,18 @@ export class InProcHttpServer {
 		let transport: StreamableHTTPServerTransport;
 		const existingTransport = sessionId ? this._getTransport(sessionId) : undefined;
 		if (sessionId && existingTransport) {
+			if (isInitializeRequest(req.body)) {
+				this._logger.debug(`Rejecting duplicate initialize for session ${sessionId}`);
+				res.status(409).json({
+					jsonrpc: '2.0',
+					error: {
+						code: -32000,
+						message: 'Conflict: A connection for this session already exists',
+					},
+					id: null,
+				});
+				return;
+			}
 			transport = existingTransport;
 		} else if (sessionId && isInitializeRequest(req.body)) {
 			this._logger.debug('Creating new MCP session...');
@@ -187,11 +253,11 @@ export class InProcHttpServer {
 			const clientPpid = parseInt(req.headers['x-copilot-parent-pid'] as string, 10);
 			let sessionRegistration: { dispose(): void } | undefined;
 			transport = new StreamableHTTPServerTransport({
-				sessionIdGenerator: () => crypto.randomUUID(),
-				onsessioninitialized: () => {
-					this._registerTransport(sessionId, transport);
+				sessionIdGenerator: () => sessionId,
+				onsessioninitialized: (mcpSessionId) => {
+					this._registerTransport(mcpSessionId, transport);
 					if (!isNaN(clientPid) && !isNaN(clientPpid)) {
-						sessionRegistration = this._sessionTracker.registerSession(sessionId, { pid: clientPid, ppid: clientPpid });
+						sessionRegistration = this._sessionTracker.registerSession(mcpSessionId, { pid: clientPid, ppid: clientPpid });
 					}
 				},
 				onsessionclosed: closedSessionId => {
@@ -211,7 +277,7 @@ export class InProcHttpServer {
 
 			try {
 				this._logger.debug('Registering MCP tools...');
-				await Promise.resolve(mcpOptions.registerTools(server));
+				await Promise.resolve(mcpOptions.registerTools(server, sessionId));
 			} catch (err) {
 				const errMsg = err instanceof Error ? err.message : String(err);
 				this._logger.error(`Failed to register MCP tools: ${errMsg}`);
@@ -260,7 +326,7 @@ export class InProcHttpServer {
 
 async function getRandomSocketPath(): Promise<string> {
 	if (os.platform() === 'win32') {
-		return `\\\\.\\pipe\\mcp-${crypto.randomUUID()}.sock`;
+		return `\\\\.\\pipe\\mcp-${generateUuid()}.sock`;
 	} else {
 		const prefix = path.join(os.tmpdir(), 'mcp-');
 		const tempDir = await fs.mkdtemp(prefix);

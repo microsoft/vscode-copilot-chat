@@ -120,7 +120,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@12",
+		"chatParticipantPrivate@13",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -2874,6 +2874,11 @@
 				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
 				"icon": "$(repo)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.cloudSessions.clearCaches",
+				"title": "%github.copilot.command.cloudSessions.clearCaches.title%",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -3187,6 +3192,22 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
+					},
+					"github.copilot.chat.claudeAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.claudeAgent.enabled%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%",
+						"tags": [
+							"preview"
+						]
 					},
 					"github.copilot.chat.copilotMemory.enabled": {
 						"type": "boolean",
@@ -3887,20 +3908,32 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.planAgent.model": {
-						"type": "string",
-						"default": "",
-						"scope": "resource",
-						"markdownDescription": "%github.copilot.config.planAgent.model%",
-						"tags": [
-							"experimental"
-						]
-					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",
 						"scope": "resource",
 						"markdownDescription": "%github.copilot.config.implementAgent.model%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.askAgent.additionalTools": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"default": [],
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.askAgent.additionalTools%",
+						"tags": [
+							"experimental"
+						]
+					},
+					"github.copilot.chat.askAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.askAgent.model%",
 						"tags": [
 							"experimental"
 						]
@@ -4628,6 +4661,12 @@
 					"command": "github.copilot.chat.checkoutPullRequestReroute",
 					"when": "chatSessionType == copilot-cloud-agent && !github.vscode-pull-request-github.activated && gitOpenRepositoryCount != 0",
 					"group": "navigation@0"
+				}
+			],
+			"chat/newSession": [
+				{
+					"command": "github.copilot.cli.newSession",
+					"group": "4_recommendations@0"
 				}
 			],
 			"testing/item/result": [
@@ -5609,7 +5648,7 @@
 				"inputPlaceholder": "Run local tasks with Claude, type `#` for adding context",
 				"order": 3,
 				"description": "%github.copilot.session.providerDescription.claude%",
-				"when": "config.github.copilot.chat.claudeAgent.enabled",
+				"when": "config.github.copilot.chat.claudeAgent.enabled && !github.copilot.previewFeaturesDisabled",
 				"canDelegate": true,
 				"capabilities": {
 					"supportsFileAttachments": true,

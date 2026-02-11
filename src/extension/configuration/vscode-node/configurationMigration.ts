@@ -162,6 +162,16 @@ ConfigurationMigrationRegistry.registerConfigurationMigrations([{
 	}
 }]);
 
+ConfigurationMigrationRegistry.registerConfigurationMigrations([{
+	key: 'github.copilot.chat.planAgent.model',
+	migrateFn: async (value: any) => {
+		return [
+			['chat.planAgent.defaultModel', { value }],
+			['github.copilot.chat.planAgent.model', { value: undefined }]
+		];
+	}
+}]);
+
 const oldCursorJumpKey = 'github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled';
 const newCursorJumpKey = 'github.copilot.nextEditSuggestions.extendedRange';
 ConfigurationMigrationRegistry.registerConfigurationMigrations([{

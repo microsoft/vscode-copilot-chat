@@ -38,7 +38,7 @@ export class CopilotCLIContrib extends Disposable {
 		const contentProvider = new ReadonlyContentProvider();
 
 		// Register commands
-		this._register(registerAddFileReferenceCommand(logger, httpServer));
+		this._register(registerAddFileReferenceCommand(logger, httpServer, this.sessionTracker));
 		for (const d of registerDiffCommands(logger, diffState)) {
 			this._register(d);
 		}
@@ -46,6 +46,9 @@ export class CopilotCLIContrib extends Disposable {
 			this._register(d);
 		}
 		this._register(contentProvider.register());
+		this._register(httpServer.onClientDisconnected(sessionId => {
+			diffState.closeAllForSession(sessionId);
+		}));
 
 		// Clean up any stale lockfiles from previous sessions
 		cleanupStaleLockFiles(logger).then(cleanedCount => {
@@ -65,8 +68,8 @@ export class CopilotCLIContrib extends Disposable {
 				id: 'vscode-copilot-cli',
 				serverLabel: 'VS Code Copilot CLI',
 				serverVersion: '0.0.1',
-				registerTools: server => {
-					registerTools(server, logger, diffState, selectionState, contentProvider);
+				registerTools: (server, sessionId) => {
+					registerTools(server, logger, diffState, selectionState, contentProvider, sessionId);
 				},
 				registerPushNotifications: () => {
 					for (const d of registerSelectionChangedNotification(logger, httpServer, selectionState)) {

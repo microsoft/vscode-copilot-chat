@@ -16,11 +16,11 @@ import { ReadonlyContentProvider } from '../readonlyContentProvider';
 export { getSelectionInfo, SelectionState } from './getSelection';
 export type { SelectionInfo } from './getSelection';
 
-export function registerTools(server: McpServer, logger: ILogger, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider): void {
+export function registerTools(server: McpServer, logger: ILogger, diffState: DiffStateManager, selectionState: SelectionState, contentProvider: ReadonlyContentProvider, sessionId: string): void {
 	logger.debug('Registering MCP tools...');
 	registerGetVscodeInfoTool(server, logger);
 	registerGetSelectionTool(server, logger, selectionState);
-	registerOpenDiffTool(server, logger, diffState, contentProvider);
+	registerOpenDiffTool(server, logger, diffState, contentProvider, sessionId);
 	registerCloseDiffTool(server, logger, diffState);
 	registerGetDiagnosticsTool(server, logger);
 	logger.debug('All MCP tools registered');

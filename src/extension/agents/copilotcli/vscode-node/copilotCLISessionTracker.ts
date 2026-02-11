@@ -23,6 +23,16 @@ export interface ICopilotCLISessionTracker {
 	registerSession(sessionId: string, info: SessionProcessInfo): IDisposable;
 
 	/**
+	 * Get a display name for a session, falling back to the sessionId.
+	 */
+	getSessionDisplayName(sessionId: string): string;
+
+	/**
+	 * Get the IDs of all connected sessions.
+	 */
+	getSessionIds(): readonly string[];
+
+	/**
 	 * Get the terminal associated with a session.
 	 * Returns `undefined` if no matching terminal is found.
 	 */
@@ -40,6 +50,15 @@ export class CopilotCLISessionTracker implements ICopilotCLISessionTracker {
 				this._sessions.delete(sessionId);
 			}
 		};
+	}
+
+	getSessionDisplayName(sessionId: string): string {
+		// todo: get session display name from the CLI
+		return sessionId;
+	}
+
+	getSessionIds(): readonly string[] {
+		return Array.from(this._sessions.keys());
 	}
 
 	async getTerminal(sessionId: string): Promise<Terminal | undefined> {
