@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n } from 'vscode';
+import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n, version as vscodeVersion, window } from 'vscode';
 import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -47,6 +47,13 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		return context;
 	} else {
 		commands.executeCommand('setContext', showSwitchToReleaseViewCtxKey, undefined);
+	}
+
+	const problematicVersions = ['1.109.0', '1.109.1'];
+	if (problematicVersions.some(v => vscodeVersion.startsWith(v))) {
+		const message = l10n.t("This version of VS Code ({0}) has known issues with GitHub Copilot. Please update VS Code and restart.", vscodeVersion);
+		window.showWarningMessage(message, { modal: true });
+		return context;
 	}
 
 	if (vscodeL10n.bundle) {

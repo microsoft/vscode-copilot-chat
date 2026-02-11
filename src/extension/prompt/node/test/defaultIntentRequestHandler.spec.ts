@@ -164,6 +164,7 @@ suite('defaultIntentRequestHandler', () => {
 			instaService.createInstance(ChatTelemetryBuilder, Date.now(), sessionId, undefined, turns.length > 1, request),
 			{ maxToolCallIterations },
 			Event.None,
+			undefined,
 		);
 	};
 
