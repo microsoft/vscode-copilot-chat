@@ -750,7 +750,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
 		});
 
 		it('should extract label from first user message when no summary', () => {
@@ -885,7 +885,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
 		});
 
 		it('should extract label from first user message when no summary', async () => {
@@ -1084,9 +1084,10 @@ describe('claudeSessionParser', () => {
 
 				const fullSession = buildResult.sessions[0];
 
-				// Label and timestamp should match
+				// Label and timestamps should match
 				expect(metadataResult!.label).toBe(fullSession.label);
-				expect(metadataResult!.timestamp).toEqual(fullSession.timestamp);
+				expect(metadataResult!.firstMessageTimestamp).toEqual(fullSession.firstMessageTimestamp);
+				expect(metadataResult!.lastMessageTimestamp).toEqual(fullSession.lastMessageTimestamp);
 			}
 		});
 

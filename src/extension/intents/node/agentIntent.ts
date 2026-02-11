@@ -259,6 +259,14 @@ export class AgentIntent extends EditCodeIntent {
 				return {};
 			}
 
+			if (summaryMetadata.usage) {
+				stream.usage({
+					promptTokens: summaryMetadata.usage.prompt_tokens,
+					completionTokens: summaryMetadata.usage.completion_tokens,
+					promptTokenDetails: summaryMetadata.promptTokenDetails,
+				});
+			}
+
 			stream.markdown(l10n.t('Compacted conversation.'));
 			const lastTurn = conversation.getLatestTurn();
 
