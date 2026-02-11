@@ -172,12 +172,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
-		const session = await this._getToken();
-		if (!session) {
-			// Return cached models until we have auth reacquired
-			// We clear this list in onDidAuthenticationChange so signed out should still have model picker clear
-			return this._currentModels;
-		}
+		// Azure-only fork: proceed even without a copilot token since auth is via service principal
+		await this._getToken();
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const allEndpoints = await this._endpointProvider.getAllChatEndpoints();
@@ -344,11 +340,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 
 		const update = async () => {
-
-			if (!await this._getToken()) {
-				dispo.clear();
-				return;
-			}
+			// Azure-only fork: proceed even without copilot token
+			await this._getToken();
 
 			const embeddingsComputer = this._embeddingsComputer;
 			const embeddingType = EmbeddingType.text3small_512;
