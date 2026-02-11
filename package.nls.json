@@ -407,6 +407,8 @@
 	"github.copilot.command.cli.sessions.openRepository": "Open Repository",
 	"github.copilot.command.cli.sessions.openWorktreeInNewWindow": "Open Worktree in New Window",
 	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Integrated Terminal",
+	"github.copilot.command.cli.newSession": "New CLI Session",
+	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
 	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in Browser",
 	"github.copilot.command.closeChatSessionPullRequest.title": "Close Pull Request",
 	"github.copilot.command.installPRExtension.title": "Install GitHub Pull Request Extension",
