@@ -1106,59 +1106,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return overrideModelConfig(sourcedModelConfig, modelConfig);
 	}
 
-<<<<<<< HEAD
-	private static overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
-		return {
-			...modelConfig,
-			modelName: overridingConfig.modelName,
-			promptingStrategy: overridingConfig.promptingStrategy,
-			currentFile: {
-				...modelConfig.currentFile,
-				includeTags: overridingConfig.includeTagsInCurrentFile,
-			},
-			lintOptions: overridingConfig.lintOptions ? { ...modelConfig.lintOptions, ...overridingConfig.lintOptions } : modelConfig.lintOptions,
-		};
-	}
-
-	private pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
-		switch (promptingStrategy) {
-			case xtabPromptOptions.PromptingStrategy.UnifiedModel:
-				return unifiedModelSystemPrompt;
-			case xtabPromptOptions.PromptingStrategy.Codexv21NesUnified:
-			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
-				return simplifiedPrompt;
-			case xtabPromptOptions.PromptingStrategy.PatchBased:
-			case xtabPromptOptions.PromptingStrategy.PatchBased01:
-			case xtabPromptOptions.PromptingStrategy.Xtab275:
-			case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
-			case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:
-			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
-			case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
-				return xtab275SystemPrompt;
-			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
-				return nes41Miniv3SystemPrompt;
-			case xtabPromptOptions.PromptingStrategy.CopilotNesXtab:
-			case undefined:
-				return systemPromptTemplate;
-			default:
-				assertNever(promptingStrategy);
-		}
-	}
-
-	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens, enableAllContextProviders, traitPosition }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number; enableAllContextProviders: boolean; traitPosition: 'before' | 'after' }): LanguageContextOptions {
-		if (languageId in enabledLanguages) {
-			return { enabled: enabledLanguages[languageId], maxTokens, traitPosition };
-		}
-
-		if (enableAllContextProviders) {
-			return { enabled: true, maxTokens, traitPosition };
-		}
-
-		return { enabled, maxTokens, traitPosition };
-	}
-=======
->>>>>>> 4a994061 (nes: xtab: extract methods into functions)
-
 	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
 		const url = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUrl);
 		const apiKey = this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderApiKey);
@@ -1303,6 +1250,7 @@ export function pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingS
 		case xtabPromptOptions.PromptingStrategy.PatchBased01:
 		case xtabPromptOptions.PromptingStrategy.Xtab275:
 		case xtabPromptOptions.PromptingStrategy.XtabAggressiveness:
+		case xtabPromptOptions.PromptingStrategy.Xtab275Aggressiveness:
 		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntent:
 		case xtabPromptOptions.PromptingStrategy.Xtab275EditIntentShort:
 			return xtab275SystemPrompt;
