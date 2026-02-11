@@ -82,7 +82,7 @@ export class NodeHookExecutor implements IHookExecutor {
 			child.stderr.on('data', data => stderr.push(data.toString()));
 
 			// Set up timeout
-			const timeoutTimer = setTimeout(killWithEscalation, (hook.timeoutSec ?? DEFAULT_TIMEOUT_SEC) * 1000);
+			const timeoutTimer = setTimeout(killWithEscalation, (hook.timeout ?? DEFAULT_TIMEOUT_SEC) * 1000);
 
 			// Set up cancellation
 			if (token) {

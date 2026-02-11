@@ -192,8 +192,9 @@ describe('NodeHookExecutor', () => {
 		vi.useFakeTimers();
 		try {
 			const promise = executor.executeCommand(
-				cmd('test', { timeoutSec: 5 }),
-				undefined, CancellationToken.None
+				cmd('test', { timeout: 5 }),
+				undefined,
+				CancellationToken.None
 			);
 
 			vi.advanceTimersByTime(5000);
