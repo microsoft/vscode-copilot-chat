@@ -241,7 +241,7 @@ export class SSEProcessor {
 		response: Response,
 		cancellationToken?: CancellationToken
 	) {
-		const body = response.body.pipeThrough(new TextDecoderStream());
+		const body = response.body.pipeThrough(new TextDecoderStream()) as unknown as DestroyableStream<string>;
 		return new SSEProcessor(
 			logService,
 			telemetryService,
