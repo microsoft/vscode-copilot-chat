@@ -125,7 +125,7 @@ export class AzureOnlyModelProvider implements LanguageModelChatProvider<AzureOn
 		const url = `${base}/openai/deployments/${model.deploymentName}/chat/completions?api-version=${model.apiVersion}`;
 		const auth = this.getAuthService();
 		const bearerToken = await auth.getToken(ServicePrincipalAuthService.SCOPE_COGNITIVE_SERVICES);
-		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, bearerToken, url);
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, bearerToken, url, true);
 	}
 
 	private getModelInfo(model: AzureOnlyModelInfo): IChatModelInformation {

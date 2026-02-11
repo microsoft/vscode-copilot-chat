@@ -113,6 +113,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
+		private readonly _useBearerAuth: boolean = false,
 		@IDomainService domainService: IDomainService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
@@ -298,10 +299,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json'
 		};
-		if (this._modelUrl.includes('openai.azure')) {
-			headers['api-key'] = this._apiKey;
-		} else {
+		if (this._useBearerAuth || !this._modelUrl.includes('openai.azure')) {
 			headers['Authorization'] = `Bearer ${this._apiKey}`;
+		} else {
+			headers['api-key'] = this._apiKey;
 		}
 		for (const [key, value] of Object.entries(this._customHeaders)) {
 			headers[key] = value;
@@ -311,7 +312,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
 		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
-		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
+		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl, this._useBearerAuth);
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
