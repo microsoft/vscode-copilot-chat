@@ -13,7 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { basename } from '../../../util/vs/base/common/resources';
+import { basename, isEqual } from '../../../util/vs/base/common/resources';
 import { ChatSessionWorktreeData, ChatSessionWorktreeFile, ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 
 const CHAT_SESSION_WORKTREE_MEMENTO_KEY = 'github.copilot.cli.sessionWorktrees';
@@ -101,9 +101,23 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined {
-		const properties = this._sessionWorktrees.get(sessionId);
-		return typeof properties === 'string' ? undefined : properties;
+	getWorktreeProperties(sessionId: string): ChatSessionWorktreeProperties | undefined;
+	getWorktreeProperties(folder: vscode.Uri): ChatSessionWorktreeProperties | undefined;
+	getWorktreeProperties(sessionIdOrFolder: string | vscode.Uri): ChatSessionWorktreeProperties | undefined {
+		if (typeof sessionIdOrFolder === 'string') {
+			const properties = this._sessionWorktrees.get(sessionIdOrFolder);
+			return typeof properties === 'string' ? undefined : properties;
+		} else {
+			for (const [_, value] of this._sessionWorktrees.entries()) {
+				if (typeof value === 'string') {
+					continue;
+				}
+				if (isEqual(vscode.Uri.file(value.worktreePath), sessionIdOrFolder)) {
+					return value;
+				}
+			}
+			return undefined;
+		}
 	}
 
 	async setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void> {
