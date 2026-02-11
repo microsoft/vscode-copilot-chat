@@ -131,7 +131,7 @@
 				"modelDescription": "Run a natural language search for relevant code or documentation comments from the user's current workspace. Returns relevant code snippets from the user's current workspace if it is large, or the full contents of the workspace if it is small.",
 				"tags": [
 					"codesearch",
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -155,7 +155,7 @@
 				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
 				"when": "config.github.copilot.chat.searchSubagent.enabled",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -188,7 +188,7 @@
 				"userDescription": "%copilot.workspaceSymbols.tool.description%",
 				"modelDescription": "Search the user's workspace for code symbols using language services. Use this tool when the user is looking for a specific symbol in their workspace.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -214,7 +214,7 @@
 				"userDescription": "%copilot.listCodeUsages.tool.description%",
 				"modelDescription": "Request to list all usages (references, definitions, implementations etc) of a function, class, method, variable etc. Use this tool when \n1. Looking for a sample implementation of an interface or class\n2. Checking how a function is used throughout the codebase.\n3. Including and updating all usages when changing a function, method, or constructor",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -264,7 +264,7 @@
 				"userDescription": "%copilot.tools.findFiles.userDescription%",
 				"modelDescription": "Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. Examples:\n- **/*.{js,ts} to match all js/ts files in the workspace.\n- src/** to match all files under the top-level src folder.\n- **/foo/**/*.js to match all js files under any foo folder in the workspace.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -290,7 +290,7 @@
 				"userDescription": "%copilot.tools.findTextInFiles.userDescription%",
 				"modelDescription": "Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex. If you are not sure what words will appear in the workspace, prefer using regex patterns with alternation (|) or character classes to search for multiple potential words at once instead of making separate searches. For example, use 'function|method|procedure' to look for all of those words at once. Use includePattern to search within files matching a specific pattern, or in a specific file, using a relative path. Use 'includeIgnoredFiles' to include files normally ignored by .gitignore, other ignore files, and `files.exclude` and `search.exclude` settings. Warning: using this may cause the search to be slower, only set it when you want to search in ignored folders like node_modules or build outputs. Use this tool when you want to see an overview of a particular file, instead of using read_file many times to look for code within a file.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -356,7 +356,7 @@
 				"userDescription": "%copilot.tools.readFile.userDescription%",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -388,7 +388,7 @@
 				"userDescription": "%copilot.tools.listDirectory.userDescription%",
 				"modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -444,7 +444,7 @@
 				"userDescription": "%copilot.tools.changes.description%",
 				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use run_in_terminal to run git commands in a terminal as well.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -480,7 +480,7 @@
 				"modelDescription": "Includes test failure information in the prompt.",
 				"inputSchema": {},
 				"tags": [
-					"vscode_editing_with_tests",
+					"ai_editing_with_tests",
 					"enable_other_tool_copilot_readFile",
 					"enable_other_tool_copilot_listDirectory",
 					"enable_other_tool_copilot_findFiles",
