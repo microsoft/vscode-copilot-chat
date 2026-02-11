@@ -55,7 +55,7 @@ import { constructTaggedFile, countTokensForLines, getUserPrompt, N_LINES_ABOVE,
 import { nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/systemMessages';
 import { PromptTags, ResponseTags } from '../common/tags';
 import { CurrentDocument } from '../common/xtabCurrentDocument';
-import { constructSweepPrompt, handleSweepResponse } from './sweep/sweep';
+import { handleSweepResponse } from './sweep/sweep';
 import { XtabCustomDiffPatchResponseHandler } from './xtabCustomDiffPatchResponseHandler';
 import { XtabEndpoint } from './xtabEndpoint';
 import { XtabNextCursorPredictor } from './xtabNextCursorPredictor';
@@ -311,7 +311,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions
 		);
 
-		const userPrompt = promptOptions.promptingStrategy === 'sweep' ? constructSweepPrompt(promptPieces) : getUserPrompt(promptPieces);
+		const userPrompt = getUserPrompt(promptPieces);
 
 		const responseFormat = xtabPromptOptions.ResponseFormat.fromPromptingStrategy(promptOptions.promptingStrategy);
 

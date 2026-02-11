@@ -22,6 +22,7 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 import { LintErrors } from './lintErrors';
 import { PromptTags } from './tags';
 import { CurrentDocument } from './xtabCurrentDocument';
+import { constructSweepPrompt } from '../node/sweep/sweep';
 
 export class PromptPieces {
 	constructor(
@@ -42,6 +43,10 @@ export class PromptPieces {
 }
 
 export function getUserPrompt(promptPieces: PromptPieces): string {
+	// Sweep uses a completely different prompt format
+	if (promptPieces.opts.promptingStrategy === PromptingStrategy.Sweep) {
+		return constructSweepPrompt(promptPieces);
+	}
 
 	const { activeDoc, xtabHistory, taggedCurrentDocLines, areaAroundCodeToEdit, langCtx, aggressivenessLevel, lintErrors, computeTokens, opts } = promptPieces;
 	const currentFileContent = taggedCurrentDocLines.join('\n');
