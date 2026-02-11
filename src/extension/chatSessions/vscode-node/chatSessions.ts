@@ -38,8 +38,7 @@ import { IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { ChatSessionWorkspaceFolderService } from './chatSessionWorkspaceFolderServiceImpl';
 import { ChatSessionWorktreeService } from './chatSessionWorktreeServiceImpl';
-import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionContentProvider, ClaudeSessionUri } from './claudeChatSessionContentProvider';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotCloudSessionsProvider } from './copilotCloudSessionsProvider';
@@ -93,14 +92,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[IFolderRepositoryManager, new SyncDescriptor(ClaudeFolderRepositoryManager)],
 			));
 
-		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
+		// const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
+		// this._register(vscode.chat.registerChatSessionItemProvider(ClaudeChatSessionItemProvider.claudeSessionType, sessionItemProvider));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionItemProvider));
-		const chatParticipant = vscode.chat.createChatParticipant(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider.createHandler());
+		const chatSessionContentProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager));
+		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider.createHandler());
 		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
-		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeChatSessionItemProvider.claudeSessionType, chatSessionContentProvider, chatParticipant));
+		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider, chatParticipant));
 
 		// #endregion
 

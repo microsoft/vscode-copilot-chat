@@ -407,7 +407,8 @@ function buildSessionFromLeaf(
 		id: leafMessage.sessionId,
 		label: generateSessionLabel(summaryEntry, messageChain),
 		messages: messageChain,
-		timestamp: messageChain[messageChain.length - 1].timestamp,
+		firstMessageTimestamp: messageChain[0].timestamp,
+		lastMessageTimestamp: messageChain[messageChain.length - 1].timestamp,
 		subagents: [],
 	};
 
@@ -808,7 +809,6 @@ function buildMetadataResult(
 	return {
 		id: sessionId,
 		label,
-		timestamp: state.firstMessageTimestamp,
 		firstMessageTimestamp: state.firstMessageTimestamp,
 		lastMessageTimestamp: state.lastMessageTimestamp,
 	};

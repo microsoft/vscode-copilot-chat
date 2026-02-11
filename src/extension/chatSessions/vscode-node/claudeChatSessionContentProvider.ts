@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -20,11 +21,10 @@ import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeModels, NoClaudeModelsAvailableError } from '../../agents/claude/node/claudeCodeModels';
 import { IClaudeSessionStateService } from '../../agents/claude/node/claudeSessionStateService';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/sessionParser/claudeCodeSessionService';
-import { IClaudeCodeSession } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
+import { IClaudeCodeSession, IClaudeCodeSessionInfo } from '../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { IClaudeSlashCommandService } from '../../agents/claude/vscode-node/claudeSlashCommandService';
 import { FolderRepositoryMRUEntry, IFolderRepositoryManager } from '../common/folderRepositoryManager';
 import { buildChatHistory } from './chatHistoryBuilder';
-import { ClaudeChatSessionItemProvider, ClaudeSessionUri } from './claudeChatSessionItemProvider';
 
 // Import the tool permission handlers
 import '../../agents/claude/vscode-node/toolPermissionHandlers/index';
@@ -55,9 +55,13 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private readonly _sessionPermissionModes = new Map<string, PermissionMode>();
 	private readonly _sessionFolders = new Map<string, URI>();
 
+	// Map untitled session IDs to their effective (persistent) session IDs
+	private readonly _untitledToEffectiveSessionId = new Map<string, string>();
+
+	private readonly _controller: ClaudeChatSessionItemController;
+
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
-		private readonly sessionItemProvider: ClaudeChatSessionItemProvider,
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
 		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
@@ -65,8 +69,10 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		@IClaudeSlashCommandService private readonly slashCommandService: IClaudeSlashCommandService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IGitService gitService: IGitService,
 	) {
 		super();
+		this._controller = this._register(new ClaudeChatSessionItemController(sessionService, workspaceService, gitService));
 
 		// Listen for configuration changes to update available options
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
@@ -102,6 +108,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 		this._sessionModels.clear();
 		this._sessionPermissionModes.clear();
 		this._sessionFolders.clear();
+		this._untitledToEffectiveSessionId.clear();
 		super.dispose();
 	}
 
@@ -248,7 +255,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				/* Via @claude */
 				// TODO: Think about how this should work
 				stream.markdown(vscode.l10n.t("Start a new Claude Agent session"));
-				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeChatSessionItemProvider.claudeSessionType}`, title: vscode.l10n.t("Start Session") });
+				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${ClaudeSessionUri.claudeSessionType}`, title: vscode.l10n.t("Start Session") });
 				return {};
 			}
 
@@ -259,51 +266,52 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			}
 
 			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
+			const yieldRequested = () => context.yieldRequested;
+
+			// Resolve the effective session ID first, before lookups, so that
+			// all property reads and writes use a consistent key.
+			let effectiveSessionId: string;
+			let isNewSession: boolean;
+			if (chatSessionContext.isUntitled) {
+				const existing = this._untitledToEffectiveSessionId.get(sessionId);
+				if (existing) {
+					effectiveSessionId = existing;
+					isNewSession = false;
+				} else {
+					effectiveSessionId = generateUuid();
+					isNewSession = true;
+					this._untitledToEffectiveSessionId.set(sessionId, effectiveSessionId);
+
+					// Transfer all session property selections from the untitled
+					// session ID to the effective (persistent) session ID.
+					this._transferSessionProperties(sessionId, effectiveSessionId);
+				}
+			} else {
+				effectiveSessionId = sessionId;
+				isNewSession = false;
+			}
+
 			let modelId: string;
 			try {
-				modelId = await this.getModelIdForSession(sessionId);
+				modelId = await this.getModelIdForSession(effectiveSessionId);
 			} catch (e) {
 				if (e instanceof NoClaudeModelsAvailableError) {
 					return { errorDetails: { message: e.message } };
 				}
 				throw e;
 			}
-			const permissionMode = this.getPermissionModeForSession(sessionId);
-			const folderInfo = this.getFolderInfoForSession(sessionId);
-			const yieldRequested = () => context.yieldRequested;
-
-			// Resolve the effective session ID and swap untitled sessions to persistent
-			// sessions immediately, before handling the request.
-			let effectiveSessionId: string;
-			let isNewSession: boolean;
-			if (chatSessionContext.isUntitled) {
-				effectiveSessionId = generateUuid();
-				isNewSession = true;
-
-				// Transfer folder selection from untitled session to the new session ID
-				const untitledFolder = this._sessionFolders.get(sessionId);
-				if (untitledFolder) {
-					this._sessionFolders.set(effectiveSessionId, untitledFolder);
-					this._sessionFolders.delete(sessionId);
-				}
-
-				// Swap to persistent session before handling the request
-				const swapResource = ClaudeSessionUri.forSessionId(effectiveSessionId);
-				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
-					resource: swapResource,
-					label: request.prompt ?? 'Claude Agent'
-				});
-			} else {
-				effectiveSessionId = sessionId;
-				isNewSession = false;
-			}
+			const permissionMode = this.getPermissionModeForSession(effectiveSessionId);
+			const folderInfo = this.getFolderInfoForSession(effectiveSessionId);
 
 			// Commit UI state to session state service before invoking agent manager
 			this.sessionStateService.setModelIdForSession(effectiveSessionId, modelId);
 			this.sessionStateService.setPermissionModeForSession(effectiveSessionId, permissionMode);
 			this.sessionStateService.setFolderInfoForSession(effectiveSessionId, folderInfo);
 
+			const prompt = request.prompt;
+			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
 			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
+			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
 
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};
@@ -456,6 +464,30 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	}
 
 	/**
+	 * Transfers all in-memory session property selections (model, permission mode,
+	 * folder) from one session ID to another and removes the old entries.
+	 */
+	private _transferSessionProperties(fromSessionId: string, toSessionId: string): void {
+		const model = this._sessionModels.get(fromSessionId);
+		if (model) {
+			this._sessionModels.set(toSessionId, model);
+			this._sessionModels.delete(fromSessionId);
+		}
+
+		const permissionMode = this._sessionPermissionModes.get(fromSessionId);
+		if (permissionMode) {
+			this._sessionPermissionModes.set(toSessionId, permissionMode);
+			this._sessionPermissionModes.delete(fromSessionId);
+		}
+
+		const folder = this._sessionFolders.get(fromSessionId);
+		if (folder) {
+			this._sessionFolders.set(toSessionId, folder);
+			this._sessionFolders.delete(fromSessionId);
+		}
+	}
+
+	/**
 	 * Resolves the model to use for a session with fallback logic:
 	 * 1. Stored session state (user's explicit selection)
 	 * 2. SDK model from session messages (mapped to endpoint model)
@@ -519,4 +551,138 @@ function mruToFolderOptionItems(mruItems: readonly FolderRepositoryMRUEntry[]): 
 		name: basename(item.folder),
 		icon: new vscode.ThemeIcon(item.repository ? 'repo' : 'folder'),
 	}));
+}
+
+/**
+ * Chat session item controller wrapper for Claude Agent.
+ * Reads sessions from ~/.claude/projects/<folder-slug>/, where each file name is a session id (GUID).
+ */
+export class ClaudeChatSessionItemController extends Disposable {
+	private readonly _controller: vscode.ChatSessionItemController;
+	private _showBadge: boolean;
+
+	constructor(
+		@IClaudeCodeSessionService private readonly _claudeCodeSessionService: IClaudeCodeSessionService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IGitService private readonly _gitService: IGitService,
+	) {
+		super();
+		this._controller = this._register(vscode.chat.createChatSessionItemController(
+			ClaudeSessionUri.claudeSessionType,
+			() => this._refreshItems(CancellationToken.None)
+		));
+
+		this._showBadge = this._computeShowBadge();
+
+		// Refresh session items and recompute badge when repositories change.
+		// _computeShowBadge() reads gitService.repositories synchronously, which
+		// may be incomplete while the git extension is still initializing.
+		this._register(_gitService.onDidOpenRepository(() => {
+			this._showBadge = this._computeShowBadge();
+			this._refreshItems(CancellationToken.None);
+		}));
+		this._register(_gitService.onDidCloseRepository(() => {
+			this._showBadge = this._computeShowBadge();
+			this._refreshItems(CancellationToken.None);
+		}));
+	}
+
+	async updateItemStatus(sessionId: string, status: vscode.ChatSessionStatus, newItemLabel: string): Promise<void> {
+		const resource = ClaudeSessionUri.forSessionId(sessionId);
+		let item = this._controller.items.get(resource);
+		if (!item) {
+			const session = await this._claudeCodeSessionService.getSession(resource, CancellationToken.None);
+			if (session) {
+				item = this._createClaudeChatSessionItem(session);
+			} else {
+				const newlyCreatedSessionInfo: IClaudeCodeSessionInfo = {
+					id: sessionId,
+					label: newItemLabel,
+					firstMessageTimestamp: new Date(),
+					lastMessageTimestamp: new Date(),
+					folderName: undefined
+				};
+				item = this._createClaudeChatSessionItem(newlyCreatedSessionInfo);
+			}
+		}
+
+		item.status = status;
+		if (status === vscode.ChatSessionStatus.InProgress) {
+			if (!item.timing) {
+				item.timing = {
+					created: Date.now()
+				};
+			}
+			item.timing.lastRequestStarted = Date.now();
+			// Clear lastRequestEnded while a request is in progress
+			item.timing.lastRequestEnded = undefined;
+		} else if (status === vscode.ChatSessionStatus.Completed) {
+			if (!item.timing) {
+				item.timing = {
+					created: Date.now(),
+					lastRequestEnded: Date.now()
+				};
+			} else {
+				item.timing.lastRequestEnded = Date.now();
+			}
+		}
+		this._controller.items.add(item);
+	}
+
+	private async _refreshItems(token: vscode.CancellationToken): Promise<void> {
+		const sessions = await this._claudeCodeSessionService.getAllSessions(token);
+		for (const session of sessions) {
+			const item = this._createClaudeChatSessionItem(session);
+			this._controller.items.add(item);
+		}
+	}
+
+	private _createClaudeChatSessionItem(session: IClaudeCodeSessionInfo): vscode.ChatSessionItem {
+		let badge: vscode.MarkdownString | undefined;
+		if (session.folderName && this._showBadge) {
+			badge = new vscode.MarkdownString(`$(folder) ${session.folderName}`);
+			badge.supportThemeIcons = true;
+		}
+
+		const item = this._controller.createChatSessionItem(ClaudeSessionUri.forSessionId(session.id), session.label);
+		item.badge = badge;
+		item.tooltip = `Claude Code session: ${session.label}`;
+		item.timing = {
+			created: session.firstMessageTimestamp.getTime(),
+			lastRequestEnded: session.lastMessageTimestamp.getTime(),
+		};
+		item.iconPath = new vscode.ThemeIcon('claude');
+		return item;
+	}
+
+	private _computeShowBadge(): boolean {
+		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
+		if (workspaceFolders.length === 0) {
+			return true; // Empty window
+		}
+		if (workspaceFolders.length > 1) {
+			return true; // Multi-root workspace
+		}
+
+		// Single-root workspace with multiple git repositories
+		const repositories = this._gitService.repositories
+			.filter(repository => repository.kind !== 'worktree');
+		return repositories.length > 1;
+	}
+}
+
+export namespace ClaudeSessionUri {
+	export const claudeSessionType = 'claude-code';
+
+	export function forSessionId(sessionId: string): vscode.Uri {
+		return vscode.Uri.from({ scheme: ClaudeSessionUri.claudeSessionType, path: '/' + sessionId });
+	}
+
+	export function getId(resource: vscode.Uri): string {
+		if (resource.scheme !== ClaudeSessionUri.claudeSessionType) {
+			throw new Error('Invalid resource scheme for Claude Code session');
+		}
+
+		return resource.path.slice(1);
+	}
 }
