@@ -264,13 +264,17 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	override interceptBody(body: IEndpointBody | undefined): void {
 		super.interceptBody(body);
 
-		// Strip Copilot-specific fields from messages when using Azure AD bearer auth,
-		// as Azure OpenAI rejects unknown message fields with "Unsupported data type"
-		if (this._useBearerAuth && body?.messages) {
-			body.messages = body.messages.map((msg: any) => {
-				const { copilot_references, copilot_confirmations, copilot_cache_control, cot_id, cot_summary, ...cleanMsg } = msg;
-				return cleanMsg;
-			});
+		// Sanitize body for Azure OpenAI when using service principal bearer auth.
+		// Azure OpenAI rejects non-standard fields with "400 Unsupported data type".
+		if (this._useBearerAuth && body) {
+			this._sanitizeBodyForAzure(body);
+			this.logService.debug('[AzureOpenAI] Sanitized request body keys: ' + Object.keys(body).join(', '));
+			if (body.messages) {
+				for (let i = 0; i < Math.min(body.messages.length, 3); i++) {
+					const msg = body.messages[i];
+					this.logService.debug(`[AzureOpenAI] Message ${i}: role=${msg.role}, content type=${typeof msg.content}, keys=${Object.keys(msg).join(',')}`);
+				}
+			}
 		}
 
 		// TODO @lramos15 - We should do this for all models and not just here
@@ -300,6 +304,74 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 		}
 	}
+
+	/**
+	 * Sanitizes the request body for Azure OpenAI compatibility.
+	 * Removes Copilot-specific fields and ensures message content uses
+	 * only standard OpenAI content part types.
+	 */
+	private _sanitizeBodyForAzure(body: IEndpointBody): void {
+		// Remove non-standard top-level body fields
+		for (const key of Object.keys(body)) {
+			if (!OpenAIEndpoint._azureAllowedBodyFields.has(key)) {
+				delete (body as any)[key];
+			}
+		}
+
+		// Sanitize messages
+		if (body.messages) {
+			body.messages = body.messages.map((msg: any) => {
+				// Only keep standard OpenAI message fields
+				const clean: any = { role: msg.role };
+				if (msg.content !== undefined) {
+					clean.content = this._sanitizeMessageContent(msg.content);
+				}
+				if (msg.name !== undefined) {
+					clean.name = msg.name;
+				}
+				if (msg.tool_calls !== undefined) {
+					clean.tool_calls = msg.tool_calls;
+				}
+				if (msg.tool_call_id !== undefined) {
+					clean.tool_call_id = msg.tool_call_id;
+				}
+				return clean;
+			});
+		}
+	}
+
+	private _sanitizeMessageContent(content: any): any {
+		if (typeof content === 'string') {
+			return content;
+		}
+		if (!Array.isArray(content)) {
+			return String(content ?? '');
+		}
+		// Filter to only standard OpenAI content part types and simplify if possible
+		const filtered = content.filter((part: any) =>
+			part.type === 'text' || part.type === 'image_url'
+		);
+		// If only one text part, simplify to string
+		if (filtered.length === 1 && filtered[0].type === 'text') {
+			return filtered[0].text;
+		}
+		if (filtered.length === 0) {
+			// Extract text from all parts as fallback
+			const text = content
+				.filter((part: any) => part.type === 'text')
+				.map((part: any) => part.text)
+				.join('');
+			return text || '';
+		}
+		return filtered;
+	}
+
+	private static readonly _azureAllowedBodyFields = new Set([
+		'messages', 'model', 'temperature', 'top_p', 'n', 'stream',
+		'stream_options', 'stop', 'max_tokens', 'max_completion_tokens',
+		'presence_penalty', 'frequency_penalty', 'logit_bias', 'logprobs',
+		'top_logprobs', 'tools', 'tool_choice', 'response_format', 'seed',
+	]);
 
 	override get urlOrRequestMetadata(): string {
 		return this._modelUrl;
