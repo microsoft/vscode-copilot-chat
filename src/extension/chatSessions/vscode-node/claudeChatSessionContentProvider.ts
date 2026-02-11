@@ -610,8 +610,8 @@ export class ClaudeChatSessionItemController extends Disposable {
 				const newlyCreatedSessionInfo: IClaudeCodeSessionInfo = {
 					id: sessionId,
 					label: newItemLabel,
-					firstMessageTimestamp: new Date(),
-					lastMessageTimestamp: new Date(),
+					created: Date.now(),
+					lastRequestEnded: Date.now(),
 					folderName: undefined
 				};
 				item = this._createClaudeChatSessionItem(newlyCreatedSessionInfo);
@@ -662,8 +662,9 @@ export class ClaudeChatSessionItemController extends Disposable {
 		item.badge = badge;
 		item.tooltip = `Claude Code session: ${session.label}`;
 		item.timing = {
-			created: session.firstMessageTimestamp.getTime(),
-			lastRequestEnded: session.lastMessageTimestamp.getTime(),
+			created: session.created,
+			lastRequestStarted: session.lastRequestStarted,
+			lastRequestEnded: session.lastRequestEnded,
 		};
 		item.iconPath = new vscode.ThemeIcon('claude');
 		return item;
