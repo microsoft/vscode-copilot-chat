@@ -168,13 +168,11 @@ export function nextEditConstructPrompt(promptPieces: PromptPieces): string {
 	// Extract current window (this is straightforward)
 	const currentSection = extract21LineWindow(currentContent, cursorLine);
 
-	// For original window, use the rebase approach:
-	// Map the window bounds from current-file-space to original-file-space using edit history
-	const originalSection = extractOriginalWindowViaRebase(
+	// For original window, map cursor position from current-space to original-space
+	const originalSection = extractOriginalWindow(
 		originalContent,
 		currentContent,
-		cursorLine,
-		editEntries
+		cursorLine
 	);
 
 	// Step 5: Calculate remaining budget for context files
@@ -234,21 +232,21 @@ function extract21LineWindow(content: string, cursorLine: number): string {
 }
 
 /**
- * Extract the original window using simple line delta approach.
+ * Map cursor position from current file to original file using line delta.
  *
  * Algorithm:
- * 1. Compute total line delta between original and current
- * 2. For cursor position in current, subtract proportional delta to get position in original
- * 3. Extract 21-line window from original at the mapped position
- *
- * This simplified approach works well when the edits are concentrated in one area
- * and avoids complexity of LCS diff line mapping.
+ * 1. Find first line where original and current differ
+ * 2. Find last line where they differ (scanning from end)
+ * 3. Map cursor position:
+ *    - Before changes: same line number
+ *    - Within changed region: proportional mapping
+ *    - After changes: subtract line delta
+ * 4. Extract 21-line window from original at mapped position
  */
-function extractOriginalWindowViaRebase(
+function extractOriginalWindow(
 	originalContent: string,
 	currentContent: string,
-	cursorLine: number,
-	_editEntries: readonly IXtabHistoryEditEntry[]
+	cursorLine: number
 ): string {
 	// If files are identical, just extract the same window
 	if (originalContent === currentContent) {
@@ -263,7 +261,6 @@ function extractOriginalWindowViaRebase(
 	const originalLines = originalContent.split('\n');
 	const currentLines = currentContent.split('\n');
 
-	// Simple approach: find where content differs and apply proportional mapping
 	// Find first divergence point
 	let firstDiff = 0;
 	const minLen = Math.min(originalLines.length, currentLines.length);
@@ -285,10 +282,7 @@ function extractOriginalWindowViaRebase(
 		currEnd--;
 	}
 
-	// Now we have the changed regions:
-	// Original: [firstDiff, origEnd]
-	// Current: [firstDiff, currEnd]
-
+	// Map cursor from current-space to original-space
 	let originalCursorLine: number;
 
 	if (cursorLine < firstDiff) {
@@ -301,7 +295,6 @@ function extractOriginalWindowViaRebase(
 		const offsetInChange = cursorLine - firstDiff;
 
 		if (currDiffLen > 0 && origDiffLen > 0) {
-			// Map proportionally
 			const ratio = origDiffLen / currDiffLen;
 			const mappedOffset = Math.round(offsetInChange * ratio);
 			originalCursorLine = firstDiff + Math.min(mappedOffset, origDiffLen - 1);
@@ -321,7 +314,6 @@ function extractOriginalWindowViaRebase(
 	// Clamp to valid range
 	originalCursorLine = Math.max(0, Math.min(originalCursorLine, originalLines.length - 1));
 
-	// Extract 21-line window from original at the mapped cursor position
 	return extract21LineWindow(originalContent, originalCursorLine);
 }
 
