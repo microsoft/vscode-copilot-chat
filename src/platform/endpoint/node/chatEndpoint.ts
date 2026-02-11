@@ -279,7 +279,7 @@ export class ChatEndpoint implements IChatEndpoint {
 				delete body.max_tokens;
 			}
 		}
-		if (body && isReasoningModel) {
+		if (body && (isReasoningModel || isGpt5PlusFamily(this))) {
 			delete body.temperature;
 		}
 
