@@ -69,7 +69,7 @@ export class CopilotCLIContrib extends Disposable {
 				serverLabel: 'VS Code Copilot CLI',
 				serverVersion: '0.0.1',
 				registerTools: (server, sessionId) => {
-					registerTools(server, logger, diffState, selectionState, contentProvider, sessionId);
+					registerTools(server, logger, diffState, selectionState, contentProvider, this.sessionTracker, sessionId);
 				},
 				registerPushNotifications: () => {
 					for (const d of registerSelectionChangedNotification(logger, httpServer, selectionState)) {
