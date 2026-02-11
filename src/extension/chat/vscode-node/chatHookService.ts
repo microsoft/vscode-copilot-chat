@@ -235,12 +235,9 @@ export class ChatHookService implements IChatHookService {
 			// Exit code 2 (error) means deny the tool
 			if (result.resultKind === 'error') {
 				const reason = typeof result.output === 'string' ? result.output : undefined;
-				return {
-					permissionDecision: 'deny',
-					permissionDecisionReason: reason,
-					updatedInput: undefined,
-					additionalContext: undefined,
-				};
+				mostRestrictiveDecision = 'deny';
+				winningReason = reason ?? winningReason;
+				break;
 			}
 
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
@@ -313,11 +310,11 @@ export class ChatHookService implements IChatHookService {
 			// Exit code 2 (error) means block the tool result
 			if (result.resultKind === 'error') {
 				const reason = typeof result.output === 'string' ? result.output : undefined;
-				return {
-					decision: 'block',
-					reason,
-					additionalContext: undefined,
-				};
+				if (!hasBlock) {
+					hasBlock = true;
+					blockReason = reason;
+				}
+				break;
 			}
 
 			if (result.resultKind !== 'success' || typeof result.output !== 'object' || result.output === null) {
