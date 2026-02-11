@@ -35,9 +35,9 @@ export class ModuleContextProvider extends ContextProvider {
 		if (runnable !== undefined) {
 			result.addPrimary(runnable);
 		}
-		result.addSecondary(new ImportsRunnable(session, languageService, context, this.tokenInfo, excludes, undefined));
+		result.addSecondary(new ImportsRunnable(session, languageService, context, this.tokenInfo, excludes));
 		if (context.neighborFiles.length > 0) {
-			result.addTertiary(new TypesOfNeighborFilesRunnable(session, languageService, context, this.tokenInfo, undefined));
+			result.addTertiary(new TypesOfNeighborFilesRunnable(session, languageService, context, this.tokenInfo));
 		}
 	}
 }

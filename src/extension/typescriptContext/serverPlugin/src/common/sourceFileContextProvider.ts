@@ -91,7 +91,7 @@ export class SourceFileContextProvider extends ContextProvider {
 		if (runnable !== undefined) {
 			result.addPrimary(runnable);
 		}
-		result.addSecondary(new ImportsRunnable(session, languageService, context, this.tokenInfo, new Set(), undefined));
+		result.addSecondary(new ImportsRunnable(session, languageService, context, this.tokenInfo, new Set()));
 		if (context.neighborFiles.length > 0) {
 			result.addTertiary(new TypesOfNeighborFilesRunnable(session, languageService, context, this.tokenInfo));
 		}

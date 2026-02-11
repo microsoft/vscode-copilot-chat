@@ -102,8 +102,8 @@ export abstract class FunctionLikeContextRunnable<T extends tt.FunctionLikeDecla
 
 export class SignatureRunnable extends FunctionLikeContextRunnable {
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.FunctionLikeDeclarationBase, priority: number = Priorities.Locals) {
-		super(session, languageService, context, SignatureRunnable.computeId(session, declaration), declaration, priority, ComputeCost.Low);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.FunctionLikeDeclarationBase) {
+		super(session, languageService, context, SignatureRunnable.computeId(session, declaration), declaration, Priorities.Locals, ComputeCost.Low);
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
@@ -177,8 +177,8 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 	private readonly cacheScope: CacheScope | undefined;
 	private runnableResult: RunnableResult | undefined;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined, priority: number = Priorities.Locals) {
-		super(session, languageService, context, 'TypeOfLocalsRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined) {
+		super(session, languageService, context, 'TypeOfLocalsRunnable', SnippetLocation.Primary, Priorities.Locals, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.cacheScope = cacheScope;
@@ -251,8 +251,8 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	private static SymbolsToInclude: number = ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, priority: number = Priorities.NeighborFiles) {
-		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo) {
+		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, Priorities.NeighborFiles, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -315,8 +315,8 @@ export class ImportsRunnable extends AbstractContextRunnable {
 		ts.SyntaxKind.ModuleDeclaration
 	]);
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, priority: number = Priorities.Imports) {
-		super(session, languageService, context, 'ImportsRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>) {
+		super(session, languageService, context, 'ImportsRunnable', SnippetLocation.Secondary, Priorities.Imports, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.runnableResult = undefined;
@@ -471,8 +471,8 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 
 	private readonly expression: tt.Expression;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Expression) {
-		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, priority, ComputeCost.Low);
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression) {
+		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, Priorities.Expression, ComputeCost.Low);
 		this.expression = expression;
 	}
 
