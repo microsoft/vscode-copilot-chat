@@ -5,7 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type { ChatLanguageModelToolReference } from 'vscode';
-import { ConfigKey } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { CustomInstructionsKind, ICustomInstructions, ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -58,6 +58,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
@@ -126,6 +127,18 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 				chunks.push(chunk);
 			}
 		}
+
+		// Azure-only fork: inject yourcompany.ai.customInstructions (non-extension config)
+		const companyInstructions = this.configurationService.getNonExtensionConfig<string | string[]>('yourcompany.ai.customInstructions');
+		if (companyInstructions) {
+			const instructionTexts = Array.isArray(companyInstructions) ? companyInstructions : [companyInstructions];
+			for (const text of instructionTexts) {
+				if (text && typeof text === 'string') {
+					chunks.push(<TextChunk>{text}</TextChunk>);
+				}
+			}
+		}
+
 		if (chunks.length === 0) {
 			return undefined;
 		}

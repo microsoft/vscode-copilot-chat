@@ -2974,6 +2974,23 @@
 						"type": "boolean",
 						"default": false,
 						"description": "Automatically index workspace files for @workspace semantic search"
+					},
+					"yourcompany.ai.customInstructions": {
+						"oneOf": [
+							{
+								"type": "string",
+								"description": "A single custom instruction string to include in all prompts"
+							},
+							{
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "An array of custom instruction strings to include in all prompts"
+							}
+						],
+						"default": [],
+						"description": "Custom instructions to inject into all Copilot chat prompts. Can be a single string or an array of strings."
 					}
 				}
 			},

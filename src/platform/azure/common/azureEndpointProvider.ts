@@ -187,8 +187,19 @@ export class AzureEndpointProvider implements IEndpointProvider {
 
 	/**
 	 * Build IChatModelInformation from a model definition.
+	 * Sets urlOrRequestMetadata to a direct Azure OpenAI URL so requests
+	 * bypass CAPI and go straight to Azure OpenAI Service.
 	 */
 	private _buildModelInfo(def: AzureModelDefinition): IChatModelInformation {
+		const endpoint = this._modelRouter.getEndpoint();
+		const routing = this._modelRouter.getDeployment('chat');
+		// Use the definition's ID as the deployment name (or fall back to router default)
+		const deploymentName = def.id;
+		const apiVersion = routing.apiVersion;
+		const directUrl = endpoint
+			? `${endpoint.replace(/\/$/, '')}/openai/deployments/${deploymentName}/chat/completions?api-version=${apiVersion}`
+			: undefined;
+
 		return {
 			id: def.id,
 			name: def.name,
@@ -196,6 +207,7 @@ export class AzureEndpointProvider implements IEndpointProvider {
 			is_chat_default: def.isDefault,
 			is_chat_fallback: def.isDefault,
 			version: '1.0.0',
+			urlOrRequestMetadata: directUrl,
 			capabilities: {
 				type: 'chat',
 				family: def.family,
@@ -219,9 +231,43 @@ export class AzureEndpointProvider implements IEndpointProvider {
 
 	/**
 	 * Get all available model definitions - built-in plus any from configuration.
+	 * Merges hardcoded models with models defined in yourcompany.ai.deployments setting.
 	 */
 	private _getModelDefinitions(): AzureModelDefinition[] {
-		return AZURE_MODEL_DEFINITIONS;
+		const configDeployments = this._configService.getNonExtensionConfig<Record<string, { name?: string; family?: string; tokenizer?: string; isDefault?: boolean; showInPicker?: boolean; maxPromptTokens?: number; maxOutputTokens?: number; supportsVision?: boolean; supportsThinking?: boolean }>>('yourcompany.ai.deployments') || {};
+
+		// Start with built-in definitions
+		const builtInIds = new Set(AZURE_MODEL_DEFINITIONS.map(m => m.id));
+		const allModels = [...AZURE_MODEL_DEFINITIONS];
+
+		// Add any config-defined deployments that aren't already in the built-in list
+		for (const [deploymentId, config] of Object.entries(configDeployments)) {
+			if (!builtInIds.has(deploymentId)) {
+				allModels.push({
+					id: deploymentId,
+					name: config.name || deploymentId,
+					family: config.family || deploymentId,
+					isDefault: config.isDefault || false,
+					showInPicker: config.showInPicker !== false,
+					tokenizer: TokenizerType.O200K,
+					limits: {
+						max_prompt_tokens: config.maxPromptTokens || 128000,
+						max_output_tokens: config.maxOutputTokens || 16384,
+						max_context_window_tokens: config.maxPromptTokens || 128000,
+					},
+					supports: {
+						tool_calls: true,
+						parallel_tool_calls: true,
+						streaming: true,
+						vision: config.supportsVision,
+						thinking: config.supportsThinking,
+					},
+					supportedEndpoints: [ModelSupportedEndpoint.ChatCompletions, ModelSupportedEndpoint.Responses],
+				});
+			}
+		}
+
+		return allModels;
 	}
 
 	private _getOrCreateChatEndpoint(modelInfo: IChatModelInformation): IChatEndpoint {
@@ -240,6 +286,11 @@ export class AzureEndpointProvider implements IEndpointProvider {
 		const overriddenModel = this._configService.getConfig(ConfigKey.Advanced.DebugOverrideChatEngine);
 		if (overriddenModel) {
 			this._logService.trace(`AzureEndpointProvider: using overridden model: ${overriddenModel}`);
+			const endpoint = this._modelRouter.getEndpoint();
+			const routing = this._modelRouter.getDeployment('chat');
+			const directUrl = endpoint
+				? `${endpoint.replace(/\/$/, '')}/openai/deployments/${overriddenModel}/chat/completions?api-version=${routing.apiVersion}`
+				: undefined;
 			return this._getOrCreateChatEndpoint({
 				id: overriddenModel,
 				name: 'Custom Override',
@@ -247,6 +298,7 @@ export class AzureEndpointProvider implements IEndpointProvider {
 				model_picker_enabled: true,
 				is_chat_default: false,
 				is_chat_fallback: false,
+				urlOrRequestMetadata: directUrl,
 				capabilities: {
 					type: 'chat',
 					family: 'custom',

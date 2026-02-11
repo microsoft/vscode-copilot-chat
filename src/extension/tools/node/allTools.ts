@@ -7,7 +7,8 @@ import './applyPatchTool';
 import './codebaseTool';
 import './createDirectoryTool';
 import './createFileTool';
-import './docTool';
+// Azure-only fork: docTool removed (requires GitHub Docs search)
+// import './docTool';
 import './editNotebookTool';
 import './findFilesTool';
 import './findTestsFilesTool';
@@ -15,7 +16,8 @@ import './findTextInFilesTool';
 import './getErrorsTool';
 import './getNotebookCellOutputTool';
 import './getSearchViewResultsTool';
-import './githubRepoTool';
+// Azure-only fork: githubRepoTool removed (requires GitHub API)
+// import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
