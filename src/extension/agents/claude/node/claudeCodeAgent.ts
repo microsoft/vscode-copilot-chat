@@ -10,6 +10,7 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
@@ -30,7 +31,6 @@ import { completeToolInvocation, createFormattedToolInvocation } from '../common
 import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 import { ClaudeLanguageModelServer, IClaudeLanguageModelServerConfig } from './claudeLanguageModelServer';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
-import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { ClaudeSettingsChangeTracker } from './claudeSettingsChangeTracker';
 import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/claudeSessionSchema';
 
