@@ -15,6 +15,7 @@ import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { formatHookErrorMessage, processHookResults } from '../../intents/node/hookResultProcessor';
+import { IToolsService, isToolValidationError } from '../../tools/common/toolsService';
 import { ChatHookTelemetry } from './chatHookTelemetry';
 
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
@@ -36,6 +37,7 @@ export class ChatHookService implements IChatHookService {
 		@IHookExecutor private readonly _hookExecutor: IHookExecutor,
 		@IHooksOutputChannel private readonly _outputChannel: IHooksOutputChannel,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IToolsService private readonly _toolsService: IToolsService,
 	) {
 		this._telemetry = new ChatHookTelemetry(telemetryService);
 	}
@@ -301,6 +303,17 @@ export class ChatHookService implements IChatHookService {
 				winningReason = messageWithTool || winningReason;
 			},
 		});
+
+		// Validate updatedInput against the tool's input schema before returning it
+		if (lastUpdatedInput) {
+			const validationResult = this._toolsService.validateToolInput(toolName, JSON.stringify(lastUpdatedInput));
+			if (isToolValidationError(validationResult)) {
+				const message = `Discarding updatedInput for tool '${toolName}': schema validation failed: ${validationResult.error}`;
+				this._logService.warn(`[ChatHookService] ${message}`);
+				this._outputChannel.appendLine(`${new Date().toISOString()} [PreToolUse] ${message}`);
+				lastUpdatedInput = undefined;
+			}
+		}
 
 		if (!mostRestrictiveDecision && !lastUpdatedInput && allAdditionalContext.length === 0) {
 			return undefined;

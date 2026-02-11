@@ -19,6 +19,7 @@ export function registerUpdateSessionNameTool(server: McpServer, logger: ILogger
 			description: 'Update the display name for the current CLI session',
 			inputSchema: schema,
 		},
+		// @ts-ignore - TS2589: zod type instantiation too deep for server.tool() generics
 		async (args: { name: string }) => {
 			const { name } = args;
 			logger.debug(`Updating session name for ${sessionId} to "${name}"`);
