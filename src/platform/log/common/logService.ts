@@ -403,7 +403,38 @@ export function collectSingleLineErrorMessage(e: any, includeDetails = false): s
 	return collect(e);
 }
 
-function extractChromiumDetails(details: any): any {
+/**
+ * Chromium error details attached by Electron to fetch errors.
+ * Electron's network service process runs separately; when it crashes,
+ * `network_process_crashed` is set to `true` on the error's `chromiumDetails`.
+ */
+export interface ElectronFetchErrorChromiumDetails {
+	readonly is_request_error?: boolean;
+	readonly network_process_crashed?: boolean;
+	readonly session_state?: any;
+	readonly drain_error?: any;
+	readonly drain_description?: any;
+	readonly go_away_error?: any;
+	readonly go_away_error_details?: any;
+	readonly go_away_debug_data?: any;
+	readonly rst_stream_error?: any;
+	readonly rst_stream_error_details?: any;
+	readonly rst_stream_description?: any;
+	readonly last_framer_error?: any;
+	readonly last_framer_error_details?: any;
+	readonly error_source?: any;
+	readonly aliases?: any;
+	readonly proxy?: any;
+	readonly in_flight_write?: any;
+	readonly buffered_spdy_framer?: any;
+	readonly tls_info?: any;
+	readonly socket_info?: any;
+	readonly url_loader_error?: any;
+	readonly active_stream_details?: any;
+	readonly closed_stream_details?: any;
+}
+
+function extractChromiumDetails(details: ElectronFetchErrorChromiumDetails): any {
 	if (!details || typeof details !== 'object') {
 		return {};
 	}

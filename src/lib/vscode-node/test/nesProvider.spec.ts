@@ -84,6 +84,10 @@ class TestFetcher implements IFetcher {
 		return false;
 	}
 
+	isNetworkProcessCrashedError(e: any): boolean {
+		return false;
+	}
+
 	getUserMessageForFetcherError(err: any): string {
 		return `Test fetcher error: ${err.message}`;
 	}

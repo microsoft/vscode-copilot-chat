@@ -59,6 +59,9 @@ describe('RouterDecisionFetcher', () => {
 			isFetcherError(_err: unknown): boolean {
 				return false;
 			},
+			isNetworkProcessCrashedError(_err: unknown): boolean {
+				return false;
+			},
 			getUserMessageForFetcherError(_err: unknown): string {
 				return '';
 			}
