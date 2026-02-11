@@ -706,7 +706,7 @@ export namespace ConfigKey {
 		 * When enabled, large tool results (above the threshold in bytes) are written to disk
 		 * instead of being included directly in the prompt. This helps manage context window usage.
 		 */
-		export const LargeToolResultsToDiskEnabled = defineSetting<boolean>('chat.agent.largeToolResultsToDisk.enabled', ConfigType.ExperimentBased, false);
+		export const LargeToolResultsToDiskEnabled = defineSetting<boolean>('chat.agent.largeToolResultsToDisk.enabled', ConfigType.ExperimentBased, true);
 		/**
 		 * The size threshold in bytes above which tool results are written to disk.
 		 * Only applies when LargeToolResultsToDiskEnabled is true.
