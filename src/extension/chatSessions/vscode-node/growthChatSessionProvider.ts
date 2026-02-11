@@ -56,8 +56,9 @@ export class GrowthChatSessionProvider extends Disposable implements vscode.Chat
 
 	/**
 	 * Mark the session as seen (interacted with by the user). Clears the
-	 * NeedsInput attention badge. Only called when the user actually sends
-	 * a message, never from content preloading.
+	 * NeedsInput attention badge. Called both when the user opens the
+	 * session (via {@link provideChatSessionContent}) and when the user
+	 * sends a message (via the request handler).
 	 */
 	private _markSeen(): void {
 		if (!this._seen) {
