@@ -112,6 +112,20 @@ export interface UserPromptSubmitHookOutput {
 	 * Tells the agent why it should continue.
 	 */
 	readonly reason?: string;
+	/**
+	 * Hook-specific output from the UserPromptSubmit hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
+	 */
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the agent's context.
+		 * When multiple sources provide context (SessionStart/SubagentStart/UserPromptSubmit),
+		 * they are concatenated.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**
@@ -155,10 +169,18 @@ export interface SessionStartHookInput {
  */
 export interface SessionStartHookOutput {
 	/**
-	 * Additional context to add to the agent's context.
-	 * Multiple hooks' values are concatenated.
+	 * Hook-specific output from the SessionStart hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly additionalContext?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the agent's context.
+		 * Multiple hooks' values are concatenated.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**
@@ -180,9 +202,17 @@ export interface SubagentStartHookInput {
  */
 export interface SubagentStartHookOutput {
 	/**
-	 * Additional context to add to the subagent's context.
+	 * Hook-specific output from the SubagentStart hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly additionalContext?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the subagent's context.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**

@@ -342,13 +342,18 @@ export class DefaultIntentRequestHandler {
 			await loop.runStartHooks(this.stream, pauseCtrl);
 
 			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
+			const additionalContexts: string[] = [];
 			processHookResults({
 				hookType: 'UserPromptSubmit',
 				results: userPromptSubmitResults,
 				outputStream: this.stream,
 				logService: this._logService,
 				onSuccess: (output) => {
-					const typedOutput = output as UserPromptSubmitHookOutput;
+					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+					if (additionalContext) {
+						additionalContexts.push(additionalContext);
+					}
 					// Check for block decision output
 					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
 						const blockReason = typedOutput.reason || l10n.t('No reason provided');
@@ -358,6 +363,10 @@ export class DefaultIntentRequestHandler {
 					}
 				},
 			});
+
+			if (additionalContexts.length > 0) {
+				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
+			}
 
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
