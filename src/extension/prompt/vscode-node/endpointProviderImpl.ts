@@ -7,7 +7,7 @@ import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
@@ -83,6 +83,17 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		const modelId = modelMetadata.id;
 		let chatEndpoint = this._chatEndpoints.get(modelId);
 		if (!chatEndpoint) {
+			// Azure-only fork: force Chat Completions API only.
+			// Azure OpenAI does not support the Responses API at the /chat/completions endpoint,
+			// so strip Responses from supported_endpoints to prevent body format mismatch.
+			if (modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses)) {
+				modelMetadata = {
+					...modelMetadata,
+					supported_endpoints: modelMetadata.supported_endpoints.filter(
+						e => e !== ModelSupportedEndpoint.Responses
+					),
+				};
+			}
 			chatEndpoint = this._instantiationService.createInstance(CopilotChatEndpoint, modelMetadata);
 			this._chatEndpoints.set(modelId, chatEndpoint);
 		}
