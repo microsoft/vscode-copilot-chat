@@ -29,7 +29,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
-import { isAnthropicFamily, isGeminiFamily } from '../common/chatModelCapabilities';
+import { isAnthropicFamily, isGeminiFamily, isGpt5PlusFamily } from '../common/chatModelCapabilities';
 import { IDomainService } from '../common/domainService';
 import { CustomModel, IChatModelInformation, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createMessagesRequestBody, processResponseFromMessagesEndpoint } from './messagesApi';
@@ -267,15 +267,19 @@ export class ChatEndpoint implements IChatEndpoint {
 			body.stream = false;
 		}
 
-		// Reasoning models (o1, o3, o4-mini, etc.) require max_completion_tokens instead of max_tokens
-		// and do not support the temperature parameter
+		// Models that require max_completion_tokens instead of max_tokens:
+		// - o-series reasoning models (o1, o3, o4-mini, etc.)
+		// - GPT-5+ family models (gpt-5, gpt-5-mini, gpt-5-codex, gpt-5.1, gpt-5.2, etc.)
 		const isReasoningModel = this.family.startsWith('o1') || this.family.startsWith('o3') || this.family.startsWith('o4')
 			|| this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI || this.model === CHAT_MODEL.O3MINI;
-		if (body && isReasoningModel) {
+		const needsMaxCompletionTokens = isReasoningModel || isGpt5PlusFamily(this);
+		if (body && needsMaxCompletionTokens) {
 			if (body.max_tokens !== undefined) {
 				body['max_completion_tokens'] = body.max_tokens;
 				delete body.max_tokens;
 			}
+		}
+		if (body && isReasoningModel) {
 			delete body.temperature;
 		}
 
