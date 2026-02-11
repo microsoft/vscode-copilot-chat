@@ -199,8 +199,8 @@ describe('addFileReference command', () => {
 
 	it('should use session name as picker label when available', async () => {
 		httpServer.setConnectedSessionIds(['session-1', 'session-2']);
-		sessionTracker.setDisplayName('session-1', 'My CLI');
-		sessionTracker.setDisplayName('session-2', 'session-2');
+		sessionTracker.setSessionName('session-1', 'My CLI');
+		sessionTracker.setSessionName('session-2', 'session-2');
 		mockShowQuickPick.mockResolvedValue({ sessionId: 'session-1', label: 'My CLI' });
 
 		registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
