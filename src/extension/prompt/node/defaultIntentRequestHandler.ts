@@ -349,13 +349,18 @@ export class DefaultIntentRequestHandler {
 			await loop.runStartHooks(this.stream, this.token);
 
 			const userPromptSubmitResults = await this._chatHookService.executeHook('UserPromptSubmit', this.request.hooks, { prompt: this.request.prompt } satisfies UserPromptSubmitHookInput, this.conversation.sessionId, this.token);
+			const additionalContexts: string[] = [];
 			processHookResults({
 				hookType: 'UserPromptSubmit',
 				results: userPromptSubmitResults,
 				outputStream: this.stream,
 				logService: this._logService,
 				onSuccess: (output) => {
-					const typedOutput = output as UserPromptSubmitHookOutput;
+					const typedOutput = output as UserPromptSubmitHookOutput & { additionalContext?: string };
+					const additionalContext = typedOutput.hookSpecificOutput?.additionalContext ?? typedOutput.additionalContext;
+					if (additionalContext) {
+						additionalContexts.push(additionalContext);
+					}
 					// Check for block decision output
 					if (typeof typedOutput === 'object' && typedOutput.decision === 'block') {
 						const blockReason = typedOutput.reason || l10n.t('No reason provided');
@@ -365,6 +370,10 @@ export class DefaultIntentRequestHandler {
 					}
 				},
 			});
+
+			if (additionalContexts.length > 0) {
+				loop.appendAdditionalHookContext(additionalContexts.join('\n'));
+			}
 
 			const result = await loop.run(this.stream, this.token);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
@@ -660,7 +669,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
-				parentRequestId: this.options.request.parentRequestId,
 			},
 			enableRetryOnFilter: true
 		}, token);

@@ -161,6 +161,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
 
+	public appendAdditionalHookContext(context: string): void {
+		if (!context) {
+			return;
+		}
+		this.additionalHookContext = this.additionalHookContext
+			? `${this.additionalHookContext}\n${context}`
+			: context;
+	}
+
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
 
@@ -330,10 +339,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				logService: this._logService,
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
-						const hookOutput = output as SessionStartHookOutput;
-						if (hookOutput.additionalContext) {
-							additionalContexts.push(hookOutput.additionalContext);
-							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						const hookOutput = output as SessionStartHookOutput & { additionalContext?: string };
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext ?? hookOutput.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${additionalContext.substring(0, 100)}...`);
 						}
 					}
 				},
@@ -372,10 +382,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				logService: this._logService,
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
-						const hookOutput = output as SubagentStartHookOutput;
-						if (hookOutput.additionalContext) {
-							additionalContexts.push(hookOutput.additionalContext);
-							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						const hookOutput = output as SubagentStartHookOutput & { additionalContext?: string };
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext ?? hookOutput.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${additionalContext.substring(0, 100)}...`);
 						}
 					}
 				},
