@@ -2202,6 +2202,18 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.newSession",
+				"title": "%github.copilot.command.cli.newSession%",
+				"icon": "$(terminal)",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.cli.newSessionToSide",
+				"title": "%github.copilot.command.cli.newSessionToSide%",
+				"icon": "$(terminal)",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -4418,6 +4430,12 @@
 					"group": "navigation@0"
 				}
 			],
+			"chat/newSession": [
+				{
+					"command": "github.copilot.cli.newSession",
+					"group": "4_recommendations@0"
+				}
+			],
 			"testing/item/result": [
 				{
 					"command": "github.copilot.tests.fixTestFailure.fromInline",
@@ -5508,7 +5526,16 @@
 			{
 				"path": "./assets/prompts/init.prompt.md"
 			}
-		]
+		],
+		"terminal": {
+			"profiles": [
+				{
+					"icon": "copilot",
+					"id": "copilot-cli",
+					"title": "GitHub Copilot CLI"
+				}
+			]
+		}
 	},
 	"prettier": {
 		"useTabs": true,
