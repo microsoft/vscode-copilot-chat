@@ -36,6 +36,8 @@ export class MockChatHookService implements IChatHookService {
 	/** Tracks all hook calls for verification */
 	readonly hookCalls: Array<{ hookType: ChatHookType; input: unknown }> = [];
 
+	logConfiguredHooks(): void { }
+
 	/**
 	 * Configure the results that should be returned when a specific hook type is executed.
 	 */

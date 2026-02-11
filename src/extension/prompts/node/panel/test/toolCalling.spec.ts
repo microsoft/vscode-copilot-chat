@@ -36,6 +36,8 @@ class CapturingChatHookService implements IChatHookService {
 		private readonly hookResult: IPreToolUseHookResult | undefined,
 	) { }
 
+	logConfiguredHooks(): void { }
+
 	async executeHook(): Promise<never[]> {
 		return [];
 	}

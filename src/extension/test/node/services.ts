@@ -148,6 +148,8 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 class NullChatHookService implements IChatHookService {
 	declare readonly _serviceBrand: undefined;
 
+	logConfiguredHooks(): void { }
+
 	async executeHook(): Promise<never[]> {
 		return [];
 	}

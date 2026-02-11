@@ -10,8 +10,11 @@ import { HookCommandResultKind, IHookCommandResult, IHookExecutor } from '../../
 import { IHooksOutputChannel } from '../../../platform/chat/common/hooksOutputChannel';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
+import { ChatHookTelemetry } from './chatHookTelemetry';
 
 const permissionPriority: Record<string, number> = { 'deny': 2, 'ask': 1, 'allow': 0 };
 
@@ -24,13 +27,17 @@ export class ChatHookService implements IChatHookService {
 	declare readonly _serviceBrand: undefined;
 
 	private _requestCounter = 0;
+	private readonly _telemetry: ChatHookTelemetry;
 
 	constructor(
 		@ISessionTranscriptService private readonly _sessionTranscriptService: ISessionTranscriptService,
 		@ILogService private readonly _logService: ILogService,
 		@IHookExecutor private readonly _hookExecutor: IHookExecutor,
 		@IHooksOutputChannel private readonly _outputChannel: IHooksOutputChannel,
-	) { }
+		@ITelemetryService telemetryService: ITelemetryService,
+	) {
+		this._telemetry = new ChatHookTelemetry(telemetryService);
+	}
 
 	private _log(requestId: number, hookType: string, message: string): void {
 		this._outputChannel.appendLine(`${new Date().toISOString()} [#${requestId}] [${hookType}] ${message}`);
@@ -60,6 +67,12 @@ export class ChatHookService implements IChatHookService {
 		}
 	}
 
+	logConfiguredHooks(hooks: vscode.ChatRequestHooks | undefined): void {
+		if (hooks) {
+			this._telemetry.logConfiguredHooks(hooks);
+		}
+	}
+
 	async executeHook(hookType: vscode.ChatHookType, hooks: vscode.ChatRequestHooks | undefined, input: unknown, sessionId?: string, token?: vscode.CancellationToken): Promise<vscode.ChatHookResult[]> {
 		if (!hooks) {
 			return [];
@@ -69,6 +82,11 @@ export class ChatHookService implements IChatHookService {
 		if (!hookCommands || hookCommands.length === 0) {
 			return [];
 		}
+
+		const hookCount = hookCommands.length;
+		const overallStopWatch = StopWatch.create();
+		let hasError = false;
+		let hasCaughtException = false;
 
 		try {
 			// Flush transcript before running hooks so scripts see up-to-date content
@@ -107,11 +125,15 @@ export class ChatHookService implements IChatHookService {
 					const inputForLog = this._redactForLogging(commandInput as Record<string, unknown>);
 					this._log(requestId, hookType, `Input: ${JSON.stringify(inputForLog)}`);
 
-					const startTime = Date.now();
+					const sw = StopWatch.create();
 					const commandResult = await this._hookExecutor.executeCommand(hookCommand, commandInput, effectiveToken);
-					const elapsed = Date.now() - startTime;
+					const elapsed = sw.elapsed();
 
 					this._logCommandResult(requestId, hookType, commandResult, elapsed);
+
+					if (commandResult.kind === HookCommandResultKind.Error || commandResult.kind === HookCommandResultKind.NonBlockingError) {
+						hasError = true;
+					}
 
 					const result = this._toHookResult(commandResult);
 					results.push(result);
@@ -123,6 +145,7 @@ export class ChatHookService implements IChatHookService {
 						break;
 					}
 				} catch (err) {
+					hasCaughtException = true;
 					const errMessage = err instanceof Error ? err.message : String(err);
 					this._log(requestId, hookType, `Error: ${errMessage}`);
 					this._logService.error(err instanceof Error ? err : new Error(errMessage), '[ChatHookService] Error running hook command');
@@ -136,8 +159,11 @@ export class ChatHookService implements IChatHookService {
 
 			return results;
 		} catch (e) {
+			hasCaughtException = true;
 			this._logService.error(`[ChatHookService] Error executing ${hookType} hook`, e);
 			return [];
+		} finally {
+			this._telemetry.logHookExecuted(hookType, hookCount, overallStopWatch.elapsed(), hasError, hasCaughtException);
 		}
 	}
 
@@ -274,12 +300,16 @@ export class ChatHookService implements IChatHookService {
 			return undefined;
 		}
 
-		return {
+		const hookResult: IPreToolUseHookResult = {
 			permissionDecision: mostRestrictiveDecision,
 			permissionDecisionReason: winningReason,
 			updatedInput: lastUpdatedInput,
 			additionalContext: allAdditionalContext.length > 0 ? allAdditionalContext : undefined,
 		};
+
+		this._telemetry.logPreToolUseResult(hookResult);
+
+		return hookResult;
 	}
 
 	async executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined> {
@@ -348,10 +378,14 @@ export class ChatHookService implements IChatHookService {
 			return undefined;
 		}
 
-		return {
+		const hookResult: IPostToolUseHookResult = {
 			decision: hasBlock ? 'block' : undefined,
 			reason: blockReason,
 			additionalContext: allAdditionalContext.length > 0 ? allAdditionalContext : undefined,
 		};
+
+		this._telemetry.logPostToolUseResult(hookResult);
+
+		return hookResult;
 	}
 }
