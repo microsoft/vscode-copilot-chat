@@ -142,22 +142,16 @@ describe('addSelection command', () => {
 			expect(httpServer.sendNotification).toHaveBeenCalled();
 		});
 
-		it('should allow vscode-remote scheme', async () => {
+		it('should reject vscode-remote scheme with warning', async () => {
 			mockActiveTextEditor.value = createMockEditorWithScheme('/test/file.ts', 'content', 0, 0, 0, 7, 'vscode-remote');
 
 			registerAddSelectionCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
 			await registeredCommands.get(ADD_SELECTION_COMMAND)!();
 
-			expect(httpServer.sendNotification).toHaveBeenCalled();
-		});
-
-		it('should allow vscode-notebook-cell scheme', async () => {
-			mockActiveTextEditor.value = createMockEditorWithScheme('/test/file.ts', 'content', 0, 0, 0, 7, 'vscode-notebook-cell');
-
-			registerAddSelectionCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
-			await registeredCommands.get(ADD_SELECTION_COMMAND)!();
-
-			expect(httpServer.sendNotification).toHaveBeenCalled();
+			expect(httpServer.sendNotification).not.toHaveBeenCalled();
+			expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+				'Cannot send virtual files to Copilot CLI.',
+			);
 		});
 
 		it('should reject output scheme with warning', async () => {

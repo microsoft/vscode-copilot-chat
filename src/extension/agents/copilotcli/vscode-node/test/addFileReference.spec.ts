@@ -258,7 +258,7 @@ describe('addFileReference command', () => {
 			);
 		});
 
-		it('should allow vscode-remote scheme from explorer URI', async () => {
+		it('should reject vscode-remote scheme from explorer URI with warning', async () => {
 			registerAddFileReferenceCommand(logger, httpServer as unknown as InProcHttpServer, sessionTracker.asTracker());
 
 			const uri = {
@@ -268,7 +268,10 @@ describe('addFileReference command', () => {
 			};
 			await registeredCommands.get(ADD_FILE_REFERENCE_COMMAND)!(uri);
 
-			expect(httpServer.sendNotification).toHaveBeenCalled();
+			expect(httpServer.sendNotification).not.toHaveBeenCalled();
+			expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+				'Cannot send virtual files to Copilot CLI.',
+			);
 		});
 	});
 });
