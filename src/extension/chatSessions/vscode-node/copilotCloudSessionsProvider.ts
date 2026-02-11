@@ -168,6 +168,7 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 	private readonly sessionPartnerAgentMap = new ResourceMap<string>();
 	private readonly sessionRepositoryMap = new ResourceMap<string>();
 	private readonly sessionReferencesMap = new ResourceMap<readonly vscode.ChatPromptReference[]>();
+	private readonly sessionShowFullLogsMap = new ResourceMap<boolean>(); // Track which sessions show full logs
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotCloudSessionsProvider.TYPE, async (request, context, stream, token) => {
 		await this.chatParticipantImpl(request, context, stream, token);
 	});
@@ -1126,8 +1127,22 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			return (this.sessionReferencesMap.get(resource) ?? []).concat(summaryRef ? [summaryRef] : []);
 		});
 
+		// Check if user wants to see full logs
+		const showFullLogs = this.sessionShowFullLogsMap.get(resource) ?? false;
+
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotCloudSessionsProvider.TYPE, this._gitService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(pr.repository.owner.login, pr.repository.name, sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }), storedReferences);
+		const history = await sessionContentBuilder.buildSessionHistory(
+			getProblemStatement(pr.repository.owner.login, pr.repository.name, sortedSessions),
+			sortedSessions,
+			pr,
+			(sessionId: string) => this._octoKitService.getSessionLogs(sessionId, { createIfNone: true }),
+			storedReferences,
+			{ 
+				includeSummary: !showFullLogs, // Only show summary if not showing full logs
+				sessionId: resource.toString(),
+				includeDetailedLogs: showFullLogs // Include detailed logs only when requested
+			}
+		);
 
 		// const selectedCustomAgent = undefined; /* TODO: Needs API to support this. */
 		// const selectedModel = undefined; /* TODO: Needs API to support this. */
@@ -1147,6 +1162,19 @@ export class CopilotCloudSessionsProvider extends Disposable implements vscode.C
 			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
+	}
+
+	showFullLogs(sessionResourceUri: string) {
+		const resource = vscode.Uri.parse(sessionResourceUri);
+		this.sessionShowFullLogsMap.set(resource, true);
+		// Trigger content refresh by firing the options change event.
+		// Note: VS Code's ChatSessionContentProvider API doesn't provide a dedicated
+		// content refresh method, so we use onDidChangeChatSessionOptions which
+		// causes VS Code to call provideChatSessionContent again.
+		this._onDidChangeChatSessionOptions.fire({
+			resource,
+			updates: [] // Empty updates array signals content refresh without option changes
+		});
 	}
 
 	async openSessionInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {

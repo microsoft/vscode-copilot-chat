@@ -230,6 +230,15 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				await this.installPullRequestExtension();
 			})
 		);
+		this.copilotCloudRegistrations.add(
+			vscode.commands.registerCommand('github.copilot.session.viewDetailedLog', async (sessionId?: string) => {
+				// This command is triggered by the "View Session Log" button
+				// Tell the provider to show full logs for this session
+				if (sessionId) {
+					cloudSessionsProvider.showFullLogs(sessionId);
+				}
+			})
+		);
 		return cloudSessionsProvider;
 	}
 

@@ -5,7 +5,7 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
-import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
+import { ChatRequestTurn, ChatRequestTurn2, ChatResponseCommandButtonPart, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
@@ -96,6 +96,12 @@ export interface ParsedToolCallDetails {
 }
 
 export class ChatSessionContentBuilder {
+	// Constants for summary generation
+	private static readonly SUMMARY_DESCRIPTION_MAX_LINES = 3;
+	private static readonly SUMMARY_DESCRIPTION_MAX_LENGTH = 300;
+	private static readonly LLM_SUMMARY_MAX_TOOL_CALLS = 10;
+	private static readonly LLM_SUMMARY_MAX_CONTENT_LENGTH = 500;
+
 	constructor(
 		private type: string,
 		@IGitService private readonly _gitService: IGitService
@@ -105,11 +111,28 @@ export class ChatSessionContentBuilder {
 	public async buildSessionHistory(
 		problemStatementPromise: Promise<string | undefined>,
 		sessions: SessionInfo[],
-		pullRequest: PullRequestSearchItem,
+		pullRequest: PullRequestSearchItem | undefined,
 		getLogsForSession: (id: string) => Promise<string>,
 		initialReferences: Promise<vscode.ChatPromptReference[]>,
+		options?: { includeSummary?: boolean; sessionId?: string; includeDetailedLogs?: boolean },
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const history: Array<ChatRequestTurn | ChatResponseTurn2> = [];
+
+		// Add summary view at the beginning if requested
+		if (options?.includeSummary && sessions.length > 0) {
+			const problemStatement = await problemStatementPromise;
+			// Get logs for LLM-based summary if no PR available
+			const logs = !pullRequest && sessions.length > 0 ? await getLogsForSession(sessions[0].id) : undefined;
+			const summaryTurn = await this.createSessionSummary(problemStatement, sessions, pullRequest, logs, options.sessionId);
+			if (summaryTurn) {
+				history.push(summaryTurn);
+			}
+			
+			// If not including detailed logs, return just the summary
+			if (!options.includeDetailedLogs) {
+				return history;
+			}
+		}
 
 		// Process all sessions concurrently and assemble results in order
 		const sessionResults = await Promise.all(
@@ -130,8 +153,8 @@ export class ChatSessionContentBuilder {
 					undefined
 				));
 
-				// Create the PR card right after problem statement for first session
-				if (sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+				// Create the PR card right after problem statement for first session (only if PR exists)
+				if (pullRequest && sessionIndex === 0 && pullRequest.author && vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
 					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 					const plaintextBody = pullRequest.body;
 
@@ -157,7 +180,196 @@ export class ChatSessionContentBuilder {
 		return history;
 	}
 
-	private async createResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
+	private async createSessionSummary(
+		problemStatement: string | undefined,
+		sessions: SessionInfo[],
+		pullRequest: PullRequestSearchItem | undefined,
+		logs?: string,
+		sessionId?: string
+	): Promise<ChatResponseTurn2 | undefined> {
+		// Build a high-level summary of what the session accomplished
+		const summaryParts: (ChatResponseMarkdownPart | ChatResponseCommandButtonPart)[] = [];
+
+		// Add the goal/purpose section
+		const markdownParts: string[] = [];
+		markdownParts.push('## 📋 Session Summary\n\n');
+
+		if (problemStatement) {
+			markdownParts.push(`**Goal:** ${problemStatement}\n\n`);
+		}
+
+		// Add status information
+		const latestSession = sessions[sessions.length - 1];
+		let statusText = '';
+		let statusEmoji = '';
+		switch (latestSession.state) {
+			case 'completed':
+				statusEmoji = '✅';
+				statusText = 'Completed';
+				break;
+			case 'failed':
+				statusEmoji = '❌';
+				statusText = 'Failed';
+				break;
+			case 'in_progress':
+				statusEmoji = '⏳';
+				statusText = 'In Progress';
+				break;
+			case 'queued':
+				statusEmoji = '⏸️';
+				statusText = 'Queued';
+				break;
+			default:
+				statusEmoji = '📝';
+				statusText = latestSession.state;
+		}
+		markdownParts.push(`${statusEmoji} **Status:** ${statusText}\n\n`);
+
+		// Generate description from PR body or use LLM for logs
+		if (pullRequest?.body) {
+			// Extract first few lines of PR body as description
+			const lines = pullRequest.body.split('\n').filter(line => line.trim().length > 0);
+			// Join lines with proper punctuation, avoiding double punctuation
+			const fullDescription = lines.slice(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LINES)
+				.map((line, index, array) => {
+					// Don't add separator after last line
+					if (index === array.length - 1) {
+						return line;
+					}
+					// Add '.' if line doesn't already end with sentence-ending punctuation
+					return line.match(/[.!?:;…]$/) ? line : line + '.';
+				})
+				.join(' ');
+			const wasTruncated = fullDescription.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH;
+			const description = fullDescription.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH);
+			if (description) {
+				markdownParts.push(`**What it does:** ${description}${wasTruncated ? '...' : ''}\n\n`);
+			}
+		} else if (logs) {
+			// Use LLM to generate summary from logs
+			const llmSummary = await this.generateLLMSummary(logs, problemStatement);
+			if (llmSummary) {
+				markdownParts.push(`**What it does:** ${llmSummary}\n\n`);
+			}
+		}
+
+		// Add high-level metrics if PR available
+		if (pullRequest?.files && pullRequest.additions !== undefined && pullRequest.deletions !== undefined) {
+			const fileCount = pullRequest.files.totalCount;
+			const additions = pullRequest.additions;
+			const deletions = pullRequest.deletions;
+			markdownParts.push(`**Changes Made:** ${fileCount} file${fileCount !== 1 ? 's' : ''} modified (+${additions} / -${deletions} lines)\n\n`);
+		}
+
+		// Add session count if multiple
+		if (sessions.length > 1) {
+			markdownParts.push(`**Sessions:** ${sessions.length} iteration${sessions.length !== 1 ? 's' : ''}\n\n`);
+		}
+
+		markdownParts.push('---\n\n');
+
+		// Add markdown part
+		summaryParts.push(new ChatResponseMarkdownPart(markdownParts.join('')));
+
+		// Add button to view detailed logs
+		const viewLogsCommand: vscode.Command = {
+			title: 'View Session Log',
+			command: 'github.copilot.session.viewDetailedLog',
+			arguments: [sessionId || this.type]
+		};
+		summaryParts.push(new ChatResponseCommandButtonPart(viewLogsCommand));
+
+		const responseResult: ChatResult = {};
+		return new ChatResponseTurn2(summaryParts, responseResult, this.type);
+	}
+
+	private async generateLLMSummary(logs: string, problemStatement?: string): Promise<string | undefined> {
+		try {
+			// Select a chat model with fallback
+			const models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o' });
+			if (models.length === 0) {
+				// Try fallback to any copilot model
+				const fallbackModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+				if (fallbackModels.length === 0) {
+					return undefined;
+				}
+				return await this.generateSummaryWithModel(fallbackModels[0], logs, problemStatement);
+			}
+
+			return await this.generateSummaryWithModel(models[0], logs, problemStatement);
+		} catch (error) {
+			console.error('Failed to generate LLM summary:', error);
+			return undefined;
+		}
+	}
+
+	private async generateSummaryWithModel(
+		model: vscode.LanguageModelChat,
+		logs: string,
+		problemStatement?: string
+	): Promise<string | undefined> {
+		// Parse logs to extract key information
+		const logChunks = this.parseSessionLogs(logs);
+		const toolCalls: string[] = [];
+		let assistantContent = '';
+
+		for (const chunk of logChunks) {
+			if (!chunk.choices || !Array.isArray(chunk.choices)) {
+				continue;
+			}
+
+			for (const choice of chunk.choices) {
+				const delta = choice.delta;
+				if (delta.role === 'assistant') {
+					if (delta.content) {
+						assistantContent += delta.content;
+					}
+					if (delta.tool_calls) {
+						for (const toolCall of delta.tool_calls) {
+							if (toolCall.function?.name) {
+								toolCalls.push(toolCall.function.name);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Create a concise prompt for the LLM
+		const prompt = `Summarize what this coding session accomplished in 1-2 sentences from a user's perspective.
+
+${problemStatement ? `Goal: ${problemStatement}\n` : ''}
+Tools used: ${toolCalls.slice(0, ChatSessionContentBuilder.LLM_SUMMARY_MAX_TOOL_CALLS).join(', ')}
+Agent output sample: ${assistantContent.substring(0, ChatSessionContentBuilder.LLM_SUMMARY_MAX_CONTENT_LENGTH)}
+
+Summary (1-2 sentences, user-focused):`;
+
+		const messages = [
+			vscode.LanguageModelChatMessage.User(prompt)
+		];
+
+		// Use a cancellation token that we control
+		const cancellationTokenSource = new vscode.CancellationTokenSource();
+		try {
+			const response = await model.sendRequest(messages, {}, cancellationTokenSource.token);
+			let summary = '';
+			for await (const chunk of response.text) {
+				summary += chunk;
+			}
+
+			// Trim and limit length
+			summary = summary.trim();
+			if (summary.length > ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH) {
+				summary = summary.substring(0, ChatSessionContentBuilder.SUMMARY_DESCRIPTION_MAX_LENGTH) + '...';
+			}
+
+			return summary;
+		} finally {
+			cancellationTokenSource.dispose();
+		}
+	}
+
+	private async createResponseTurn(pullRequest: PullRequestSearchItem | undefined, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		if (logs.trim().length > 0) {
 			return await this.parseSessionLogsIntoResponseTurn(pullRequest, logs, session);
 		} else if (session.state === 'in_progress' || session.state === 'queued') {
@@ -173,7 +385,7 @@ export class ChatSessionContentBuilder {
 		}
 	}
 
-	private async parseSessionLogsIntoResponseTurn(pullRequest: PullRequestSearchItem, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
+	private async parseSessionLogsIntoResponseTurn(pullRequest: PullRequestSearchItem | undefined, logs: string, session: SessionInfo): Promise<ChatResponseTurn2 | undefined> {
 		try {
 			const logChunks = this.parseSessionLogs(logs);
 			const responseParts: Array<ChatResponseMarkdownPart | ChatToolInvocationPart | ChatResponseMultiDiffPart> = [];
@@ -216,7 +428,7 @@ export class ChatSessionContentBuilder {
 	private processAssistantDelta(
 		delta: AssistantDelta,
 		choice: Choice,
-		pullRequest: PullRequestSearchItem,
+		pullRequest: PullRequestSearchItem | undefined,
 		responseParts: Array<ChatResponseMarkdownPart | ChatToolInvocationPart | ChatResponseMultiDiffPart | ChatResponseThinkingProgressPart>,
 	): string {
 		let currentResponseContent = '';
@@ -295,7 +507,7 @@ export class ChatSessionContentBuilder {
 		return currentResponseContent;
 	}
 
-	public createToolInvocationPart(pullRequest: PullRequestSearchItem, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	public createToolInvocationPart(pullRequest: PullRequestSearchItem | undefined, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 		if (!toolCall.function?.name || !toolCall.id) {
 			return undefined;
 		}
