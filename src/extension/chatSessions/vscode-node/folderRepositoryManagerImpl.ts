@@ -18,7 +18,7 @@ import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotc
 import { createTimeout } from '../../inlineEdits/common/common';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
-import { IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
+import { ChatSessionWorktreeProperties, IChatSessionWorktreeService } from '../common/chatSessionWorktreeService';
 import {
 	FolderRepositoryInfo,
 	FolderRepositoryMRUEntry,
@@ -112,7 +112,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 
-	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<Omit<FolderRepositoryInfo, 'worktree' | 'worktreeProperties'>> {
+	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
 		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)?.uri
 			?? this.workspaceFolderService.getSessionWorkspaceFolder(sessionId)) : undefined;
@@ -120,6 +120,8 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		// If no folder selected and we have a single workspace folder, use active repository
 		let repositoryUri: vscode.Uri | undefined;
 		let folderUri = selectedFolder;
+		let worktree: vscode.Uri | undefined = undefined;
+		let worktreeProperties: ChatSessionWorktreeProperties | undefined = undefined;
 
 		// If we have just one folder opened in workspace, use that as default
 		// TODO: @DonJayamanne Handle Session View.
@@ -127,6 +129,13 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			const activeRepo = this.gitService.activeRepository.get();
 			repositoryUri = activeRepo?.rootUri;
 			folderUri = repositoryUri ?? this.workspaceService.getWorkspaceFolders()[0];
+
+			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
+			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
+				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
+				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
+				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
+			}
 		} else if (selectedFolder) {
 			// First check if user trusts the folder.
 			// We need to do this before looking for git repos to avoid prompting for trust twice.
@@ -142,20 +151,31 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				return {
 					folder: selectedFolder,
 					repository: undefined,
-					trusted: false
+					trusted: false,
+					worktree,
+					worktreeProperties
 				};
+			}
+
+			// If we're in a single folder workspace, possible the user has opened the worktree folder directly.
+			if (sessionId && isUntitledSessionId(sessionId) && folderUri) {
+				worktreeProperties = this.worktreeService.getWorktreeProperties(folderUri);
+				worktree = worktreeProperties ? vscode.Uri.file(worktreeProperties.worktreePath) : undefined;
+				repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : repositoryUri;
 			}
 
 			// Now look for a git repository in the selected folder.
 			// If found, use it. If not, proceed without isolation.`
-			repositoryUri = (await this.gitService.getRepository(selectedFolder, true))?.rootUri;
+			repositoryUri = worktreeProperties ? vscode.Uri.file(worktreeProperties.repositoryPath) : (await this.gitService.getRepository(selectedFolder, true))?.rootUri;
 
 			// If no git repo found, use folder directly without isolation
 			if (!repositoryUri) {
 				return {
 					folder: selectedFolder,
 					repository: undefined,
-					trusted: true
+					trusted: true,
+					worktree,
+					worktreeProperties
 				};
 			}
 		}
@@ -167,14 +187,18 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 				return {
 					folder: folderUri,
 					repository: undefined,
-					trusted
+					trusted,
+					worktree,
+					worktreeProperties
 				};
 			}
 
 			return {
 				folder: undefined,
 				repository: undefined,
-				trusted: true
+				trusted: true,
+				worktree,
+				worktreeProperties
 			};
 		}
 
@@ -185,14 +209,18 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: folderUri ?? repositoryUri,
 				repository: repositoryUri,
-				trusted: false
+				trusted: false,
+				worktree,
+				worktreeProperties
 			};
 		}
 
 		return {
 			folder: folderUri ?? repositoryUri,
 			repository: repositoryUri,
-			trusted: true
+			trusted: true,
+			worktree,
+			worktreeProperties
 		};
 	}
 
@@ -206,28 +234,28 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	): Promise<FolderRepositoryInfo> {
 		const { stream, toolInvocationToken } = options;
 
-		const { folder, repository, trusted } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
+		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
 		if (trusted === false) {
-			return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted };
+			return { folder, repository, worktree, worktreeProperties, trusted };
 		}
 		if (!repository) {
 			// No git repository found, proceed without isolation
-			return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted: true };
+			return { folder, repository, worktree, worktreeProperties, trusted: true };
 		}
 
 		// Check for uncommitted changes and prompt user before creating worktree
 		let uncommittedChangesAction: 'move' | 'copy' | 'skip' | 'cancel' | undefined = undefined;
-		if (!sessionId || isUntitledSessionId(sessionId)) {
+		if ((!sessionId || isUntitledSessionId(sessionId)) && !worktreeProperties) {
 			if (await this.checkIfRepoHasUncommittedChanges(sessionId, token)) {
 				uncommittedChangesAction = await this.promptForUncommittedChangesAction(sessionId, toolInvocationToken, token);
 				if (uncommittedChangesAction === 'cancel') {
-					return { folder, repository, worktree: undefined, worktreeProperties: undefined, trusted: true, cancelled: true };
+					return { folder, repository, worktree, worktreeProperties, trusted: true, cancelled: true };
 				}
 			}
 		}
 
 		// Create worktree for the git repository
-		const worktreeProperties = await this.worktreeService.createWorktree(repository, stream);
+		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream);
 
 		if (!worktreeProperties) {
 			stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));
@@ -235,7 +263,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			return {
 				folder: folder ?? repository,
 				repository: repository,
-				worktree: undefined,
+				worktree,
 				worktreeProperties,
 				trusted
 			};
@@ -250,7 +278,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		if (uncommittedChangesAction === 'move' || uncommittedChangesAction === 'copy') {
 			await this.moveOrCopyChangesToWorkTree(
 				repository,
-				vscode.Uri.file(worktreeProperties.worktreePath),
+				worktree ?? vscode.Uri.file(worktreeProperties.worktreePath),
 				uncommittedChangesAction,
 				stream,
 				token
@@ -260,7 +288,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		return {
 			folder: folder ?? repository,
 			repository: repository,
-			worktree: vscode.Uri.file(worktreeProperties.worktreePath),
+			worktree: worktree ?? vscode.Uri.file(worktreeProperties.worktreePath),
 			worktreeProperties,
 			trusted: true
 		};
