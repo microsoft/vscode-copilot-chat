@@ -11,7 +11,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { RelativePattern } from '../../filesystem/common/fileTypes';
 import { ILogService } from '../../log/common/logService';
-import { ISearchService } from '../../search/common/searchService';
+import { BaseSearchServiceImpl } from '../../search/vscode/baseSearchServiceImpl';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
 import { IgnoreFile } from '../../ignore/node/ignoreFile';
@@ -24,13 +24,13 @@ export class LocalIgnoreService implements IIgnoreService {
 	declare readonly _serviceBrand: undefined;
 
 	private readonly _copilotIgnoreFiles = new IgnoreFile();
+	private readonly _searchService = new BaseSearchServiceImpl();
 	private _disposables: IDisposable[] = [];
 	private _init: Promise<void> | undefined;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
-		@ISearchService private readonly _searchService: ISearchService,
 		@IFileSystemService private readonly _fs: IFileSystemService,
 	) {
 		this._installListeners();
