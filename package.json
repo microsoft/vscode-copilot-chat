@@ -2293,6 +2293,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.commitToWorktree",
+				"title": "%github.copilot.command.cli.sessions.commitToWorktree%",
+				"icon": "$(git-commit)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.newSession",
 				"title": "%github.copilot.command.cli.newSession%",
 				"icon": "$(terminal)",
@@ -4669,6 +4675,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.cli.sessions.commitToWorktree",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.chat.debug.exportSingleTrajectory",
 					"when": "false"

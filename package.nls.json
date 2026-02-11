@@ -412,6 +412,7 @@
 	"github.copilot.command.cli.sessions.openRepository": "Open Repository",
 	"github.copilot.command.cli.sessions.openWorktreeInNewWindow": "Open Worktree in New Window",
 	"github.copilot.command.cli.sessions.openWorktreeInTerminal": "Open Worktree in Integrated Terminal",
+	"github.copilot.command.cli.sessions.commitToWorktree": "Commit File to Worktree",
 	"github.copilot.command.cli.newSession": "New CLI Session",
 	"github.copilot.command.cli.newSessionToSide": "New CLI Session to the Side",
 	"github.copilot.command.chat.copilotCLI.addFileReference": "Add File to Copilot CLI",

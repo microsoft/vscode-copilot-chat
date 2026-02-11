@@ -345,6 +345,19 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		return changes;
 	}
 
+
+	getSessionIdForWorktree(folder: vscode.Uri): string | undefined {
+		for (const [sessionId, value] of this._sessionWorktrees.entries()) {
+			if (typeof value === 'string') {
+				continue;
+			}
+			if (isEqual(vscode.Uri.file(value.worktreePath), folder)) {
+				return sessionId;
+			}
+		}
+		return undefined;
+	}
+
 	async handleRequestCompleted(sessionId: string): Promise<void> {
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
 		if (!worktreeProperties) {

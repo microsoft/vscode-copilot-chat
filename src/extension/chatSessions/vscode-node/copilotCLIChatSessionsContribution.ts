@@ -1115,7 +1115,18 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 	}
 }
 
-export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService, copilotCLIWorktreeManagerService: IChatSessionWorktreeService, gitService: IGitService, copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService, contentProvider: CopilotCLIChatSessionContentProvider, folderRepositoryManager: IFolderRepositoryManager, envService: INativeEnvService, fileSystemService: IFileSystemService): IDisposable {
+export function registerCLIChatCommands(
+	copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider,
+	copilotCLISessionService: ICopilotCLISessionService,
+	copilotCLIWorktreeManagerService: IChatSessionWorktreeService,
+	gitService: IGitService,
+	copilotCliWorkspaceSession: IChatSessionWorkspaceFolderService,
+	contentProvider: CopilotCLIChatSessionContentProvider,
+	folderRepositoryManager: IFolderRepositoryManager,
+	envService: INativeEnvService,
+	fileSystemService: IFileSystemService,
+	logService: ILogService
+): IDisposable {
 	const disposableStore = new DisposableStore();
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.resource) {
@@ -1348,6 +1359,44 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges', applyChanges));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.chat.applyCopilotCLIAgentSessionChanges.apply', applyChanges));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.commitToWorktree', async (args?: { worktreeUri?: vscode.Uri; fileUri?: vscode.Uri }) => {
+		logService.trace(`[commitToWorktree] Command invoked, args: ${JSON.stringify(args, null, 2)}`);
+		if (!args?.worktreeUri || !args?.fileUri) {
+			logService.debug('[commitToWorktree] Missing worktreeUri or fileUri, aborting');
+			return;
+		}
+
+		const worktreeUri = vscode.Uri.from(args.worktreeUri);
+		const fileUri = vscode.Uri.from(args.fileUri);
+		try {
+			const fileName = basename(fileUri);
+			await gitService.add(worktreeUri, [fileUri.fsPath]);
+			logService.debug(`[commitToWorktree] Committing with message: Update customization: ${fileName}`);
+			await gitService.commit(worktreeUri, l10n.t('Update customization: {0}', fileName), { noVerify: true, signCommit: false });
+			logService.trace('[commitToWorktree] Commit successful');
+
+			// Clear the worktree changes cache so getWorktreeChanges() recomputes
+			const sessionId = copilotCLIWorktreeManagerService.getSessionIdForWorktree(worktreeUri);
+			if (sessionId) {
+				const props = copilotCLIWorktreeManagerService.getWorktreeProperties(sessionId);
+				if (props) {
+					await copilotCLIWorktreeManagerService.setWorktreeProperties(sessionId, { ...props, changes: undefined });
+				} else {
+					logService.error('[commitToWorktree] No worktree properties found for session:', sessionId);
+				}
+			} else {
+				logService.error('[commitToWorktree] No session found for worktree:', worktreeUri.toString());
+			}
+
+			logService.trace('[commitToWorktree] Notifying sessions change');
+			copilotcliSessionItemProvider.notifySessionsChange();
+		} catch (error) {
+			logService.error('[commitToWorktree] Error:', error);
+			vscode.window.showErrorMessage(l10n.t('Failed to commit: {0}', error instanceof Error ? error.message : String(error)));
+		}
+	}));
+
 	return disposableStore;
 }
 
