@@ -123,9 +123,6 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<br />
 				If you need to write a plan, only write high quality plans, not low quality ones.<br />
 			</Tag>
-			<Tag name='toolUseInstructions'>
-				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
-			</Tag>
 			<Tag name='task_execution'>
 				You are a coding agent. Please keep going until the query is completely resolved, before ending your turn and yielding back to the user. Only terminate your turn when you are sure that the problem is solved. Autonomously resolve the query to the best of your ability, using the tools available to you, before coming back to the user. Do NOT guess or make up an answer.<br />
 				<br />
@@ -134,6 +131,7 @@ class DefaultGpt5AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Analyzing code for vulnerabilities is allowed.<br />
 				- Showing user code and tool call details is allowed.<br />
 				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
 				{tools[ToolName.ApplyPatch] && <>- Use the apply_patch tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"command":["apply_patch","*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"]}`}.<br /></>}
 				{!tools[ToolName.ApplyPatch] && tools[ToolName.ReplaceString] && <>- Use the replace_string_in_file tool to edit files precisely.<br /></>}
 				<br />

@@ -176,17 +176,21 @@
                 "name": "execution_subagent",
                 "toolReferenceName": "executionSubagent",
                 "displayName": "%copilot.tools.executionSubagent.name%",
-                "icon": "$(search)",
+                "icon": "$(play)",
                 "canBeReferencedInPrompt": true,
                 "userDescription": "%copilot.tools.executionSubagent.description%",
-                "modelDescription": "Launch an iterative execution-focused subagent that orchestrates run_in_terminal, read_file, grep_search, and apply_patch tools to perform an execution-based task.\nHere are some examples of how it can be used:\n- Run a terminal command and filter its output to extract relevant information.\n- Run a terminal command, and if it fails, refine it and try again.\n- Run tests, fix simple errors and re-run tests until they pass.\nYou should use this instead of run_in_terminal in most cases.\nInput fields:\n- query: What to execute, and what you are looking for in the output. Can include an exact command to run, or a natural language description of an execution task.\n- description: Short user-visible invocation message.",
-                "when": "!config.github.copilot.chat.disableExecutionSubagent",
+                "modelDescription": "Launch an iterative execution-focused subagent that perform an execution-based task.\nCALL THIS FOR ANY TASK THAT REQUIRES RUNNING TERMINAL COMMANDS.\n\nHere are some examples of how it can be used:\n- Run tests and filter the output to summarize which tests failed and why.\n- Install all dependencies of a project.\n\nReturns: A list of commands that were run, along with relevant excerpts of each command's output.\n\nInput fields:\n- commands: One or more commands to execute. A single string with multiple commands separated by newline characters.\n- objective: The high-level goal of the commands to be executed, and what to look for in the outputs.\n- description: Short user-visible invocation message.",
+                "when": "config.github.copilot.chat.enableExecutionSubagent",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
-                        "query": {
+                        "commands": {
                             "type": "string",
-                            "description": "What to execute, and what to look for in the output. Can include an exact command to run, or a description of an execution task."
+                            "description": "One or more commands to execute. A single string with multiple commands separated by newline characters."
+                        },
+                        "objective": {
+                            "type": "string",
+                            "description": "The high-level goal of the commands to be executed, and what to look for in the outputs."
                         },
                         "description": {
                             "type": "string",
@@ -194,7 +198,8 @@
                         }
                     },
                     "required": [
-                        "query",
+                        "commands",
+                        "objective",
                         "description"
                     ]
                 }
@@ -4332,19 +4337,28 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.disableExecutionSubagent": {
+					"github.copilot.chat.executionSubagent.enabled": {
                         "type": "boolean",
                         "default": false,
-                        "markdownDescription": "%github.copilot.config.disableExecutionSubagent%",
+                        "markdownDescription": "%github.copilot.config.executionSubagent.enabled%",
                         "tags": [
                             "advanced",
                             "experimental"
                         ]
                     },
-                    "github.copilot.chat.executionSubagentModel": {
+                    "github.copilot.chat.executionSubagent.model": {
                         "type": "string",
                         "default": "claude-sonnet-4.5",
-                        "markdownDescription": "%github.copilot.config.executionSubagentModel%",
+                        "markdownDescription": "%github.copilot.config.executionSubagent.model%",
+                        "tags": [
+                            "advanced",
+                            "experimental"
+                        ]
+                    },
+					"github.copilot.chat.executionSubagent.toolCallLimit": {
+                        "type": "number",
+                        "default": 5,
+                        "markdownDescription": "%github.copilot.config.executionSubagent.toolCallLimit%",
                         "tags": [
                             "advanced",
                             "experimental"

@@ -3,25 +3,29 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseNotebookEditPart, ChatResponseTextEditPart, ChatToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ChatResponseNotebookEditPart, ChatResponseTextEditPart, ChatToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ExecutionSubagentToolCallingLoop } from '../../prompt/node/executionSubagentToolCallingLoop';
-import { ExecutionSubagentPrompt } from '../../prompts/node/agent/executionSubagentPrompt';
-import { PromptElementCtor } from '../../prompts/node/base/promptElement';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface IExecutionSubagentParams {
 
-	/** What to execute, and what to look for in the output. Can include an exact command to run, or a description of an execution task. */
-	query: string;
+	/** One or more commands to execute */
+	commands: string;
+	/** The high-level goal of the commands to be executed, and what to look for in the outputs */
+	objective: string;
 	/** User-visible description shown while invoking */
 	description: string;
 }
@@ -33,45 +37,35 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) { }
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IExecutionSubagentParams>, token: vscode.CancellationToken) {
 		const executionInstruction = [
-			`Query: ${options.input.query}`,
+			`Command(s) to run: ${options.input.commands}`,
 			'',
-			'You are a specialized execution subagent. Use these tools to perform an execution task and return relevant portions of the execution output',
-			'according to the specified query:',
-			'- run_in_terminal: Execute the provided command in the terminal to obtain output.',
-			'- read_file: Read the contents of files as part of the execution task.',
-			'- grep_search: Search for specific patterns within files to find relevant information.',
-			'- apply_patch: Apply a patch to a file as part of the execution task.',
+			'Execution objective: ',
+			`${options.input.objective}`,
 			'',
-			'You can use all of these tools multiple times if necessary. However, when the task is complete, filter through all the tool output and return the relevant portions in this exact format:',
-			'',
-			'<final_answer>',
-			'{',
-			' \"command_or_tool\": \"<a command that was run, or the name of a tool that was invoked>\",',
-			' \"output\": \"relevant output excerpts from the command or tool invocation\"',
-			'}',
-			'{',
-			' \"command_or_tool\": \"<another command that was run, or the name of a tool that was invoked>\",',
-			' \"output\": \"relevant output excerpts from the command or tool invocation\"',
-			'}',
-			'...',
-			'</final_answer>',
-			'',
-			'Return an empty <final_answer></final_answer> block if no portion of any command output is relevant to the query.',
-			'Do not include any explanation or additional text outside the <final_answer> tags.',
-			''
 		].join('\n');
 
+		const request = this._inputContext!.request!;
+		const parentSessionId = this._inputContext?.conversation?.sessionId ?? generateUuid();
+		// Generate a stable session ID for this subagent invocation that will be used:
+		// 1. As subAgentInvocationId in the subagent's tool context
+		// 2. As subAgentInvocationId in toolMetadata for parent trajectory linking
+		// 3. As the session_id in the subagent's own trajectory
+		const subAgentInvocationId = generateUuid();
+
+		const toolCallLimit = this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ExecutionSubagentToolCallLimit, this.experimentationService);
+
 		const loop = this.instantiationService.createInstance(ExecutionSubagentToolCallingLoop, {
-			toolCallLimit: 25,
-			conversation: new Conversation('', [new Turn('', { type: 'user', message: executionInstruction })]),
-			request: this._inputContext!.request!,
-			location: this._inputContext!.request!.location,
-			promptText: options.input.query,
-			allowedTools: new Set([ToolName.CoreRunInTerminal, ToolName.ReadFile, ToolName.FindTextInFiles, ToolName.ApplyPatch]),
-			customPromptClass: ExecutionSubagentPrompt as typeof ExecutionSubagentPrompt & PromptElementCtor,
+			toolCallLimit,
+			conversation: new Conversation(parentSessionId, [new Turn(generateUuid(), { type: 'user', message: executionInstruction })]),
+			request: request,
+			location: request.location,
+			promptText: options.input.objective,
+			subAgentInvocationId: subAgentInvocationId,
 		});
 
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
@@ -81,10 +75,14 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 
 		// Create a new capturing token to group this execution subagent and all its nested tool calls
 		// Similar to how DefaultIntentRequestHandler does it
+		// Pass the subAgentInvocationId so the trajectory uses this ID for explicit linking
 		const executionSubagentToken = new CapturingToken(
-			`Execution: ${options.input.query.substring(0, 50)}${options.input.query.length > 50 ? '...' : ''}`,
+			`Execution: ${options.input.objective.substring(0, 50)}${options.input.objective.length > 50 ? '...' : ''}`,
 			'execution',
-			false
+			false,
+			false,
+			subAgentInvocationId,
+			'execution'  // subAgentName for trajectory tracking
 		);
 
 		// Wrap the loop execution in captureInvocation with the new token
@@ -94,8 +92,11 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		// Build subagent trajectory metadata that will be logged via toolMetadata
 		// All nested tool calls are already logged by ToolCallingLoop.logToolResult()
 		const toolMetadata = {
-			query: options.input.query,
-			description: options.input.description
+			query: options.input.objective,
+			description: options.input.description,
+			// The subAgentInvocationId links this tool call to the subagent's trajectory
+			subAgentInvocationId: subAgentInvocationId,
+			agentName: 'execution'
 		};
 
 		let subagentResponse = '';
@@ -108,6 +109,7 @@ class ExecutionSubagentTool implements ICopilotTool<IExecutionSubagentParams> {
 		// toolMetadata will be automatically included in exportAllPromptLogsAsJsonCommand
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelTextPart(subagentResponse)]);
 		result.toolMetadata = toolMetadata;
+		result.toolResultMessage = new MarkdownString(l10n.t`Execution complete: ${options.input.description}`);
 		return result;
 	}
 
