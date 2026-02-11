@@ -263,6 +263,16 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override interceptBody(body: IEndpointBody | undefined): void {
 		super.interceptBody(body);
+
+		// Strip Copilot-specific fields from messages when using Azure AD bearer auth,
+		// as Azure OpenAI rejects unknown message fields with "Unsupported data type"
+		if (this._useBearerAuth && body?.messages) {
+			body.messages = body.messages.map((msg: any) => {
+				const { copilot_references, copilot_confirmations, copilot_cache_control, cot_id, cot_summary, ...cleanMsg } = msg;
+				return cleanMsg;
+			});
+		}
+
 		// TODO @lramos15 - We should do this for all models and not just here
 		if (body?.tools?.length === 0) {
 			delete body.tools;
