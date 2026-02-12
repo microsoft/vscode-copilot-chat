@@ -29,7 +29,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ToolCall } from '../../agents/copilotcli/common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../../agents/copilotcli/common/delegationSummaryService';
-import { ICopilotCLIAgents, ICopilotCLIModels } from '../../agents/copilotcli/node/copilotCli';
+import { ICopilotCLIAgents, ICopilotCLIModels, ICopilotCLISDK } from '../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcliPromptResolver';
 import { CopilotCLICommand, copilotCLICommands, ICopilotCLISession } from '../../agents/copilotcli/node/copilotcliSession';
 import { ICopilotCLISessionItem, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -801,6 +801,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 		@IChatDelegationSummaryService private readonly chatDelegationSummaryService: IChatDelegationSummaryService,
 		@IFolderRepositoryManager private readonly folderRepositoryManager: IFolderRepositoryManager,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 	) {
 		super();
 	}
@@ -853,7 +854,11 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				}
 			}
 
-			await this.lockRepoOptionForSession(context, token);
+			const [authInfo,] = await Promise.all([this.copilotCLISDK.getAuthInfo(), this.lockRepoOptionForSession(context, token)]);
+			if (authInfo.type === 'token' && !authInfo.token && !this.configurationService.getConfig(ConfigKey.Shared.DebugOverrideProxyUrl)) {
+				this.logService.error(`Authorization failed`);
+				throw new Error(vscode.l10n.t('Authorization failed. Please sign into GitHub and try again.'));
+			}
 
 			if (!chatSessionContext) {
 				// Delegating from another chat session
@@ -867,6 +872,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 			const [modelId, agent] = await Promise.all([
 				this.getModelId(request, token),
 				this.getAgent(id, request, token),
+				this.copilotCLISDK.getAuthInfo(),
 			]);
 			if (isUntitled && agent) {
 				const changes = [{ optionId: AGENTS_OPTION_ID, value: agent?.name ?? '' }];
