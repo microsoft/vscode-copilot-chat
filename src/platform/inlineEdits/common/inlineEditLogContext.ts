@@ -306,6 +306,11 @@ export class InlineEditRequestLogContext {
 		this._icon = Icon.skipped;
 	}
 
+	public markAsFromCache() {
+		this._isVisible = true;
+		this._icon = Icon.database;
+	}
+
 	public markAsNoSuggestions() {
 		this._isVisible = true;
 		this._icon = Icon.circleSlash;
@@ -377,7 +382,7 @@ export class InlineEditRequestLogContext {
 	setResponseResults(v: readonly unknown[]): void {
 		this._isVisible = true;
 		this._responseResults = v;
-		this._icon = Icon.lightbulbFull;
+		this._icon ??= Icon.lightbulbFull;
 	}
 
 	getDebugName(): string {

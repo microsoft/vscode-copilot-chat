@@ -96,10 +96,9 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	allowTools[ToolName.CoreRunTest] = await testService.hasAnyTests();
 	allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-	const useAgenticProxy = configurationService.getConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy);
 	const searchSubagentEnabled = configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentToolEnabled, experimentationService);
 	const isGptOrAnthropic = isGptFamily(model) || isAnthropicFamily(model);
-	allowTools[ToolName.SearchSubagent] = isGptOrAnthropic && (useAgenticProxy && searchSubagentEnabled);
+	allowTools[ToolName.SearchSubagent] = isGptOrAnthropic && searchSubagentEnabled;
 
 	if (model.family.includes('grok-code')) {
 		allowTools[ToolName.CoreManageTodoList] = false;
@@ -258,6 +257,14 @@ export class AgentIntent extends EditCodeIntent {
 			if (!summaryMetadata) {
 				stream.markdown(l10n.t('Unable to compact conversation.'));
 				return {};
+			}
+
+			if (summaryMetadata.usage) {
+				stream.usage({
+					promptTokens: summaryMetadata.usage.prompt_tokens,
+					completionTokens: summaryMetadata.usage.completion_tokens,
+					promptTokenDetails: summaryMetadata.promptTokenDetails,
+				});
 			}
 
 			stream.markdown(l10n.t('Compacted conversation.'));

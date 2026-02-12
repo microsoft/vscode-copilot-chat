@@ -2293,6 +2293,12 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.cli.sessions.commitToWorktree",
+				"title": "%github.copilot.command.cli.sessions.commitToWorktree%",
+				"icon": "$(git-commit)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.cli.newSession",
 				"title": "%github.copilot.command.cli.newSession%",
 				"icon": "$(terminal)",
@@ -2321,6 +2327,10 @@
 				"title": "%github.copilot.command.disableEditTracing%",
 				"category": "Developer",
 				"enablement": "github.copilot.chat.replay.workspaceEditTracing"
+			},
+			{
+				"command": "github.copilot.chat.compact",
+				"title": "%github.copilot.command.compactConversation%"
 			},
 			{
 				"command": "github.copilot.chat.explain",
@@ -2852,14 +2862,22 @@
 				"category": "Copilot CLI"
 			},
 			{
+				"command": "github.copilot.chat.copilotCLI.addSelection",
+				"title": "%github.copilot.command.chat.copilotCLI.addSelection%",
+				"enablement": "github.copilot.chat.copilotCLI.hasSession",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.copilotCLI.acceptDiff",
 				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
+				"enablement": "github.copilot.chat.copilotCLI.hasActiveDiff",
 				"icon": "$(check)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.rejectDiff",
 				"title": "%github.copilot.command.chat.copilotCLI.rejectDiff%",
+				"enablement": "github.copilot.chat.copilotCLI.hasActiveDiff",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
@@ -4460,6 +4478,22 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.branchSupport.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.branchSupport.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.cli.sessionController.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.sessionController.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.agentCustomizationSkill.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -4483,6 +4517,14 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.searchSubagent.useAgenticProxy%",
+						"tags": [
+							"advanced"
+						]
+					},
+					"github.copilot.chat.searchSubagent.agenticProxySearchModelName": {
+						"type": "string",
+						"default": "agentic-search-v1",
+						"markdownDescription": "%github.copilot.config.searchSubagent.agenticProxySearchModelName%",
 						"tags": [
 							"advanced"
 						]
@@ -4600,6 +4642,11 @@
 					"command": "github.copilot.chat.copilotCLI.addFileReference",
 					"group": "copilot",
 					"when": "github.copilot.chat.copilotCLI.hasSession && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
+				},
+				{
+					"command": "github.copilot.chat.copilotCLI.addSelection",
+					"group": "copilot",
+					"when": "github.copilot.chat.copilotCLI.hasSession && editorHasSelection && !inOutput && resourceScheme != 'vscode-webview' && resourceScheme != 'webview-panel'"
 				}
 			],
 			"editor/context/chat": [
@@ -4648,6 +4695,11 @@
 					"group": "navigation@0"
 				}
 			],
+			"chat/contextUsage/actions": [
+				{
+					"command": "github.copilot.chat.compact"
+				}
+			],
 			"chat/newSession": [
 				{
 					"command": "github.copilot.cli.newSession",
@@ -4669,6 +4721,10 @@
 				}
 			],
 			"commandPalette": [
+				{
+					"command": "github.copilot.cli.sessions.commitToWorktree",
+					"when": "false"
+				},
 				{
 					"command": "github.copilot.chat.debug.exportSingleTrajectory",
 					"when": "false"
@@ -5916,7 +5972,7 @@
 		"zod": "3.25.76"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "0.2.37",
+		"@anthropic-ai/claude-agent-sdk": "^0.2.39",
 		"@anthropic-ai/sdk": "^0.74.0",
 		"@github/blackbird-external-ingest-utils": "^0.2.0",
 		"@github/copilot": "^0.0.406",

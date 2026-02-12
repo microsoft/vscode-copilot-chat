@@ -14,7 +14,7 @@ import {
 	extractSessionMetadataStreaming,
 	parseSessionFileContent,
 } from '../claudeSessionParser';
-import { StoredMessage } from '../claudeSessionSchema';
+import { isUserRequest, StoredMessage } from '../claudeSessionSchema';
 
 describe('claudeSessionParser', () => {
 	// ========================================================================
@@ -263,6 +263,38 @@ describe('claudeSessionParser', () => {
 	});
 
 	// ========================================================================
+	// isUserRequest
+	// ========================================================================
+
+	describe('isUserRequest', () => {
+		it('should return true for string content', () => {
+			expect(isUserRequest('Hello world')).toBe(true);
+		});
+
+		it('should return true for array with text block', () => {
+			expect(isUserRequest([{ type: 'text', text: 'Hello' }])).toBe(true);
+		});
+
+		it('should return false for array with only tool_result blocks', () => {
+			expect(isUserRequest([
+				{ type: 'tool_result', tool_use_id: 'tool-1', content: 'result' },
+				{ type: 'tool_result', tool_use_id: 'tool-2', content: 'result' },
+			])).toBe(false);
+		});
+
+		it('should return true for mixed array with tool_result and text', () => {
+			expect(isUserRequest([
+				{ type: 'tool_result', tool_use_id: 'tool-1', content: 'result' },
+				{ type: 'text', text: 'Follow-up question' },
+			])).toBe(true);
+		});
+
+		it('should return false for empty array', () => {
+			expect(isUserRequest([])).toBe(false);
+		});
+	});
+
+	// ========================================================================
 	// buildSessions
 	// ========================================================================
 
@@ -484,6 +516,66 @@ describe('claudeSessionParser', () => {
 			expect(result.sessions.length).toBe(1);
 			// Session should contain at least some messages (stops at cycle)
 			expect(result.sessions[0].messages.length).toBeGreaterThan(0);
+		});
+
+		it('should set lastRequestStarted to last genuine user request', () => {
+			const messages = new Map<string, StoredMessage>([
+				['msg-1', createTestMessage({
+					uuid: 'msg-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: 'Hello' },
+				})],
+				['msg-2', createTestMessage({
+					uuid: 'msg-2',
+					sessionId: 'session-1',
+					parentUuid: 'msg-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+				['msg-3', createTestMessage({
+					uuid: 'msg-3',
+					sessionId: 'session-1',
+					parentUuid: 'msg-2',
+					timestamp: new Date('2026-01-31T00:03:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'done' }] },
+				})],
+				['msg-4', createTestMessage({
+					uuid: 'msg-4',
+					sessionId: 'session-1',
+					parentUuid: 'msg-3',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:04:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions[0].lastRequestStarted).toBe(new Date('2026-01-31T00:01:00Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', () => {
+			const messages = new Map<string, StoredMessage>([
+				['msg-1', createTestMessage({
+					uuid: 'msg-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'done' }] },
+				})],
+				['msg-2', createTestMessage({
+					uuid: 'msg-2',
+					sessionId: 'session-1',
+					parentUuid: 'msg-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions[0].lastRequestStarted).toBeUndefined();
 		});
 
 		it('should include parallel tool result siblings in session', () => {
@@ -750,7 +842,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
 		it('should extract label from first user message when no summary', () => {
@@ -809,17 +901,17 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Actual message');
 		});
 
-		it('should extract firstMessageTimestamp and lastMessageTimestamp from single message', () => {
+		it('should extract created and lastRequestEnded from single message', () => {
 			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
 
 			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
 			expect(metadata).not.toBeNull();
-			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
-			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
-		it('should extract different firstMessageTimestamp and lastMessageTimestamp from multiple messages', () => {
+		it('should extract different created and lastRequestEnded from multiple messages', () => {
 			const content = [
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
 				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
@@ -830,8 +922,8 @@ describe('claudeSessionParser', () => {
 			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
 			expect(metadata).not.toBeNull();
-			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
-			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:37:30.000Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:37:30.000Z').getTime());
 		});
 
 		it('should return null when only summary exists (no messages)', () => {
@@ -840,6 +932,32 @@ describe('claudeSessionParser', () => {
 			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
 			expect(metadata).toBeNull();
+		});
+
+		it('should set lastRequestStarted for genuine user request', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBeUndefined();
 		});
 	});
 
@@ -885,7 +1003,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
 		it('should extract label from first user message when no summary', async () => {
@@ -951,18 +1069,18 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Actual message');
 		});
 
-		it('should extract firstMessageTimestamp and lastMessageTimestamp from single message', async () => {
+		it('should extract created and lastRequestEnded from single message', async () => {
 			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
 			const filePath = createTempFile(content);
 
 			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
 			expect(metadata).not.toBeNull();
-			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
-			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
-		it('should extract different firstMessageTimestamp and lastMessageTimestamp from multiple messages', async () => {
+		it('should extract different created and lastRequestEnded from multiple messages', async () => {
 			const content = [
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
 				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
@@ -974,11 +1092,11 @@ describe('claudeSessionParser', () => {
 			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
 			expect(metadata).not.toBeNull();
-			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
-			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T00:37:30.000Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:37:30.000Z').getTime());
 		});
 
-		it('should read all messages to get lastMessageTimestamp', async () => {
+		it('should read all messages to get lastRequestEnded', async () => {
 			// Create a file where summary is early but last message timestamp is at the end
 			const lines = [
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
@@ -994,9 +1112,37 @@ describe('claudeSessionParser', () => {
 
 			expect(metadata).not.toBeNull();
 			expect(metadata!.label).toBe('Test summary');
-			expect(metadata!.firstMessageTimestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 			// Last message is at index 9, so timestamp is 01:09:00
-			expect(metadata!.lastMessageTimestamp).toEqual(new Date('2026-01-31T01:09:00.000Z'));
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T01:09:00.000Z').getTime());
+		});
+
+		it('should set lastRequestStarted for genuine user request', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBeUndefined();
 		});
 
 		it('should handle cancellation via AbortSignal', async () => {
@@ -1066,6 +1212,14 @@ describe('claudeSessionParser', () => {
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"This is a very long message that should be truncated to 50 characters maximum"}}',
 				// Array content blocks
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"text","text":"Array block content"}]}}',
+				// Multi-turn with tool result (lastRequestStarted should differ from lastRequestEnded)
+				[
+					'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+					'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+					'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+					'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:00.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}',
+					'{"type":"summary","summary":"Tool result session","leafUuid":"uuid-4"}'
+				].join('\n'),
 			];
 
 			const fileMtime = new Date('2026-01-31T00:00:00.000Z');
@@ -1084,9 +1238,11 @@ describe('claudeSessionParser', () => {
 
 				const fullSession = buildResult.sessions[0];
 
-				// Label and timestamp should match
+				// Label and timestamps should match
 				expect(metadataResult!.label).toBe(fullSession.label);
-				expect(metadataResult!.timestamp).toEqual(fullSession.timestamp);
+				expect(metadataResult!.created).toEqual(fullSession.created);
+				expect(metadataResult!.lastRequestStarted).toEqual(fullSession.lastRequestStarted);
+				expect(metadataResult!.lastRequestEnded).toEqual(fullSession.lastRequestEnded);
 			}
 		});
 

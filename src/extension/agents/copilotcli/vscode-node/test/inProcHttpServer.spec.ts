@@ -16,6 +16,9 @@ vi.mock('vscode', () => ({
 			fragment: components.fragment,
 		}),
 	},
+	window: {
+		onDidCloseTerminal: () => ({ dispose: () => { } }),
+	},
 	EventEmitter: class MockEventEmitter<T> {
 		private readonly listeners: Array<(e: T) => void> = [];
 		readonly event = (listener: (e: T) => void) => {

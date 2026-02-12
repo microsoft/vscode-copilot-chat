@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { ILogger, ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
-import { registerAddFileReferenceCommand, registerDiffCommands } from './commands';
+import { registerAddFileReferenceCommand, registerAddSelectionCommand, registerDiffCommands } from './commands';
 import { registerCommandContext } from './commands/context';
 import { CopilotCLISessionTracker, ICopilotCLISessionTracker } from './copilotCLISessionTracker';
 import { DiffStateManager } from './diffState';
@@ -42,6 +42,7 @@ export class CopilotCLIContrib extends Disposable {
 
 		// Register commands
 		this._register(registerAddFileReferenceCommand(logger, httpServer, this.sessionTracker));
+		this._register(registerAddSelectionCommand(logger, httpServer, this.sessionTracker));
 		for (const d of registerDiffCommands(logger, diffState)) {
 			this._register(d);
 		}
