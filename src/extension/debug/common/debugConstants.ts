@@ -7,7 +7,6 @@ import { ToolName } from '../../tools/common/toolNames';
 
 /**
  * Tools available to the debug subagent.
- * Shared between DebugSubagentToolCallingLoop and DirectDebugInvoker.
  */
 export const DEBUG_ALLOWED_TOOLS = new Set<string>([
 	// Debug tools
@@ -34,7 +33,6 @@ export const DEBUG_MAX_TOOL_CALLS = 20;
 
 /**
  * System prompt for debug analysis.
- * Shared between DebugSubagentPrompt (TSX) and DirectDebugInvoker.
  * Single source of truth for debug subagent instructions.
  */
 export const DEBUG_SYSTEM_PROMPT = `You are a Debug Agent that analyzes chat sessions and agent behavior.
