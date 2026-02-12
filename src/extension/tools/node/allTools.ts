@@ -46,3 +46,6 @@ import './azureDevOps/adoQueryWorkItemsTool';
 import './azureDevOps/adoUpdateWorkItemTool';
 import './azureDevOps/adoCreateWorkItemTool';
 import './azureDevOps/adoAddCommentTool';
+import './azureDevOps/adoListWikisTool';
+import './azureDevOps/adoGetWikiPageTool';
+import './azureDevOps/adoCreateOrUpdateWikiPageTool';

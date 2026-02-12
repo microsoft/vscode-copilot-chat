@@ -1432,6 +1432,79 @@
 					},
 					"required": ["workItemId", "text"]
 				}
+			},
+			{
+				"name": "assistant_adoListWikis",
+				"toolReferenceName": "adoListWikis",
+				"displayName": "Azure DevOps: List Wikis",
+				"icon": "$(book)",
+				"userDescription": "List all wikis in an Azure DevOps project",
+				"modelDescription": "List all wikis available in the Azure DevOps project. Returns wiki names, IDs, and types (projectWiki or codeWiki). Use this to discover available wikis before reading or writing wiki pages.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					}
+				}
+			},
+			{
+				"name": "assistant_adoGetWikiPage",
+				"toolReferenceName": "adoGetWikiPage",
+				"displayName": "Azure DevOps: Read Wiki Page",
+				"icon": "$(book)",
+				"userDescription": "Read a wiki page from Azure DevOps",
+				"modelDescription": "Read the markdown content of a wiki page in Azure DevOps. Requires the wiki identifier (name or ID from the list wikis tool) and the page path (e.g., '/Home', '/Architecture/Overview'). Also returns any sub-pages under the requested path.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"wikiIdentifier": {
+							"type": "string",
+							"description": "The wiki name or ID. Use the list wikis tool to discover available wikis."
+						},
+						"path": {
+							"type": "string",
+							"description": "The page path within the wiki (e.g., '/Home', '/Architecture/Overview')"
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["wikiIdentifier", "path"]
+				}
+			},
+			{
+				"name": "assistant_adoCreateOrUpdateWikiPage",
+				"toolReferenceName": "adoCreateOrUpdateWikiPage",
+				"displayName": "Azure DevOps: Write Wiki Page",
+				"icon": "$(edit)",
+				"userDescription": "Create or update an Azure DevOps wiki page",
+				"modelDescription": "Create or update a wiki page in Azure DevOps. If the page exists it will be updated; otherwise a new page is created. Requires the wiki identifier (name or ID), page path, and the full markdown content for the page. IMPORTANT: Before writing, always confirm with the user which wiki and page path to target if not explicitly specified.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"wikiIdentifier": {
+							"type": "string",
+							"description": "The wiki name or ID. Use the list wikis tool to discover available wikis."
+						},
+						"path": {
+							"type": "string",
+							"description": "The page path within the wiki (e.g., '/Home', '/Architecture/Overview')"
+						},
+						"content": {
+							"type": "string",
+							"description": "The full markdown content for the wiki page"
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["wikiIdentifier", "path", "content"]
+				}
 			}
 		],
 		"languageModelToolSets": [

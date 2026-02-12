@@ -55,8 +55,29 @@ export interface AzureDevOpsConfig {
 }
 
 /**
+ * Azure DevOps wiki summary
+ */
+export interface AzureDevOpsWiki {
+	readonly id: string;
+	readonly name: string;
+	readonly type: 'projectWiki' | 'codeWiki';
+	readonly url: string;
+}
+
+/**
+ * Azure DevOps wiki page with content and ETag for concurrency
+ */
+export interface AzureDevOpsWikiPage {
+	readonly id: number;
+	readonly path: string;
+	readonly content?: string;
+	readonly etag: string;
+	readonly subPages?: readonly { readonly id: number; readonly path: string }[];
+}
+
+/**
  * Client for Azure DevOps REST API operations.
- * Handles work item CRUD, queries (WIQL), and comments.
+ * Handles work item CRUD, queries (WIQL), comments, and wiki pages.
  */
 export class AzureDevOpsClient {
 
@@ -320,5 +341,68 @@ export class AzureDevOpsClient {
 		}
 
 		return lines.join('\n');
+	}
+
+	/**
+	 * List all wikis in a project.
+	 */
+	async listWikis(project?: string): Promise<readonly AzureDevOpsWiki[]> {
+		const config = this.getConfig();
+		const proj = project || config.defaultProject;
+		const baseUrl = config.orgUrl.replace(/\/$/, '');
+
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis?api-version=7.1`;
+
+		const response = await this._fetch(url);
+		const result = await response.json() as { value: AzureDevOpsWiki[] };
+		return result.value;
+	}
+
+	/**
+	 * Get a wiki page with its content and ETag.
+	 */
+	async getWikiPage(wikiIdentifier: string, path: string, project?: string): Promise<AzureDevOpsWikiPage> {
+		const config = this.getConfig();
+		const proj = project || config.defaultProject;
+		const baseUrl = config.orgUrl.replace(/\/$/, '');
+
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis/${encodeURIComponent(wikiIdentifier)}/pages?path=${encodeURIComponent(path)}&includeContent=true&api-version=7.1`;
+
+		const response = await this._fetch(url);
+		const etag = response.headers.get('etag') ?? '';
+		const page = await response.json() as { id: number; path: string; content?: string; subPages?: { id: number; path: string }[] };
+		return { ...page, etag };
+	}
+
+	/**
+	 * Create or update a wiki page.
+	 * For updates, pass the ETag from a previous getWikiPage call.
+	 */
+	async createOrUpdateWikiPage(wikiIdentifier: string, path: string, content: string, etag?: string, project?: string): Promise<AzureDevOpsWikiPage> {
+		const config = this.getConfig();
+		const proj = project || config.defaultProject;
+		const baseUrl = config.orgUrl.replace(/\/$/, '');
+
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis/${encodeURIComponent(wikiIdentifier)}/pages?path=${encodeURIComponent(path)}&api-version=7.1`;
+
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+		};
+		if (etag) {
+			headers['If-Match'] = etag;
+		}
+
+		const response = await this._fetch(url, {
+			method: 'PUT',
+			headers,
+			body: JSON.stringify({ content }),
+		});
+
+		const newEtag = response.headers.get('etag') ?? '';
+		const page = await response.json() as { id: number; path: string; content?: string };
+		return { ...page, etag: newEtag };
 	}
 }
