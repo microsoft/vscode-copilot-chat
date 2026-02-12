@@ -25,7 +25,7 @@ export class NewSdkCopilotCLIModels implements ICopilotCLIModels {
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 		// Eagerly fetch available models so that they're ready when needed.
 		this._availableModels.value.catch(error => {
-			this.logService.error('[NewSdkCopilotCLIModels] Failed to fetch available models', error);
+			this.logService.error(error, '[NewSdkCopilotCLIModels] Failed to fetch available models');
 		});
 	}
 

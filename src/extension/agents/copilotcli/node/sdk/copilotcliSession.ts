@@ -147,7 +147,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 			this._modelId = modelId;
 		}
 
-		this.logService.info(`[NewSdkCopilotCLISession] Invoking session ${this.sessionId}`);
+		this.logService.info(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const disposables = this.add(new DisposableStore());
 		// Abort via session.abort() when cancellation is requested
 		disposables.add(token.onCancellationRequested(() => {
@@ -172,7 +172,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 		try {
 			// Register event listeners
 			disposables.add(toDisposable(this._sdkSession.on((event: SessionEvent) => {
-				this.logService.trace(`[NewSdkCopilotCLISession] Event: ${JSON.stringify(event, null, 2)}`);
+				this.logService.trace(`[CopilotCLISession] Event: ${JSON.stringify(event, null, 2)}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('user.message', (event) => {
 				sdkRequestId = event.id;
@@ -201,7 +201,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 							const ids = editFilesAndToolCallIds.get(uri) || [];
 							ids.push(event.data as UnknownToolCall as ToolCall);
 							editFilesAndToolCallIds.set(uri, ids);
-							this.logService.trace(`[NewSdkCopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
+							this.logService.trace(`[CopilotCLISession] Tracking for toolCallId ${event.data.toolCallId} of file ${uri.fsPath}`);
 						});
 					}
 				} else {
@@ -212,7 +212,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
 					}
 				}
-				this.logService.trace(`[NewSdkCopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
+				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('tool.execution_complete', (event) => {
 				const toolName = toolNames.get(event.data.toolCallId) || '<unknown>';
@@ -222,7 +222,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 
 				toolIdEditMap.set(event.data.toolCallId, editTracker.completeEdit(event.data.toolCallId));
 				if (editToolIds.has(event.data.toolCallId)) {
-					this.logService.trace(`[NewSdkCopilotCLISession] Completed edit tracking for toolCallId ${event.data.toolCallId}`);
+					this.logService.trace(`[CopilotCLISession] Completed edit tracking for toolCallId ${event.data.toolCallId}`);
 					return;
 				}
 
@@ -236,10 +236,10 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
 				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
 				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
-				this.logService.trace(`[NewSdkCopilotCLISession] Complete Tool ${toolName}, ${parts}`);
+				this.logService.trace(`[CopilotCLISession] Complete Tool ${toolName}, ${parts}`);
 			})));
 			disposables.add(toDisposable(this._sdkSession.on('session.error', (event) => {
-				this.logService.error(`[NewSdkCopilotCLISession] CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
+				this.logService.error(`[CopilotCLISession] CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
 				this._stream?.markdown(`\n\n❌ Error: (${event.data.errorType}) ${event.data.message}`);
 				const errorMarkdown = [`# Error Details`, `Type: ${event.data.errorType}`, `Message: ${event.data.message}`, `## Stack`, event.data.stack || ''].join('\n');
 				this._requestLogger.addEntry({
@@ -258,7 +258,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 				const messageOptions: MessageOptions = { prompt, attachments };
 				await this._sdkSession.sendAndWait(messageOptions, 24 * 60 * 60 * 1000);
 			}
-			this.logService.trace(`[NewSdkCopilotCLISession] Invoking session (completed) ${this.sessionId}`);
+			this.logService.trace(`[CopilotCLISession] Invoking session (completed) ${this.sessionId}`);
 
 			const requestDetails: { requestId: string; toolIdEditMap: Record<string, string> } = { requestId, toolIdEditMap: {} };
 			await Promise.all(Array.from(toolIdEditMap.entries()).map(async ([toolId, editFilePromise]) => {
@@ -277,7 +277,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 		} catch (error) {
 			this._status = ChatSessionStatus.Failed;
 			this._statusChange.fire(this._status);
-			this.logService.error(`[NewSdkCopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
+			this.logService.error(`[CopilotCLISession] Invoking session (error) ${this.sessionId}`, error);
 			this._stream?.markdown(`\n\n❌ Error: ${error instanceof Error ? error.message : String(error)}`);
 
 			this._logConversation(prompt, assistantMessageChunks.join(''), modelId || '', attachments, logStartTime, 'Failed', error instanceof Error ? error.message : String(error));
@@ -309,12 +309,12 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 			}
 
 			if (workingDirectory && extUriBiasedIgnorePathCase.isEqualOrParent(data, Uri.file(workingDirectory))) {
-				this.logService.trace(`[NewSdkCopilotCLISession] Auto Approving request to read file in working directory ${permReq.path}`);
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read file in working directory ${permReq.path}`);
 				return { kind: 'approved' };
 			}
 
 			if (this.workspaceService.getWorkspaceFolder(data)) {
-				this.logService.trace(`[NewSdkCopilotCLISession] Auto Approving request to read workspace file ${permReq.path}`);
+				this.logService.trace(`[CopilotCLISession] Auto Approving request to read workspace file ${permReq.path}`);
 				return { kind: 'approved' };
 			}
 		}
@@ -335,9 +335,9 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 			}
 
 			if (autoApprove) {
-				this.logService.trace(`[NewSdkCopilotCLISession] Auto Approving request ${editFile.fsPath}`);
+				this.logService.trace(`[CopilotCLISession] Auto Approving request ${editFile.fsPath}`);
 				if (toolCall && this._stream) {
-					this.logService.trace(`[NewSdkCopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
 				}
 				return { kind: 'approved' };
@@ -347,19 +347,19 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 		try {
 			const permissionHandler = await this._waitForPermissionHandler(permReq);
 			if (!permissionHandler) {
-				this.logService.warn(`[NewSdkCopilotCLISession] No permission handler registered, denying request for ${permReq.kind} permission.`);
+				this.logService.warn(`[CopilotCLISession] No permission handler registered, denying request for ${permReq.kind} permission.`);
 				return { kind: 'denied-interactively-by-user' };
 			}
 
 			if (await permissionHandler(permReq, toolCall, token)) {
 				if (editFile && toolCall && this._stream) {
-					this.logService.trace(`[NewSdkCopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
+					this.logService.trace(`[CopilotCLISession] Starting to track edit for toolCallId ${toolCall.toolCallId} & file ${editFile.fsPath}`);
 					await editTracker.trackEdit(toolCall.toolCallId, [editFile], this._stream);
 				}
 				return { kind: 'approved' };
 			}
 		} catch (error) {
-			this.logService.error(`[NewSdkCopilotCLISession] Permission request error: ${error}`);
+			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
 		} finally {
 			this._permissionRequested = undefined;
 		}
@@ -372,7 +372,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 	 */
 	async handleUserInputRequest(userInputRequest: NewSdkUserInputRequest): Promise<NewSdkUserInputResponse> {
 		if (!this._stream) {
-			this.logService.warn('[NewSdkCopilotCLISession] No stream available, cannot show question carousel');
+			this.logService.warn('[CopilotCLISession] No stream available, cannot show question carousel');
 			return { answer: '', wasFreeform: false };
 		}
 
@@ -402,7 +402,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 	 * This is a no-op. If delegation context is needed, use SessionConfig.systemMessage instead.
 	 */
 	addUserMessage(_content: string): void {
-		this.logService.trace('[NewSdkCopilotCLISession] addUserMessage is not supported by the new SDK — using no-op');
+		this.logService.trace('[CopilotCLISession] addUserMessage is not supported by the new SDK — using no-op');
 	}
 
 	/**
@@ -410,7 +410,7 @@ export class NewSdkCopilotCLISession extends DisposableStore implements ICopilot
 	 * This is a no-op. If delegation context is needed, use SessionConfig.systemMessage instead.
 	 */
 	addUserAssistantMessage(_content: string): void {
-		this.logService.trace('[NewSdkCopilotCLISession] addUserAssistantMessage is not supported by the new SDK — using no-op');
+		this.logService.trace('[CopilotCLISession] addUserAssistantMessage is not supported by the new SDK — using no-op');
 	}
 
 	public async getSelectedModelId(): Promise<string | undefined> {

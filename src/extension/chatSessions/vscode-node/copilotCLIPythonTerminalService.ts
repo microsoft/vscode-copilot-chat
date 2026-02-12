@@ -39,7 +39,7 @@ export class PythonTerminalService {
 			}
 			return await api.createTerminal(env, options);
 		} catch (ex) {
-			this.logService.error('Failed to create terminal with Python environment', ex.toString());
+			this.logService.error(ex, 'Failed to create terminal with Python environment');
 		}
 	}
 }

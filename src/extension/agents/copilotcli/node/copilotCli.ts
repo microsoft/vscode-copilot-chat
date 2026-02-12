@@ -315,7 +315,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 	private _refreshAgents(): void {
 		this._agentsPromise = undefined;
 		this.getAgents().catch((error) => {
-			this.logService.error('[CopilotCLIAgents] Failed to refresh agents', error);
+			this.logService.error(error, '[CopilotCLIAgents] Failed to refresh agents');
 		});
 		this._onDidChangeAgents.fire();
 	}
@@ -376,7 +376,7 @@ export class CopilotCLIAgents extends Disposable implements ICopilotCLIAgents {
 		// Cache the promise to avoid concurrent fetches
 		if (!this._agentsPromise) {
 			this._agentsPromise = this.getAgentsImpl().catch((error) => {
-				this.logService.error('[CopilotCLIAgents] Failed to fetch custom agents', error);
+				this.logService.error(error, '[CopilotCLIAgents] Failed to fetch custom agents');
 				this._agentsPromise = undefined;
 				return [];
 			});
