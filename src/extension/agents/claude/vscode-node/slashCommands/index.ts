@@ -11,6 +11,7 @@ import '../../node/slashCommands/index';
 // Add new command imports here as they are created
 
 import './agentsCommand';
+import './checkpointCommand';
 import './hooksCommand';
 import './memoryCommand';
 // TODO: Re-enable after legal review is complete

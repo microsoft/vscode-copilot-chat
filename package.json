@@ -2253,6 +2253,11 @@
 				"category": "Claude Agent"
 			},
 			{
+				"command": "copilot.claude.checkpoint",
+				"title": "Restore Checkpoint",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "copilot.claude.hooks",
 				"title": "Configure Hooks",
 				"category": "Claude Agent"
