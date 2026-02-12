@@ -4464,6 +4464,14 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.cli.branchSupport.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.branchSupport.enabled%",
+						"tags": [
+							"advanced"
+						]
+					},
 					"github.copilot.chat.agentCustomizationSkill.enabled": {
 						"type": "boolean",
 						"default": false,
