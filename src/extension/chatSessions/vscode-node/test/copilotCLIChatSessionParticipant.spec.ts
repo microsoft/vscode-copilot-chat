@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Attachment } from '@github/copilot/sdk';
+import { Attachment, SessionOptions } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
@@ -165,9 +165,9 @@ function createChatContext(sessionId: string, isUntitled: boolean): vscode.ChatC
 }
 
 class TestCopilotCLISession extends CopilotCLISession {
-	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; token: vscode.CancellationToken }> = [];
-	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, token: vscode.CancellationToken): Promise<void> {
-		this.requests.push({ input, attachments, modelId, token });
+	public requests: Array<{ input: CopilotCLISessionInput; attachments: Attachment[]; modelId: string | undefined; authInfo: NonNullable<SessionOptions['authInfo']>; token: vscode.CancellationToken }> = [];
+	override handleRequest(requestId: string, input: CopilotCLISessionInput, attachments: Attachment[], modelId: string | undefined, authInfo: NonNullable<SessionOptions['authInfo']>, token: vscode.CancellationToken): Promise<void> {
+		this.requests.push({ input, attachments, modelId, authInfo, token });
 		return Promise.resolve();
 	}
 }
@@ -327,13 +327,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const context = createChatContext('temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
+		const authInfo = await sdk.getAuthInfo();
 		expect(cliSessions.length).toBe(0);
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Say hi' }, attachments: [], modelId: 'base', authInfo, token });
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
@@ -392,7 +393,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		const sessionId = 'existing-123';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
-
+		const authInfo = await sdk.getAuthInfo();
 		const request = new TestChatRequest('Continue');
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
@@ -405,7 +406,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(sessionId);
 		expect(cliSessions[0].requests.length).toBe(1);
-		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', token });
+		expect(cliSessions[0].requests[0]).toEqual({ input: { prompt: 'Continue' }, attachments: [], modelId: 'base', authInfo, token });
 
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
