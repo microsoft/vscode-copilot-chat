@@ -105,6 +105,7 @@ export class AzureCopilotTokenManager implements ICopilotTokenManager {
 		this._cachedTokenExpiry = Date.now() + 3600_000; // 1 hour
 		this._onDidCopilotTokenRefresh.fire();
 
+		this._logService.info(`AzureCopilotTokenManager: returning token (length=${bearerToken.length}, prefix=${bearerToken.substring(0, 15)}..., endpoint=${azureEndpoint || 'EMPTY'})`);
 		return copilotToken;
 	}
 
