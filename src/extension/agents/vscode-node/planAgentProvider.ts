@@ -65,7 +65,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
 				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.PlanAgentExploreSubagentEnabled.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -216,7 +216,7 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 
 		// Check if Explore subagent is enabled (internal experiment)
-		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.PlanAgentExploreSubagentEnabled);
+		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled);
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 

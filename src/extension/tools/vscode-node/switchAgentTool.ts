@@ -31,7 +31,7 @@ export class SwitchAgentTool implements ICopilotTool<ISwitchAgentParams> {
 		}
 
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
-		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.PlanAgentExploreSubagentEnabled);
+		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.TeamInternal.PlanAgentExploreSubagentEnabled);
 		const planAgentBody = PlanAgentProvider.buildAgentBody(askQuestionsEnabled, exploreSubagentEnabled);
 
 		// Execute command to switch agent
