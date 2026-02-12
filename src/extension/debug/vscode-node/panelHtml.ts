@@ -136,6 +136,39 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			padding-right: 16px;
 		}
 
+		.session-separator {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			margin: 24px 0;
+			padding: 12px 16px;
+			background: linear-gradient(90deg, var(--vscode-badge-background) 0%, transparent 100%);
+			border-radius: 4px;
+			border-left: 3px solid var(--vscode-textLink-foreground);
+		}
+
+		.session-separator-icon {
+			font-size: 16px;
+		}
+
+		.session-separator-text {
+			flex: 1;
+		}
+
+		.session-separator-title {
+			font-weight: 600;
+			font-size: 12px;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--vscode-textLink-foreground);
+		}
+
+		.session-separator-subtitle {
+			font-size: 11px;
+			color: var(--vscode-descriptionForeground);
+			margin-top: 2px;
+		}
+
 		.ai-indicator {
 			display: inline-flex;
 			align-items: center;
@@ -358,6 +391,28 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 		@keyframes spin {
 			to { transform: rotate(360deg); }
 		}
+
+		.user-query {
+			margin-bottom: 16px;
+			padding: 12px 16px;
+			background-color: var(--vscode-input-background);
+			border-radius: 6px;
+			border-left: 3px solid var(--vscode-textLink-foreground);
+		}
+
+		.user-query-label {
+			font-size: 11px;
+			font-weight: 600;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			color: var(--vscode-descriptionForeground);
+			margin-bottom: 4px;
+		}
+
+		.user-query-text {
+			color: var(--vscode-foreground);
+			line-height: 1.4;
+		}
 	</style>
 </head>
 <body>
@@ -461,17 +516,25 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			const command = input.value.trim();
 			if (!command) return;
 
+			// Determine if this is an AI query (AI mode enabled OR natural language without slash)
+			const isAiQuery = isAiMode || !command.startsWith('/');
+
+			// Show user's query
+			if (isAiQuery) {
+				addUserQuery(command);
+			}
+
 			// Add loading indicator
 			const loadingDiv = document.createElement('div');
 			loadingDiv.className = 'loading';
-			loadingDiv.textContent = isAiMode ? 'Analyzing with AI' : 'Processing';
+			loadingDiv.textContent = isAiQuery ? 'Analyzing with AI, please wait...' : 'Processing...';
 			content.appendChild(loadingDiv);
 			content.scrollTop = content.scrollHeight;
 
 			// Send to extension
 			if (command.toLowerCase() === '/load') {
 				vscode.postMessage({ type: 'load' });
-			} else if (isAiMode || !command.startsWith('/')) {
+			} else if (isAiQuery) {
 				// AI mode or natural language query
 				vscode.postMessage({ type: 'aiQuery', query: command });
 			} else {
@@ -502,10 +565,12 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 		document.querySelectorAll('.quick-btn[data-ai-query]').forEach(btn => {
 			btn.addEventListener('click', () => {
 				const query = btn.getAttribute('data-ai-query');
+				// Show user's query
+				addUserQuery(query);
 				// Add loading indicator
 				const loadingDiv = document.createElement('div');
 				loadingDiv.className = 'loading';
-				loadingDiv.textContent = 'Analyzing with AI';
+				loadingDiv.textContent = 'Analyzing with AI, please wait...';
 				content.appendChild(loadingDiv);
 				content.scrollTop = content.scrollHeight;
 				// Remove welcome
@@ -538,6 +603,11 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 				return;
 			}
 
+			if (message.type === 'separator') {
+				addSessionSeparator(message.title, message.subtitle);
+				return;
+			}
+
 			if (message.type === 'result') {
 				await addResultOutput(message);
 			}
@@ -554,6 +624,31 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 				sessionBadge.textContent = 'No Session';
 				sessionBadge.style.backgroundColor = 'var(--vscode-badge-background)';
 			}
+		}
+
+		function addUserQuery(query) {
+			// Remove welcome message
+			const welcome = content.querySelector('.welcome');
+			if (welcome) welcome.remove();
+
+			const div = document.createElement('div');
+			div.className = 'user-query';
+			div.innerHTML = '<div class="user-query-label">Your Question</div>' +
+				'<div class="user-query-text">' + escapeHtml(query) + '</div>';
+			content.appendChild(div);
+			content.scrollTop = content.scrollHeight;
+		}
+
+		function addSessionSeparator(title, subtitle) {
+			const div = document.createElement('div');
+			div.className = 'session-separator';
+			div.innerHTML = '<span class="session-separator-icon">📁</span>' +
+				'<div class="session-separator-text">' +
+				'<div class="session-separator-title">' + escapeHtml(title || 'New Session') + '</div>' +
+				(subtitle ? '<div class="session-separator-subtitle">' + escapeHtml(subtitle) + '</div>' : '') +
+				'</div>';
+			content.appendChild(div);
+			content.scrollTop = content.scrollHeight;
 		}
 
 		function addErrorOutput(error) {

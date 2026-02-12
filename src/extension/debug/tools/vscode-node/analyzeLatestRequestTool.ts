@@ -10,7 +10,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
-import { DebugItemStatus } from '../../common/debugTypes';
+import { IDebugContextService } from '../../common/debugContextService';
+import { DebugItemStatus, DebugSession } from '../../common/debugTypes';
 import { buildSessionFromRequestLogger } from '../../node/debugSessionService';
 
 interface IAnalyzeLatestRequestParams {
@@ -28,12 +29,14 @@ interface IAnalyzeLatestRequestParams {
 
 /**
  * Tool to analyze a specific request/turn from the session in detail
+ * Supports both live session and loaded session from files
  */
 class AnalyzeLatestRequestTool implements ICopilotTool<IAnalyzeLatestRequestParams> {
 	public static readonly toolName = ToolName.DebugAnalyzeLatestRequest;
 
 	constructor(
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IDebugContextService private readonly debugContext: IDebugContextService,
 	) { }
 
 	async invoke(
@@ -48,12 +51,23 @@ class AnalyzeLatestRequestTool implements ICopilotTool<IAnalyzeLatestRequestPara
 			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
-		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		// Check for loaded session first, then fall back to live session
+		let session: DebugSession;
+		let isLoadedSession = false;
+
+		const loadedSession = this.debugContext.getLoadedSession();
+		if (loadedSession) {
+			session = loadedSession;
+			isLoadedSession = true;
+		} else {
+			// Build the debug session from live data
+			session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		}
 
 		if (session.turns.length === 0) {
+			const source = isLoadedSession ? 'loaded session' : 'current session';
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart('No requests found in the current session.')
+				new LanguageModelTextPart(`No requests found in the ${source}.`)
 			]);
 		}
 

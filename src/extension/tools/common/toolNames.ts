@@ -78,9 +78,11 @@ export enum ToolName {
 	DebugGetFailures = 'debug_getFailures',
 	DebugGetToolCalls = 'debug_getToolCalls',
 	DebugLoadTrajectoryFile = 'debug_loadTrajectoryFile',
+	DebugLoadSessionFile = 'debug_loadSessionFile',
 	DebugGetCurrentSession = 'debug_getCurrentSession',
 	DebugGetSessionHistory = 'debug_getSessionHistory',
 	DebugAnalyzeLatestRequest = 'debug_analyzeLatestRequest',
+	DebugGetLiveHierarchy = 'debug_getLiveHierarchy',
 	DebugSubagent = 'debug_subagent',
 }
 
@@ -247,9 +249,11 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.DebugGetFailures]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugGetToolCalls]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugLoadTrajectoryFile]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugLoadSessionFile]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugGetCurrentSession]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugGetSessionHistory]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugAnalyzeLatestRequest]: ToolCategory.RedundantButSpecific,
+	[ToolName.DebugGetLiveHierarchy]: ToolCategory.RedundantButSpecific,
 	[ToolName.DebugSubagent]: ToolCategory.RedundantButSpecific,
 } as const;
 

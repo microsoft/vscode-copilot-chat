@@ -10,7 +10,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
-import { DebugTurn } from '../../common/debugTypes';
+import { IDebugContextService } from '../../common/debugContextService';
+import { DebugSession, DebugTurn } from '../../common/debugTypes';
 import { buildSessionFromRequestLogger } from '../../node/debugSessionService';
 
 interface IGetSessionHistoryParams {
@@ -32,12 +33,14 @@ interface IGetSessionHistoryParams {
 
 /**
  * Tool to get the conversation history from the current session
+ * or loaded session from IDebugContextService
  */
 class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 	public static readonly toolName = ToolName.DebugGetSessionHistory;
 
 	constructor(
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IDebugContextService private readonly debugContext: IDebugContextService,
 	) { }
 
 	async invoke(
@@ -54,12 +57,23 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
-		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		// Check for loaded session first, then fall back to live session
+		let session: DebugSession;
+		let isLoadedSession = false;
+
+		const loadedSession = this.debugContext.getLoadedSession();
+		if (loadedSession) {
+			session = loadedSession;
+			isLoadedSession = true;
+		} else {
+			// Build the debug session from live data
+			session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		}
 
 		if (session.turns.length === 0) {
+			const source = isLoadedSession ? 'loaded session' : 'session';
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart('No conversation history found. The session has no recorded turns yet.')
+				new LanguageModelTextPart(`No conversation history found. The ${source} has no recorded turns yet.`)
 			]);
 		}
 
@@ -202,6 +216,7 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 			lines.push('gantt');
 			lines.push('    title Session Timeline');
 			lines.push('    dateFormat HH:mm:ss');
+			lines.push('    axisFormat %H:%M:%S');
 			lines.push('');
 			lines.push('    section Turns');
 

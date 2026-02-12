@@ -9,7 +9,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { IAgentTrajectory } from '../../../platform/trajectory/common/trajectoryTypes';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatReplayExport } from '../../replay/common/chatReplayTypes';
+import { ChatReplayExport, ExportedPrompt } from '../../replay/common/chatReplayTypes';
 import { IDebugContextService } from '../common/debugContextService';
 import { DebugQueryType, DebugSession } from '../common/debugTypes';
 import { executeQuery, parseQuery } from '../node/debugQueryHandler';
@@ -35,8 +35,9 @@ interface WebviewToExtensionMessage {
  * Messages sent from extension to webview
  */
 interface ExtensionToWebviewMessage {
-	type: 'result' | 'sessionInfo' | 'error';
+	type: 'result' | 'sessionInfo' | 'error' | 'separator';
 	title?: string;
+	subtitle?: string;
 	markdown?: string;
 	mermaid?: string;
 	error?: string;
@@ -167,6 +168,8 @@ export class DebugPanelManager extends Disposable {
 
 		if (query.type === DebugQueryType.Refresh) {
 			this._loadedFromFile = false;
+			// Clear loaded session from context service so tools use live data
+			this._debugContextService.clearLoadedSession();
 			this._refreshLiveSession();
 			this._sendToWebview({
 				type: 'result',
@@ -177,28 +180,31 @@ export class DebugPanelManager extends Disposable {
 			return;
 		}
 
-		const result = executeQuery(query, this._session);
+		try {
+			const result = executeQuery(query, this._session);
 
-		this._sendToWebview({
-			type: 'result',
-			title: result.title,
-			markdown: result.markdown,
-			mermaid: result.mermaid,
-			error: result.error
-		});
+			this._sendToWebview({
+				type: 'result',
+				title: result.title,
+				markdown: result.markdown,
+				mermaid: result.mermaid,
+				error: result.error
+			});
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this._sendToWebview({
+				type: 'result',
+				title: 'Error',
+				markdown: `*Data not available or could not be processed.*\n\n**Details:** ${errorMsg}\n\nTry loading a different file or use \`/refresh\` to reload live session data.`
+			});
+		}
 	}
 
 	/**
 	 * Execute an AI-powered query directly without showing in chat UI
 	 */
 	private async _executeAiQuery(query: string): Promise<void> {
-		// Notify webview that query is being processed
-		this._sendToWebview({
-			type: 'result',
-			title: 'Processing',
-			markdown: `**Query:** ${query}\n\n*Analyzing with AI... Please wait.*`
-		});
-
+		// Webview already shows loading indicator - no need for placeholder message
 		try {
 			// Execute directly without going through chat
 			await this._subagentInvoker.executeQuery(query);
@@ -213,9 +219,250 @@ export class DebugPanelManager extends Disposable {
 	}
 
 	/**
-	 * Load a session file
+	 * Load a session file or folder
 	 */
 	private async _loadFile(): Promise<void> {
+		// Show quick pick to choose between file or folder
+		const choice = await vscode.window.showQuickPick([
+			{ label: '$(file) Load File', description: 'Load a single .chatreplay.json, .trajectory.json, or .jsonl file', value: 'file' },
+			{ label: '$(folder) Load Folder', description: 'Load all debug files from a folder', value: 'folder' }
+		], {
+			title: 'Load Debug Session',
+			placeHolder: 'Choose how to load debug data'
+		});
+
+		if (!choice) {
+			return;
+		}
+
+		if (choice.value === 'folder') {
+			await this._loadFolder();
+		} else {
+			await this._loadSingleFile();
+		}
+	}
+
+	/**
+	 * Load all debug files from a folder
+	 */
+	private async _loadFolder(): Promise<void> {
+		const uris = await vscode.window.showOpenDialog({
+			canSelectFiles: false,
+			canSelectFolders: true,
+			canSelectMany: false,
+			title: 'Select Debug Logs Folder'
+		});
+
+		if (!uris || uris.length === 0) {
+			return;
+		}
+
+		const folderUri = uris[0];
+		const folderPath = folderUri.fsPath;
+		const folderName = folderPath.split(/[/\\]/).pop() || 'folder';
+
+		try {
+			// Read directory contents
+			const entries = await vscode.workspace.fs.readDirectory(folderUri);
+
+			// Categorize files
+			const chatReplayFiles: vscode.Uri[] = [];
+			const trajectoryFiles: vscode.Uri[] = [];
+			const transcriptFiles: vscode.Uri[] = [];
+
+			for (const [name, type] of entries) {
+				if (type !== vscode.FileType.File) {
+					continue;
+				}
+
+				const fileUri = vscode.Uri.joinPath(folderUri, name);
+				const lowerName = name.toLowerCase();
+
+				if (lowerName.endsWith('.chatreplay.json')) {
+					chatReplayFiles.push(fileUri);
+				} else if (lowerName.endsWith('.trajectory.json') || (lowerName.endsWith('.json') && lowerName.includes('trajectory'))) {
+					trajectoryFiles.push(fileUri);
+				} else if (lowerName.endsWith('.jsonl')) {
+					transcriptFiles.push(fileUri);
+				} else if (lowerName.endsWith('.json')) {
+					// Try to detect ATIF trajectory by peeking at content
+					try {
+						const content = await vscode.workspace.fs.readFile(fileUri);
+						const text = new TextDecoder().decode(content);
+						const data = JSON.parse(text);
+						if (data && typeof data === 'object' && 'session_id' in data && 'steps' in data) {
+							trajectoryFiles.push(fileUri);
+						} else if (data && typeof data === 'object' && (('prompts' in data && 'totalPrompts' in data) || ('prompt' in data && 'logs' in data))) {
+							// Both full ChatReplayExport and single ExportedPrompt formats
+							chatReplayFiles.push(fileUri);
+						}
+					} catch {
+						// Skip invalid files
+					}
+				}
+			}
+
+			if (chatReplayFiles.length === 0 && trajectoryFiles.length === 0 && transcriptFiles.length === 0) {
+				this._sendToWebview({
+					type: 'error',
+					error: `No debug files found in ${folderName}. Expected .chatreplay.json, .trajectory.json, or .jsonl files.`
+				});
+				return;
+			}
+
+			// Add visual separator before loading new session
+			this._sendToWebview({
+				type: 'separator',
+				title: 'Loading New Session',
+				subtitle: folderName
+			});
+
+			// Clear existing data and session
+			this._session = undefined;
+			this._loadedFromFile = false;
+			this._debugContextService.clearTrajectories();
+			this._debugContextService.clearLoadedSession();
+			this._sendSessionInfo(); // Update badge to show "No Session" while loading
+
+			// Load trajectories first (for hierarchy analysis)
+			let trajectoriesLoaded = 0;
+			for (const fileUri of trajectoryFiles) {
+				try {
+					const content = await vscode.workspace.fs.readFile(fileUri);
+					const text = new TextDecoder().decode(content);
+					const data = JSON.parse(text) as IAgentTrajectory;
+					this._debugContextService.addTrajectory(data);
+					trajectoriesLoaded++;
+				} catch {
+					// Skip invalid trajectory files
+				}
+			}
+
+			// Load the main session (prefer chatreplay, then transcript, then trajectory)
+			let sessionLoaded = false;
+			let sessionSource = '';
+
+			if (chatReplayFiles.length > 0) {
+				try {
+					const fileUri = chatReplayFiles[0];
+					const filename = fileUri.fsPath.split(/[/\\]/).pop() || 'chatreplay.json';
+					const content = await vscode.workspace.fs.readFile(fileUri);
+					const text = new TextDecoder().decode(content);
+					const data = JSON.parse(text);
+
+					// Handle both full export and single prompt formats
+					let exportData: ChatReplayExport;
+					if ('prompts' in data && 'totalPrompts' in data) {
+						exportData = data as ChatReplayExport;
+					} else if ('prompt' in data && 'logs' in data) {
+						// Single ExportedPrompt - wrap it
+						exportData = {
+							exportedAt: new Date().toISOString(),
+							totalPrompts: 1,
+							totalLogEntries: (data as ExportedPrompt).logs.length,
+							prompts: [data as ExportedPrompt]
+						};
+					} else {
+						throw new Error('Invalid chatreplay format');
+					}
+
+					this._session = buildSessionFromChatReplay(exportData, filename);
+					this._debugContextService.loadSession(this._session, folderPath);
+					sessionLoaded = true;
+					sessionSource = 'chatreplay';
+				} catch {
+					// Fall through to try other sources
+				}
+			}
+
+			if (!sessionLoaded && transcriptFiles.length > 0) {
+				try {
+					const fileUri = transcriptFiles[0];
+					const filename = fileUri.fsPath.split(/[/\\]/).pop() || 'transcript.jsonl';
+					const content = await vscode.workspace.fs.readFile(fileUri);
+					const text = new TextDecoder().decode(content);
+					this._session = buildSessionFromTranscript(text, filename);
+					this._debugContextService.loadSession(this._session, folderPath);
+					sessionLoaded = true;
+					sessionSource = 'transcript';
+				} catch {
+					// Fall through to try trajectory
+				}
+			}
+
+			if (!sessionLoaded && trajectoryFiles.length > 0) {
+				// Use first trajectory as session source
+				try {
+					const fileUri = trajectoryFiles[0];
+					const filename = fileUri.fsPath.split(/[/\\]/).pop() || 'trajectory.json';
+					const content = await vscode.workspace.fs.readFile(fileUri);
+					const text = new TextDecoder().decode(content);
+					const data = JSON.parse(text) as IAgentTrajectory;
+					this._session = buildSessionFromTrajectory(data, filename);
+					this._debugContextService.loadSession(this._session, folderPath);
+					sessionLoaded = true;
+					sessionSource = 'trajectory';
+				} catch {
+					// No session could be loaded
+				}
+			}
+
+			this._loadedFromFile = sessionLoaded;
+			this._sendSessionInfo();
+
+			// Build summary
+			const lines: string[] = [];
+			lines.push(`Loaded folder **${folderName}**\n`);
+			lines.push('### Files Found');
+			if (chatReplayFiles.length > 0) {
+				lines.push(`- ${chatReplayFiles.length} chat replay file(s)`);
+			}
+			if (trajectoryFiles.length > 0) {
+				lines.push(`- ${trajectoryFiles.length} trajectory file(s)`);
+			}
+			if (transcriptFiles.length > 0) {
+				lines.push(`- ${transcriptFiles.length} transcript file(s)`);
+			}
+
+			lines.push('');
+			lines.push('### Loaded Data');
+			if (sessionLoaded && this._session) {
+				lines.push(`- **Session:** ${sessionSource} (${this._session.metrics.totalTurns} turns, ${this._session.metrics.totalToolCalls} tool calls)`);
+			}
+			if (trajectoriesLoaded > 0) {
+				lines.push(`- **Trajectories:** ${trajectoriesLoaded} loaded (for hierarchy/failure analysis)`);
+				const hierarchy = this._debugContextService.buildHierarchy();
+				if (hierarchy.length > 0) {
+					lines.push(`- **Hierarchy roots:** ${hierarchy.length}`);
+				}
+				const failures = this._debugContextService.findFailures();
+				if (failures.length > 0) {
+					lines.push(`- **Failures detected:** ${failures.length} ⚠️`);
+				}
+			}
+
+			lines.push('');
+			lines.push('*All data is now available for AI analysis. Use "Ask AI" or type a question.*');
+
+			this._sendToWebview({
+				type: 'result',
+				title: 'Folder Loaded',
+				markdown: lines.join('\n')
+			});
+
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this._sendToWebview({
+				type: 'error',
+				error: `Failed to load folder: ${errorMsg}`
+			});
+		}
+	}
+
+	/**
+	 * Load a single session file
+	 */
+	private async _loadSingleFile(): Promise<void> {
 		const uris = await vscode.window.showOpenDialog({
 			canSelectFiles: true,
 			canSelectFolders: false,
@@ -234,6 +481,20 @@ export class DebugPanelManager extends Disposable {
 		const uri = uris[0];
 		const filename = uri.fsPath.split(/[/\\]/).pop() || 'unknown';
 
+		// Add visual separator before loading new session
+		this._sendToWebview({
+			type: 'separator',
+			title: 'Loading New Session',
+			subtitle: filename
+		});
+
+		// Clear existing data and session
+		this._session = undefined;
+		this._loadedFromFile = false;
+		this._debugContextService.clearTrajectories();
+		this._debugContextService.clearLoadedSession();
+		this._sendSessionInfo(); // Update badge to show "No Session" while loading
+
 		try {
 			const content = await vscode.workspace.fs.readFile(uri);
 			const text = new TextDecoder().decode(content);
@@ -249,6 +510,8 @@ export class DebugPanelManager extends Disposable {
 							// It's a transcript JSONL
 							this._session = buildSessionFromTranscript(text, filename);
 							this._loadedFromFile = true;
+							// Also store in context service so tools can access it
+							this._debugContextService.loadSession(this._session, uri.fsPath);
 							this._sendSessionInfo();
 
 							const session = this._session;
@@ -256,7 +519,7 @@ export class DebugPanelManager extends Disposable {
 								this._sendToWebview({
 									type: 'result',
 									title: 'Transcript Loaded',
-									markdown: `Loaded **${filename}** (JSONL Transcript)\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.transcriptEvents?.length || 0} transcript events\n\n*Use \`/transcript\` to view raw events, \`/thinking\` for reasoning content.*`
+									markdown: `Loaded **${filename}** (JSONL Transcript)\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.transcriptEvents?.length || 0} transcript events\n\n*Session data is now available for AI analysis. Use "Ask AI" or type a question.*`
 								});
 							}
 							return;
@@ -272,8 +535,17 @@ export class DebugPanelManager extends Disposable {
 
 			// Detect file type
 			if ('prompts' in data && 'totalPrompts' in data) {
-				// ChatReplayExport
+				// ChatReplayExport (full export with multiple prompts)
 				this._session = buildSessionFromChatReplay(data as ChatReplayExport, filename);
+			} else if ('prompt' in data && 'logs' in data) {
+				// Single ExportedPrompt - wrap it in a ChatReplayExport structure
+				const wrappedExport: ChatReplayExport = {
+					exportedAt: new Date().toISOString(),
+					totalPrompts: 1,
+					totalLogEntries: (data as ExportedPrompt).logs.length,
+					prompts: [data as ExportedPrompt]
+				};
+				this._session = buildSessionFromChatReplay(wrappedExport, filename);
 			} else if ('schema_version' in data && 'steps' in data) {
 				// ATIF trajectory
 				this._session = buildSessionFromTrajectory(data as IAgentTrajectory, filename);
@@ -282,6 +554,8 @@ export class DebugPanelManager extends Disposable {
 			}
 
 			this._loadedFromFile = true;
+			// Also store in context service so tools can access it
+			this._debugContextService.loadSession(this._session, uri.fsPath);
 			this._sendSessionInfo();
 
 			const session = this._session;
@@ -289,7 +563,7 @@ export class DebugPanelManager extends Disposable {
 				this._sendToWebview({
 					type: 'result',
 					title: 'Session Loaded',
-					markdown: `Loaded **${filename}**\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.metrics.totalSubAgents} sub-agents`
+					markdown: `Loaded **${filename}**\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.metrics.totalSubAgents} sub-agents\n\n*Session data is now available for AI analysis. Use "Ask AI" or type a question.*`
 				});
 			}
 

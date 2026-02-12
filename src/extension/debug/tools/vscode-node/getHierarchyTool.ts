@@ -10,6 +10,7 @@ import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
 import { IDebugContextService, ITrajectoryNode } from '../../common/debugContextService';
+import { findHierarchyNode, renderHierarchyDetailed, renderHierarchyMermaid, renderHierarchyTree } from '../../common/hierarchyRenderer';
 
 interface IGetHierarchyParams {
 	/** Optional session ID to get hierarchy from a specific root. If not provided, shows all hierarchies. */
@@ -43,10 +44,10 @@ class GetHierarchyTool implements ICopilotTool<IGetHierarchyParams> {
 			]);
 		}
 
-		let targetRoots = roots;
+		let targetRoots: readonly ITrajectoryNode[] = roots;
 		if (sessionId) {
 			// Find the specific node
-			const node = this.findNode(roots, sessionId);
+			const node = findHierarchyNode(roots, sessionId);
 			if (node) {
 				targetRoots = [node];
 			} else {
@@ -56,109 +57,27 @@ class GetHierarchyTool implements ICopilotTool<IGetHierarchyParams> {
 			}
 		}
 
+		// Use shared rendering functions
+		const renderOptions = {
+			title: 'Agent Hierarchy',
+			subtitle: 'Sub-agent tree from loaded trajectories',
+			showModel: false,
+			showMetrics: false
+		};
+
 		let output: string;
 		switch (format) {
 			case 'mermaid':
-				output = this.renderMermaid(targetRoots);
+				output = renderHierarchyMermaid(targetRoots, renderOptions);
 				break;
 			case 'detailed':
-				output = this.renderDetailed(targetRoots);
+				output = renderHierarchyDetailed(targetRoots, renderOptions);
 				break;
 			default:
-				output = this.renderTree(targetRoots);
+				output = renderHierarchyTree(targetRoots, renderOptions);
 		}
 
 		return new LanguageModelToolResult([new LanguageModelTextPart(output)]);
-	}
-
-	private findNode(nodes: ITrajectoryNode[], sessionId: string): ITrajectoryNode | undefined {
-		for (const node of nodes) {
-			if (node.sessionId === sessionId) {
-				return node;
-			}
-			const found = this.findNode(node.children, sessionId);
-			if (found) {
-				return found;
-			}
-		}
-		return undefined;
-	}
-
-	private renderTree(roots: ITrajectoryNode[], indent = ''): string {
-		const lines: string[] = [];
-		if (indent === '') {
-			lines.push('## Agent Hierarchy Tree\n');
-		}
-
-		for (const node of roots) {
-			const statusIcon = node.hasFailures ? '❌' : '✅';
-			const toolCount = node.toolCallCount > 0 ? ` [${node.toolCallCount} tools]` : '';
-			const subagentCount = node.children.length > 0 ? ` (${node.children.length} sub-agents)` : '';
-
-			lines.push(`${indent}${statusIcon} **${node.agentName}**${toolCount}${subagentCount}`);
-			lines.push(`${indent}   Session: \`${node.sessionId.substring(0, 16)}...\``);
-
-			if (node.children.length > 0) {
-				lines.push(this.renderTree(node.children, indent + '    '));
-			}
-		}
-
-		return lines.join('\n');
-	}
-
-	private renderMermaid(roots: ITrajectoryNode[]): string {
-		const lines: string[] = [];
-		lines.push('## Agent Hierarchy (Mermaid)\n');
-		lines.push('```mermaid');
-		lines.push('graph TD');
-		lines.push('');
-
-		for (const root of roots) {
-			this.addMermaidNode(root, lines);
-		}
-
-		lines.push('```');
-		return lines.join('\n');
-	}
-
-	private addMermaidNode(node: ITrajectoryNode, lines: string[]): void {
-		const nodeId = node.sessionId.substring(0, 8);
-		const style = node.hasFailures ? ':::failed' : '';
-		const label = `${node.agentName}<br/>${node.toolCallCount} tools`;
-
-		lines.push(`    ${nodeId}["${label}"]${style}`);
-
-		for (const child of node.children) {
-			const childId = child.sessionId.substring(0, 8);
-			lines.push(`    ${nodeId} --> ${childId}`);
-			this.addMermaidNode(child, lines);
-		}
-	}
-
-	private renderDetailed(roots: ITrajectoryNode[]): string {
-		const lines: string[] = [];
-		lines.push('## Detailed Agent Hierarchy\n');
-
-		const renderNode = (node: ITrajectoryNode, depth: number) => {
-			const prefix = '  '.repeat(depth);
-			lines.push(`${prefix}### ${node.agentName}`);
-			lines.push(`${prefix}- **Session ID:** \`${node.sessionId}\``);
-			lines.push(`${prefix}- **Steps:** ${node.stepCount}`);
-			lines.push(`${prefix}- **Tool Calls:** ${node.toolCallCount}`);
-			lines.push(`${prefix}- **Status:** ${node.hasFailures ? 'Has Failures ❌' : 'OK ✅'}`);
-			lines.push(`${prefix}- **Sub-agents:** ${node.children.length}`);
-			lines.push('');
-
-			for (const child of node.children) {
-				renderNode(child, depth + 1);
-			}
-		};
-
-		for (const root of roots) {
-			renderNode(root, 0);
-		}
-
-		return lines.join('\n');
 	}
 
 	prepareInvocation(

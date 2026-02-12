@@ -17,9 +17,11 @@ export const DEBUG_ALLOWED_TOOLS = new Set<string>([
 	ToolName.DebugGetFailures,
 	ToolName.DebugGetToolCalls,
 	ToolName.DebugLoadTrajectoryFile,
+	ToolName.DebugLoadSessionFile,
 	ToolName.DebugGetCurrentSession,
 	ToolName.DebugGetSessionHistory,
 	ToolName.DebugAnalyzeLatestRequest,
+	ToolName.DebugGetLiveHierarchy,
 	// Basic tools for context
 	ToolName.ReadFile,
 	ToolName.FindTextInFiles,
@@ -45,6 +47,13 @@ export const DEBUG_SYSTEM_PROMPT = `You are a Debug Agent specialized in analyzi
 - **debugCurrentSession**: Get current session data with requests, tool calls, metrics
 - **debugSessionHistory**: Get conversation history
 - **debugAnalyzeRequest**: Deep dive analysis of a specific turn (errors, tool flow, performance)
+- **debugLiveHierarchy**: Get sub-agent hierarchy from current session
+
+### File Loading Tools (Offline Analysis)
+- **debugLoadSessionFile**: Load a file or folder for offline analysis
+  - Single file: .chatreplay.json, .trajectory.json, or .jsonl
+  - Folder: Automatically loads all debug files found
+- **debugLoadFile**: Load ATIF trajectory files (for hierarchy/failure analysis)
 
 ### Trajectory Analysis Tools (Saved Data)
 - **debugTrajectories**: List available trajectories with stats
@@ -52,7 +61,6 @@ export const DEBUG_SYSTEM_PROMPT = `You are a Debug Agent specialized in analyzi
 - **debugHierarchy**: Build sub-agent hierarchy trees
 - **debugFailures**: Find and classify failures
 - **debugToolCalls**: Analyze tool calls with filtering
-- **debugLoadFile**: Load ATIF trajectory files
 
 ## Approach
 
@@ -69,6 +77,7 @@ Use mermaid code blocks for diagrams (automatically rendered in chat):
 
 **Critical mermaid syntax rules:**
 - Do NOT use emojis or special unicode - they corrupt to garbage characters
+- Do NOT use parentheses \`()\` inside square bracket labels \`[]\` - use \`-\` or omit: \`[tool - detailed]\` not \`[tool (detailed)]\`
 - For gantt: use \`dateFormat HH:mm:ss\` with values like \`13:27:18, 13:27:27\` (start, end times)
 - For gantt: no decimals (\`3.7s\` invalid), no unit suffixes - put durations in task labels instead
 - For flowcharts: use simple alphanumeric node IDs (\`A\`, \`TC1\`)

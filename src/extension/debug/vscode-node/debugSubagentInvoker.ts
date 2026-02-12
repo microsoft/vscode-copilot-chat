@@ -19,10 +19,8 @@ import { IDebugContextService } from '../common/debugContextService';
 
 /**
  * Model family to use for the debug subagent.
- * Claude Sonnet 4.5 is preferred for better analysis capabilities.
  */
-const DEBUG_MODEL_FAMILY = 'claude-sonnet-4.5';
-const DEBUG_MODEL_FALLBACK: ChatEndpointFamily = 'gpt-4.1';
+const DEBUG_MODEL_FAMILY: ChatEndpointFamily = 'gpt-4.1';
 
 /**
  * Creates a minimal mock ChatRequest for use when invoking the debug subagent
@@ -87,20 +85,7 @@ export class DebugSubagentInvoker {
 		);
 
 		return this._requestLogger.captureInvocation(capturingToken, async () => {
-			// Try to get Claude model, fall back to GPT-4.1 if not available
-			// Note: ChatEndpointFamily only includes certain models, so we check Claude availability
-			// but pass undefined for modelFamily (letting the endpoint use its defaults) when Claude is selected
-			let modelFamily: ChatEndpointFamily | undefined = DEBUG_MODEL_FALLBACK;
-			try {
-				const claudeModels = await vscode.lm.selectChatModels({ family: DEBUG_MODEL_FAMILY, vendor: 'copilot' });
-				if (claudeModels.length > 0) {
-					// Claude is available - omit modelFamily so request/endpoint handles model selection
-					modelFamily = undefined;
-				}
-			} catch {
-				// Ignore errors, use fallback
-			}
-			return this._executeQueryInternal(query, cts, subAgentInvocationId, parentSessionId, modelFamily);
+			return this._executeQueryInternal(query, cts, subAgentInvocationId, parentSessionId);
 		});
 	}
 
@@ -111,8 +96,7 @@ export class DebugSubagentInvoker {
 		query: string,
 		cts: CancellationTokenSource,
 		subAgentInvocationId: string,
-		parentSessionId: string,
-		modelFamily: ChatEndpointFamily | undefined
+		parentSessionId: string
 	): Promise<string> {
 		try {
 			const debugInstruction = [
@@ -129,7 +113,7 @@ export class DebugSubagentInvoker {
 				location: ChatLocation.Panel,
 				promptText: query,
 				subAgentInvocationId: subAgentInvocationId,
-				modelFamily, // Use selected model family for endpoint selection (undefined when Claude available)
+				modelFamily: DEBUG_MODEL_FAMILY,
 			});
 
 			// Run the loop with no output stream (panel handles display separately)

@@ -198,6 +198,7 @@ class GetToolCallsTool implements ICopilotTool<IGetToolCallsParams> {
 		lines.push('gantt');
 		lines.push('    title Tool Call Timeline');
 		lines.push('    dateFormat HH:mm:ss');
+		lines.push('    axisFormat %H:%M:%S');
 		lines.push('');
 
 		// Group by session
@@ -214,9 +215,12 @@ class GetToolCallsTool implements ICopilotTool<IGetToolCallsParams> {
 
 			for (const call of calls) {
 				const status = call.failed ? 'crit,' : '';
-				const duration = call.durationMs || 100;
-				const start = call.timestamp ? new Date(call.timestamp).toTimeString().substring(0, 8) : '00:00:00';
-				lines.push(`        ${call.toolName} : ${status}${start}, ${duration}ms`);
+				const durationMs = call.durationMs || 100;
+				const startTime = call.timestamp ? new Date(call.timestamp) : new Date();
+				const start = startTime.toTimeString().substring(0, 8);
+				const endTime = new Date(startTime.getTime() + durationMs);
+				const end = endTime.toTimeString().substring(0, 8);
+				lines.push(`        ${call.toolName} : ${status}${start}, ${end}`);
 			}
 		}
 

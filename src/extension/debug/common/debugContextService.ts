@@ -7,6 +7,8 @@ import { IAgentTrajectory, ITrajectoryStep } from '../../../platform/trajectory/
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { DebugSession } from './debugTypes';
+import { IHierarchyNode } from './hierarchyRenderer';
 
 export const IDebugContextService = createServiceIdentifier<IDebugContextService>('IDebugContextService');
 
@@ -27,27 +29,13 @@ export interface IDebugSubagentResponse {
 /**
  * Represents a node in the trajectory hierarchy
  */
-export interface ITrajectoryNode {
+export interface ITrajectoryNode extends IHierarchyNode {
 	/** The trajectory data */
 	readonly trajectory: IAgentTrajectory;
-	/** Session ID (for convenience) */
-	readonly sessionId: string;
-	/** Agent name (for convenience) */
-	readonly agentName: string;
 	/** Parent node (undefined for root) */
 	readonly parent?: ITrajectoryNode;
 	/** Child nodes (sub-agent invocations) */
 	readonly children: ITrajectoryNode[];
-	/** The tool call ID that invoked this sub-agent */
-	readonly parentToolCallId?: string;
-	/** Depth in the hierarchy (0 = root) */
-	readonly depth: number;
-	/** Number of steps in this trajectory */
-	readonly stepCount: number;
-	/** Number of tool calls in this trajectory */
-	readonly toolCallCount: number;
-	/** Whether any failures occurred in this trajectory */
-	readonly hasFailures: boolean;
 }
 
 /**
@@ -178,12 +166,37 @@ export interface IDebugContextService {
 	 * @param response The response data
 	 */
 	fireDebugSubagentResponse(response: IDebugSubagentResponse): void;
+
+	// ========== Loaded Session Support ==========
+
+	/**
+	 * Load a debug session from a file (chat replay or transcript)
+	 * @param session The session to load
+	 * @param sourceFile Optional source file path
+	 */
+	loadSession(session: DebugSession, sourceFile?: string): void;
+
+	/**
+	 * Get the currently loaded session
+	 */
+	getLoadedSession(): DebugSession | undefined;
+
+	/**
+	 * Clear the loaded session
+	 */
+	clearLoadedSession(): void;
+
+	/**
+	 * Check if a session is loaded
+	 */
+	hasLoadedSession(): boolean;
 }
 
 export class DebugContextService extends Disposable implements IDebugContextService {
 	declare readonly _serviceBrand: undefined;
 
 	private readonly _trajectories = new Map<string, IAgentTrajectory>();
+	private _loadedSession: DebugSession | undefined;
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
@@ -193,6 +206,31 @@ export class DebugContextService extends Disposable implements IDebugContextServ
 	fireDebugSubagentResponse(response: IDebugSubagentResponse): void {
 		this._onDebugSubagentResponse.fire(response);
 	}
+
+	// ========== Loaded Session Support ==========
+
+	loadSession(session: DebugSession, sourceFile?: string): void {
+		this._loadedSession = {
+			...session,
+			sourceFile: sourceFile || session.sourceFile
+		};
+		this._onDidChange.fire();
+	}
+
+	getLoadedSession(): DebugSession | undefined {
+		return this._loadedSession;
+	}
+
+	clearLoadedSession(): void {
+		this._loadedSession = undefined;
+		this._onDidChange.fire();
+	}
+
+	hasLoadedSession(): boolean {
+		return this._loadedSession !== undefined;
+	}
+
+	// ========== Trajectory Support ==========
 
 	loadTrajectories(trajectories: Map<string, IAgentTrajectory>): void {
 		this._trajectories.clear();

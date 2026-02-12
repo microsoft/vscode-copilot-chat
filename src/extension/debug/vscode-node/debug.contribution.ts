@@ -13,10 +13,12 @@ import '../tools/vscode-node/analyzeLatestRequestTool';
 import '../tools/vscode-node/getCurrentSessionTool';
 import '../tools/vscode-node/getFailuresTool';
 import '../tools/vscode-node/getHierarchyTool';
+import '../tools/vscode-node/getLiveHierarchyTool';
 import '../tools/vscode-node/getSessionHistoryTool';
 import '../tools/vscode-node/getToolCallsTool';
 import '../tools/vscode-node/getTrajectoriesListTool';
 import '../tools/vscode-node/getTrajectoryTool';
+import '../tools/vscode-node/loadSessionFileTool';
 import '../tools/vscode-node/loadTrajectoryFileTool';
 
 /**

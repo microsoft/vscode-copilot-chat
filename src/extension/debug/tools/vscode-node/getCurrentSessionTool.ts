@@ -10,6 +10,8 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
+import { IDebugContextService } from '../../common/debugContextService';
+import { DebugSession } from '../../common/debugTypes';
 import { buildSessionFromRequestLogger } from '../../node/debugSessionService';
 
 interface IGetCurrentSessionParams {
@@ -27,12 +29,14 @@ interface IGetCurrentSessionParams {
 
 /**
  * Tool to get the current live session data from IRequestLogger
+ * or loaded session from IDebugContextService
  */
 class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 	public static readonly toolName = ToolName.DebugGetCurrentSession;
 
 	constructor(
 		@IRequestLogger private readonly requestLogger: IRequestLogger,
+		@IDebugContextService private readonly debugContext: IDebugContextService,
 	) { }
 
 	async invoke(
@@ -47,37 +51,54 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 			excludeDebugSubagent = true  // Default to excluding debug subagent's own calls
 		} = options.input;
 
-		// Build the debug session from live data
-		const session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		// Check for loaded session first, then fall back to live session
+		let session: DebugSession;
+		let isLoadedSession = false;
+
+		const loadedSession = this.debugContext.getLoadedSession();
+		if (loadedSession) {
+			session = loadedSession;
+			isLoadedSession = true;
+		} else {
+			// Build the debug session from live data
+			session = buildSessionFromRequestLogger(this.requestLogger, 'live', { excludeDebugSubagent });
+		}
 
 		if (session.turns.length === 0) {
+			const source = isLoadedSession ? 'loaded session' : 'current chat session';
 			return new LanguageModelToolResult([
-				new LanguageModelTextPart('No session data found. The current chat session has no recorded requests yet.')
+				new LanguageModelTextPart(`No session data found. The ${source} has no recorded requests yet.`)
 			]);
 		}
 
 		let output: string;
 		switch (format) {
 			case 'detailed':
-				output = this.renderDetailed(session, maxTurns, includeToolCalls, includeRequests);
+				output = this.renderDetailed(session, maxTurns, includeToolCalls, includeRequests, isLoadedSession);
 				break;
 			case 'metrics':
-				output = this.renderMetrics(session);
+				output = this.renderMetrics(session, isLoadedSession);
 				break;
 			default:
-				output = this.renderSummary(session, maxTurns, includeToolCalls);
+				output = this.renderSummary(session, maxTurns, includeToolCalls, isLoadedSession);
 		}
 
 		return new LanguageModelToolResult([new LanguageModelTextPart(output)]);
 	}
 
-	private renderSummary(session: ReturnType<typeof buildSessionFromRequestLogger>, maxTurns: number, includeToolCalls: boolean): string {
+	private renderSummary(session: DebugSession, maxTurns: number, includeToolCalls: boolean, isLoadedSession: boolean): string {
 		const lines: string[] = [];
 		const m = session.metrics;
 
-		lines.push('# Current Live Session\n');
+		const title = isLoadedSession
+			? `# Loaded Session${session.sourceFile ? ` (${session.sourceFile})` : ''}`
+			: '# Current Live Session';
+		lines.push(`${title}\n`);
 		lines.push('## Overview');
 		lines.push(`- **Session ID:** ${session.sessionId}`);
+		if (isLoadedSession && session.source) {
+			lines.push(`- **Source:** ${session.source}`);
+		}
 		lines.push(`- **Total Turns:** ${m.totalTurns}`);
 		lines.push(`- **Total Tool Calls:** ${m.totalToolCalls}${m.failedToolCalls > 0 ? ` (${m.failedToolCalls} failed)` : ''}`);
 		lines.push(`- **Total Requests:** ${m.totalRequests}${m.failedRequests > 0 ? ` (${m.failedRequests} failed)` : ''}`);
@@ -128,10 +149,13 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		return lines.join('\n');
 	}
 
-	private renderDetailed(session: ReturnType<typeof buildSessionFromRequestLogger>, maxTurns: number, includeToolCalls: boolean, includeRequests: boolean): string {
+	private renderDetailed(session: DebugSession, maxTurns: number, includeToolCalls: boolean, includeRequests: boolean, isLoadedSession: boolean): string {
 		const lines: string[] = [];
 
-		lines.push('# Current Live Session (Detailed)\n');
+		const title = isLoadedSession
+			? `# Loaded Session (Detailed)${session.sourceFile ? `\n*Source: ${session.sourceFile}*` : ''}`
+			: '# Current Live Session (Detailed)';
+		lines.push(`${title}\n`);
 		lines.push(`**Session ID:** \`${session.sessionId}\`\n`);
 
 		const turnsToShow = session.turns.slice(-maxTurns);
@@ -224,11 +248,14 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		return lines.join('\n');
 	}
 
-	private renderMetrics(session: ReturnType<typeof buildSessionFromRequestLogger>): string {
+	private renderMetrics(session: DebugSession, isLoadedSession: boolean): string {
 		const lines: string[] = [];
 		const m = session.metrics;
 
-		lines.push('# Session Metrics\n');
+		const title = isLoadedSession
+			? `# Session Metrics${session.sourceFile ? ` (${session.sourceFile})` : ''}`
+			: '# Session Metrics';
+		lines.push(`${title}\n`);
 
 		lines.push('## Summary Statistics\n');
 		lines.push('| Metric | Value |');
