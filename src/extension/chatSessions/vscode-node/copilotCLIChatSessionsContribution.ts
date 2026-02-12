@@ -375,7 +375,11 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 		const repositories = this.isUntitledWorkspace() ? folderMRUToChatProviderOptions(this.folderRepositoryManager.getFolderMRU()) : this.getRepositoryOptionItems();
 
 		// If we have session in _sessionModel, use that (faster as its in memory), else get from existing session.
-		const model = (existingSession ? (_sessionModel.get(copilotcliSessionId) ?? await existingSession.object.getSelectedModelId()) : _sessionModel.get(copilotcliSessionId)) ?? await this.getCustomAgentModel(defaultAgent, token) ?? defaultModel;
+		const [model, history] = await Promise.all([
+			(existingSession ? (_sessionModel.get(copilotcliSessionId) ?? await existingSession.object.getSelectedModelId()) : _sessionModel.get(copilotcliSessionId)) ?? await this.getCustomAgentModel(defaultAgent, token) ?? defaultModel,
+			existingSession?.object?.getChatHistory() || []
+		]);
+		existingSession?.dispose();
 
 		const options: Record<string, string | vscode.ChatSessionProviderOptionItem> = {};
 
@@ -463,8 +467,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		}
 
-		const history = existingSession?.object?.getChatHistory() || [];
-		existingSession?.dispose();
 		// Always keep track of this in memory.
 		// We need this when we create the session later for execution.
 		_sessionModel.set(copilotcliSessionId, model);

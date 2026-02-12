@@ -100,7 +100,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			return undefined;
 		} catch (error) {
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Error creating worktree for isolation: {0}', error instanceof Error ? error.message : String(error))));
-			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Error creating worktree for isolation: ', error);
+			this.logService.error(error, '[ChatSessionWorktreeService][_createWorktree] Error creating worktree for isolation: ');
 			return undefined;
 		}
 	}
