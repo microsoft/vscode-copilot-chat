@@ -31,9 +31,15 @@ export class CompletionsCoreContribution extends Disposable {
 			const unificationStateValue = unificationState.read(reader);
 			const configEnabled = configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, experimentationService).read(reader);
 			const extensionUnification = unificationStateValue?.extensionUnification ?? false;
+			const copilotToken = this._copilotToken.read(reader);
+
+			// Azure-only fork: also register completions when the Azure CopilotToken is present.
+			// The Azure fork provides a synthetic CopilotToken via AzureCopilotTokenManager,
+			// but it doesn't set isNoAuthUser. Check for the Azure service principal username.
+			const isAzureFork = copilotToken?.username === 'azure-service-principal';
 
 			let hasInstantiatedProvider = false;
-			if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+			if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || copilotToken?.isNoAuthUser || isAzureFork) {
 				const provider = _copilotInlineCompletionItemProviderService.getOrCreateProvider();
 				reader.store.add(
 					languages.registerInlineCompletionItemProvider(
@@ -49,9 +55,9 @@ export class CompletionsCoreContribution extends Disposable {
 				hasInstantiatedProvider = true;
 			}
 
-			void commands.executeCommand('setContext', 'github.copilot.extensionUnification.activated', extensionUnification);
+			void commands.executeCommand('setContext', 'github.copilot.extensionUnification.activated', extensionUnification || isAzureFork);
 
-			if (extensionUnification && hasInstantiatedProvider) {
+			if ((extensionUnification || isAzureFork) && hasInstantiatedProvider) {
 				const completionsInstaService = _copilotInlineCompletionItemProviderService.getOrCreateInstantiationService();
 				reader.store.add(completionsInstaService.invokeFunction(registerUnificationCommands));
 			}
@@ -59,6 +65,8 @@ export class CompletionsCoreContribution extends Disposable {
 
 		this._register(autorun(reader => {
 			const token = this._copilotToken.read(reader);
+			// Azure-only fork: always set activated to true when any token exists.
+			// The Azure fork provides a synthetic CopilotToken that should enable all features.
 			void commands.executeCommand('setContext', 'github.copilot.activated', token !== undefined);
 		}));
 	}
