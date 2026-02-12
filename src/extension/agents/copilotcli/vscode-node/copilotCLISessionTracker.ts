@@ -116,7 +116,7 @@ export class CopilotCLISessionTracker extends Disposable implements ICopilotCLIS
 		}
 
 		// Fallback: try the grandparent PID (PPID of the PPID), using cache
-		// Try fetching upto 4 generations of parent PIDs to account for different shell configurations (e.g. login shells, shell wrappers)
+		// Try fetching up to 4 generations of parent PIDs to account for different shell configurations (e.g. login shells, shell wrappers)
 		const ppids = this._grandparentPids.get(sessionId) ?? [];
 		this._grandparentPids.set(sessionId, ppids);
 		let previousPpid = info.ppid;
