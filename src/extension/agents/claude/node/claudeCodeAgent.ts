@@ -38,6 +38,10 @@ import { SYNTHETIC_MODEL_ID, toAnthropicImageMediaType } from './sessionParser/c
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: ClaudeLanguageModelServer | undefined;
 	private _sessions = this._register(new DisposableMap<string, ClaudeCodeSession>());
+	// Allow accessing sessions for checkpoint operations
+	public getSession(sessionId: string): ClaudeCodeSession | undefined {
+		return this._sessions.get(sessionId);
+	}
 
 	private async getLangModelServer(): Promise<ClaudeLanguageModelServer> {
 		if (!this._langModelServer) {
@@ -224,6 +228,7 @@ export class ClaudeCodeSession extends Disposable {
 	private _isResumed: boolean;
 	private _yieldInProgress = false;
 	private _sessionStarting: Promise<void> | undefined;
+	private _userMessageIds: string[] = []; // Track user message IDs for checkpoint restoration
 
 	/**
 	 * Sets the model on the active SDK session.
@@ -332,6 +337,51 @@ export class ClaudeCodeSession extends Disposable {
 		this._pendingPrompt?.error(new Error('Session disposed'));
 		this._pendingPrompt = undefined;
 		super.dispose();
+	}
+
+	/**
+	 * Gets the list of tracked user message IDs that can be used for checkpoint restoration.
+	 * @returns Array of user message UUIDs in chronological order
+	 */
+	public getUserMessageIds(): readonly string[] {
+		return [...this._userMessageIds];
+	}
+
+	/**
+	 * Restores files to their state at a specific user message checkpoint.
+	 * @param userMessageId The UUID of the user message to restore to
+	 * @param dryRun If true, preview changes without actually modifying files
+	 * @returns Result indicating success/failure and file changes
+	 */
+	public async rewindToCheckpoint(userMessageId: string, dryRun = false): Promise<{ success: boolean; error?: string; filesChanged?: string[]; insertions?: number; deletions?: number }> {
+		if (!this._queryGenerator) {
+			return { success: false, error: 'No active session' };
+		}
+
+		if (!this._userMessageIds.includes(userMessageId)) {
+			return { success: false, error: `User message ID not found: ${userMessageId}` };
+		}
+
+		try {
+			this.logService.trace(`[ClaudeCodeSession] Rewinding to checkpoint: ${userMessageId}, dryRun=${dryRun}`);
+			const result = await this._queryGenerator.rewindFiles(userMessageId, { dryRun });
+			
+			if (result.canRewind) {
+				this.logService.info(`[ClaudeCodeSession] Checkpoint restore ${dryRun ? 'preview' : 'completed'}: ${result.filesChanged?.length || 0} files, +${result.insertions || 0}/-${result.deletions || 0}`);
+				return {
+					success: true,
+					filesChanged: result.filesChanged,
+					insertions: result.insertions,
+					deletions: result.deletions
+				};
+			} else {
+				this.logService.warn(`[ClaudeCodeSession] Cannot rewind to checkpoint: ${result.error}`);
+				return { success: false, error: result.error };
+			}
+		} catch (error) {
+			this.logService.error('[ClaudeCodeSession] Error during checkpoint restore', error);
+			return { success: false, error: String(error) };
+		}
 	}
 
 	/**
@@ -454,6 +504,8 @@ export class ClaudeCodeSession extends Disposable {
 			model: this._currentModelId,
 			// Pass the permission mode to the SDK
 			permissionMode: this._currentPermissionMode,
+			// Enable file checkpointing to support rollback/restore functionality
+			enableFileCheckpointing: true,
 			hooks: this._buildHooks(token),
 			mcpServers,
 			canUseTool: async (name, input) => {
@@ -789,6 +841,12 @@ export class ClaudeCodeSession extends Disposable {
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		token: vscode.CancellationToken
 	): void {
+		// Track user message ID for checkpoint restoration
+		if (message.uuid && !message.isSynthetic) {
+			this._userMessageIds.push(message.uuid);
+			this.logService.trace(`[ClaudeCodeSession] Tracked user message ID for checkpoint: ${message.uuid}`);
+		}
+
 		if (Array.isArray(message.message.content)) {
 			for (const toolResult of message.message.content) {
 				if (toolResult.type === 'tool_result') {
