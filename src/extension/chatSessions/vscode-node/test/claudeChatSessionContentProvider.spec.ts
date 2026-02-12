@@ -86,9 +86,17 @@ interface MockClaudeSession {
 }
 
 class MockFolderRepositoryManager implements IFolderRepositoryManager {
+	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
+		throw new Error('Method not implemented.');
+	}
+	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
+		throw new Error('Method not implemented.');
+	}
+	deleteUntitledSessionFolder(sessionId: string): void {
+		throw new Error('Method not implemented.');
+	}
 	declare _serviceBrand: undefined;
 
-	private readonly _untitledFolders = new Map<string, vscode.Uri>();
 	private _mruEntries: FolderRepositoryMRUEntry[] = [];
 	private _lastUsedFolderIdInUntitledWorkspace: string | undefined;
 
@@ -100,16 +108,8 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		this._lastUsedFolderIdInUntitledWorkspace = id;
 	}
 
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void {
-		this._untitledFolders.set(sessionId, folderUri);
-	}
-
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined {
-		return this._untitledFolders.get(sessionId);
-	}
-
-	deleteUntitledSessionFolder(sessionId: string): void {
-		this._untitledFolders.delete(sessionId);
+	setLastUsedFolderId(_folderId: string): void {
+	// no-op in tests
 	}
 
 	async getFolderRepository(): Promise<{ folder: undefined; repository: undefined; worktree: undefined; worktreeProperties: undefined; trusted: undefined }> {

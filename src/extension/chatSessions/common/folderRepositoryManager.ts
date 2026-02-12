@@ -91,19 +91,10 @@ export interface IFolderRepositoryManager {
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Track the selected folder for an untitled session.
+	 * Set the last used folder ID, used for defaulting the selection in
+	 * the folder dropdown in untitled workspaces.
 	 */
-	setUntitledSessionFolder(sessionId: string, folderUri: vscode.Uri): void;
-
-	/**
-	 * Get the selected folder URI for an untitled session.
-	 */
-	getUntitledSessionFolder(sessionId: string): vscode.Uri | undefined;
-
-	/**
-	 * Delete the tracked folder for an untitled session.
-	 */
-	deleteUntitledSessionFolder(sessionId: string): void;
+	setLastUsedFolderId(folderId: string): void;
 
 	/**
 	 * Get folder/repository/worktree/trust information for a session.
@@ -128,7 +119,7 @@ export interface IFolderRepositoryManager {
 	 *
 	 * This method should be called when starting a request for an untitled session.
 	 * It will:
-	 * 1. Get the selected folder from memory or workspace folder service
+	 * 1. Use the provided folder or resolve from workspace folder service
 	 * 2. Check if the folder contains a git repository
 	 * 3. Verify trust on the repository/folder
 	 * 4. Check for uncommitted changes and prompt the user via the provided callback
@@ -137,7 +128,7 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; folder?: vscode.Uri },
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 

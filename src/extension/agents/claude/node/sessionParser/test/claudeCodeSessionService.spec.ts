@@ -6,6 +6,7 @@
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { Uri } from 'vscode';
 import { INativeEnvService } from '../../../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../../platform/filesystem/common/fileTypes';
@@ -28,6 +29,15 @@ function computeFolderSlug(folderUri: URI): string {
 }
 
 class MockFolderRepositoryManager implements IFolderRepositoryManager {
+	setUntitledSessionFolder(sessionId: string, folderUri: Uri): void {
+		throw new Error('Method not implemented.');
+	}
+	getUntitledSessionFolder(sessionId: string): Uri | undefined {
+		throw new Error('Method not implemented.');
+	}
+	deleteUntitledSessionFolder(sessionId: string): void {
+		throw new Error('Method not implemented.');
+	}
 	declare _serviceBrand: undefined;
 	private _mruEntries: FolderRepositoryMRUEntry[] = [];
 
@@ -35,9 +45,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		this._mruEntries = entries;
 	}
 
-	setUntitledSessionFolder(): void { }
-	getUntitledSessionFolder(): undefined { return undefined; }
-	deleteUntitledSessionFolder(): void { }
+	setLastUsedFolderId(): void { }
 	async getFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async initializeFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	getFolderMRU(): FolderRepositoryMRUEntry[] { return this._mruEntries; }
