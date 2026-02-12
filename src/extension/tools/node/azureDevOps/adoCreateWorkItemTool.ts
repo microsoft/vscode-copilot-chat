@@ -17,7 +17,6 @@ import { AzureDevOpsClient, WorkItemPatchOperation } from './azureDevOpsClient';
 interface IAdoCreateWorkItemParams {
 	workItemType: string;
 	fields: { path: string; value: unknown }[];
-	project?: string;
 }
 
 class AdoCreateWorkItemTool implements ICopilotTool<IAdoCreateWorkItemParams> {
@@ -48,7 +47,7 @@ class AdoCreateWorkItemTool implements ICopilotTool<IAdoCreateWorkItemParams> {
 			value: f.value,
 		}));
 
-		const workItem = await this.client.createWorkItem(options.input.workItemType, operations, options.input.project);
+		const workItem = await this.client.createWorkItem(options.input.workItemType, operations);
 		checkCancellation(token);
 
 		const formatted = this.client.formatWorkItem(workItem);

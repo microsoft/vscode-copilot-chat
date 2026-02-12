@@ -501,7 +501,8 @@ export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptPro
 			return;
 		}
 		return <Tag name='azureDevOpsInstructions'>
-			Azure DevOps tools are available. When the user asks about work items, bugs, tasks, user stories, sprints, boards, or wikis, use these tools instead of suggesting CLI commands or scripts:<br />
+			Azure DevOps tools are available. The project is pre-configured in settings — always search and operate within the default project. Do not ask the user which project to use.<br />
+			When the user asks about work items, bugs, tasks, user stories, sprints, boards, or wikis, use these tools instead of suggesting CLI commands or scripts:<br />
 			- Use {ToolName.AdoQueryWorkItems} with a WIQL query to search work items. Use @me in WIQL for the current user.<br />
 			- Use {ToolName.AdoGetWorkItem} to fetch a specific work item by ID.<br />
 			- Use {ToolName.AdoUpdateWorkItem} to update work item fields.<br />

@@ -18,7 +18,6 @@ interface IAdoCreateOrUpdateWikiPageParams {
 	wikiIdentifier: string;
 	path: string;
 	content: string;
-	project?: string;
 }
 
 class AdoCreateOrUpdateWikiPageTool implements ICopilotTool<IAdoCreateOrUpdateWikiPageParams> {
@@ -46,7 +45,7 @@ class AdoCreateOrUpdateWikiPageTool implements ICopilotTool<IAdoCreateOrUpdateWi
 		// Try to fetch existing page to get ETag for update
 		let etag: string | undefined;
 		try {
-			const existing = await this.client.getWikiPage(options.input.wikiIdentifier, options.input.path, options.input.project);
+			const existing = await this.client.getWikiPage(options.input.wikiIdentifier, options.input.path);
 			etag = existing.etag;
 		} catch {
 			// Page doesn't exist yet — create without ETag
@@ -59,7 +58,6 @@ class AdoCreateOrUpdateWikiPageTool implements ICopilotTool<IAdoCreateOrUpdateWi
 			options.input.path,
 			options.input.content,
 			etag,
-			options.input.project,
 		);
 		checkCancellation(token);
 

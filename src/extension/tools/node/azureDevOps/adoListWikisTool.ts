@@ -14,8 +14,8 @@ import { ICopilotTool, ToolRegistry } from '../../common/toolsRegistry';
 import { checkCancellation } from '../toolUtils';
 import { AzureDevOpsClient } from './azureDevOpsClient';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
 interface IAdoListWikisParams {
-	project?: string;
 }
 
 class AdoListWikisTool implements ICopilotTool<IAdoListWikisParams> {
@@ -40,7 +40,7 @@ class AdoListWikisTool implements ICopilotTool<IAdoListWikisParams> {
 			)]);
 		}
 
-		const wikis = await this.client.listWikis(options.input.project);
+		const wikis = await this.client.listWikis();
 		checkCancellation(token);
 
 		if (wikis.length === 0) {

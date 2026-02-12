@@ -16,7 +16,6 @@ import { AzureDevOpsClient } from './azureDevOpsClient';
 
 interface IAdoGetWorkItemParams {
 	id: number;
-	project?: string;
 }
 
 class AdoGetWorkItemTool implements ICopilotTool<IAdoGetWorkItemParams> {
@@ -41,7 +40,7 @@ class AdoGetWorkItemTool implements ICopilotTool<IAdoGetWorkItemParams> {
 			)]);
 		}
 
-		const workItem = await this.client.getWorkItem(options.input.id, options.input.project);
+		const workItem = await this.client.getWorkItem(options.input.id);
 		checkCancellation(token);
 
 		const formatted = this.client.formatWorkItem(workItem);

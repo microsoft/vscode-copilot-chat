@@ -17,7 +17,6 @@ import { AzureDevOpsClient, WorkItemPatchOperation } from './azureDevOpsClient';
 interface IAdoUpdateWorkItemParams {
 	id: number;
 	operations: WorkItemPatchOperation[];
-	project?: string;
 }
 
 class AdoUpdateWorkItemTool implements ICopilotTool<IAdoUpdateWorkItemParams> {
@@ -42,7 +41,7 @@ class AdoUpdateWorkItemTool implements ICopilotTool<IAdoUpdateWorkItemParams> {
 			)]);
 		}
 
-		const workItem = await this.client.updateWorkItem(options.input.id, options.input.operations, options.input.project);
+		const workItem = await this.client.updateWorkItem(options.input.id, options.input.operations);
 		checkCancellation(token);
 
 		const formatted = this.client.formatWorkItem(workItem);

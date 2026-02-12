@@ -16,7 +16,6 @@ import { AzureDevOpsClient } from './azureDevOpsClient';
 
 interface IAdoQueryWorkItemsParams {
 	wiql: string;
-	project?: string;
 	top?: number;
 }
 
@@ -43,7 +42,7 @@ class AdoQueryWorkItemsTool implements ICopilotTool<IAdoQueryWorkItemsParams> {
 		}
 
 		const top = options.input.top ?? 20;
-		const queryResult = await this.client.queryWorkItems(options.input.wiql, options.input.project, top);
+		const queryResult = await this.client.queryWorkItems(options.input.wiql, top);
 		checkCancellation(token);
 
 		if (queryResult.workItems.length === 0) {
@@ -51,7 +50,7 @@ class AdoQueryWorkItemsTool implements ICopilotTool<IAdoQueryWorkItemsParams> {
 		}
 
 		const ids = queryResult.workItems.map(wi => wi.id);
-		const workItems = await this.client.getWorkItems(ids, options.input.project);
+		const workItems = await this.client.getWorkItems(ids);
 		checkCancellation(token);
 
 		const formatted = workItems.map(wi => this.client.formatWorkItem(wi)).join('\n---\n\n');

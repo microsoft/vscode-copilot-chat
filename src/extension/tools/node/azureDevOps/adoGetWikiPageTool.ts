@@ -17,7 +17,6 @@ import { AzureDevOpsClient } from './azureDevOpsClient';
 interface IAdoGetWikiPageParams {
 	wikiIdentifier: string;
 	path: string;
-	project?: string;
 }
 
 class AdoGetWikiPageTool implements ICopilotTool<IAdoGetWikiPageParams> {
@@ -42,7 +41,7 @@ class AdoGetWikiPageTool implements ICopilotTool<IAdoGetWikiPageParams> {
 			)]);
 		}
 
-		const page = await this.client.getWikiPage(options.input.wikiIdentifier, options.input.path, options.input.project);
+		const page = await this.client.getWikiPage(options.input.wikiIdentifier, options.input.path);
 		checkCancellation(token);
 
 		const content = page.content ?? '(empty page)';

@@ -17,7 +17,6 @@ import { AzureDevOpsClient } from './azureDevOpsClient';
 interface IAdoAddCommentParams {
 	workItemId: number;
 	text: string;
-	project?: string;
 }
 
 class AdoAddCommentTool implements ICopilotTool<IAdoAddCommentParams> {
@@ -42,7 +41,7 @@ class AdoAddCommentTool implements ICopilotTool<IAdoAddCommentParams> {
 			)]);
 		}
 
-		const comment = await this.client.addComment(options.input.workItemId, options.input.text, options.input.project);
+		const comment = await this.client.addComment(options.input.workItemId, options.input.text);
 		checkCancellation(token);
 
 		return new LanguageModelToolResult([new LanguageModelTextPart(

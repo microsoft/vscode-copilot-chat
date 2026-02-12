@@ -78,6 +78,7 @@ export interface AzureDevOpsWikiPage {
 /**
  * Client for Azure DevOps REST API operations.
  * Handles work item CRUD, queries (WIQL), comments, and wiki pages.
+ * Always uses the default project from settings.
  */
 export class AzureDevOpsClient {
 
@@ -118,6 +119,16 @@ export class AzureDevOpsClient {
 	}
 
 	/**
+	 * Build the base URL with project segment from config.
+	 */
+	private _getBaseUrlWithProject(): { baseUrl: string; projectSegment: string } {
+		const config = this.getConfig();
+		const baseUrl = config.orgUrl.replace(/\/$/, '');
+		const projectSegment = config.defaultProject ? `/${encodeURIComponent(config.defaultProject)}` : '';
+		return { baseUrl, projectSegment };
+	}
+
+	/**
 	 * Make an authenticated request to the Azure DevOps REST API.
 	 */
 	private async _fetch(url: string, options: RequestInit = {}): Promise<Response> {
@@ -147,12 +158,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Get a single work item by ID.
 	 */
-	async getWorkItem(id: number, project?: string): Promise<AzureDevOpsWorkItem> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async getWorkItem(id: number): Promise<AzureDevOpsWorkItem> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${id}?api-version=7.1&$expand=all`;
 
 		const response = await this._fetch(url);
@@ -162,17 +169,13 @@ export class AzureDevOpsClient {
 	/**
 	 * Get multiple work items by IDs.
 	 */
-	async getWorkItems(ids: readonly number[], project?: string): Promise<readonly AzureDevOpsWorkItem[]> {
+	async getWorkItems(ids: readonly number[]): Promise<readonly AzureDevOpsWorkItem[]> {
 		if (ids.length === 0) {
 			return [];
 		}
 
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const idList = ids.join(',');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
 		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems?ids=${idList}&api-version=7.1&$expand=all`;
 
 		const response = await this._fetch(url);
@@ -183,12 +186,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Run a WIQL (Work Item Query Language) query.
 	 */
-	async queryWorkItems(wiql: string, project?: string, top?: number): Promise<AzureDevOpsQueryResult> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async queryWorkItems(wiql: string, top?: number): Promise<AzureDevOpsQueryResult> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		let url = `${baseUrl}${projectSegment}/_apis/wit/wiql?api-version=7.1`;
 
 		if (top !== undefined) {
@@ -206,12 +205,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Update a work item using JSON Patch operations.
 	 */
-	async updateWorkItem(id: number, operations: readonly WorkItemPatchOperation[], project?: string): Promise<AzureDevOpsWorkItem> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async updateWorkItem(id: number, operations: readonly WorkItemPatchOperation[]): Promise<AzureDevOpsWorkItem> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${id}?api-version=7.1`;
 
 		const response = await this._fetch(url, {
@@ -226,15 +221,14 @@ export class AzureDevOpsClient {
 	/**
 	 * Create a new work item.
 	 */
-	async createWorkItem(workItemType: string, operations: readonly WorkItemPatchOperation[], project?: string): Promise<AzureDevOpsWorkItem> {
+	async createWorkItem(workItemType: string, operations: readonly WorkItemPatchOperation[]): Promise<AzureDevOpsWorkItem> {
 		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		if (!proj) {
-			throw new Error('Project is required for creating work items. Set yourcompany.ado.defaultProject or pass a project name.');
+		if (!config.defaultProject) {
+			throw new Error('Project is required for creating work items. Set yourcompany.ado.defaultProject in VS Code settings.');
 		}
 
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
-		const url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems/$${encodeURIComponent(workItemType)}?api-version=7.1`;
+		const url = `${baseUrl}/${encodeURIComponent(config.defaultProject)}/_apis/wit/workitems/$${encodeURIComponent(workItemType)}?api-version=7.1`;
 
 		const response = await this._fetch(url, {
 			method: 'POST',
@@ -248,12 +242,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Add a comment to a work item.
 	 */
-	async addComment(workItemId: number, text: string, project?: string): Promise<AzureDevOpsComment> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async addComment(workItemId: number, text: string): Promise<AzureDevOpsComment> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
 
 		const response = await this._fetch(url, {
@@ -267,12 +257,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Get comments for a work item.
 	 */
-	async getComments(workItemId: number, project?: string): Promise<readonly AzureDevOpsComment[]> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async getComments(workItemId: number): Promise<readonly AzureDevOpsComment[]> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
 
 		const response = await this._fetch(url);
@@ -347,14 +333,10 @@ export class AzureDevOpsClient {
 	}
 
 	/**
-	 * List all wikis in a project.
+	 * List all wikis in the default project.
 	 */
-	async listWikis(project?: string): Promise<readonly AzureDevOpsWiki[]> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async listWikis(): Promise<readonly AzureDevOpsWiki[]> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis?api-version=7.1`;
 
 		const response = await this._fetch(url);
@@ -365,12 +347,8 @@ export class AzureDevOpsClient {
 	/**
 	 * Get a wiki page with its content and ETag.
 	 */
-	async getWikiPage(wikiIdentifier: string, path: string, project?: string): Promise<AzureDevOpsWikiPage> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async getWikiPage(wikiIdentifier: string, path: string): Promise<AzureDevOpsWikiPage> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis/${encodeURIComponent(wikiIdentifier)}/pages?path=${encodeURIComponent(path)}&includeContent=true&api-version=7.1`;
 
 		const response = await this._fetch(url);
@@ -383,12 +361,8 @@ export class AzureDevOpsClient {
 	 * Create or update a wiki page.
 	 * For updates, pass the ETag from a previous getWikiPage call.
 	 */
-	async createOrUpdateWikiPage(wikiIdentifier: string, path: string, content: string, etag?: string, project?: string): Promise<AzureDevOpsWikiPage> {
-		const config = this.getConfig();
-		const proj = project || config.defaultProject;
-		const baseUrl = config.orgUrl.replace(/\/$/, '');
-
-		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+	async createOrUpdateWikiPage(wikiIdentifier: string, path: string, content: string, etag?: string): Promise<AzureDevOpsWikiPage> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
 		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis/${encodeURIComponent(wikiIdentifier)}/pages?path=${encodeURIComponent(path)}&api-version=7.1`;
 
 		const headers: Record<string, string> = {

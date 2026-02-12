@@ -1289,10 +1289,6 @@
 						"id": {
 							"type": "number",
 							"description": "The work item ID"
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["id"]
@@ -1311,10 +1307,6 @@
 						"wiql": {
 							"type": "string",
 							"description": "The WIQL query string. Example: SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.WorkItemType] = 'Bug' AND [System.State] = 'Active' ORDER BY [System.CreatedDate] DESC"
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						},
 						"top": {
 							"type": "number",
@@ -1359,10 +1351,6 @@
 								},
 								"required": ["op", "path"]
 							}
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["id", "operations"]
@@ -1398,10 +1386,6 @@
 								},
 								"required": ["path", "value"]
 							}
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["workItemType", "fields"]
@@ -1424,10 +1408,6 @@
 						"text": {
 							"type": "string",
 							"description": "The comment text (supports HTML)"
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["workItemId", "text"]
@@ -1442,12 +1422,7 @@
 				"modelDescription": "List all wikis available in the Azure DevOps project. Returns wiki names, IDs, and types (projectWiki or codeWiki). Use this to discover available wikis before reading or writing wiki pages.",
 				"inputSchema": {
 					"type": "object",
-					"properties": {
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
-						}
-					}
+					"properties": {}
 				}
 			},
 			{
@@ -1467,10 +1442,6 @@
 						"path": {
 							"type": "string",
 							"description": "The page path within the wiki (e.g., '/Home', '/Architecture/Overview')"
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["wikiIdentifier", "path"]
@@ -1497,10 +1468,6 @@
 						"content": {
 							"type": "string",
 							"description": "The full markdown content for the wiki page"
-						},
-						"project": {
-							"type": "string",
-							"description": "The project name. Uses the default project from settings if not provided."
 						}
 					},
 					"required": ["wikiIdentifier", "path", "content"]
