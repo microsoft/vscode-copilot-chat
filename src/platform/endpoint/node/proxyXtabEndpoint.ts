@@ -26,9 +26,12 @@ export function createProxyXtabEndpoint(
 	if (azureEndpoint) {
 		const modelRouter = instaService.invokeFunction(acc => acc.get(IModelRouter));
 		const deployment = modelRouter.getDeployment('chat');
-		modelId = overriddenModelName ?? deployment.deploymentName;
+		// Azure-only fork: always use the model router's deployment name, not the
+		// Copilot-specific model name (e.g. 'copilot-nes-oct') which doesn't
+		// correspond to an actual Azure OpenAI deployment.
+		modelId = deployment.deploymentName;
 		const baseUrl = azureEndpoint.replace(/\/$/, '');
-		urlOrRequestMetadata = `${baseUrl}/openai/deployments/${modelId}/chat/completions?api-version=2024-12-01-preview`;
+		urlOrRequestMetadata = `${baseUrl}/openai/deployments/${modelId}/chat/completions?api-version=${deployment.apiVersion}`;
 	} else {
 		modelId = overriddenModelName ?? CHAT_MODEL.NES_XTAB;
 		urlOrRequestMetadata = { type: RequestType.ProxyChatCompletions };
