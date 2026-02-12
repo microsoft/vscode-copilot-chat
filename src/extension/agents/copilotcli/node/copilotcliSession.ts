@@ -488,7 +488,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
 		});
 		result.push(`~~~`);
 		result.push(``);
@@ -583,7 +583,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
 		});
 		result.push(`~~~`);
 		result.push(``);

@@ -96,11 +96,13 @@ export class CopilotCLIPromptResolver {
 		const [attachments, imageAttachments] = await this.constructFileOrFolderAttachments(fileFolderReferences, token);
 		// Re-add the images after we've copied them to the image store.
 		imageAttachments.forEach(img => {
-			validReferences.push({
-				name: img.displayName,
-				value: URI.file(img.path),
-				id: img.path,
-			});
+			if (img.type === 'file') {
+				validReferences.push({
+					name: img.displayName,
+					value: URI.file(img.path),
+					id: img.path,
+				});
+			}
 		});
 		variables = new ChatVariablesCollection(validReferences);
 		return [variables, attachments];
