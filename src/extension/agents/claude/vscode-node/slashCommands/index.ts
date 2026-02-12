@@ -13,5 +13,6 @@ import '../../node/slashCommands/index';
 import './agentsCommand';
 import './hooksCommand';
 import './memoryCommand';
+import './devopsCommand';
 // TODO: Re-enable after legal review is complete
 // import './terminalCommand';

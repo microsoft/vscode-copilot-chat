@@ -2237,6 +2237,11 @@
 				"category": "Claude Agent"
 			},
 			{
+				"command": "copilot.claude.devops",
+				"title": "Azure DevOps Work Items",
+				"category": "Claude Agent"
+			},
+			{
 				"command": "github.copilot.cli.sessions.delete",
 				"title": "%github.copilot.command.deleteAgentSession%",
 				"icon": "$(close)",
@@ -2971,6 +2976,26 @@
 						],
 						"default": [],
 						"description": "Custom instructions to inject into all Copilot chat prompts. Can be a single string or an array of strings."
+					}
+				}
+			},
+			{
+				"title": "Azure DevOps Integration",
+				"properties": {
+					"yourcompany.ado.orgUrl": {
+						"type": "string",
+						"default": "",
+						"description": "Azure DevOps organization URL (e.g., https://dev.azure.com/your-org)"
+					},
+					"yourcompany.ado.pat": {
+						"type": "string",
+						"default": "",
+						"description": "Azure DevOps Personal Access Token (PAT) for API authentication"
+					},
+					"yourcompany.ado.defaultProject": {
+						"type": "string",
+						"default": "",
+						"description": "Default Azure DevOps project name for work item operations"
 					}
 				}
 			},
@@ -5735,6 +5760,10 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
+					},
+					{
+						"name": "devops",
+						"description": "Azure DevOps work items - search, view, and manage"
 					}
 				]
 			},
