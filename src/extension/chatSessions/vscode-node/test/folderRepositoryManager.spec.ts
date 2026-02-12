@@ -349,7 +349,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(sessionId, undefined, token);
@@ -395,7 +396,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(
@@ -419,7 +421,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/repo',
-				worktreePath: '/repo-worktree'
+				worktreePath: '/repo-worktree',
+				version: 1
 			});
 
 			const result = await manager.getFolderRepository(
@@ -441,7 +444,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/original-repo',
-				worktreePath: '/worktree-path'
+				worktreePath: '/worktree-path',
+				version: 1
 			});
 
 			await manager.getFolderRepository(
@@ -475,7 +479,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/my/repo',
-				worktreePath: '/my/repo-worktree'
+				worktreePath: '/my/repo-worktree',
+				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
 			const result = await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
@@ -861,7 +866,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 			baseCommit: 'abc123',
 			branchName: 'copilot-worktree',
 			repositoryPath: originalRepoPath,
-			worktreePath: worktreeFolderPath
+			worktreePath: worktreeFolderPath,
+			version: 1
 		};
 
 		describe('initializeFolderRepository', () => {
@@ -1014,7 +1020,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 					baseCommit: 'def456',
 					branchName: 'copilot-new-wt',
 					repositoryPath: '/regular-repo',
-					worktreePath: '/regular-repo-worktree'
+					worktreePath: '/regular-repo-worktree',
+					version: 1
 				} satisfies ChatSessionWorktreeProperties);
 
 				const sessionId = 'untitled:wt-test-7';
@@ -1079,7 +1086,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/my/repo',
-				worktreePath: '/my/repo-worktree'
+				worktreePath: '/my/repo-worktree',
+				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
 			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken, branch: 'feature-branch' }, token);
@@ -1108,7 +1116,8 @@ describe('CopilotCLIFolderRepositoryManager', () => {
 				baseCommit: 'abc123',
 				branchName: 'copilot-worktree',
 				repositoryPath: '/my/repo',
-				worktreePath: '/my/repo-worktree'
+				worktreePath: '/my/repo-worktree',
+				version: 1
 			} satisfies ChatSessionWorktreeProperties);
 
 			await manager.initializeFolderRepository(sessionId, { stream, toolInvocationToken: mockToolInvocationToken }, token);
