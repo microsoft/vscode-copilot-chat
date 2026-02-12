@@ -1224,5 +1224,59 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			);
 			expect(branchUnlockCalls.length).toBeGreaterThan(0);
 		});
+
+		it('passes branch to initializeFolderRepository when branch is set via initial options', async () => {
+			const sessionId = 'untitled:temp-branch-pass';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockInitializeFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined,
+				trusted: true,
+				cancelled: false,
+			}));
+			(folderRepositoryManager.initializeFolderRepository as any) = mockInitializeFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			// Simulate branch being pre-selected (e.g. by provideChatSessionContent auto-selecting default branch)
+			(context.chatSessionContext as any).initialSessionOptions = [
+				{ optionId: 'branch', value: 'feature-branch' }
+			];
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(mockInitializeFolderRepository).toHaveBeenCalled();
+			const [, options] = mockInitializeFolderRepository.mock.calls[0] as unknown as Parameters<typeof folderRepositoryManager.initializeFolderRepository>;
+			expect(options.branch).toBe('feature-branch');
+		});
+
+		it('passes undefined branch to initializeFolderRepository when no branch is selected', async () => {
+			const sessionId = 'untitled:temp-no-branch-pass';
+			const mockInitializeFolderRepository = vi.fn(async () => ({
+				folder: Uri.file(`${sep}workspace`),
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined,
+				trusted: true,
+				cancelled: false,
+			}));
+			(folderRepositoryManager.initializeFolderRepository as any) = mockInitializeFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			// No initialSessionOptions with branch
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			expect(mockInitializeFolderRepository).toHaveBeenCalled();
+			const [, options] = mockInitializeFolderRepository.mock.calls[0] as unknown as Parameters<typeof folderRepositoryManager.initializeFolderRepository>;
+			expect(options.branch).toBeUndefined();
+		});
 	});
 });
