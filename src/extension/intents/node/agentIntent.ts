@@ -103,6 +103,16 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 		allowTools[ToolName.CoreManageTodoList] = false;
 	}
 
+	// Azure DevOps tools — always available, gracefully error if not configured
+	allowTools[ToolName.AdoGetWorkItem] = true;
+	allowTools[ToolName.AdoQueryWorkItems] = true;
+	allowTools[ToolName.AdoUpdateWorkItem] = true;
+	allowTools[ToolName.AdoCreateWorkItem] = true;
+	allowTools[ToolName.AdoAddComment] = true;
+	allowTools[ToolName.AdoListWikis] = true;
+	allowTools[ToolName.AdoGetWikiPage] = true;
+	allowTools[ToolName.AdoCreateOrUpdateWikiPage] = true;
+
 	allowTools[ToolName.EditFilesPlaceholder] = false;
 	// todo@connor4312: string check here is for back-compat for 1.109 Insiders
 	if (Iterable.some(request.tools, ([t, enabled]) => (typeof t === 'string' ? t : t.name) === ContributedToolName.EditFilesPlaceholder && enabled === false)) {

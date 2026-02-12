@@ -189,6 +189,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+			<AzureDevOpsInstructions {...this.props} />
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -343,6 +344,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+			<AzureDevOpsInstructions {...this.props} />
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -489,6 +491,27 @@ export class GenericEditingTips extends PromptElement<DefaultAgentPromptProps> {
 			If you're building a webapp from scratch, give it a beautiful and modern UI.<br />
 			After editing a file, any new errors in the file will be in the tool result. Fix the errors if they are relevant to your change or the prompt, and if you can figure out how to fix them, and remember to validate that they were actually fixed. Do not loop more than 3 times attempting to fix errors in the same file. If the third try fails, you should stop and ask the user what to do next.<br />
 		</>;
+	}
+}
+
+export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptProps> {
+	async render() {
+		const hasAdoTools = !!this.props.availableTools?.find(tool => tool.name === ToolName.AdoGetWorkItem);
+		if (!hasAdoTools) {
+			return;
+		}
+		return <Tag name='azureDevOpsInstructions'>
+			Azure DevOps tools are available. When the user asks about work items, bugs, tasks, user stories, sprints, boards, or wikis, use these tools instead of suggesting CLI commands or scripts:<br />
+			- Use {ToolName.AdoQueryWorkItems} with a WIQL query to search work items. Use @me in WIQL for the current user.<br />
+			- Use {ToolName.AdoGetWorkItem} to fetch a specific work item by ID.<br />
+			- Use {ToolName.AdoUpdateWorkItem} to update work item fields.<br />
+			- Use {ToolName.AdoCreateWorkItem} to create new work items.<br />
+			- Use {ToolName.AdoAddComment} to add comments to work items.<br />
+			- Use {ToolName.AdoListWikis} to discover available wikis before reading or writing pages.<br />
+			- Use {ToolName.AdoGetWikiPage} to read wiki page content.<br />
+			- Use {ToolName.AdoCreateOrUpdateWikiPage} to create or edit wiki pages.<br />
+			IMPORTANT: For any write operation (updating work items, creating work items, adding comments, writing wiki pages), if the user has not clearly specified the target (which work item, which wiki, which page), ALWAYS ask the user to clarify before proceeding. Never guess which item to modify.
+		</Tag>;
 	}
 }
 
