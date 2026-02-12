@@ -28,7 +28,7 @@ import { PermissionRequest } from './permissionHelpers';
 import { ensureRipgrepShim } from './ripgrepShim';
 import { UserInputRequest } from './userInputHelpers';
 
-const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+export const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 const COPILOT_CLI_REQUEST_MAP_KEY = 'github.copilot.cli.requestMap';
 // Store last used Agent per workspace.
 const COPILOT_CLI_AGENT_MEMENTO_KEY = 'github.copilot.cli.customAgent';
