@@ -9,7 +9,8 @@ import { AuthenticationChatUpgradeService } from '../../../platform/authenticati
 import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { BlockedExtensionService, IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
-import { ChatQuotaService } from '../../../platform/chat/common/chatQuotaServiceImpl';
+// Azure-only fork: ChatQuotaService replaced with null implementation
+// import { ChatQuotaService } from '../../../platform/chat/common/chatQuotaServiceImpl';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IInteractionService, InteractionService } from '../../../platform/chat/common/interactionService';
@@ -25,7 +26,7 @@ import { IDialogService } from '../../../platform/dialog/common/dialogService';
 import { DialogServiceImpl } from '../../../platform/dialog/vscode/dialogServiceImpl';
 import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
-import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
+import { AzureEmbeddingsComputer } from '../../../platform/azure/common/azureEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
@@ -40,7 +41,8 @@ import { GitExtensionServiceImpl } from '../../../platform/git/vscode/gitExtensi
 import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { NullBaseOctoKitService } from '../../../platform/github/common/nullOctokitServiceImpl';
-import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
+// Azure-only fork: OctoKitService replaced with NullBaseOctoKitService
+// import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { IInteractiveSessionService } from '../../../platform/interactive/common/interactiveSessionService';
 import { InteractiveSessionServiceImpl } from '../../../platform/interactive/vscode/interactiveSessionServiceImpl';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -142,11 +144,13 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IChatSessionService, new SyncDescriptor(ChatSessionService));
 	builder.define(IConfigurationService, new SyncDescriptor(ConfigurationServiceImpl));
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new NewOutputChannelLogTarget(extensionContext)]]));
-	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
+	// Azure-only fork: null quota service (no GitHub quota management)
+	builder.define(IChatQuotaService, <IChatQuotaService>{ _serviceBrand: undefined, quotaExhausted: false, overagesEnabled: false, processQuotaHeaders() { }, clearQuota() { } });
 	builder.define(ITasksService, new SyncDescriptor(TasksService));
 	builder.define(IGitExtensionService, new SyncDescriptor(GitExtensionServiceImpl));
 	builder.define(IGitService, new SyncDescriptor(GitServiceImpl));
-	builder.define(IOctoKitService, isScenarioAutomation ? new SyncDescriptor(NullBaseOctoKitService) : new SyncDescriptor(OctoKitService));
+	// Azure-only fork: always use null OctoKit (no GitHub API calls)
+	builder.define(IOctoKitService, new SyncDescriptor(NullBaseOctoKitService));
 	builder.define(IReviewService, new SyncDescriptor(ReviewServiceImpl));
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(LanguageDiagnosticsServiceImpl));
 	builder.define(ILanguageFeaturesService, new SyncDescriptor(LanguageFeaturesServiceImpl));
@@ -170,7 +174,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ISnippyService, new SyncDescriptor(SnippyService));
 	builder.define(IInteractiveSessionService, new InteractiveSessionServiceImpl());
 	builder.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
-	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
+	builder.define(IEmbeddingsComputer, new SyncDescriptor(AzureEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	builder.define(IToolEmbeddingsComputer, new SyncDescriptor(ToolEmbeddingsComputer));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));

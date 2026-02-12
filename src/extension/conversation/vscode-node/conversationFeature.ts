@@ -37,7 +37,8 @@ import { NotebookCellLinkifier } from '../../linkify/vscode-node/notebookCellLin
 import { SymbolLinkifier } from '../../linkify/vscode-node/symbolLinkifier';
 import { IntentDetector } from '../../prompt/node/intentDetector';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
-import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
+// Azure-only fork: GitHub PR review removed
+// import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
 import { startFeedbackCollection } from './feedbackCollection';
 import { registerNewWorkspaceIntentCommand } from './newWorkspaceFollowup';
 import { generateTerminalFixes, setLastCommandMatchResult } from './terminalFixGenerator';
@@ -89,21 +90,20 @@ export class ConversationFeature implements IExtensionContribution {
 
 		const activationBlockerDeferred = new DeferredPromise<void>();
 		this.activationBlocker = activationBlockerDeferred.p;
-		if (authenticationService.copilotToken) {
-			this.logService.info(`ConversationFeature: Copilot token already available`);
-			this.activated = true;
-			activationBlockerDeferred.complete();
-		} else {
-			this.logService.info(`ConversationFeature: Waiting for copilot token to activate conversation feature`);
-		}
+		// Azure-only fork: Always activate conversation features immediately.
+		// The Azure fork does not use GitHub Copilot tokens; authentication is
+		// handled by the Azure AD service principal in BYOKContrib.
+		this.logService.info(`ConversationFeature: Azure-only fork, activating immediately`);
+		this.activated = true;
+		this.enabled = true;
+		activationBlockerDeferred.complete();
 
 		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 			const hasSession = !!authenticationService.copilotToken;
 			this.logService.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			// Azure-only fork: Keep activated even without copilot token
 			if (hasSession) {
 				this.activated = true;
-			} else {
-				this.activated = false;
 			}
 
 			activationBlockerDeferred.complete();
@@ -285,7 +285,8 @@ export class ConversationFeature implements IExtensionContribution {
 			this.instantiationService.invokeFunction(registerInlineChatCommands),
 			this.registerTerminalQuickFixProviders(),
 			registerNewWorkspaceIntentCommand(this.newWorkspacePreviewContentManager, this.logService, options),
-			registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
+			// Azure-only fork: GitHub PR review removed
+			// registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
 			registerSearchIntentCommand(),
 		].forEach(d => disposables.add(d));
 		return disposables;
@@ -331,7 +332,11 @@ export class ConversationFeature implements IExtensionContribution {
 		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
 			const chatEnabled = this.authenticationService.copilotToken !== undefined;
 			this.logService.info(`copilot token sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
-			this.enabled = chatEnabled ?? false;
+			// Azure-only fork: Never disable chat due to missing copilot token.
+			// The Azure fork uses its own auth mechanism (Azure AD service principal).
+			if (chatEnabled) {
+				this.enabled = true;
+			}
 		}));
 	}
 
@@ -378,6 +383,7 @@ function registerSearchIntentCommand(): IDisposable {
 	});
 }
 
-function registerGitHubPullRequestTitleAndDescriptionProvider(instantiationService: IInstantiationService): IDisposable {
-	return instantiationService.createInstance(GitHubPullRequestProviders);
-}
+// Azure-only fork: GitHub PR review removed
+// function registerGitHubPullRequestTitleAndDescriptionProvider(instantiationService: IInstantiationService): IDisposable {
+// 	return instantiationService.createInstance(GitHubPullRequestProviders);
+// }

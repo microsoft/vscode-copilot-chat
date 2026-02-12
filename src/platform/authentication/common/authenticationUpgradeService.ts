@@ -50,60 +50,16 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 	}
 
 	async shouldRequestPermissiveSessionUpgrade(): Promise<boolean> {
-		let reason: string = 'true';
-		try {
-			// We don't want to be annoying
-			if (this.hasRequestedPermissiveSessionUpgrade) {
-				reason = 'false - already requested';
-				return false;
-			}
-			// The user does not want to be asked
-			if (this._authenticationService.isMinimalMode) {
-				reason = 'false - minimal mode';
-				return false;
-			}
-			// We already have a permissive session
-			if (await this._authenticationService.getGitHubSession('permissive', { silent: true })) {
-				reason = 'false - already have permissive session';
-				return false;
-			}
-			// The user is not signed in at all
-			if (!(await this._authenticationService.getGitHubSession('any', { silent: true }))) {
-				reason = 'false - not signed in';
-				return false;
-			}
-			// The user has access to all repositories
-			if (await this._canAccessAllRepositories()) {
-				reason = 'false - access to all repositories';
-				return false;
-			}
-			return true;
-		} finally {
-			this.logService.trace(`Should request permissive session upgrade: ${reason}`);
-		}
+		// Azure-only fork: never prompt for GitHub permission upgrades.
+		// Authentication is handled by Azure service principal.
+		this.logService.trace('Should request permissive session upgrade: false - Azure-only fork');
+		return false;
 	}
 
-	async showPermissiveSessionModal(skipRepeatCheck = false): Promise<boolean> {
-		if (this.hasRequestedPermissiveSessionUpgrade && !skipRepeatCheck) {
-			this.logService.trace('Already requested permissive session upgrade');
-			return false;
-		}
-		this.logService.trace('Requesting permissive session upgrade');
-		this.hasRequestedPermissiveSessionUpgrade = true;
-		try {
-			await this._authenticationService.getGitHubSession('permissive', {
-				forceNewSession: {
-					detail: l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
-					learnMore: URI.parse('https://aka.ms/copilotRepoScope'),
-				},
-				clearSessionPreference: true
-			});
-			return true;
-		} catch (e) {
-			// User cancelled so show the badge
-			await this._authenticationService.getGitHubSession('permissive', {});
-			return false;
-		}
+	async showPermissiveSessionModal(_skipRepeatCheck = false): Promise<boolean> {
+		// Azure-only fork: no GitHub permission modals needed
+		this.logService.trace('showPermissiveSessionModal: skipped in Azure-only fork');
+		return false;
 	}
 
 	showPermissiveSessionUpgradeInChat(

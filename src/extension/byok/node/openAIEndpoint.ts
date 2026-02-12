@@ -113,6 +113,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		_modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
+		private readonly _useBearerAuth: boolean = false,
 		@IDomainService domainService: IDomainService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
@@ -230,6 +231,16 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return trimmed;
 	}
 
+	protected override get useResponsesApi(): boolean {
+		// Azure OpenAI with bearer auth uses Chat Completions API, not Responses API.
+		// The /chat/completions endpoint rejects Responses API body format with
+		// "400 Unsupported data type".
+		if (this._useBearerAuth) {
+			return false;
+		}
+		return super.useResponsesApi;
+	}
+
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
@@ -262,6 +273,13 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override interceptBody(body: IEndpointBody | undefined): void {
 		super.interceptBody(body);
+
+		// Sanitize body for Azure OpenAI when using service principal bearer auth.
+		// Azure OpenAI rejects non-standard fields with "400 Unsupported data type".
+		if (this._useBearerAuth && body) {
+			this._sanitizeBodyForAzure(body);
+		}
+
 		// TODO @lramos15 - We should do this for all models and not just here
 		if (body?.tools?.length === 0) {
 			delete body.tools;
@@ -290,6 +308,83 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 	}
 
+	/**
+	 * Sanitizes the request body for Azure OpenAI compatibility.
+	 * Removes Copilot-specific fields and ensures message content uses
+	 * only standard OpenAI content part types.
+	 */
+	private _sanitizeBodyForAzure(body: IEndpointBody): void {
+		// Remove non-standard top-level body fields
+		for (const key of Object.keys(body)) {
+			if (!OpenAIEndpoint._azureAllowedBodyFields.has(key)) {
+				delete (body as any)[key];
+			}
+		}
+
+		// Sanitize messages
+		if (body.messages) {
+			body.messages = body.messages.map((msg: any) => {
+				// Only keep standard OpenAI message fields
+				const clean: any = { role: msg.role };
+				if (msg.content !== undefined) {
+					clean.content = this._sanitizeMessageContent(msg.content);
+				}
+				if (msg.name !== undefined) {
+					clean.name = msg.name;
+				}
+				if (msg.tool_calls !== undefined) {
+					clean.tool_calls = msg.tool_calls;
+				}
+				if (msg.tool_call_id !== undefined) {
+					clean.tool_call_id = msg.tool_call_id;
+				}
+				return clean;
+			});
+		}
+	}
+
+	private _sanitizeMessageContent(content: any): any {
+		if (typeof content === 'string') {
+			return content;
+		}
+		if (content === null || content === undefined) {
+			return null;
+		}
+		if (!Array.isArray(content)) {
+			return String(content);
+		}
+		// Build clean content parts with only standard OpenAI properties
+		const cleaned: any[] = [];
+		for (const part of content) {
+			if (part.type === 'text') {
+				cleaned.push({ type: 'text', text: part.text ?? '' });
+			} else if (part.type === 'image_url') {
+				cleaned.push({ type: 'image_url', image_url: part.image_url });
+			}
+			// Drop all other content part types (cache_breakpoint, opaque, etc.)
+		}
+		// If only one text part, simplify to string
+		if (cleaned.length === 1 && cleaned[0].type === 'text') {
+			return cleaned[0].text;
+		}
+		if (cleaned.length === 0) {
+			// No standard parts found - extract text as fallback
+			const text = content
+				.filter((p: any) => p.text)
+				.map((p: any) => String(p.text))
+				.join('');
+			return text || '';
+		}
+		return cleaned;
+	}
+
+	private static readonly _azureAllowedBodyFields = new Set([
+		'messages', 'model', 'temperature', 'top_p', 'n', 'stream',
+		'stream_options', 'stop', 'max_tokens', 'max_completion_tokens',
+		'presence_penalty', 'frequency_penalty', 'logit_bias', 'logprobs',
+		'top_logprobs', 'tools', 'tool_choice', 'response_format', 'seed',
+	]);
+
 	override get urlOrRequestMetadata(): string {
 		return this._modelUrl;
 	}
@@ -298,10 +393,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json'
 		};
-		if (this._modelUrl.includes('openai.azure')) {
-			headers['api-key'] = this._apiKey;
-		} else {
+		if (this._useBearerAuth || !this._modelUrl.includes('openai.azure')) {
 			headers['Authorization'] = `Bearer ${this._apiKey}`;
+		} else {
+			headers['api-key'] = this._apiKey;
 		}
 		for (const [key, value] of Object.entries(this._customHeaders)) {
 			headers[key] = value;
@@ -311,7 +406,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
 		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
-		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
+		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl, this._useBearerAuth);
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {

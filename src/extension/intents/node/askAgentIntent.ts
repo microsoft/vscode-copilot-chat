@@ -36,7 +36,7 @@ import { AgentIntentInvocation } from './agentIntent';
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
-		const lookForTags = new Set<string>(['vscode_codesearch']);
+		const lookForTags = new Set<string>(['ai_codesearch']);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const model = await endpointProvider.getChatEndpoint(request);
 

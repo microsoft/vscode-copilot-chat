@@ -4,17 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 import { commands, extensions, window } from 'vscode';
 import { IAuthenticationService, MinimalModeError } from '../../../platform/authentication/common/authentication';
-import { ContactSupportError, EnterpriseManagedError, GitHubLoginFailedError, InvalidTokenError, NotSignedUpError, RateLimitedError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
-import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { GHPR_EXTENSION_ID } from '../../chatSessions/vscode/chatSessionsUriHandler';
-import { EXTENSION_ID } from '../../common/constants';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -117,45 +113,16 @@ export class ContextKeysContribution extends Disposable {
 		this._logService.debug(`[context keys] Updating context keys.`);
 		this._cancelPendingOfflineCheck();
 		const allKeys = Object.values(welcomeViewContextKeys);
-		let error: unknown | undefined = undefined;
 		let key: string | undefined;
+		// Azure-only fork: Always set Activated key. The Azure fork does not
+		// depend on GitHub Copilot tokens; authentication is handled by
+		// the Azure AD service principal in BYOKContrib.
 		try {
 			await this._authenticationService.getCopilotToken();
-			key = welcomeViewContextKeys.Activated;
 		} catch (e: any) {
-			error = e;
-			const reason = e.message || e;
-			const data = TelemetryData.createAndMarkAsIssued({ reason });
-			this._telemetryService.sendGHTelemetryErrorEvent('activationFailed', data.properties, data.measurements);
-			const message =
-				reason === 'GitHubLoginFailed'
-					? SESSION_LOGIN_MESSAGE
-					: `GitHub Copilot could not connect to server. Extension activation failed: "${reason}"`;
-			this._logService.error(message);
+			this._logService.debug(`[context keys] Azure-only fork: Copilot token not available (expected), proceeding with activation.`);
 		}
-
-		if (error instanceof NotSignedUpError) {
-			key = welcomeViewContextKeys.IndividualDisabled;
-		} else if (error instanceof SubscriptionExpiredError) {
-			key = welcomeViewContextKeys.IndividualExpired;
-		} else if (error instanceof EnterpriseManagedError) {
-			key = welcomeViewContextKeys.EnterpriseDisabled;
-		} else if (error instanceof ContactSupportError) {
-			key = welcomeViewContextKeys.ContactSupport;
-		} else if (error instanceof InvalidTokenError) {
-			key = welcomeViewContextKeys.InvalidToken;
-		} else if (error instanceof GitHubLoginFailedError) {
-			key = welcomeViewContextKeys.GitHubLoginFailed;
-		} else if (error) {
-			if (!extensions.getExtension(EXTENSION_ID)?.isActive) {
-				if (error instanceof RateLimitedError) {
-					key = welcomeViewContextKeys.RateLimited;
-				} else {
-					key = welcomeViewContextKeys.Offline;
-				}
-			}
-			this._scheduleOfflineCheck();
-		}
+		key = welcomeViewContextKeys.Activated;
 
 		if (key) {
 			if (key !== this._lastContextKey) {

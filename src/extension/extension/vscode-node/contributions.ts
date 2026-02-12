@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
-import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
+// Azure-only fork: AuthenticationContrib removed (GitHub permission upgrade prompts)
+// import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
-import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
+// Azure-only fork: quota management removed (GitHub-specific)
+// import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import { ChatSessionContextContribution } from '../../chatSessionContext/vscode-node/chatSessionContextProvider';
 import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
 import * as chatBlockLanguageContribution from '../../codeBlocks/vscode-node/chatBlockLanguageFeatures.contribution';
@@ -19,13 +21,15 @@ import { ConversationFeature } from '../../conversation/vscode-node/conversation
 import { FeedbackCommandContribution } from '../../conversation/vscode-node/feedbackContribution';
 import { LanguageModelAccess } from '../../conversation/vscode-node/languageModelAccess';
 import { LogWorkspaceStateContribution } from '../../conversation/vscode-node/logWorkspaceState';
-import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
+// Azure-only fork: RemoteAgentContribution removed (checks GitHub auth)
+// import { RemoteAgentContribution } from '../../conversation/vscode-node/remoteAgents';
 import { DiagnosticsContextContribution } from '../../diagnosticsContext/vscode/diagnosticsContextProvider';
 import { LanguageModelProxyContrib } from '../../externalAgents/vscode-node/lmProxyContrib';
 import { WalkthroughCommandContribution } from '../../getting-started/vscode-node/commands';
 import * as newWorkspaceContribution from '../../getting-started/vscode-node/newWorkspace.contribution';
 import { ScmContextProviderContribution } from '../../git/vscode/scmContextprovider';
-import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
+// Azure-only fork: GitHub MCP removed
+// import { GitHubMcpContrib } from '../../githubMcp/vscode-node/githubMcp.contribution';
 import { IgnoredFileProviderContribution } from '../../ignore/vscode-node/ignoreProvider';
 import { JointCompletionsProviderContribution } from '../../inlineEdits/vscode-node/jointInlineCompletionProvider';
 import { FixTestFailureContribution } from '../../intents/vscode-node/fixTestFailureContributions';
@@ -66,7 +70,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
-	asContributionFactory(AuthenticationContrib),
+	// Azure-only fork: removed AuthenticationContrib (GitHub permission upgrade)
+	// asContributionFactory(AuthenticationContrib),
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
 	asContributionFactory(PowerStateLogger),
@@ -86,7 +91,12 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(InlineCompletionContribution),
 	asContributionFactory(NesRenameContribution),
 	asContributionFactory(SearchPanelCommands),
-	asContributionFactory(ChatQuotaContribution),
+	// Azure-only fork: removed ChatQuotaContribution (GitHub-specific)
+	// asContributionFactory(ChatQuotaContribution),
+	// Azure-only fork: BYOKContrib moved here from vscodeNodeChatContributions so that
+	// the Azure model provider and yourcompany.ai.updateSecret command are always
+	// registered, even before authentication succeeds.
+	asContributionFactory(BYOKContrib),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
 	asContributionFactory(ScmContextProviderContribution),
@@ -96,7 +106,8 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
-	asContributionFactory(GitHubMcpContrib)
+	// Azure-only fork: removed GitHubMcpContrib
+	// asContributionFactory(GitHubMcpContrib)
 ];
 
 /**
@@ -111,14 +122,14 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(RequestLogTree),
 	asContributionFactory(OnboardTerminalTestsContribution),
 	asContributionFactory(ToolsContribution),
-	asContributionFactory(RemoteAgentContribution),
+	// Azure-only fork: RemoteAgentContribution removed (checks GitHub auth)
+	// asContributionFactory(RemoteAgentContribution),
 	asContributionFactory(AiMappedEditsContrib),
 	asContributionFactory(RenameSuggestionsContrib),
 	asContributionFactory(LogWorkspaceStateContribution),
 	asContributionFactory(SetupTestsContribution),
 	asContributionFactory(FixTestFailureContribution),
 	asContributionFactory(IgnoredFileProviderContribution),
-	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),

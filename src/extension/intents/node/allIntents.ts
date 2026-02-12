@@ -18,7 +18,8 @@ import { GenerateCodeIntent } from './generateCodeIntent';
 import { NewWorkspaceIntent } from './newIntent';
 import { NewNotebookIntent } from './newNotebookIntent.contribution';
 import { NotebookEditorIntent } from './notebookEditorIntent';
-import { ReviewIntent } from './reviewIntent';
+// Azure-only fork: ReviewIntent removed (depends on GitHub CAPI code review)
+// import { ReviewIntent } from './reviewIntent';
 import { SearchIntent } from './searchIntent';
 import { SearchKeywordsIntent } from './searchKeywordsIntent';
 import { SearchPanelIntent } from './searchPanelIntent';
@@ -38,7 +39,8 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(TestsIntent),
 	new SyncDescriptor(FixIntent),
 	new SyncDescriptor(ExplainIntent),
-	new SyncDescriptor(ReviewIntent),
+	// Azure-only fork: ReviewIntent removed (depends on GitHub CAPI code review)
+	// new SyncDescriptor(ReviewIntent),
 	new SyncDescriptor(TerminalIntent),
 	new SyncDescriptor(TerminalExplainIntent),
 	new SyncDescriptor(UnknownIntent),

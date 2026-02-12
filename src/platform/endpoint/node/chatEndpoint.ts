@@ -267,6 +267,18 @@ export class ChatEndpoint implements IChatEndpoint {
 			body.stream = false;
 		}
 
+		// Reasoning models (o1, o3, o4-mini, etc.) require max_completion_tokens instead of max_tokens
+		// and do not support the temperature parameter
+		const isReasoningModel = this.family.startsWith('o1') || this.family.startsWith('o3') || this.family.startsWith('o4')
+			|| this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI || this.model === CHAT_MODEL.O3MINI;
+		if (body && isReasoningModel) {
+			if (body.max_tokens !== undefined) {
+				body['max_completion_tokens'] = body.max_tokens;
+				delete body.max_tokens;
+			}
+			delete body.temperature;
+		}
+
 		// If it's o1 we must modify the body significantly as the request is very different
 		if (body?.messages && (this.family.startsWith('o1') || this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI)) {
 			const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {

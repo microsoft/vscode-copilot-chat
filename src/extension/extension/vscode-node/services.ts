@@ -9,13 +9,17 @@ import { ICopilotTokenManager } from '../../../platform/authentication/common/co
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { createStaticGitHubTokenProvider, getOrCreateTestingCopilotTokenManager } from '../../../platform/authentication/node/copilotTokenManager';
 import { AuthenticationService } from '../../../platform/authentication/vscode-node/authenticationService';
-import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+// Azure-only fork: replaced VSCodeCopilotTokenManager with AzureCopilotTokenManager
+// import { VSCodeCopilotTokenManager } from '../../../platform/authentication/vscode-node/copilotTokenManager';
+import { AzureCopilotTokenManager } from '../../../platform/azure/common/azureCopilotTokenManager';
 import { IChatAgentService } from '../../../platform/chat/common/chatAgents';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IChunkingEndpointClient } from '../../../platform/chunking/common/chunkingEndpointClient';
-import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
+// Azure-only fork: replaced ChunkingEndpointClientImpl with AzureChunkingEndpointClient
+// import { ChunkingEndpointClientImpl } from '../../../platform/chunking/common/chunkingEndpointClientImpl';
+import { AzureChunkingEndpointClient } from '../../../platform/azure/common/azureChunkingEndpointClient';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
 import { IDevContainerConfigurationService } from '../../../platform/devcontainer/common/devContainerConfigurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
@@ -23,7 +27,9 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/node/automodeService';
+// Azure-only fork: replaced AutomodeService with NullAutomodeService
+import { IAutomodeService } from '../../../platform/endpoint/node/automodeService';
+import { NullAutomodeService } from '../../../platform/azure/common/nullAutomodeService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
 import { INativeEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
@@ -33,7 +39,10 @@ import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
-import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
+// Azure-only fork: VsCodeIgnoreService replaced with LocalIgnoreService (no CAPI dependency)
+// import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
+import { AzureModelRouter, IModelRouter } from '../../../platform/azure/common/modelRouter';
+import { LocalIgnoreService } from '../../../platform/azure/common/localIgnoreService';
 import { IImageService } from '../../../platform/image/common/imageService';
 import { ImageServiceImpl } from '../../../platform/image/node/imageServiceImpl';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../../../platform/inlineEdits/common/inlineEditsModelService';
@@ -46,14 +55,20 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
+// Azure-only fork: replaced ProxyModelsService with NullProxyModelsService
 import { IProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
-import { ProxyModelsService } from '../../../platform/proxyModels/node/proxyModelsService';
+import { NullProxyModelsService } from '../../../platform/proxyModels/common/proxyModelsService';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
-import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
+// Azure-only fork: replaced GithubCodeSearchService with NullGithubCodeSearchService
+import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
+import { NullGithubCodeSearchService } from '../../../platform/azure/common/nullGithubCodeSearch';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
-import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
-import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
-import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
+// Azure-only fork: replaced VsCodeCodeSearchAuthenticationService with NullCodeSearchAuthenticationService
+// import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
+import { NullCodeSearchAuthenticationService } from '../../../platform/azure/common/nullCodeSearchAuth';
+// Azure-only fork: DocsSearchClient removed (depends on GitHub CAPI)
+// import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
+// import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/scopeSelectionImpl';
@@ -63,16 +78,22 @@ import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/c
 import { IExperimentationService, NullExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
-import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
-import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
-import { TelemetryService } from '../../../platform/telemetry/vscode-node/telemetryServiceImpl';
+// Azure-only fork: telemetry stripped
+// import { APP_INSIGHTS_KEY_ENHANCED, APP_INSIGHTS_KEY_STANDARD } from '../../../platform/telemetry/node/azureInsights';
+// import { MicrosoftExperimentationService } from '../../../platform/telemetry/vscode-node/microsoftExperimentationService';
+// import { TelemetryService } from '../../../platform/telemetry/vscode-node/telemetryServiceImpl';
 import { IWorkspaceMutationManager } from '../../../platform/testing/common/workspaceMutationManager';
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { ITrajectoryLogger } from '../../../platform/trajectory/common/trajectoryLogger';
 import { TrajectoryLogger } from '../../../platform/trajectory/node/trajectoryLogger';
-import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+// Azure-only fork: replaced GithubAvailableEmbeddingTypesService with AzureAvailableEmbeddingTypesService
+// import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { AzureAvailableEmbeddingTypesService } from '../../../platform/azure/common/azureAvailableEmbeddingTypes';
+// Azure-only fork: Azure AI Search removed — using local embeddings only
+// import { AzureSearchClient, IAzureSearchClient } from '../../../platform/azure/common/azureSearchClient';
 import { IRerankerService, RerankerService } from '../../../platform/workspaceChunkSearch/common/rerankerService';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
@@ -107,7 +128,9 @@ import { IPromptCategorizerService, PromptCategorizerService } from '../../promp
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { DevContainerConfigurationServiceImpl } from '../../prompt/vscode-node/devContainerConfigurationServiceImpl';
-import { ProductionEndpointProvider } from '../../prompt/vscode-node/endpointProviderImpl';
+// Azure-only fork: replaced ProductionEndpointProvider with AzureEndpointProvider
+// import { ProductionEndpointProvider } from '../../prompt/vscode-node/endpointProviderImpl';
+import { AzureEndpointProvider } from '../../../platform/azure/common/azureEndpointProvider';
 import { GitCommitMessageServiceImpl } from '../../prompt/vscode-node/gitCommitMessageServiceImpl';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
@@ -141,7 +164,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	registerCommonServices(builder, extensionContext);
 
-	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
+	// Azure-only fork: null automode (no CAPI /models/session)
+	builder.define(IAutomodeService, new NullAutomodeService());
 	builder.define(IConversationStore, new ConversationStore());
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
@@ -171,7 +195,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(ICopilotTokenManager, getOrCreateTestingCopilotTokenManager(env.devDeviceId));
 	} else {
 		setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey);
-		builder.define(ICopilotTokenManager, new SyncDescriptor(VSCodeCopilotTokenManager));
+		// Azure-only fork: service principal token instead of GitHub copilot token
+		builder.define(ICopilotTokenManager, new SyncDescriptor(AzureCopilotTokenManager));
 	}
 
 	if (isScenarioAutomation) {
@@ -180,18 +205,25 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
-		builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
-		builder.define(IIgnoreService, new SyncDescriptor(VsCodeIgnoreService));
+		// Azure-only fork: static model definitions from AzureEndpointProvider
+		builder.define(IEndpointProvider, new SyncDescriptor(AzureEndpointProvider));
+		// Azure-only fork: use local-only ignore service (no CAPI remote exclusions)
+		builder.define(IIgnoreService, new SyncDescriptor(LocalIgnoreService));
 	}
+
+	// Azure-only fork: model router for deployment routing
+	builder.define(IModelRouter, new SyncDescriptor(AzureModelRouter));
 
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
 	builder.define(IIntentService, new SyncDescriptor(IntentService));
 	builder.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	builder.define(IWorkspaceFileIndex, new SyncDescriptor(WorkspaceFileIndex));
-	builder.define(IChunkingEndpointClient, new SyncDescriptor(ChunkingEndpointClientImpl));
+	// Azure-only fork: local chunking + Azure OpenAI embeddings
+	builder.define(IChunkingEndpointClient, new SyncDescriptor(AzureChunkingEndpointClient));
 	builder.define(ICommandService, new SyncDescriptor(CommandServiceImpl));
-	builder.define(IDocsSearchClient, new SyncDescriptor(DocsSearchClient));
+	// Azure-only fork: DocsSearchClient removed (depends on GitHub CAPI)
+	// builder.define(IDocsSearchClient, new SyncDescriptor(DocsSearchClient));
 	builder.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
 	builder.define(ITestDepsResolver, new SyncDescriptor(TestDepsResolver));
 	builder.define(ISetupTestsDetector, new SyncDescriptor(SetupTestsDetector));
@@ -209,7 +241,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IFeedbackReporter, new SyncDescriptor(FeedbackReporter));
 	builder.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
-	builder.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
+	// Azure-only fork: no GitHub remote code search
+	builder.define(IGithubCodeSearchService, new NullGithubCodeSearchService());
 	builder.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	builder.define(IWorkspaceChunkSearchService, new SyncDescriptor(WorkspaceChunkSearchService));
 	builder.define(ISettingsEditorSearchService, new SyncDescriptor(SettingsEditorSearchServiceImpl));
@@ -226,11 +259,16 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ILanguageContextService, new SyncDescriptor(LanguageContextServiceImpl));
 	builder.define(ILanguageContextProviderService, new SyncDescriptor(LanguageContextProviderService));
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
-	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
+	// Azure-only fork: no GitHub sign-in prompts for code search
+	builder.define(ICodeSearchAuthenticationService, new NullCodeSearchAuthenticationService());
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
-	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
+	// Azure-only fork: always returns text3small_512 (no GitHub CAPI dependency)
+	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(AzureAvailableEmbeddingTypesService));
+	// Azure-only fork: Azure AI Search removed — using local embeddings only
+	// builder.define(IAzureSearchClient, new SyncDescriptor(AzureSearchClient));
 	builder.define(IRerankerService, new SyncDescriptor(RerankerService));
-	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
+	// Azure-only fork: null proxy models (no CAPI /models for NES)
+	builder.define(IProxyModelsService, new NullProxyModelsService());
 	builder.define(IPowerService, new SyncDescriptor(PowerService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, new SyncDescriptor(UndesiredModels.Manager));
@@ -239,30 +277,13 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 }
 
-function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
-	if (ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
-		// Intitiate the experimentation service
-		builder.define(IExperimentationService, new SyncDescriptor(MicrosoftExperimentationService));
-	} else {
-		builder.define(IExperimentationService, new NullExperimentationService());
-	}
+function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, _extensionContext: ExtensionContext) {
+	// Azure-only fork: always use null experimentation service
+	builder.define(IExperimentationService, new NullExperimentationService());
 }
 
-function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string) {
-
-	if (ExtensionMode.Production === extensionContext.extensionMode && !isScenarioAutomation) {
-		builder.define(ITelemetryService, new SyncDescriptor(TelemetryService, [
-			extensionContext.extension.packageJSON.name,
-			internalAIKey,
-			internalLargeEventAIKey,
-			externalAIKey,
-			APP_INSIGHTS_KEY_STANDARD,
-			APP_INSIGHTS_KEY_ENHANCED,
-		]));
-	} else {
-		// If we're developing or testing we don't want telemetry to be sent, so we turn it off
-		builder.define(ITelemetryService, new NullTelemetryService());
-	}
-
+function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, _internalAIKey: string, _internalLargeEventAIKey: string, _externalAIKey: string) {
+	// Azure-only fork: telemetry disabled - always use null service
+	builder.define(ITelemetryService, new NullTelemetryService());
 	setupMSFTExperimentationService(builder, extensionContext);
 }

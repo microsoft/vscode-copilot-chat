@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorunWithStore, IObservable, ISettableObservable, mapObservableArrayCached, observableFromEvent, observableValue, waitForState } from '../../../util/vs/base/common/observable';
+import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { autorunWithStore, IObservable, ISettableObservable, observableFromEvent, observableValue, waitForState } from '../../../util/vs/base/common/observable';
 import { IGitExtensionService } from '../../git/common/gitExtensionService';
-import { API } from '../../git/vscode/git';
+import { API, Repository } from '../../git/vscode/git';
 
 export class ObservableGit extends Disposable {
 
@@ -27,23 +27,61 @@ export class ObservableGit extends Disposable {
 	}
 
 	async init() {
-		const gitApi = await waitForState(this._gitApi);
-		if (this._store.isDisposed) {
-			return;
-		}
+		try {
+			const gitApi = await waitForState(this._gitApi);
+			if (this._store.isDisposed) {
+				return;
+			}
 
-		const repos = observableFromEvent(this, (e) => gitApi.onDidOpenRepository(e), () => gitApi.repositories);
+			const repos = observableFromEvent(this, (e) => gitApi.onDidOpenRepository(e), () => {
+				const r = gitApi.repositories;
+				return Array.isArray(r) ? r : [];
+			});
 
-		await waitForState(repos, (repos) => repos.length > 0, undefined);
-		if (this._store.isDisposed) {
-			return;
-		}
+			await waitForState(repos, (repos) => repos.length > 0, undefined);
+			if (this._store.isDisposed) {
+				return;
+			}
 
-		mapObservableArrayCached(this, repos, (repo, store) => {
-			const stateChangeObservable = observableFromEvent(listener => repo.state.onDidChange(listener), () => repo.state.HEAD?.name);
-			store.add(autorunWithStore((reader, _store) => {
-				this.branch.set(stateChangeObservable.read(reader), undefined);
+			// Track branches using autorunWithStore instead of mapObservableArrayCached
+			// to avoid "items is not iterable" when the git API returns unexpected values
+			const repoStores = new Map<string, DisposableStore>();
+			this._store.add({ dispose: () => { for (const s of repoStores.values()) { s.dispose(); } repoStores.clear(); } });
+
+			this._store.add(autorunWithStore((reader) => {
+				const repoList = repos.read(reader);
+				if (!Array.isArray(repoList)) {
+					return;
+				}
+
+				const currentKeys = new Set<string>();
+				for (const repo of repoList) {
+					const key = repo.rootUri.toString();
+					currentKeys.add(key);
+					if (!repoStores.has(key)) {
+						const store = new DisposableStore();
+						repoStores.set(key, store);
+						this._trackRepo(repo, store);
+					}
+				}
+
+				// Clean up removed repos
+				for (const [key, store] of repoStores) {
+					if (!currentKeys.has(key)) {
+						store.dispose();
+						repoStores.delete(key);
+					}
+				}
 			}));
-		}, repo => repo.rootUri.toString()).recomputeInitiallyAndOnChange(this._store);
+		} catch {
+			// Git extension may not be available or may return unexpected data
+		}
+	}
+
+	private _trackRepo(repo: Repository, store: DisposableStore): void {
+		const stateChangeObservable = observableFromEvent(listener => repo.state.onDidChange(listener), () => repo.state.HEAD?.name);
+		store.add(autorunWithStore((reader) => {
+			this.branch.set(stateChangeObservable.read(reader), undefined);
+		}));
 	}
 }

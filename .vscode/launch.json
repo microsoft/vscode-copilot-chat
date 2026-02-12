@@ -7,7 +7,9 @@
 			"name": "Launch Copilot Extension",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extension", "GitHub.copilot",
+				"--disable-extension", "GitHub.copilot-chat"
 			],
 			"smartStep": true,
 			"sourceMaps": true,
@@ -30,7 +32,9 @@
 			"name": "Launch Copilot Extension - Watch Mode",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extension", "GitHub.copilot",
+				"--disable-extension", "GitHub.copilot-chat"
 			],
 			"smartStep": true,
 			"sourceMaps": true,
@@ -268,7 +272,9 @@
 			"name": "Launch Copilot Extension - TS Server in Debug Mode",
 			"runtimeExecutable": "${execPath}",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extension", "GitHub.copilot",
+				"--disable-extension", "GitHub.copilot-chat"
 			],
 			"smartStep": true,
 			"sourceMaps": true,

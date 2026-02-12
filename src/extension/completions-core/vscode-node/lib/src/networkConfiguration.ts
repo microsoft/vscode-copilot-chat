@@ -63,6 +63,16 @@ function getEndpointOverrideUrl(accessor: ServicesAccessor, endpoint: keyof Serv
 	}
 }
 
+/**
+ * Azure-only fork: detect Azure OpenAI endpoint and construct proper URL.
+ *
+ * GitHub proxy URL pattern: {proxy}/v1/engines/{modelId}/completions
+ * Azure OpenAI URL pattern: {endpoint}/openai/deployments/{deployment}/completions?api-version=2024-12-01-preview
+ */
+function isAzureOpenAIEndpoint(url: string): boolean {
+	return url.includes('.openai.azure.com') || url.includes('.cognitiveservices.azure.com');
+}
+
 export function getEndpointUrl(
 	accessor: ServicesAccessor,
 	token: CopilotToken,
@@ -70,6 +80,19 @@ export function getEndpointUrl(
 	...paths: string[]
 ): string {
 	const root = getEndpointOverrideUrl(accessor, endpoint) ?? (token.endpoints ? token.endpoints[endpoint] : undefined) ?? getDefaultEndpoints(accessor)[endpoint];
+
+	// Azure-only fork: rewrite URL for Azure OpenAI format
+	if (isAzureOpenAIEndpoint(root) && endpoint === 'proxy') {
+		// paths is typically ['v1/engines', modelId, 'completions']
+		// We need to extract the model ID and endpoint type, then construct Azure URL
+		if (paths.length >= 3 && paths[0] === 'v1/engines') {
+			const modelId = paths[1];
+			const endpointPath = paths.slice(2).join('/');
+			const apiVersion = '2024-12-01-preview';
+			return `${root}/openai/deployments/${modelId}/${endpointPath}?api-version=${apiVersion}`;
+		}
+	}
+
 	return joinPath(root, ...paths);
 }
 

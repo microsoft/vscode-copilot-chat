@@ -135,9 +135,8 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
-		if (!this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser) {
-			return undefined;
-		}
+		// Azure-only fork: skip copilotToken check — we use service principal auth
+		// Original code gated on: this._authenticationService.copilotToken
 
 		if (this._impl) {
 			return this._impl;
@@ -172,7 +171,8 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 					repos: [],
 				},
 				localIndexState: {
-					status: !this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser ? LocalEmbeddingsIndexStatus.Disabled : LocalEmbeddingsIndexStatus.Unknown,
+					// Azure-only fork: always report Unknown (not Disabled) since we don't depend on copilotToken
+				status: LocalEmbeddingsIndexStatus.Unknown,
 					getState: async () => undefined,
 				}
 			};

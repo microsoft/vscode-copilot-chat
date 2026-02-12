@@ -1,29 +1,29 @@
 {
-	"name": "copilot-chat",
-	"displayName": "GitHub Copilot Chat",
-	"description": "AI chat features powered by Copilot",
+	"name": "yourcompany-ai-assistant",
+	"displayName": "Your Company AI Assistant",
+	"description": "AI coding assistant powered by Azure OpenAI",
 	"version": "0.38.0",
 	"build": "1",
-	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
+	"internalAIKey": "",
 	"completionsCoreVersion": "1.378.1799",
-	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
-	"ariaKey": "0c6ae279ed8443289764825290e4f9e2-1a736e7c-1324-4338-be46-fc2a58ae4d14-7255",
+	"internalLargeStorageAriaKey": "",
+	"ariaKey": "",
 	"buildType": "dev",
-	"publisher": "GitHub",
-	"homepage": "https://github.com/features/copilot?editor=vscode",
+	"publisher": "yourcompany",
+	"homepage": "",
 	"license": "SEE LICENSE IN LICENSE.txt",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/microsoft/vscode-copilot-chat"
+		"url": ""
 	},
 	"bugs": {
-		"url": "https://github.com/microsoft/vscode/issues"
+		"url": ""
 	},
-	"qna": "https://github.com/github-community/community/discussions/categories/copilot",
+	"qna": "",
 	"icon": "assets/copilot.png",
-	"pricing": "Trial",
+	"pricing": "Free",
 	"engines": {
-		"vscode": "^1.110.0",
+		"vscode": "^1.109.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -56,41 +56,15 @@
 		"kotlin",
 		"co-pilot"
 	],
-	"badges": [
-		{
-			"url": "https://img.shields.io/badge/GitHub%20Copilot-Subscription%20Required-orange",
-			"href": "https://github.com/github-copilot/signup?editor=vscode",
-			"description": "%github.copilot.badge.signUp%"
-		},
-		{
-			"url": "https://img.shields.io/github/stars/github/copilot-docs?style=social",
-			"href": "https://github.com/github/copilot-docs",
-			"description": "%github.copilot.badge.star%"
-		},
-		{
-			"url": "https://img.shields.io/youtube/channel/views/UC7c3Kb6jYCRj4JOHHZTxKsQ?style=social",
-			"href": "https://www.youtube.com/@GitHub/search?query=copilot",
-			"description": "%github.copilot.badge.youtube%"
-		},
-		{
-			"url": "https://img.shields.io/twitter/follow/github?style=social",
-			"href": "https://twitter.com/github",
-			"description": "%github.copilot.badge.twitter%"
-		}
-	],
+	"badges": [],
 	"activationEvents": [
-		"onStartupFinished",
-		"onLanguageModelChat:copilot",
-		"onUri",
-		"onFileSystem:ccreq",
-		"onFileSystem:ccsettings",
-		"onCustomAgentProvider"
+		"onStartupFinished"
 	],
 	"main": "./dist/extension",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"agentSessionsWorkspace",
-		"chatHooks@3",
+		"chatHooks",
 		"extensionsAny",
 		"newSymbolNamesProvider",
 		"interactive",
@@ -104,8 +78,8 @@
 		"embeddings",
 		"findTextInFiles",
 		"findTextInFiles2",
-		"languageModelToolSupportsModel@1",
-		"findFiles2@2",
+		"languageModelToolSupportsModel",
+		"findFiles2",
 		"textSearchProvider",
 		"terminalDataWriteEvent",
 		"terminalExecuteCommandEvent",
@@ -114,14 +88,14 @@
 		"mappedEditsProvider",
 		"aiRelatedInformation",
 		"aiSettingsSearch",
-		"chatParticipantAdditions@3",
-		"defaultChatParticipant@4",
+		"chatParticipantAdditions",
+		"defaultChatParticipant",
 		"contribSourceControlInputBoxMenu",
 		"authLearnMore",
 		"testObserver",
-		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@12",
-		"chatProvider@4",
+		"aiTextSearchProvider",
+		"chatParticipantPrivate",
+		"chatProvider",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -137,7 +111,7 @@
 		"taskExecutionTerminal",
 		"dataChannels",
 		"languageModelThinkingPart",
-		"chatSessionsProvider@3",
+		"chatSessionsProvider",
 		"devDeviceId",
 		"contribEditorContentMenu",
 		"chatPromptFiles",
@@ -149,7 +123,7 @@
 	"contributes": {
 		"languageModelTools": [
 			{
-				"name": "copilot_searchCodebase",
+				"name": "assistant_searchCodebase",
 				"toolReferenceName": "codebase",
 				"displayName": "%copilot.tools.searchCodebase.name%",
 				"icon": "$(folder)",
@@ -157,7 +131,7 @@
 				"modelDescription": "Run a natural language search for relevant code or documentation comments from the user's current workspace. Returns relevant code snippets from the user's current workspace if it is large, or the full contents of the workspace if it is small.",
 				"tags": [
 					"codesearch",
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -181,7 +155,7 @@
 				"modelDescription": "Launch an iterative search-focused subagent that orchestrates semantic_search, grep_search, file_search and read_file tool calls to explore and gather relevant workspace code for a natural language query.\n CALL THIS FOR ANY TASK THAT REQUIRES CODEBASE EXPLORATION!\n\nRemember:\n1. Perform tool calls in parallel whenever possible\n2. Avoid redundant calls -- don't repeat identical searches.\n3. Stop once you have high-confidence, non-duplicative snippets covering the query scope.\n\nReturns: A list of relevant files/snippet locations in the workspace.\n\nInput fields:\n- query: Natural language description of what to search for.\n- description: Short user-visible invocation message. \n- details: 2-3 sentences detailing the objective of the search agent.",
 				"when": "config.github.copilot.chat.searchSubagent.enabled",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -207,14 +181,14 @@
 				}
 			},
 			{
-				"name": "copilot_searchWorkspaceSymbols",
+				"name": "assistant_searchWorkspaceSymbols",
 				"toolReferenceName": "symbols",
 				"displayName": "%copilot.tools.searchWorkspaceSymbols.name%",
 				"icon": "$(symbol)",
 				"userDescription": "%copilot.workspaceSymbols.tool.description%",
 				"modelDescription": "Search the user's workspace for code symbols using language services. Use this tool when the user is looking for a specific symbol in their workspace.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -230,7 +204,7 @@
 				}
 			},
 			{
-				"name": "copilot_listCodeUsages",
+				"name": "assistant_listCodeUsages",
 				"toolReferenceName": "usages",
 				"legacyToolReferenceFullNames": [
 					"usages"
@@ -240,7 +214,7 @@
 				"userDescription": "%copilot.listCodeUsages.tool.description%",
 				"modelDescription": "Request to list all usages (references, definitions, implementations etc) of a function, class, method, variable etc. Use this tool when \n1. Looking for a sample implementation of an interface or class\n2. Checking how a function is used throughout the codebase.\n3. Including and updating all usages when changing a function, method, or constructor",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -263,7 +237,7 @@
 				}
 			},
 			{
-				"name": "copilot_getVSCodeAPI",
+				"name": "assistant_getVSCodeAPI",
 				"toolReferenceName": "vscodeAPI",
 				"displayName": "%copilot.tools.getVSCodeAPI.name%",
 				"icon": "$(references)",
@@ -284,13 +258,13 @@
 				"tags": []
 			},
 			{
-				"name": "copilot_findFiles",
+				"name": "assistant_findFiles",
 				"toolReferenceName": "fileSearch",
 				"displayName": "%copilot.tools.findFiles.name%",
 				"userDescription": "%copilot.tools.findFiles.userDescription%",
 				"modelDescription": "Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. Examples:\n- **/*.{js,ts} to match all js/ts files in the workspace.\n- src/** to match all files under the top-level src folder.\n- **/foo/**/*.js to match all js files under any foo folder in the workspace.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -310,13 +284,13 @@
 				}
 			},
 			{
-				"name": "copilot_findTextInFiles",
+				"name": "assistant_findTextInFiles",
 				"toolReferenceName": "textSearch",
 				"displayName": "%copilot.tools.findTextInFiles.name%",
 				"userDescription": "%copilot.tools.findTextInFiles.userDescription%",
 				"modelDescription": "Do a fast text search in the workspace. Use this tool when you want to search with an exact string or regex. If you are not sure what words will appear in the workspace, prefer using regex patterns with alternation (|) or character classes to search for multiple potential words at once instead of making separate searches. For example, use 'function|method|procedure' to look for all of those words at once. Use includePattern to search within files matching a specific pattern, or in a specific file, using a relative path. Use 'includeIgnoredFiles' to include files normally ignored by .gitignore, other ignore files, and `files.exclude` and `search.exclude` settings. Warning: using this may cause the search to be slower, only set it when you want to search in ignored folders like node_modules or build outputs. Use this tool when you want to see an overview of a particular file, instead of using read_file many times to look for code within a file.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -349,7 +323,7 @@
 				}
 			},
 			{
-				"name": "copilot_applyPatch",
+				"name": "assistant_applyPatch",
 				"displayName": "%copilot.tools.applyPatch.name%",
 				"toolReferenceName": "applyPatch",
 				"userDescription": "%copilot.tools.applyPatch.description%",
@@ -373,7 +347,7 @@
 				}
 			},
 			{
-				"name": "copilot_readFile",
+				"name": "assistant_readFile",
 				"toolReferenceName": "readFile",
 				"legacyToolReferenceFullNames": [
 					"search/readFile"
@@ -382,7 +356,7 @@
 				"userDescription": "%copilot.tools.readFile.userDescription%",
 				"modelDescription": "Read the contents of a file.\n\nYou must specify the line range you're interested in. Line numbers are 1-indexed. If the file contents returned are insufficient for your task, you may call this tool again to retrieve more content. Prefer reading larger ranges over doing many small reads.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -408,13 +382,13 @@
 				}
 			},
 			{
-				"name": "copilot_listDirectory",
+				"name": "assistant_listDirectory",
 				"toolReferenceName": "listDirectory",
 				"displayName": "%copilot.tools.listDirectory.name%",
 				"userDescription": "%copilot.tools.listDirectory.userDescription%",
 				"modelDescription": "List the contents of a directory. Result will have the name of the child. If the name ends in /, it's a folder, otherwise a file",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -430,7 +404,7 @@
 				}
 			},
 			{
-				"name": "copilot_getErrors",
+				"name": "assistant_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
 				"legacyToolReferenceFullNames": [
@@ -454,13 +428,13 @@
 				}
 			},
 			{
-				"name": "copilot_readProjectStructure",
+				"name": "assistant_readProjectStructure",
 				"displayName": "%copilot.tools.readProjectStructure.name%",
 				"modelDescription": "Get a file tree representation of the workspace.",
 				"tags": []
 			},
 			{
-				"name": "copilot_getChangedFiles",
+				"name": "assistant_getChangedFiles",
 				"displayName": "%copilot.tools.getChangedFiles.name%",
 				"toolReferenceName": "changes",
 				"legacyToolReferenceFullNames": [
@@ -470,7 +444,7 @@
 				"userDescription": "%copilot.tools.changes.description%",
 				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use run_in_terminal to run git commands in a terminal as well.",
 				"tags": [
-					"vscode_codesearch"
+					"ai_codesearch"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -495,7 +469,7 @@
 				}
 			},
 			{
-				"name": "copilot_testFailure",
+				"name": "assistant_testFailure",
 				"toolReferenceName": "testFailure",
 				"legacyToolReferenceFullNames": [
 					"testFailure"
@@ -506,15 +480,15 @@
 				"modelDescription": "Includes test failure information in the prompt.",
 				"inputSchema": {},
 				"tags": [
-					"vscode_editing_with_tests",
-					"enable_other_tool_copilot_readFile",
-					"enable_other_tool_copilot_listDirectory",
-					"enable_other_tool_copilot_findFiles",
-					"enable_other_tool_copilot_runTests"
+					"ai_editing_with_tests",
+					"enable_other_tool_assistant_readFile",
+					"enable_other_tool_assistant_listDirectory",
+					"enable_other_tool_assistant_findFiles",
+					"enable_other_tool_assistant_runTests"
 				]
 			},
 			{
-				"name": "copilot_createNewWorkspace",
+				"name": "assistant_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
 				"legacyToolReferenceFullNames": [
@@ -542,7 +516,7 @@
 				]
 			},
 			{
-				"name": "copilot_getProjectSetupInfo",
+				"name": "assistant_getProjectSetupInfo",
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "getProjectSetupInfo",
@@ -565,7 +539,7 @@
 				"tags": []
 			},
 			{
-				"name": "copilot_installExtension",
+				"name": "assistant_installExtension",
 				"displayName": "Install Extension in VS Code",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "installExtension",
@@ -593,7 +567,7 @@
 				"tags": []
 			},
 			{
-				"name": "copilot_runVscodeCommand",
+				"name": "assistant_runVscodeCommand",
 				"displayName": "Run VS Code Command",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
 				"toolReferenceName": "runCommand",
@@ -628,7 +602,7 @@
 				"tags": []
 			},
 			{
-				"name": "copilot_createNewJupyterNotebook",
+				"name": "assistant_createNewJupyterNotebook",
 				"displayName": "Create New Jupyter Notebook",
 				"icon": "$(notebook)",
 				"toolReferenceName": "createJupyterNotebook",
@@ -652,7 +626,7 @@
 				"tags": []
 			},
 			{
-				"name": "copilot_insertEdit",
+				"name": "assistant_insertEdit",
 				"toolReferenceName": "insertEdit",
 				"displayName": "%copilot.tools.insertEdit.name%",
 				"modelDescription": "Insert new code into an existing file in the workspace. Use this tool once per file that needs to be modified, even if there are multiple changes for a file. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the files, you just need to provide minimal hints.\nAvoid repeating existing code, instead use comments to represent regions of unchanged code. Be as concise as possible. For example:\n// ...existing code...\n{ changed code }\n// ...existing code...\n{ changed code }\n// ...existing code...\n\nHere is an example of how you should use format an edit to an existing Person class:\nclass Person {\n\t// ...existing code...\n\tage: number;\n\t// ...existing code...\n\tgetAge() {\n\treturn this.age;\n\t}\n}",
@@ -681,7 +655,7 @@
 				}
 			},
 			{
-				"name": "copilot_createFile",
+				"name": "assistant_createFile",
 				"toolReferenceName": "createFile",
 				"legacyToolReferenceFullNames": [
 					"createFile"
@@ -709,7 +683,7 @@
 				}
 			},
 			{
-				"name": "copilot_createDirectory",
+				"name": "assistant_createDirectory",
 				"toolReferenceName": "createDirectory",
 				"legacyToolReferenceFullNames": [
 					"createDirectory"
@@ -732,7 +706,7 @@
 				}
 			},
 			{
-				"name": "copilot_openSimpleBrowser",
+				"name": "assistant_openSimpleBrowser",
 				"displayName": "%copilot.tools.openSimpleBrowser.name%",
 				"modelDescription": "Preview a website or open a URL in the editor's Simple Browser. Useful for quickly viewing locally hosted websites, demos, or resources without leaving the coding environment.",
 				"userDescription": "%copilot.tools.openSimpleBrowser.description%",
@@ -755,7 +729,7 @@
 				}
 			},
 			{
-				"name": "copilot_replaceString",
+				"name": "assistant_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
 				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use 'Lines 123-456 omitted' from summarized documents or ...existing code... comments in the oldString or newString.",
@@ -784,7 +758,7 @@
 				}
 			},
 			{
-				"name": "copilot_multiReplaceString",
+				"name": "assistant_multiReplaceString",
 				"toolReferenceName": "multiReplaceString",
 				"displayName": "%copilot.tools.multiReplaceString.name%",
 				"modelDescription": "This tool allows you to apply multiple replace_string_in_file operations in a single call, which is more efficient than calling replace_string_in_file multiple times. It takes an array of replacement operations and applies them sequentially. Each replacement operation has the same parameters as replace_string_in_file: filePath, oldString, newString, and explanation. This tool is ideal when you need to make multiple edits across different files or multiple edits in the same file. The tool will provide a summary of successful and failed operations.",
@@ -831,14 +805,14 @@
 				}
 			},
 			{
-				"name": "copilot_editNotebook",
+				"name": "assistant_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"icon": "$(pencil)",
 				"displayName": "%copilot.tools.editNotebook.name%",
 				"userDescription": "%copilot.tools.editNotebook.userDescription%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
-					"enable_other_tool_copilot_getNotebookSummary"
+					"enable_other_tool_assistant_getNotebookSummary"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -888,7 +862,7 @@
 				}
 			},
 			{
-				"name": "copilot_runNotebookCell",
+				"name": "assistant_runNotebookCell",
 				"displayName": "%copilot.tools.runNotebookCell.name%",
 				"toolReferenceName": "runNotebookCell",
 				"legacyToolReferenceFullNames": [
@@ -898,7 +872,7 @@
 				"modelDescription": "This is a tool for running a code cell in a notebook file directly in the notebook editor. The output from the execution will be returned. Code cells should be run as they are added or edited when working through a problem to bring the kernel state up to date and ensure the code executes successfully. Code cells are ready to run and don't require any pre-processing. If asked to run the first cell in a notebook, you should run the first code cell since markdown cells cannot be executed. NOTE: Avoid executing Markdown cells or providing Markdown cell IDs, as Markdown cells cannot be  executed.",
 				"userDescription": "%copilot.tools.runNotebookCell.description%",
 				"tags": [
-					"enable_other_tool_copilot_getNotebookSummary"
+					"enable_other_tool_assistant_getNotebookSummary"
 				],
 				"inputSchema": {
 					"type": "object",
@@ -927,7 +901,7 @@
 				}
 			},
 			{
-				"name": "copilot_getNotebookSummary",
+				"name": "assistant_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
 				"legacyToolReferenceFullNames": [
 					"runNotebooks/getNotebookSummary"
@@ -949,7 +923,7 @@
 				}
 			},
 			{
-				"name": "copilot_readNotebookCellOutput",
+				"name": "assistant_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
 				"toolReferenceName": "readNotebookCellOutput",
 				"legacyToolReferenceFullNames": [
@@ -979,7 +953,7 @@
 				}
 			},
 			{
-				"name": "copilot_fetchWebPage",
+				"name": "assistant_fetchWebPage",
 				"displayName": "%copilot.tools.fetchWebPage.name%",
 				"toolReferenceName": "fetch",
 				"legacyToolReferenceFullNames": [
@@ -1012,7 +986,7 @@
 				}
 			},
 			{
-				"name": "copilot_findTestFiles",
+				"name": "assistant_findTestFiles",
 				"displayName": "%copilot.tools.findTestFiles.name%",
 				"icon": "$(beaker)",
 				"canBeReferencedInPrompt": false,
@@ -1036,7 +1010,7 @@
 				}
 			},
 			{
-				"name": "copilot_getDocInfo",
+				"name": "assistant_getDocInfo",
 				"displayName": "%copilot.tools.getDocInfo.name%",
 				"icon": "$(beaker)",
 				"canBeReferencedInPrompt": false,
@@ -1061,7 +1035,7 @@
 				}
 			},
 			{
-				"name": "copilot_getSearchResults",
+				"name": "assistant_getSearchResults",
 				"toolReferenceName": "searchResults",
 				"displayName": "%github.copilot.tools.searchResults.name%",
 				"icon": "$(search)",
@@ -1069,7 +1043,7 @@
 				"modelDescription": "The results from the search view"
 			},
 			{
-				"name": "copilot_githubRepo",
+				"name": "assistant_githubRepo",
 				"toolReferenceName": "githubRepo",
 				"legacyToolReferenceFullNames": [
 					"githubRepo"
@@ -1098,7 +1072,7 @@
 				}
 			},
 			{
-				"name": "copilot_toolReplay",
+				"name": "assistant_toolReplay",
 				"modelDescription": "Replays a tool call from a previous chat session.",
 				"displayName": "tool replay",
 				"when": "false",
@@ -1121,7 +1095,7 @@
 				}
 			},
 			{
-				"name": "copilot_askQuestions",
+				"name": "assistant_askQuestions",
 				"toolReferenceName": "askQuestions",
 				"displayName": "%copilot.tools.askQuestions.name%",
 				"userDescription": "%copilot.tools.askQuestions.description%",
@@ -1198,7 +1172,7 @@
 				}
 			},
 			{
-				"name": "copilot_switchAgent",
+				"name": "assistant_switchAgent",
 				"toolReferenceName": "switchAgent",
 				"displayName": "%copilot.tools.switchAgent.name%",
 				"userDescription": "%copilot.tools.switchAgent.description%",
@@ -1222,7 +1196,7 @@
 				}
 			},
 			{
-				"name": "copilot_memory",
+				"name": "assistant_memory",
 				"displayName": "Memory",
 				"toolReferenceName": "memory",
 				"canBeReferencedInPrompt": true,
@@ -1292,7 +1266,7 @@
 				}
 			},
 			{
-				"name": "copilot_editFiles",
+				"name": "assistant_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",
 				"icon": "$(pencil)",
@@ -2874,9 +2848,132 @@
 				"title": "%github.copilot.command.cloudSessions.openRepository.title%",
 				"icon": "$(repo)",
 				"category": "GitHub Copilot"
+			},
+			{
+				"command": "yourcompany.ai.updateSecret",
+				"title": "Update Client Secret",
+				"category": "Your Company AI"
 			}
 		],
 		"configuration": [
+			{
+				"title": "Azure OpenAI",
+				"properties": {
+					"yourcompany.ai.tenantId": {
+						"type": "string",
+						"default": "",
+						"description": "Azure AD tenant ID for service principal authentication"
+					},
+					"yourcompany.ai.clientId": {
+						"type": "string",
+						"default": "",
+						"description": "Service principal client ID (app registration)"
+					},
+					"yourcompany.ai.endpoint": {
+						"type": "string",
+						"default": "",
+						"description": "Azure OpenAI endpoint URL (e.g. https://your-resource.openai.azure.com)"
+					},
+					"yourcompany.ai.deployments": {
+						"type": "object",
+						"default": {},
+						"description": "Map of deployment name to model config",
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name for the model"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"default": 128000,
+									"description": "Maximum input tokens"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"default": 16384,
+									"description": "Maximum output tokens"
+								},
+								"toolCalling": {
+									"type": "boolean",
+									"default": true,
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports image input"
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking/reasoning"
+								},
+								"apiVersion": {
+									"type": "string",
+									"default": "2024-12-01-preview",
+									"description": "Azure OpenAI API version"
+								}
+							}
+						}
+					},
+					"yourcompany.ai.embeddingsDeployment": {
+						"type": "string",
+						"default": "text-embedding-3-large",
+						"description": "Azure OpenAI deployment name for embeddings (text-embedding-3-large)"
+					},
+					"yourcompany.ai.embeddingsApiVersion": {
+						"type": "string",
+						"default": "2024-12-01-preview",
+						"description": "API version for the embeddings deployment"
+					},
+					"yourcompany.ai.routing": {
+						"type": "object",
+						"default": {},
+						"description": "Feature-to-deployment routing overrides. Keys: chat, embeddings, completions, code-apply, intent-detection",
+						"properties": {
+							"chat": {
+								"type": "string",
+								"description": "Deployment for chat requests"
+							},
+							"embeddings": {
+								"type": "string",
+								"description": "Deployment for embeddings"
+							},
+							"completions": {
+								"type": "string",
+								"description": "Deployment for inline completions"
+							},
+							"code-apply": {
+								"type": "string",
+								"description": "Deployment for code application (diffs)"
+							},
+							"intent-detection": {
+								"type": "string",
+								"description": "Deployment for intent detection"
+							}
+						}
+					},
+					"yourcompany.ai.customInstructions": {
+						"oneOf": [
+							{
+								"type": "string",
+								"description": "A single custom instruction string to include in all prompts"
+							},
+							{
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "An array of custom instruction strings to include in all prompts"
+							}
+						],
+						"default": [],
+						"description": "Custom instructions to inject into all Copilot chat prompts. Can be a single string or an array of strings."
+					}
+				}
+			},
 			{
 				"title": "GitHub Copilot Chat",
 				"id": "stable",
@@ -5875,7 +5972,6 @@
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
 		"typescript-eslint": "^8.36.0",
-		"typescript-formatter": "github:jrieken/typescript-formatter#497efb26bc40b5fa59a350e6eab17bce650a7e4b",
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
