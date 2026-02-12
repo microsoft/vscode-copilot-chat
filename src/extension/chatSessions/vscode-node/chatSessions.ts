@@ -96,6 +96,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const chatParticipant = vscode.chat.createChatParticipant(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider.createHandler());
 		chatParticipant.iconPath = new vscode.ThemeIcon('claude');
 		this._register(vscode.chat.registerChatSessionContentProvider(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider, chatParticipant));
+		// Register as both content provider and item provider to enable session forking
+		this._register(vscode.chat.registerChatSessionItemProvider(ClaudeSessionUri.claudeSessionType, chatSessionContentProvider));
 
 		// #endregion
 

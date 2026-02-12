@@ -43,12 +43,18 @@ const MAX_MRU_ENTRIES = 10;
 /** Sentinel value indicating no Claude models with Messages API are available */
 export const UNAVAILABLE_MODEL_ID = '__unavailable__';
 
-export class ClaudeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
+export class ClaudeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionOptions = this._register(new Emitter<vscode.ChatSessionOptionChangeEvent>());
 	readonly onDidChangeChatSessionOptions = this._onDidChangeChatSessionOptions.event;
 
 	private readonly _onDidChangeChatSessionProviderOptions = this._register(new Emitter<void>());
 	readonly onDidChangeChatSessionProviderOptions = this._onDidChangeChatSessionProviderOptions.event;
+
+	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
+	readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
+
+	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
+	readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 
 	// Track option selections per session (in-memory, committed to session state service on request handling)
 	private readonly _sessionModels = new Map<string, string>();
@@ -283,6 +289,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			// all property reads and writes use a consistent key.
 			let effectiveSessionId: string;
 			let isNewSession: boolean;
+			let shouldCommitUntitledSession = false;
 			if (chatSessionContext.isUntitled) {
 				const existing = this._untitledToEffectiveSessionId.get(sessionId);
 				if (existing) {
@@ -291,6 +298,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				} else {
 					effectiveSessionId = generateUuid();
 					isNewSession = true;
+					shouldCommitUntitledSession = true;
 					this._untitledToEffectiveSessionId.set(sessionId, effectiveSessionId);
 					this._effectiveToUntitledSessionId.set(effectiveSessionId, sessionId);
 
@@ -325,8 +333,33 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
 
+			// If this was an untitled session that we just created, commit it to a persistent session
+			if (shouldCommitUntitledSession && !result.errorDetails) {
+				const newSessionUri = ClaudeSessionUri.forSessionId(effectiveSessionId);
+				const newSessionLabel = prompt.substring(0, 50) + (prompt.length > 50 ? '...' : '');
+				this._onDidCommitChatSessionItem.fire({
+					original: chatSessionContext.chatSessionItem,
+					modified: {
+						resource: newSessionUri,
+						label: newSessionLabel
+					}
+				});
+			}
+
 			return result.errorDetails ? { errorDetails: result.errorDetails } : {};
 		};
+	}
+
+	// #endregion
+
+	// #region ChatSessionItemProvider
+
+	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
+		const sessions = await this.sessionService.getAllSessions(token);
+		return sessions.map(session => {
+			const item = this._controller.createChatSessionItem(session);
+			return item;
+		});
 	}
 
 	// #endregion
@@ -672,6 +705,13 @@ export class ClaudeChatSessionItemController extends Disposable {
 		};
 		item.iconPath = new vscode.ThemeIcon('claude');
 		return item;
+	}
+
+	/**
+	 * Public wrapper for creating session items, used by ChatSessionItemProvider
+	 */
+	public createChatSessionItem(session: IClaudeCodeSessionInfo): vscode.ChatSessionItem {
+		return this._createClaudeChatSessionItem(session);
 	}
 
 	private _computeShowBadge(): boolean {
