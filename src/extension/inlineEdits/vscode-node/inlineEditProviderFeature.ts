@@ -66,10 +66,8 @@ export class InlineEditProviderFeature {
 
 	public readonly inlineEditsEnabled = derived(this, (reader) => {
 		const copilotToken = this._copilotToken.read(reader);
-		// Azure-only fork: always enable inline edits. Auth is handled by the
-		// Azure endpoint (API key), not via GitHub Copilot tokens.
 		if (copilotToken === undefined) {
-			return true;
+			return false;
 		}
 		if (copilotToken.isCompletionsQuotaExceeded) {
 			return false;

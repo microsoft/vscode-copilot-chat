@@ -127,10 +127,6 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 		});
 
-		// Azure-only fork: skip remote index status entirely.
-		// Remote code search requires GitHub authentication which is not available.
-		// Fall through directly to local indexing status.
-		if (false) {
 		// If we have remote index info, prioritize showing information related to it
 		switch (state.remoteIndexState.status) {
 			case 'initializing':
@@ -239,7 +235,6 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 				break;
 			}
 		}
-		} // end Azure-only fork: skip remote index
 
 		// For local indexing
 		const localStatus = await this.getLocalIndexStatusItem(state);
