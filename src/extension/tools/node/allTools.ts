@@ -41,3 +41,8 @@ import './toolReplayTool';
 import './usagesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+import './azureDevOps/adoGetWorkItemTool';
+import './azureDevOps/adoQueryWorkItemsTool';
+import './azureDevOps/adoUpdateWorkItemTool';
+import './azureDevOps/adoCreateWorkItemTool';
+import './azureDevOps/adoAddCommentTool';
