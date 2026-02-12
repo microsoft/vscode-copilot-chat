@@ -1,7 +1,7 @@
 [
   {
     "name": "goWebApp",
-    "question": "@workspace /setupTests",
+    "question": "/setupTests",
     "keywords": {
       "anyOf": [
         "testing",

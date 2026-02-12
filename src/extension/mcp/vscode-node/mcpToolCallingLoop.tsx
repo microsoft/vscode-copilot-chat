@@ -7,6 +7,7 @@ import type { CancellationToken, LanguageModelToolInformation, Progress } from '
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -40,8 +41,9 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
+		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
 	}
 
 	private async getEndpoint() {

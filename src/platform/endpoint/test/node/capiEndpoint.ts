@@ -37,10 +37,6 @@ export class CAPITestEndpoint extends ChatEndpoint {
 	) {
 		super(modelMetadata,
 			domainService,
-			capiClientService,
-			fetcherService,
-			telemetryService,
-			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,

@@ -167,7 +167,7 @@ describe('CopilotCLITools', () => {
 			const part = createCopilotCLIToolInvocation({ toolName: 'str_replace_editor', toolCallId: 'e1', arguments: { command: 'create', path: '/tmp/x.ts' } });
 			expect(part).toBeInstanceOf(ChatToolInvocationPart);
 			const msg = getInvocationMessageText(part as ChatToolInvocationPart);
-			expect(msg).toMatch(/Created/);
+			expect(msg).toMatch(/Creat/);
 		});
 	});
 

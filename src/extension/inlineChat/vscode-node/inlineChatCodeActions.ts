@@ -10,7 +10,6 @@ import { IReviewService } from '../../../platform/review/common/reviewService';
 import { extractImageAttributes } from '../../../util/common/imageUtils';
 import * as path from '../../../util/vs/base/common/path';
 import { Intent } from '../../common/constants';
-import { workspaceIntentId } from '../../intents/node/workspaceIntent';
 
 class AICodeAction extends vscode.CodeAction {
 	override readonly isAI = true;
@@ -121,7 +120,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 
 		const explainAction = new AICodeAction(vscode.l10n.t('Explain'), QuickFixesProvider.explainKind);
 		explainAction.diagnostics = severeDiagnostics;
-		const query = `@${workspaceIntentId} /${Intent.Explain} ${diagnostics}`;
+		const query = `/${Intent.Explain} ${diagnostics}`;
 		explainAction.command = {
 			title: explainAction.title,
 			command: 'github.copilot.chat.explain',

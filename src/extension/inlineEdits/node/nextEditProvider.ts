@@ -626,7 +626,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let ithEdit = -1;
 
-		const processEdit = (streamedEdit: { readonly edit: LineReplacement; readonly isFromCursorJump: boolean; readonly window?: OffsetRange; readonly targetDocument?: DocumentId }, telemetry: IStatelessNextEditTelemetry): CachedOrRebasedEdit | undefined => {
+		const processEdit = (streamedEdit: { readonly edit: LineReplacement; readonly isFromCursorJump: boolean; readonly window?: OffsetRange; readonly originalWindow?: OffsetRange; readonly targetDocument?: DocumentId }, telemetry: IStatelessNextEditTelemetry): CachedOrRebasedEdit | undefined => {
 			++ithEdit;
 			const myLogger = logger.createSubLogger('processEdit');
 			myLogger.trace(`processing edit #${ithEdit} (starts at 0)`);
@@ -670,7 +670,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					ithEdit === 0 ? targetDocState.nextEdits : undefined,
 					ithEdit === 0 ? nextEditRequest.intermediateUserEdit : undefined,
 					req,
-					{ isFromCursorJump: streamedEdit.isFromCursorJump }
+					{ isFromCursorJump: streamedEdit.isFromCursorJump, originalEditWindow: streamedEdit.originalWindow }
 				);
 				myLogger.trace(`populated cache for ${ithEdit}`);
 			}
@@ -940,6 +940,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
 
+		logger.trace(`triggering speculative request for post-edit state (opportunityId=${req.opportunityId}, headerRequestId=${req.headerRequestId})`);
+
 		try {
 			const speculativeRequest = await this._createSpeculativeRequest(
 				req,
@@ -1147,7 +1149,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 								ithEdit === 0 ? targetDocState.nextEdits : undefined,
 								undefined, // no userEditSince for speculative
 								req,
-								{ isFromCursorJump: streamedEdit.isFromCursorJump }
+								{ isFromCursorJump: streamedEdit.isFromCursorJump, originalEditWindow: streamedEdit.originalWindow }
 							);
 
 							if (!nextEditRequest.firstEdit.isSettled && cachedEdit) {

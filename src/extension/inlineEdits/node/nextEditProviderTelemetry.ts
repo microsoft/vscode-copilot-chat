@@ -967,6 +967,8 @@ export class TelemetrySender implements IDisposable {
 			cursorJumpModelName,
 			cursorJumpPrompt,
 			cursorJumpResponse,
+			lintErrors,
+			terminalOutput,
 		} = telemetry;
 
 		const modelResponse = response === undefined ? response : await response;
@@ -988,6 +990,8 @@ export class TelemetrySender implements IDisposable {
 				cursorJumpModelName,
 				cursorJumpPrompt,
 				cursorJumpResponse,
+				lintErrors,
+				terminalOutput,
 			})
 		);
 	}

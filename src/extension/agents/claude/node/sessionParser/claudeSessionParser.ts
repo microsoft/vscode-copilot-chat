@@ -30,6 +30,7 @@ import {
 	isAssistantMessageEntry,
 	isChainLinkEntry,
 	isSummaryEntry,
+	isUserRequest,
 	ISubagentSession,
 	isUserMessageEntry,
 	ParseError,
@@ -194,6 +195,15 @@ export function parseSessionFileContent(
  * Convert a user message entry's timestamp from string to Date.
  */
 function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
+	// Extract agentId from toolUseResult if present (links Task tool_use to subagent).
+	// The toolUseResult field is typed as string | object by the validator; for Task tools
+	// it's an object containing { agentId, status, prompt, ... }. The `in` check narrows
+	// the type so no unsafe cast is needed.
+	let toolUseResultAgentId: string | undefined;
+	if (entry.toolUseResult && typeof entry.toolUseResult === 'object' && 'agentId' in entry.toolUseResult && typeof entry.toolUseResult.agentId === 'string') {
+		toolUseResultAgentId = entry.toolUseResult.agentId;
+	}
+
 	return {
 		uuid: entry.uuid,
 		sessionId: entry.sessionId,
@@ -208,6 +218,7 @@ function reviveUserMessage(entry: UserMessageEntry): StoredMessage {
 		gitBranch: entry.gitBranch,
 		slug: entry.slug,
 		agentId: entry.agentId,
+		toolUseResultAgentId,
 	};
 }
 
@@ -362,11 +373,44 @@ function buildSessionFromLeaf(
 		};
 	}
 
+	// Collect parallel tool result siblings that branched off the main chain.
+	// When parallel tool calls occur, each tool_use assistant message is chained
+	// linearly, but results come back pointing to their respective tool_use message.
+	// Only the last result is in the main chain; the others are orphaned siblings.
+	// We identify these as user messages whose parent is an assistant message already
+	// in the chain — this distinguishes tool results from edit sidechains (where
+	// both parent and child are the same role).
+	const chainUuids = new Set(messageChain.map(m => m.uuid));
+	const siblings: StoredMessage[] = [];
+	for (const msg of messages.values()) {
+		if (chainUuids.has(msg.uuid)) {
+			continue; // Already in chain
+		}
+		if (msg.parentUuid !== null && chainUuids.has(msg.parentUuid)) {
+			// Only collect user messages whose parent is an assistant message
+			const parent = messages.get(msg.parentUuid);
+			if (msg.type === 'user' && parent !== undefined && parent.type === 'assistant') {
+				siblings.push(msg);
+			}
+		}
+	}
+
+	// Insert siblings into the chain right after their parent
+	for (const sibling of siblings) {
+		const parentIndex = messageChain.findIndex(m => m.uuid === sibling.parentUuid);
+		if (parentIndex !== -1) {
+			messageChain.splice(parentIndex + 1, 0, sibling);
+			chainUuids.add(sibling.uuid);
+		}
+	}
+
 	const session: IClaudeCodeSession = {
 		id: leafMessage.sessionId,
 		label: generateSessionLabel(summaryEntry, messageChain),
 		messages: messageChain,
-		timestamp: messageChain[messageChain.length - 1].timestamp,
+		created: messageChain[0].timestamp.getTime(),
+		lastRequestStarted: findLastRequestStartedTimestamp(messageChain),
+		lastRequestEnded: messageChain[messageChain.length - 1].timestamp.getTime(),
 		subagents: [],
 	};
 
@@ -506,6 +550,21 @@ function getFirstNonEmptyLine(text: string): string {
 }
 
 /**
+ * Find the timestamp of the last genuine user request in a message chain.
+ * A genuine user request is a user message whose content is NOT solely tool_result blocks.
+ * Returns undefined if no genuine user request is found.
+ */
+function findLastRequestStartedTimestamp(messages: readonly StoredMessage[]): number | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (msg.type === 'user' && msg.message.role === 'user' && isUserRequest(msg.message.content)) {
+			return msg.timestamp.getTime();
+		}
+	}
+	return undefined;
+}
+
+/**
  * Deduplicate sessions by ID, keeping the one with the most messages.
  * This handles orphaned branches from parallel tool calls.
  */
@@ -533,16 +592,14 @@ export function buildSubagentSession(
 	chainLinks: ReadonlyMap<string, ChainLinkLike>
 ): ISubagentSession | null {
 	// Build message chain from scratch - subagent files are typically linear
-	// Find leaf nodes (messages not referenced as parents)
+	// Find leaf nodes (messages not referenced as parents by other messages).
+	// Only consider references from actual messages, not chain links (which
+	// include progress entries that would otherwise mark all messages as
+	// non-leaves).
 	const referencedAsParent = new Set<string>();
 	for (const message of messages.values()) {
 		if (message.parentUuid !== null) {
 			referencedAsParent.add(message.parentUuid);
-		}
-	}
-	for (const chainLink of chainLinks.values()) {
-		if (chainLink.parentUuid !== null) {
-			referencedAsParent.add(chainLink.parentUuid);
 		}
 	}
 
@@ -627,7 +684,9 @@ export function extractSessionMetadata(
 ): IClaudeCodeSessionInfo | null {
 	const state = {
 		summary: undefined as string | undefined,
-		firstMessageTimestamp: undefined as Date | undefined,
+		created: undefined as number | undefined,
+		lastRequestEnded: undefined as number | undefined,
+		lastRequestStartedTimestamp: undefined as number | undefined,
 		firstUserMessageContent: undefined as string | undefined,
 		foundSessionId: false,
 	};
@@ -650,7 +709,9 @@ export function extractSessionMetadata(
  */
 interface MetadataExtractionState {
 	summary: string | undefined;
-	firstMessageTimestamp: Date | undefined;
+	created: number | undefined;
+	lastRequestEnded: number | undefined;
+	lastRequestStartedTimestamp: number | undefined;
 	firstUserMessageContent: string | undefined;
 	foundSessionId: boolean;
 }
@@ -671,7 +732,7 @@ function processLineForMetadata(
 
 	// Fast string check before JSON.parse - skip lines that can't match
 	const mightBeSummary = trimmed.includes('"type":"summary"') || trimmed.includes('"type": "summary"');
-	const mightBeMessage = !state.foundSessionId && (
+	const mightBeMessage = (
 		trimmed.includes('"type":"user"') || trimmed.includes('"type": "user"') ||
 		trimmed.includes('"type":"assistant"') || trimmed.includes('"type": "assistant"')
 	);
@@ -698,43 +759,50 @@ function processLineForMetadata(
 				state.summary = summaryResult.content.summary;
 			}
 		}
-		// Check early termination
-		if (state.summary !== undefined && state.firstMessageTimestamp !== undefined) {
-			return { shouldContinue: false };
-		}
 		return { shouldContinue: true };
 	}
 
-	// Try message validation
+	// Try message validation - always process to track both first and last timestamps
 	if (mightBeMessage) {
 		const messageResult = vMessageEntry.validate(parsed);
 		if (!messageResult.error) {
 			const entry = messageResult.content;
-			state.foundSessionId = true;
-			state.firstMessageTimestamp = new Date(entry.timestamp);
+			const messageTimestamp = new Date(entry.timestamp).getTime();
 
-			// Extract user message content for label fallback
-			if (entry.type === 'user') {
-				const msgContent = entry.message.content;
-				if (typeof msgContent === 'string') {
-					state.firstUserMessageContent = msgContent;
-				} else if (Array.isArray(msgContent)) {
-					for (const block of msgContent) {
-						if (block.type === 'text' && 'text' in block) {
-							state.firstUserMessageContent = block.text;
-							break;
+			// Track first message timestamp and content
+			if (state.created === undefined) {
+				state.foundSessionId = true;
+				state.created = messageTimestamp;
+
+				// Extract user message content for label fallback
+				if (entry.type === 'user') {
+					const msgContent = entry.message.content;
+					if (typeof msgContent === 'string') {
+						state.firstUserMessageContent = msgContent;
+					} else if (Array.isArray(msgContent)) {
+						// Concatenate all text blocks - system-reminders are stripped later like comments
+						const textParts: string[] = [];
+						for (const block of msgContent) {
+							if (block.type === 'text' && 'text' in block) {
+								textParts.push(block.text);
+							}
 						}
+						state.firstUserMessageContent = textParts.join('\n');
 					}
 				}
 			}
+
+			// Track last genuine user request timestamp
+			if (entry.type === 'user' && isUserRequest(entry.message.content)) {
+				state.lastRequestStartedTimestamp = messageTimestamp;
+			}
+
+			// Always update last message timestamp (messages are chronological in file)
+			state.lastRequestEnded = messageTimestamp;
 		}
 	}
 
-	// Early termination: we have both summary and timestamp
-	if (state.summary !== undefined && state.firstMessageTimestamp !== undefined) {
-		return { shouldContinue: false };
-	}
-
+	// No early termination - we need to read all messages to get lastRequestEnded
 	return { shouldContinue: true };
 }
 
@@ -743,11 +811,11 @@ function processLineForMetadata(
  */
 function buildMetadataResult(
 	sessionId: string,
-	fileMtime: Date,
+	_fileMtime: Date,
 	state: MetadataExtractionState
 ): IClaudeCodeSessionInfo | null {
-	// Need at least some indication this is a valid session file
-	if (!state.foundSessionId && state.summary === undefined) {
+	// Require at least one message for a valid session
+	if (state.created === undefined || state.lastRequestEnded === undefined) {
 		return null;
 	}
 
@@ -765,7 +833,9 @@ function buildMetadataResult(
 	return {
 		id: sessionId,
 		label,
-		timestamp: state.firstMessageTimestamp ?? fileMtime,
+		created: state.created,
+		lastRequestStarted: state.lastRequestStartedTimestamp,
+		lastRequestEnded: state.lastRequestEnded,
 	};
 }
 
@@ -773,8 +843,8 @@ function buildMetadataResult(
  * Extract metadata from a session file using streaming to minimize memory usage.
  *
  * This is optimized for listing many sessions where we only need basic metadata.
- * It reads the file line-by-line and stops early once all needed data is found,
- * avoiding loading entire large session files into memory.
+ * It reads the file line-by-line to extract timestamps and labels without
+ * loading entire large session files into memory.
  *
  * @param filePath The filesystem path to the .jsonl session file
  * @param sessionId Session ID (from filename)
@@ -793,7 +863,9 @@ export async function extractSessionMetadataStreaming(
 
 	const state: MetadataExtractionState = {
 		summary: undefined,
-		firstMessageTimestamp: undefined,
+		created: undefined,
+		lastRequestEnded: undefined,
+		lastRequestStartedTimestamp: undefined,
 		firstUserMessageContent: undefined,
 		foundSessionId: false,
 	};

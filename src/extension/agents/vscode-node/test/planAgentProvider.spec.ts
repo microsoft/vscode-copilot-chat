@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert } from 'chai';
+import * as os from 'os';
+import * as path from 'path';
 import { afterEach, beforeEach, suite, test } from 'vitest';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -16,9 +18,8 @@ import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { buildAgentMarkdown, PlanAgentProvider } from '../planAgentProvider';
-import * as os from 'os';
-import * as path from 'path';
+import { buildAgentMarkdown } from '../agentTypes';
+import { PlanAgentProvider } from '../planAgentProvider';
 
 suite('PlanAgentProvider', () => {
 	let disposables: DisposableStore;
@@ -80,6 +81,7 @@ suite('PlanAgentProvider', () => {
 		assert.ok(content.includes('agent'));
 		assert.ok(content.includes('search'));
 		assert.ok(content.includes('read'));
+		assert.ok(content.includes('memory'));
 
 		// Should not have model override (not in base content)
 		assert.ok(content.includes('name: Plan'));
@@ -127,7 +129,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('applies model override from settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'Claude Haiku 4.5 (copilot)');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'Claude Haiku 4.5 (copilot)');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -139,9 +141,37 @@ suite('PlanAgentProvider', () => {
 		assert.ok(content.includes('model: Claude Haiku 4.5 (copilot)'));
 	});
 
+	test('applies core default model when configured', async () => {
+		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', 'Claude Haiku 4.5 (copilot)');
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		// Should contain model override from core setting
+		assert.ok(content.includes('model: Claude Haiku 4.5 (copilot)'));
+	});
+
+	test('prefers core default model over extension setting', async () => {
+		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', 'core-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'extension-model');
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		// Should contain core model override
+		assert.ok(content.includes('model: core-model'));
+		assert.ok(!content.includes('model: extension-model'));
+	});
+
 	test('applies both additionalTools and model settings together', async () => {
 		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAdditionalTools, ['extraTool']);
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'claude-3-sonnet');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'claude-3-sonnet');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -177,7 +207,20 @@ suite('PlanAgentProvider', () => {
 			eventFired = true;
 		});
 
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'new-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'new-model');
+
+		assert.equal(eventFired, true);
+	});
+
+	test('fires onDidChangeCustomAgents when core default model changes', async () => {
+		const provider = createProvider();
+
+		let eventFired = false;
+		provider.onDidChangeCustomAgents(() => {
+			eventFired = true;
+		});
+
+		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', 'core-model');
 
 		assert.equal(eventFired, true);
 	});
@@ -241,7 +284,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('preserves body content after frontmatter when applying settings', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, 'test-model');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'test-model');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -268,7 +311,7 @@ suite('PlanAgentProvider', () => {
 	});
 
 	test('handles empty model string gracefully', async () => {
-		await mockConfigurationService.setConfig(ConfigKey.PlanAgentModel, '');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, '');
 
 		const provider = createProvider();
 		const agents = await provider.provideCustomAgents({}, {} as any);
@@ -278,6 +321,20 @@ suite('PlanAgentProvider', () => {
 
 		// Should not have model field added
 		assert.ok(!content.includes('model:'));
+	});
+
+	test('falls back to extension setting when core default model is empty string', async () => {
+		await mockConfigurationService.setNonExtensionConfig('chat.planAgent.defaultModel', '');
+		await mockConfigurationService.setConfig(ConfigKey.Deprecated.PlanAgentModel, 'fallback-model');
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		// Empty core setting should fall through to extension setting
+		assert.ok(content.includes('model: fallback-model'));
 	});
 
 	test('includes handoffs in generated content', async () => {
@@ -343,7 +400,7 @@ suite('buildAgentMarkdown', () => {
 			name: 'Plan',
 			description: 'Researches and outlines multi-step plans',
 			argumentHint: 'Outline the goal or problem to research',
-			tools: ['github/issue_read', 'agent', 'search'],
+			tools: ['github/issue_read', 'agent', 'search', 'memory'],
 			model: 'Claude Haiku 4.5 (copilot)',
 			handoffs: [
 				{
@@ -364,7 +421,7 @@ name: Plan
 description: Researches and outlines multi-step plans
 argument-hint: Outline the goal or problem to research
 model: Claude Haiku 4.5 (copilot)
-tools: ['github/issue_read', 'agent', 'search']
+tools: ['github/issue_read', 'agent', 'search', 'memory']
 handoffs:
   - label: Start Implementation
     agent: agent

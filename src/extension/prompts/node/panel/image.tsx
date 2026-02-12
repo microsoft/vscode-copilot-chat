@@ -44,13 +44,14 @@ export class HistoricalImage extends PromptElement<HistoricalImageProps, unknown
 	constructor(
 		props: HistoricalImageProps,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) {
 		super(props);
 	}
 
 	override async render(_state: unknown, sizing: PromptSizing) {
 		// If the model doesn't support vision, omit historical images
-		if (!this.promptEndpoint.supportsVision) {
+		if (!this.promptEndpoint.supportsVision || !this.authService.copilotToken?.isEditorPreviewFeaturesEnabled()) {
 			return undefined;
 		}
 
@@ -77,7 +78,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 		const fillerUri: Uri = this.props.reference ?? Uri.parse('Attached Image');
 
 		try {
-			if (!this.promptEndpoint.supportsVision) {
+			if (!this.promptEndpoint.supportsVision || !this.authService.copilotToken?.isEditorPreviewFeaturesEnabled()) {
 				if (this.props.omitReferences) {
 					return;
 				}

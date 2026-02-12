@@ -16,6 +16,7 @@ export interface IFetcherService {
 	isAbortError(e: any): boolean;
 	isInternetDisconnectedError(e: any): boolean;
 	isFetcherError(e: any): boolean;
+	isNetworkProcessCrashedError(e: any): boolean;
 	getUserMessageForFetcherError(err: any): string;
 	fetchWithPagination<T>(baseUrl: string, options: PaginationOptions<T>): Promise<T[]>;
 }

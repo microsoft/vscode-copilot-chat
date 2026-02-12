@@ -14,7 +14,7 @@ import {
 	extractSessionMetadataStreaming,
 	parseSessionFileContent,
 } from '../claudeSessionParser';
-import { StoredMessage } from '../claudeSessionSchema';
+import { isUserRequest, StoredMessage } from '../claudeSessionSchema';
 
 describe('claudeSessionParser', () => {
 	// ========================================================================
@@ -94,6 +94,97 @@ describe('claudeSessionParser', () => {
 			expect(result.errors.length).toBe(0);
 		});
 
+		it('should parse assistant message with cache_creation: null in usage (newer SDK format)', () => {
+			const content = JSON.stringify({
+				parentUuid: '8d4dcda5-3984-42c4-9b9e-d57f64a924dc',
+				isSidechain: false,
+				type: 'assistant',
+				message: {
+					role: 'assistant',
+					content: [{ type: 'text', text: 'Hello!' }],
+					id: 'msg_123',
+					model: 'claude-sonnet-4',
+					type: 'message',
+					stop_reason: null,
+					stop_sequence: null,
+					usage: {
+						input_tokens: 0,
+						cache_creation_input_tokens: 0,
+						cache_read_input_tokens: 0,
+						output_tokens: 1,
+						cache_creation: null,
+					},
+				},
+				uuid: 'cc74a117-72ce-4ea6-8d01-4401e60ddfeb',
+				sessionId: '6762c0b9-ee55-42cc-8998-180da7f37462',
+				timestamp: '2026-01-31T00:35:00.000Z',
+			});
+
+			const result = parseSessionFileContent(content);
+
+			expect(result.messages.size).toBe(1);
+			expect(result.stats.assistantMessages).toBe(1);
+			expect(result.stats.chainLinks).toBe(0);
+			expect(result.errors.length).toBe(0);
+
+			const message = result.messages.get('cc74a117-72ce-4ea6-8d01-4401e60ddfeb');
+			expect(message).toBeDefined();
+			expect(message?.type).toBe('assistant');
+		});
+
+		it('should not misclassify assistant messages with null usage fields as chain links', () => {
+			// Regression test: assistant messages with cache_creation: null were being
+			// misclassified as chain links because vObj rejects null, causing the entire
+			// assistant message validation to fail and fall through to vChainLinkEntry.
+			const lines = [
+				JSON.stringify({
+					parentUuid: null,
+					type: 'user',
+					message: { role: 'user', content: 'Hello' },
+					uuid: 'uuid-user-1',
+					sessionId: 'session-1',
+					timestamp: '2026-01-31T00:34:50.049Z',
+				}),
+				JSON.stringify({
+					parentUuid: 'uuid-user-1',
+					type: 'assistant',
+					message: {
+						role: 'assistant',
+						content: [{ type: 'text', text: 'Hi there!' }],
+						id: 'msg_1',
+						model: 'claude-sonnet-4',
+						type: 'message',
+						stop_reason: 'end_turn',
+						stop_sequence: null,
+						usage: {
+							input_tokens: 100,
+							cache_creation_input_tokens: 0,
+							cache_read_input_tokens: 0,
+							output_tokens: 50,
+							cache_creation: null,
+						},
+					},
+					uuid: 'uuid-assistant-1',
+					sessionId: 'session-1',
+					timestamp: '2026-01-31T00:35:00.000Z',
+				}),
+			];
+
+			const result = parseSessionFileContent(lines.join('\n'));
+
+			expect(result.messages.size).toBe(2);
+			expect(result.stats.userMessages).toBe(1);
+			expect(result.stats.assistantMessages).toBe(1);
+			expect(result.stats.chainLinks).toBe(0);
+			expect(result.errors.length).toBe(0);
+
+			// Verify the session can be built correctly
+			const buildResult = buildSessions(result.messages, result.summaries, result.chainLinks);
+			expect(buildResult.sessions.length).toBe(1);
+			expect(buildResult.sessions[0].messages.length).toBe(2);
+			expect(buildResult.sessions[0].messages[1].type).toBe('assistant');
+		});
+
 		it('should parse summary entry', () => {
 			const content = JSON.stringify({
 				type: 'summary',
@@ -168,6 +259,38 @@ describe('claudeSessionParser', () => {
 			expect(result.stats.skippedEmpty).toBe(4);
 			expect(result.stats.queueOperations).toBe(1);
 			expect(result.errors.length).toBe(0);
+		});
+	});
+
+	// ========================================================================
+	// isUserRequest
+	// ========================================================================
+
+	describe('isUserRequest', () => {
+		it('should return true for string content', () => {
+			expect(isUserRequest('Hello world')).toBe(true);
+		});
+
+		it('should return true for array with text block', () => {
+			expect(isUserRequest([{ type: 'text', text: 'Hello' }])).toBe(true);
+		});
+
+		it('should return false for array with only tool_result blocks', () => {
+			expect(isUserRequest([
+				{ type: 'tool_result', tool_use_id: 'tool-1', content: 'result' },
+				{ type: 'tool_result', tool_use_id: 'tool-2', content: 'result' },
+			])).toBe(false);
+		});
+
+		it('should return true for mixed array with tool_result and text', () => {
+			expect(isUserRequest([
+				{ type: 'tool_result', tool_use_id: 'tool-1', content: 'result' },
+				{ type: 'text', text: 'Follow-up question' },
+			])).toBe(true);
+		});
+
+		it('should return false for empty array', () => {
+			expect(isUserRequest([])).toBe(false);
 		});
 	});
 
@@ -394,6 +517,203 @@ describe('claudeSessionParser', () => {
 			// Session should contain at least some messages (stops at cycle)
 			expect(result.sessions[0].messages.length).toBeGreaterThan(0);
 		});
+
+		it('should set lastRequestStarted to last genuine user request', () => {
+			const messages = new Map<string, StoredMessage>([
+				['msg-1', createTestMessage({
+					uuid: 'msg-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: 'Hello' },
+				})],
+				['msg-2', createTestMessage({
+					uuid: 'msg-2',
+					sessionId: 'session-1',
+					parentUuid: 'msg-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+				['msg-3', createTestMessage({
+					uuid: 'msg-3',
+					sessionId: 'session-1',
+					parentUuid: 'msg-2',
+					timestamp: new Date('2026-01-31T00:03:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'done' }] },
+				})],
+				['msg-4', createTestMessage({
+					uuid: 'msg-4',
+					sessionId: 'session-1',
+					parentUuid: 'msg-3',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:04:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions[0].lastRequestStarted).toBe(new Date('2026-01-31T00:01:00Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', () => {
+			const messages = new Map<string, StoredMessage>([
+				['msg-1', createTestMessage({
+					uuid: 'msg-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'done' }] },
+				})],
+				['msg-2', createTestMessage({
+					uuid: 'msg-2',
+					sessionId: 'session-1',
+					parentUuid: 'msg-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions[0].lastRequestStarted).toBeUndefined();
+		});
+
+		it('should include parallel tool result siblings in session', () => {
+			// Simulates parallel tool calls: assistant sends 4 Task tool_use messages
+			// as a linear chain, then tool results come back pointing to their respective
+			// tool_use assistant messages. Only the last tool result is in the "main" chain;
+			// the others branch off as siblings.
+			//
+			// Structure:
+			//   user-1 -> asst-thinking -> asst-tool-1 -> asst-tool-2 -> asst-tool-3 -> asst-tool-4
+			//                                 |               |               |               |
+			//                              result-1        result-2        result-3        result-4
+			//                                                                                 |
+			//                                                                          asst-final -> asst-text
+			const messages = new Map<string, StoredMessage>([
+				['user-1', createTestMessage({
+					uuid: 'user-1',
+					sessionId: 'session-1',
+					parentUuid: null,
+					timestamp: new Date('2026-01-31T00:01:00Z'),
+					message: { role: 'user', content: 'Run 4 tasks in parallel' },
+				})],
+				['asst-thinking', createTestMessage({
+					uuid: 'asst-thinking',
+					sessionId: 'session-1',
+					parentUuid: 'user-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:02:00Z'),
+				})],
+				// 4 tool_use messages chained linearly
+				['asst-tool-1', createTestMessage({
+					uuid: 'asst-tool-1',
+					sessionId: 'session-1',
+					parentUuid: 'asst-thinking',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:00Z'),
+				})],
+				['asst-tool-2', createTestMessage({
+					uuid: 'asst-tool-2',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-1',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:01Z'),
+				})],
+				['asst-tool-3', createTestMessage({
+					uuid: 'asst-tool-3',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-2',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:02Z'),
+				})],
+				['asst-tool-4', createTestMessage({
+					uuid: 'asst-tool-4',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-3',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:03:03Z'),
+				})],
+				// Tool results - each points back to its tool_use assistant message
+				['result-1', createTestMessage({
+					uuid: 'result-1',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-1',
+					timestamp: new Date('2026-01-31T00:04:00Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'Done 1' }] },
+					toolUseResultAgentId: 'agent-1',
+				})],
+				['result-2', createTestMessage({
+					uuid: 'result-2',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-2',
+					timestamp: new Date('2026-01-31T00:04:01Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-2', content: 'Done 2' }] },
+					toolUseResultAgentId: 'agent-2',
+				})],
+				['result-3', createTestMessage({
+					uuid: 'result-3',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-3',
+					timestamp: new Date('2026-01-31T00:04:02Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-3', content: 'Done 3' }] },
+					toolUseResultAgentId: 'agent-3',
+				})],
+				['result-4', createTestMessage({
+					uuid: 'result-4',
+					sessionId: 'session-1',
+					parentUuid: 'asst-tool-4',
+					timestamp: new Date('2026-01-31T00:04:03Z'),
+					message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-4', content: 'Done 4' }] },
+					toolUseResultAgentId: 'agent-4',
+				})],
+				// Continuation after all tools complete - connected to last result
+				['asst-final', createTestMessage({
+					uuid: 'asst-final',
+					sessionId: 'session-1',
+					parentUuid: 'result-4',
+					type: 'assistant',
+					timestamp: new Date('2026-01-31T00:05:00Z'),
+				})],
+			]);
+
+			const result = buildSessions(messages, new Map(), new Map());
+
+			expect(result.sessions.length).toBe(1);
+			const session = result.sessions[0];
+
+			// The session should include ALL tool results, not just the last one
+			const toolResultMessages = session.messages.filter(
+				m => m.toolUseResultAgentId !== undefined
+			);
+			expect(toolResultMessages).toHaveLength(4);
+			expect(toolResultMessages.map(m => m.toolUseResultAgentId).sort())
+				.toEqual(['agent-1', 'agent-2', 'agent-3', 'agent-4']);
+
+			// All 11 messages should be present (user + thinking + 4 tool_use + 4 results + final)
+			expect(session.messages.length).toBe(11);
+		});
+
+		it('should parse parallel subagent fixture correctly', () => {
+			const fixturePath = path.resolve(__dirname, '../../test/fixtures', 'b3a7bd3c-5a10-4e7b-8ff0-7fc0cd6d1093.jsonl');
+			const content = fs.readFileSync(fixturePath, 'utf8');
+			const parseResult = parseSessionFileContent(content);
+
+			const buildResult = buildSessions(parseResult.messages, parseResult.summaries, parseResult.chainLinks);
+
+			expect(buildResult.sessions.length).toBe(1);
+			const session = buildResult.sessions[0];
+
+			// The fixture has 4 parallel tool calls (subagents a775a67, ae52dab, aa9d784, ac47f8c)
+			// Each tool_result user message has a toolUseResultAgentId
+			const toolResultMessages = session.messages.filter(
+				m => m.toolUseResultAgentId !== undefined
+			);
+			expect(toolResultMessages).toHaveLength(4);
+
+			const agentIds = toolResultMessages.map(m => m.toolUseResultAgentId).sort();
+			expect(agentIds).toEqual(['a775a67', 'aa9d784', 'ac47f8c', 'ae52dab']);
+		});
 	});
 
 	// #region buildSubagentSession
@@ -522,7 +842,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
 		it('should extract label from first user message when no summary', () => {
@@ -557,16 +877,6 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Hello'); // Falls back to user message content
 		});
 
-		it('should use file mtime as fallback timestamp', () => {
-			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
-			const fileMtime = new Date('2026-02-01T12:00:00.000Z');
-
-			const metadata = extractSessionMetadata(content, 'session-1', fileMtime);
-
-			expect(metadata).not.toBeNull();
-			expect(metadata!.timestamp).toEqual(fileMtime);
-		});
-
 		it('should return null for empty content', () => {
 			const metadata = extractSessionMetadata('', 'session-1', new Date());
 
@@ -589,6 +899,65 @@ describe('claudeSessionParser', () => {
 
 			expect(metadata).not.toBeNull();
 			expect(metadata!.label).toBe('Actual message');
+		});
+
+		it('should extract created and lastRequestEnded from single message', () => {
+			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should extract different created and lastRequestEnded from multiple messages', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":"Follow up"}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:37:30.000Z').getTime());
+		});
+
+		it('should return null when only summary exists (no messages)', () => {
+			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).toBeNull();
+		});
+
+		it('should set lastRequestStarted for genuine user request', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+
+			const metadata = extractSessionMetadata(content, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBeUndefined();
 		});
 	});
 
@@ -634,7 +1003,7 @@ describe('claudeSessionParser', () => {
 			expect(metadata).not.toBeNull();
 			expect(metadata!.id).toBe('session-1');
 			expect(metadata!.label).toBe('Test session summary');
-			expect(metadata!.timestamp).toEqual(new Date('2026-01-31T00:34:50.049Z'));
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
 		});
 
 		it('should extract label from first user message when no summary', async () => {
@@ -672,17 +1041,6 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Hello');
 		});
 
-		it('should use file mtime as fallback timestamp', async () => {
-			const content = '{"type":"summary","summary":"Just a summary","leafUuid":"uuid-1"}';
-			const filePath = createTempFile(content);
-			const fileMtime = new Date('2026-02-01T12:00:00.000Z');
-
-			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', fileMtime);
-
-			expect(metadata).not.toBeNull();
-			expect(metadata!.timestamp).toEqual(fileMtime);
-		});
-
 		it('should return null for empty content', async () => {
 			const filePath = createTempFile('');
 
@@ -711,23 +1069,80 @@ describe('claudeSessionParser', () => {
 			expect(metadata!.label).toBe('Actual message');
 		});
 
-		it('should stop reading early when metadata is found', async () => {
-			// Create a file where metadata is at the beginning, followed by lots of extra data
+		it('should extract created and lastRequestEnded from single message', async () => {
+			const content = '{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}';
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should extract different created and lastRequestEnded from multiple messages', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":"Follow up"}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T00:37:30.000Z').getTime());
+		});
+
+		it('should read all messages to get lastRequestEnded', async () => {
+			// Create a file where summary is early but last message timestamp is at the end
 			const lines = [
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
 				'{"type":"summary","summary":"Test summary","leafUuid":"uuid-1"}',
 			];
-			// Add many more lines that shouldn't need to be read
-			for (let i = 0; i < 1000; i++) {
-				lines.push(`{"type":"assistant","uuid":"uuid-${i + 2}","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":"Response ${i}"}}`);
+			// Add more messages - the last one should be captured
+			for (let i = 0; i < 10; i++) {
+				lines.push(`{"type":"assistant","uuid":"uuid-${i + 2}","sessionId":"session-1","timestamp":"2026-01-31T01:0${i}:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}`);
 			}
 			const filePath = createTempFile(lines.join('\n'));
 
 			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
 
-			// Should still get correct metadata
 			expect(metadata).not.toBeNull();
 			expect(metadata!.label).toBe('Test summary');
+			expect(metadata!.created).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+			// Last message is at index 9, so timestamp is 01:09:00
+			expect(metadata!.lastRequestEnded).toBe(new Date('2026-01-31T01:09:00.000Z').getTime());
+		});
+
+		it('should set lastRequestStarted for genuine user request', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+				'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:30.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBe(new Date('2026-01-31T00:34:50.049Z').getTime());
+		});
+
+		it('should set lastRequestStarted to undefined when all user messages are tool results', async () => {
+			const content = [
+				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+				'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}'
+			].join('\n');
+			const filePath = createTempFile(content);
+
+			const metadata = await extractSessionMetadataStreaming(filePath, 'session-1', new Date('2026-01-31T00:00:00.000Z'));
+
+			expect(metadata).not.toBeNull();
+			expect(metadata!.lastRequestStarted).toBeUndefined();
 		});
 
 		it('should handle cancellation via AbortSignal', async () => {
@@ -797,6 +1212,14 @@ describe('claudeSessionParser', () => {
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"This is a very long message that should be truncated to 50 characters maximum"}}',
 				// Array content blocks
 				'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":[{"type":"text","text":"Array block content"}]}}',
+				// Multi-turn with tool result (lastRequestStarted should differ from lastRequestEnded)
+				[
+					'{"type":"user","uuid":"uuid-1","sessionId":"session-1","timestamp":"2026-01-31T00:34:50.049Z","parentUuid":null,"message":{"role":"user","content":"Hello"}}',
+					'{"type":"assistant","uuid":"uuid-2","sessionId":"session-1","timestamp":"2026-01-31T00:35:00.000Z","parentUuid":"uuid-1","message":{"role":"assistant","content":[]}}',
+					'{"type":"user","uuid":"uuid-3","sessionId":"session-1","timestamp":"2026-01-31T00:36:00.000Z","parentUuid":"uuid-2","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}',
+					'{"type":"assistant","uuid":"uuid-4","sessionId":"session-1","timestamp":"2026-01-31T00:37:00.000Z","parentUuid":"uuid-3","message":{"role":"assistant","content":[]}}',
+					'{"type":"summary","summary":"Tool result session","leafUuid":"uuid-4"}'
+				].join('\n'),
 			];
 
 			const fileMtime = new Date('2026-01-31T00:00:00.000Z');
@@ -815,9 +1238,11 @@ describe('claudeSessionParser', () => {
 
 				const fullSession = buildResult.sessions[0];
 
-				// Label and timestamp should match
+				// Label and timestamps should match
 				expect(metadataResult!.label).toBe(fullSession.label);
-				expect(metadataResult!.timestamp).toEqual(fullSession.timestamp);
+				expect(metadataResult!.created).toEqual(fullSession.created);
+				expect(metadataResult!.lastRequestStarted).toEqual(fullSession.lastRequestStarted);
+				expect(metadataResult!.lastRequestEnded).toEqual(fullSession.lastRequestEnded);
 			}
 		});
 

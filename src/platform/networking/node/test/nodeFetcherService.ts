@@ -43,6 +43,9 @@ export class NodeFetcherService implements IFetcherService {
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
 	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
+	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
 	}

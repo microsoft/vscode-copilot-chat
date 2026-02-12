@@ -323,6 +323,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 						return l10n.t('Edit {0}', formatUriForFileWidget(uri));
 				}
 			},
+			options.forceConfirmationReason
 		);
 
 		return {
