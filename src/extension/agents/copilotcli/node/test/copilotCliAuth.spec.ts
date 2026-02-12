@@ -22,6 +22,12 @@ describe('CopilotCLISDK Authentication', () => {
 	let instantiationService: IInstantiationService;
 	let logService: ILogService;
 
+	class TestCopilotCLISDK extends CopilotCLISDK {
+		protected override async ensureShims(): Promise<void> {
+			return;
+		}
+	}
+
 	// Helper to create a mock extension context
 	function createMockExtensionContext(): IVSCodeExtensionContext {
 		return {
@@ -67,7 +73,7 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		} as unknown as IAuthenticationService;
 
-		const sdk = new CopilotCLISDK(
+		const sdk = new TestCopilotCLISDK(
 			createMockExtensionContext(),
 			createMockEnvService(),
 			logService,
@@ -105,7 +111,7 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		} as unknown as IAuthenticationService;
 
-		const sdk = new CopilotCLISDK(
+		const sdk = new TestCopilotCLISDK(
 			createMockExtensionContext(),
 			createMockEnvService(),
 			logService,
@@ -136,7 +142,7 @@ describe('CopilotCLISDK Authentication', () => {
 			}
 		} as unknown as IAuthenticationService;
 
-		const sdk = new CopilotCLISDK(
+		const sdk = new TestCopilotCLISDK(
 			createMockExtensionContext(),
 			createMockEnvService(),
 			logService,
