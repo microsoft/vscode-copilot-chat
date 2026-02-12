@@ -180,7 +180,7 @@ class ChatAgents implements IDisposable {
 
 	private registerDefaultAgent(): IDisposable {
 		const intentGetter = (request: vscode.ChatRequest) => {
-			if (this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling && this.configurationService.getNonExtensionConfig('chat.agent.enabled')) {
+			if (this.configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling) {
 				return Intent.AskAgent;
 			}
 			return Intent.Unknown;

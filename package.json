@@ -1617,7 +1617,6 @@
 				"isEngine": true,
 				"isDefault": true,
 				"isAgent": true,
-				"when": "config.chat.agent.enabled",
 				"commands": [
 					{
 						"name": "error",
