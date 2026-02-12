@@ -467,8 +467,19 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 		if (this.#disabledReason) {
 			return { type: 'canceled', reason: this.#disabledReason };
 		}
-		const endpoint = 'completions';
+
+		// Azure-only fork: delegate to v2 path for Azure endpoints because it
+		// properly transforms the request body to chat completions format and
+		// converts the response stream back to legacy completions format.
+		// The v1 path sends raw legacy completions body (prompt/suffix/nwo/extra)
+		// to Azure's /chat/completions endpoint which rejects it with 400.
 		const copilotToken = this.copilotTokenManager.token ?? await this.copilotTokenManager.getToken();
+		const uri = this.instantiationService.invokeFunction(getProxyEngineUrl, copilotToken, params.engineModelId, 'completions');
+		if (uri.includes('.openai.azure.com') || uri.includes('.cognitiveservices.azure.com')) {
+			return this.fetchAndStreamCompletions2(params, baseTelemetryData, finishedCb, (cancel ?? CancellationToken.None) as CancellationToken);
+		}
+
+		const endpoint = 'completions';
 		const response = await this.fetchWithParameters(endpoint, params, copilotToken, baseTelemetryData, cancel);
 		if (response === 'not-sent') {
 			return { type: 'canceled', reason: 'before fetch request' };
