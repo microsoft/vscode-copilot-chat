@@ -81,14 +81,20 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 			// represent unix paths on windows without a drive letter, which causes
 			// issues. Try to rectify this.
 			if (isPosixPath && this.isWindows() && predominantScheme === Schemas.file) {
-				const lowerCandidates = this.workspaceService.getWorkspaceFolders()
-					.filter(folder => folder.scheme === Schemas.file)
-					.map(folder => getDriveLetter(folder.fsPath, true))
-					.filter(isDefined);
+				// Detect Git Bash/MSYS2-style drive letter paths: /c/Users/... -> c:/Users/...
+				const gitBashDriveMatch = /^\/([a-zA-Z])\//.exec(filepath);
+				if (gitBashDriveMatch) {
+					filepath = `${gitBashDriveMatch[1]}:${filepath.slice(2)}`;
+				} else {
+					const lowerCandidates = this.workspaceService.getWorkspaceFolders()
+						.filter(folder => folder.scheme === Schemas.file)
+						.map(folder => getDriveLetter(folder.fsPath, true))
+						.filter(isDefined);
 
-				const matchingDriveLetter = lowerCandidates.find(c => this.workspaceService.getWorkspaceFolder(URI.file(`${c}:${filepath}`)));
-				if (matchingDriveLetter) {
-					filepath = `${matchingDriveLetter}:${filepath}`;
+					const matchingDriveLetter = lowerCandidates.find(c => this.workspaceService.getWorkspaceFolder(URI.file(`${c}:${filepath}`)));
+					if (matchingDriveLetter) {
+						filepath = `${matchingDriveLetter}:${filepath}`;
+					}
 				}
 			}
 

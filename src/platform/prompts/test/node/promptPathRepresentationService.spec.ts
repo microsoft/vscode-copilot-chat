@@ -183,6 +183,28 @@ describe('PromptPathRepresentationService', () => {
 			// No workspace folders, so no drive letter rectification
 			expect(result!.path).toBe('/home/user/file.ts');
 		});
+
+		it('resolves Git Bash-style drive letter paths: /c/Users/... -> c:/Users/...', () => {
+			const result = windowsService.resolveFilePath('/c/Users/repo_folder/src/file.py');
+			expect(result).toBeDefined();
+			expect(result!.scheme).toBe(Schemas.file);
+			expect(result!.path).toMatch(/^\/c:\/Users\/repo_folder\/src\/file\.py$/i);
+		});
+
+		it('resolves uppercase Git Bash-style drive letter paths: /D/Projects/...', () => {
+			const result = windowsService.resolveFilePath('/D/Projects/app/main.ts');
+			expect(result).toBeDefined();
+			expect(result!.scheme).toBe(Schemas.file);
+			expect(result!.path).toMatch(/^\/D:\/Projects\/app\/main\.ts$/i);
+		});
+
+		it('does not treat single-letter directories as Git Bash drive paths on non-Windows', () => {
+			// On a non-Windows service, /c/Users/... is just a regular posix path
+			const result = service.resolveFilePath('/c/Users/repo_folder/file.ts');
+			expect(result).toBeDefined();
+			expect(result!.scheme).toBe(Schemas.file);
+			expect(result!.path).toBe('/c/Users/repo_folder/file.ts');
+		});
 	});
 
 	describe('getExampleFilePath', () => {
