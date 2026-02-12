@@ -8,7 +8,8 @@ import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import type * as vscode from 'vscode';
-import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { ChatReferenceBinaryData, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { IClaudeCodeSession, ISubagentSession, StoredMessage } from '../../../agents/claude/node/sessionParser/claudeSessionSchema';
 import { buildChatHistory } from '../chatHistoryBuilder';
 
@@ -67,11 +68,13 @@ function taskToolResult(toolUseId: string, agentId: string, content: string): St
 }
 
 function session(messages: StoredMessage[], subagents: ISubagentSession[] = []): IClaudeCodeSession {
+	const timestamp = new Date();
 	return {
 		id: 'test-session',
 		label: 'Test',
 		messages,
-		timestamp: new Date(),
+		created: (messages[0]?.timestamp ?? timestamp).getTime(),
+		lastRequestEnded: (messages[messages.length - 1]?.timestamp ?? timestamp).getTime(),
 		subagents,
 	};
 }
@@ -683,7 +686,8 @@ describe('buildChatHistory', () => {
 				id: 'fixture-session',
 				label: 'Fixture Test',
 				messages,
-				timestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				subagents: [],
 			};
 
@@ -895,6 +899,115 @@ describe('buildChatHistory', () => {
 			const subagentTools = toolParts.filter(t => t.subAgentInvocationId === taskId);
 			expect(subagentTools).toHaveLength(1);
 			expect(subagentTools[0].toolName).toBe('Glob');
+		});
+	});
+
+	// #endregion
+
+	// #region Image References
+
+	describe('image references', () => {
+		it('creates request turn with image references from base64 image blocks', () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: 'image/png',
+							data: 'iVBORw0KGgo=',
+						},
+					} as Anthropic.ImageBlockParam,
+					{ type: 'text', text: 'What is this?' },
+				]),
+				assistantMsg([{ type: 'text', text: 'An image.' }]),
+			]));
+
+			expect(result).toHaveLength(2);
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.prompt).toBe('What is this?');
+			expect(requestTurn.references).toHaveLength(1);
+
+			const ref = requestTurn.references[0];
+			expect(ref.value).toBeInstanceOf(ChatReferenceBinaryData);
+			const binaryData = ref.value as InstanceType<typeof ChatReferenceBinaryData>;
+			expect(binaryData.mimeType).toBe('image/png');
+		});
+
+		it('reconstructs binary data from base64 in image references', async () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{
+						type: 'image',
+						source: {
+							type: 'base64',
+							media_type: 'image/jpeg',
+							data: Buffer.from([0xFF, 0xD8]).toString('base64'),
+						},
+					} as Anthropic.ImageBlockParam,
+					{ type: 'text', text: 'Describe' },
+				]),
+			]));
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			const binaryData = requestTurn.references[0].value as InstanceType<typeof ChatReferenceBinaryData>;
+			const data = await binaryData.data();
+			expect(Buffer.from(data)).toEqual(Buffer.from([0xFF, 0xD8]));
+		});
+
+		it('creates request turn with multiple image references', () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{
+						type: 'image',
+						source: { type: 'base64', media_type: 'image/png', data: 'aQ==' },
+					} as Anthropic.ImageBlockParam,
+					{
+						type: 'image',
+						source: { type: 'base64', media_type: 'image/jpeg', data: 'bQ==' },
+					} as Anthropic.ImageBlockParam,
+					{ type: 'text', text: 'Compare these' },
+				]),
+			]));
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.references).toHaveLength(2);
+			expect((requestTurn.references[0].value as InstanceType<typeof ChatReferenceBinaryData>).mimeType).toBe('image/png');
+			expect((requestTurn.references[1].value as InstanceType<typeof ChatReferenceBinaryData>).mimeType).toBe('image/jpeg');
+		});
+
+		it('creates request turn for image-only messages with no text', () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{
+						type: 'image',
+						source: { type: 'base64', media_type: 'image/png', data: 'aQ==' },
+					} as Anthropic.ImageBlockParam,
+				]),
+			]));
+
+			// Even with no text, should produce a request turn because of the image
+			expect(result).toHaveLength(1);
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.references).toHaveLength(1);
+		});
+
+		it('creates URI reference for URL-based image blocks', () => {
+			const result = buildChatHistory(session([
+				userMsg([
+					{
+						type: 'image',
+						source: { type: 'url', url: 'https://example.com/img.png' },
+					} as Anthropic.ImageBlockParam,
+					{ type: 'text', text: 'What is this?' },
+				]),
+			]));
+
+			const requestTurn = result[0] as vscode.ChatRequestTurn2;
+			expect(requestTurn.references).toHaveLength(1);
+			const ref = requestTurn.references[0];
+			expect(URI.isUri(ref.value)).toBe(true);
+			expect((ref.value as URI).toString()).toBe('https://example.com/img.png');
 		});
 	});
 

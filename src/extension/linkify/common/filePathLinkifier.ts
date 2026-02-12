@@ -20,11 +20,11 @@ import { IContributedLinkifier, LinkifierContext } from './linkifyService';
 // Create a single regex which runs different regexp parts in a big `|` expression.
 const pathMatchRe = new RegExp(
 	[
-		// Inline code paths
-		/(?<!\[)`(?<inlineCodePath>[^`\s]+)`(?!\])/.source,
+		// Inline code paths (exclude code-like characters $, {, }, that are common in code but rare in filenames)
+		/(?<!\[)`(?<inlineCodePath>[^`\s${}]+)`(?!\])/.source,
 
-		// File paths rendered as plain text
-		/(?<![\[`()<])(?<plainTextPath>[^\s`*]+\.[^\s`*]+)(?![\]`])/.source
+		// File paths rendered as plain text (exclude code-like characters)
+		/(?<![\[`()<])(?<plainTextPath>[^\s`*${}()]+\.[^\s`*${}()]+)(?![\]`])/.source
 	].join('|'),
 	'gu');
 
@@ -124,19 +124,27 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			}
 		}
 
-		// Then fallback to checking references based on filename
-		const name = path.basename(pathText);
-		const refUri = context.references
-			.map(ref => {
-				if ('variableName' in ref.anchor) {
-					return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
-				}
-				return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
-			})
-			.filter((item): item is Uri => !!item)
-			.find(refUri => resources.basename(refUri) === name);
+		// Then fallback to checking references based on filename.
+		// Only do this for simple filenames without directory components - if the user
+		// specified a path like `./node_modules/cli.js`, we shouldn't match a reference
+		// with a completely different path just because the basename matches.
+		// Also skip if text contains code-like characters that are rarely in real filenames.
+		if (!pathText.includes('/') && !pathText.includes('\\') && !/[${}()]/.test(pathText)) {
+			const name = path.basename(pathText);
+			const refUri = context.references
+				.map(ref => {
+					if ('variableName' in ref.anchor) {
+						return isUriComponents(ref.anchor.value) ? ref.anchor.value : ref.anchor.value?.uri;
+					}
+					return isUriComponents(ref.anchor) ? ref.anchor : ref.anchor.uri;
+				})
+				.filter((item): item is Uri => !!item)
+				.find(refUri => resources.basename(refUri) === name);
 
-		return refUri;
+			return refUri;
+		}
+
+		return undefined;
 	}
 
 	private async statAndNormalizeUri(uri: Uri, includeDirectorySlash: boolean): Promise<Uri | undefined> {

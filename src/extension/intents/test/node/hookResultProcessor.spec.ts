@@ -83,7 +83,7 @@ describe('hookResultProcessor', () => {
 					// Verify hookProgress is called with the stopReason
 					expect(mockStream.hookProgressCalls.length).toBeGreaterThan(0);
 					expect(mockStream.hookProgressCalls[0].hookType).toBe(hookType);
-					expect(mockStream.hookProgressCalls[0].stopReason).toBe('Build failed, fix errors before continuing');
+					expect(mockStream.hookProgressCalls[0].stopReason).toContain('Build failed, fix errors before continuing');
 				});
 
 				it('should not call onSuccess when stopReason is present', () => {
@@ -140,7 +140,29 @@ describe('hookResultProcessor', () => {
 					// Verify hookProgress is called with the stopReason
 					expect(mockStream.hookProgressCalls).toHaveLength(1);
 					expect(mockStream.hookProgressCalls[0].hookType).toBe(hookType);
-					expect(mockStream.hookProgressCalls[0].stopReason).toBe('First hook aborted');
+					expect(mockStream.hookProgressCalls[0].stopReason).toContain('First hook aborted');
+				});
+
+				it('should throw HookAbortError when stopReason is empty string (continue: false)', () => {
+					const results: HookResult[] = [
+						{
+							resultKind: 'success',
+							output: {},
+							stopReason: '',
+						},
+					];
+
+					const onSuccess = vi.fn();
+					const options: ProcessHookResultsOptions = {
+						hookType,
+						results,
+						outputStream: mockStream as unknown as ChatResponseStream,
+						logService,
+						onSuccess,
+					};
+
+					expect(() => processHookResults(options)).toThrow(HookAbortError);
+					expect(onSuccess).not.toHaveBeenCalled();
 				});
 			});
 		});
@@ -388,6 +410,39 @@ describe('hookResultProcessor', () => {
 			expect(mockStream.hookProgressCalls).toHaveLength(0);
 		});
 
+		it('should continue processing remaining results after onError', () => {
+			const results: HookResult[] = [
+				{
+					resultKind: 'error',
+					output: 'First error',
+				},
+				{
+					resultKind: 'success',
+					output: { reason: 'keep going' },
+				},
+				{
+					resultKind: 'error',
+					output: 'Second error',
+				},
+			];
+
+			const onSuccess = vi.fn();
+			const onError = vi.fn();
+			processHookResults({
+				hookType: 'Stop',
+				results,
+				outputStream: mockStream as unknown as ChatResponseStream,
+				logService,
+				onSuccess,
+				onError,
+			});
+
+			expect(onError).toHaveBeenCalledTimes(2);
+			expect(onError).toHaveBeenCalledWith('First error');
+			expect(onError).toHaveBeenCalledWith('Second error');
+			expect(onSuccess).toHaveBeenCalledWith({ reason: 'keep going' });
+		});
+
 		// Other exit codes - show stderr to user only (warnings)
 		it('should show warning to user on other exit codes', () => {
 			const results: HookResult[] = [
@@ -586,12 +641,12 @@ describe('hookResultProcessor', () => {
 		it('should format error message with details', () => {
 			const message = formatHookErrorMessage('Connection failed');
 			expect(message).toContain('Connection failed');
-			expect(message).toContain('hook failed');
+			expect(message).toContain('A hook prevented chat from continuing');
 		});
 
 		it('should format error message without details', () => {
 			const message = formatHookErrorMessage('');
-			expect(message).toContain('hook failed');
+			expect(message).toContain('A hook prevented chat from continuing');
 			expect(message).not.toContain('Error message:');
 		});
 	});

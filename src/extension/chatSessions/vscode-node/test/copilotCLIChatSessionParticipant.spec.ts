@@ -7,6 +7,8 @@ import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
@@ -16,13 +18,13 @@ import { NullRequestLogger } from '../../../../platform/requestLogger/node/nullR
 import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
 import type { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService, NullWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { LanguageModelTextPart, LanguageModelToolResult2 } from '../../../../util/common/test/shims/chatTypes';
 import { mock } from '../../../../util/common/test/simpleMock';
 import { CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { sep } from '../../../../util/vs/base/common/path';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseConfirmationPart } from '../../../../vscodeTypes';
 import { IChatDelegationSummaryService } from '../../../agents/copilotcli/common/delegationSummaryService';
 import { type ICopilotCLIModels, type ICopilotCLISDK } from '../../../agents/copilotcli/node/copilotCli';
 import { CopilotCLIPromptResolver } from '../../../agents/copilotcli/node/copilotcliPromptResolver';
@@ -59,6 +61,20 @@ vi.mock('../copilotCLITerminalIntegration', () => {
 	};
 });
 
+class FakeToolsService extends mock<IToolsService>() {
+	nextConfirmationButton: string | undefined = undefined;
+	override invokeTool = vi.fn(async (name: string, _options: unknown, _token: unknown) => {
+		if (name === 'vscode_get_confirmation_with_options') {
+			const button = this.nextConfirmationButton;
+			if (button !== undefined) {
+				return new LanguageModelToolResult2([new LanguageModelTextPart(button)]);
+			}
+			return new LanguageModelToolResult2([]);
+		}
+		return new LanguageModelToolResult2([]);
+	});
+}
+
 class FakeChatSessionWorkspaceFolderService extends mock<IChatSessionWorkspaceFolderService>() {
 	private _sessionWorkspaceFolders = new Map<string, vscode.Uri>();
 	private _recentFolders: { folder: vscode.Uri; lastAccessTime: number }[] = [];
@@ -87,7 +103,7 @@ class FakeChatSessionWorktreeService extends mock<IChatSessionWorktreeService>()
 		super();
 	}
 	override createWorktree = vi.fn(async () => undefined) as unknown as IChatSessionWorktreeService['createWorktree'];
-	override getWorktreeProperties = vi.fn((_id: string) => undefined);
+	override getWorktreeProperties = vi.fn((_id: string | vscode.Uri) => undefined);
 	override setWorktreeProperties = vi.fn(async () => { });
 	override getWorktreePath = vi.fn((_id: string) => undefined);
 	override handleRequestCompleted = vi.fn(async () => { });
@@ -180,7 +196,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	let models: FakeModels;
 	let sessionService: CopilotCLISessionService;
 	let telemetry: ITelemetryService;
-	let tools: IToolsService;
+	let tools: FakeToolsService;
 	let participant: CopilotCLIChatSessionParticipant;
 	let workspaceService: IWorkspaceService;
 	let instantiationService: IInstantiationService;
@@ -198,6 +214,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		} as unknown as ICopilotCLISDK;
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
+		disposables.add(accessor);
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
 			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined) => {
 				return { prompt: prompt ?? request.prompt, attachments: [], references: [] };
@@ -217,7 +234,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		models = new FakeModels();
 		cliSessionServiceForFolderManager = new FakeCopilotCLISessionService();
 		telemetry = new NullTelemetryService();
-		tools = new class FakeToolsService extends mock<IToolsService>() { }();
+		tools = new FakeToolsService();
 		workspaceService = new NullWorkspaceService([URI.file('/workspace')]);
 		const logger = accessor.get(ILogService);
 		const logService = accessor.get(ILogService);
@@ -266,8 +283,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			cliSessionServiceForFolderManager as unknown as ICopilotCLISessionService,
 			git,
 			workspaceService,
-			logService
+			logService,
+			tools
 		);
+
+		instantiationService = accessor.get(IInstantiationService);
+		const mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		await mockConfigurationService.setConfig(ConfigKey.Advanced.CLIBranchSupport, true);
+
 		participant = new CopilotCLIChatSessionParticipant(
 			contentProvider,
 			promptResolver,
@@ -285,8 +308,8 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			logger,
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
-			workspaceService,
 			folderRepositoryManager,
+			mockConfigurationService
 		);
 	});
 
@@ -310,13 +333,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
-		const worktreeProperties: ChatSessionWorktreeProperties = {
+		const worktreeProperties = {
 			autoCommit: true,
 			baseCommit: 'deadbeef',
 			branchName: 'test',
 			repositoryPath: `${sep}repo`,
-			worktreePath: `${sep}worktree`
-		};
+			worktreePath: `${sep}worktree`,
+			version: 1
+		} satisfies ChatSessionWorktreeProperties;
 		// Set up untitled session folder
 		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// Configure git to return repository for the folder
@@ -411,33 +435,38 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cloudProvider.delegate).toHaveBeenCalled();
 	});
 
-	it('handles /delegate command from another chat (has worktree support)', async () => {
+	it('handles /delegate command from another chat (has uncommitted changes and user copies changes)', async () => {
 		expect(manager.sessions.size).toBe(0);
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }] } }) } as unknown as IGitService['activeRepository'];
+		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
-		const parts: vscode.ExtendedChatResponsePart[] = [];
-		const stream = new MockChatResponseStream((part) => parts.push(part));
+		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		expect(manager.sessions.size).toBe(0);
-		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
+		// With the awaitable confirmation, the session should be created in a single request
+		expect(manager.sessions.size).toBe(1);
+		expect(tools.invokeTool).toHaveBeenCalledWith(
+			'vscode_get_confirmation_with_options',
+			expect.objectContaining({ input: expect.objectContaining({ title: 'Delegate to Background Agent' }) }),
+			token
+		);
 	});
 
-	it('handles /delegate command from another chat without active repositor', async () => {
+	it('handles /delegate command from another chat without active repository', async () => {
 		expect(manager.sessions.size).toBe(0);
 		const request = new TestChatRequest('/delegate Build feature');
 		const context = { chatSessionContext: undefined } as vscode.ChatContext;
-		const parts: vscode.ExtendedChatResponsePart[] = [];
-		const stream = new MockChatResponseStream((part) => parts.push(part));
+		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
 		expect(manager.sessions.size).toBe(1);
-		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(false);
+		// No confirmation should be invoked when there are no uncommitted changes
+		expect(tools.invokeTool).not.toHaveBeenCalled();
 	});
 
 	it('handles /delegate command for new session without uncommitted changes', async () => {
@@ -481,215 +510,156 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].requests[0].prompt).toContain('Push this');
 	});
 
-	it('handleConfirmationData accepts uncommitted-changes and records push', async () => {
-		// Existing session (non-untitled) so confirmation path is hit
+	it('handles existing session with acceptedConfirmationData (no longer triggers cloud delegation)', async () => {
+		// With the new flow, acceptedConfirmationData is no longer used for uncommitted changes.
+		// Existing sessions proceed directly to handleRequest without confirmation flow.
 		const sessionId = 'existing-confirm';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 		const request = new TestChatRequest('my prompt');
 		const context = createChatContext(sessionId, false);
-		(request as any).acceptedConfirmationData = [{ step: 'uncommitted-changes', metadata: { chatContext: context } }];
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
-		// Cloud provider will create delegated chat session returning prInfo
-		(cloudProvider.delegate as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ uri: 'pr://2', title: 'T', description: 'D', author: 'A', linkTag: 'L' });
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should NOT call session.handleRequest, instead record push messages
+		// Should call session.handleRequest normally
 		expect(cliSessions.length).toBe(1);
-		expect(cliSessions[0].requests.length).toBe(0);
-		expect(sdkSession.emittedEvents.length).toBe(2);
-		expect(sdkSession.emittedEvents[0].event).toBe('user.message');
-		expect(sdkSession.emittedEvents[1].event).toBe('assistant.message');
-		expect(sdkSession.emittedEvents[1].content).toContain('pr://2');
-		// Cloud provider used with provided metadata
-		expect(cloudProvider.delegate).toHaveBeenCalledWith(
-			request,
-			stream,
-			context,
-			token,
-			{ chatContext: context }
-		);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toBe('my prompt');
 	});
 
-	it('handleConfirmationData cancels when uncommitted-changes rejected', async () => {
+	it('handles existing session with rejectedConfirmationData (proceeds normally)', async () => {
+		// With the new flow, rejectedConfirmationData is no longer used for uncommitted changes.
 		const sessionId = 'existing-confirm-reject';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 		const request = new TestChatRequest('Apply');
-		(request as any).rejectedConfirmationData = [{ step: 'uncommitted-changes', metadata: { prompt: 'delegate work', history: 'hist' } }];
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should not record push or call delegate session
-		expect(sdkSession.emittedEvents.length).toBe(0);
-		expect(cloudProvider.delegate).not.toHaveBeenCalled();
-		// Cancellation message markdown captured
-		expect(stream.output.some(o => /Cloud agent delegation request cancelled/i.test(o))).toBe(true);
+		// Should proceed normally (no cloud delegation)
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toBe('Apply');
 	});
 
-	it('handleConfirmationData unknown step warns and skips', async () => {
+	it('handles existing session with unknown step acceptedConfirmationData (proceeds normally)', async () => {
 		const sessionId = 'existing-confirm-unknown';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
 		const request = new TestChatRequest('Apply');
-		(request as any).acceptedConfirmationData = [{ step: 'mystery-step', metadata: {} }];
 		const context = createChatContext(sessionId, false);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// No events are emitted
-		expect(sdkSession.emittedEvents.length).toBe(0);
+		// Should proceed normally
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
 	});
 
-	it('shows confirmation prompt for untitled session with uncommitted changes', async () => {
+	it('prompts for uncommitted changes action for untitled session with uncommitted changes', async () => {
 		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info
 		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		// User selects Copy Changes
+		tools.nextConfirmationButton = 'Copy Changes';
 		const request = new TestChatRequest('Fix the bug');
 		const context = createChatContext('untitled:temp-new', true);
-		const parts: vscode.ExtendedChatResponsePart[] = [];
-		const stream = new MockChatResponseStream((part) => parts.push(part));
-		const token = disposables.add(new CancellationTokenSource()).token;
-
-		await participant.createHandler()(request, context, stream, token);
-
-		// Should show confirmation prompt instead of creating session
-		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
-		const confirmationPart = parts.find(p => p instanceof ChatResponseConfirmationPart) as ChatResponseConfirmationPart;
-		expect(confirmationPart.title).toBe('Uncommitted Changes');
-		expect(confirmationPart.data.step).toBe('uncommitted-changes');
-		expect(confirmationPart.data.metadata.prompt).toBe('Fix the bug');
-		expect(cliSessions.length).toBe(0);
-	});
-
-	it('uses original prompt from confirmation metadata when user accepts', async () => {
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
-
-		const request = new TestChatRequest('Copy Changes');
-		const context = createChatContext('temp-new', true);
-		(request as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'Fix the bug',
-				references: [],
-				chatContext: context
-			}
-		}];
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should create session and use original prompt
+		// Session should be created in one request (no separate confirmation round-trip)
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
-		// Verify promptResolver was called with original prompt
-		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBe('Fix the bug');
+		// Verify confirmation tool was invoked with the right title
+		expect(tools.invokeTool).toHaveBeenCalledWith(
+			'vscode_get_confirmation_with_options',
+			expect.objectContaining({ input: expect.objectContaining({ title: 'Uncommitted Changes' }) }),
+			token
+		);
 	});
 
-	it('uses original prompt for session label when swapping untitled session', async () => {
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+	it('uses request prompt directly when user accepts uncommitted changes confirmation', async () => {
+		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
+		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		tools.nextConfirmationButton = 'Copy Changes';
 
-		const request = new TestChatRequest('Move Changes');
-		const context = createChatContext('temp-new', true);
-		(request as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'Implement new feature',
-				references: [],
-				chatContext: context
-			}
-		}];
+		const request = new TestChatRequest('Fix the bug');
+		const context = createChatContext('untitled:temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should swap with original prompt as label
+		// Should create session and use request.prompt directly
+		expect(cliSessions.length).toBe(1);
+		expect(cliSessions[0].requests.length).toBe(1);
+		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
+		// Verify promptResolver was called without override prompt
+		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
+		expect((promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBeUndefined();
+	});
+
+	it('uses request prompt for session label when swapping untitled session', async () => {
+		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
+		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		tools.nextConfirmationButton = 'Move Changes';
+
+		const request = new TestChatRequest('Implement new feature');
+		const context = createChatContext('untitled:temp-new', true);
+		const stream = new MockChatResponseStream();
+		const token = disposables.add(new CancellationTokenSource()).token;
+
+		await participant.createHandler()(request, context, stream, token);
+
+		// Should swap with request.prompt as label
 		expect(itemProvider.swap).toHaveBeenCalled();
 		const swapCall = (itemProvider.swap as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(swapCall[1].label).toBe('Implement new feature');
 	});
 
-	it('passes additionalReferences from confirmation metadata to resolvePrompt', async () => {
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+	it('passes empty references array to resolvePrompt after confirmation', async () => {
+		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
+		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		tools.nextConfirmationButton = 'Copy Changes';
 
-		const testReferences: vscode.ChatPromptReference[] = [
-			{ id: 'vscode.file', name: 'test.ts', value: Uri.file('/workspace/test.ts') },
-			{ id: 'vscode.file', name: 'other.ts', value: Uri.file('/workspace/other.ts') }
-		];
-
-		const request = new TestChatRequest('Copy Changes');
-		const context = createChatContext('temp-new', true);
-		(request as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'Fix the bug',
-				references: testReferences,
-				chatContext: context
-			}
-		}];
+		const request = new TestChatRequest('Fix the bug');
+		const context = createChatContext('untitled:temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should pass additionalReferences to resolvePrompt
-		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
-		const resolvePromptCall = (promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
-		expect(resolvePromptCall[2]).toEqual(testReferences);
-	});
-
-	it('passes empty array when confirmation metadata has no references', async () => {
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
-
-		const request = new TestChatRequest('Copy Changes');
-		const context = createChatContext('temp-new', true);
-		(request as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'Fix the bug',
-				// No references field
-				chatContext: context
-			}
-		}];
-		const stream = new MockChatResponseStream();
-		const token = disposables.add(new CancellationTokenSource()).token;
-
-		await participant.createHandler()(request, context, stream, token);
-
-		// Should pass empty array when no references in metadata
+		// Should pass empty array to resolvePrompt (no metadata to recover from)
 		expect(promptResolver.resolvePrompt).toHaveBeenCalled();
 		const resolvePromptCall = (promptResolver.resolvePrompt as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
 		expect(resolvePromptCall[2]).toEqual([]);
 	});
 
 	it('returns empty when user cancels untitled session confirmation', async () => {
-		git.activeRepository = { get: () => ({ changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		git.activeRepository = { get: () => ({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
+		git.setRepo({ rootUri: Uri.file(`${sep}repo`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
+		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
+		// User clicks Cancel
+		tools.nextConfirmationButton = 'Cancel';
 
-		const request = new TestChatRequest('Cancel');
-		const context = createChatContext('temp-new', true);
-		(request as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'Fix the bug',
-				references: [],
-				chatContext: context
-			}
-		}];
+		const request = new TestChatRequest('Fix the bug');
+		const context = createChatContext('untitled:temp-new', true);
 		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
-		workspaceFolderService.trackSessionWorkspaceFolder('temp-new', git.activeRepository.get()?.rootUri?.fsPath || '');
 
 		await participant.createHandler()(request, context, stream, token);
 
@@ -698,24 +668,23 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(itemProvider.swap).not.toHaveBeenCalled();
 	});
 
-	it('does not show confirmation for untitled session without uncommitted changes', async () => {
+	it('does not prompt for confirmation for untitled session without uncommitted changes', async () => {
 		git.activeRepository = { get: () => ({ changes: { indexChanges: [], workingTree: [] } }) } as unknown as IGitService['activeRepository'];
 
 		const request = new TestChatRequest('Fix the bug');
 		const context = createChatContext('temp-new', true);
-		const parts: vscode.ExtendedChatResponsePart[] = [];
-		const stream = new MockChatResponseStream((part) => parts.push(part));
+		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
 		// Should create session directly without confirmation
-		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(false);
+		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toBe('Fix the bug');
 	});
 
-	it('does not show confirmation for existing (non-untitled) session with uncommitted changes', async () => {
+	it('does not prompt for confirmation for existing (non-untitled) session with uncommitted changes', async () => {
 		const sessionId = 'existing-123';
 		const sdkSession = new MockCliSdkSession(sessionId, new Date());
 		manager.sessions.set(sessionId, sdkSession);
@@ -723,14 +692,13 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 
 		const request = new TestChatRequest('Continue work');
 		const context = createChatContext(sessionId, false);
-		const parts: vscode.ExtendedChatResponsePart[] = [];
-		const stream = new MockChatResponseStream((part) => parts.push(part));
+		const stream = new MockChatResponseStream();
 		const token = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request, context, stream, token);
 
-		// Should not show confirmation for existing sessions
-		expect(parts.some(p => p instanceof ChatResponseConfirmationPart)).toBe(false);
+		// Should not prompt for confirmation for existing sessions
+		expect(tools.invokeTool).not.toHaveBeenCalled();
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toBe('Continue work');
 	});
@@ -769,33 +737,16 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		git.setRepo({ rootUri: Uri.file(`${sep}workspace`), changes: { indexChanges: [{ path: 'file.ts' }], workingTree: [] } } as unknown as RepoContext);
 		// Set up untitled session folder so getFolderRepository returns repository info (for uncommitted changes check)
 		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}workspace`));
-		// First request shows confirmation
+		// User selects Copy Changes via the tools confirmation
+		tools.nextConfirmationButton = 'Copy Changes';
+
+		// First request creates the session (with confirmation handled inline)
 		const request1 = new TestChatRequest('First request');
 		const context1 = createChatContext('untitled:temp-new', true);
-		const parts1: vscode.ExtendedChatResponsePart[] = [];
-		const stream1 = new MockChatResponseStream((part) => parts1.push(part));
+		const stream1 = new MockChatResponseStream();
 		const token1 = disposables.add(new CancellationTokenSource()).token;
 
 		await participant.createHandler()(request1, context1, stream1, token1);
-
-		// Confirmation should be shown
-		expect(parts1.some(p => p instanceof ChatResponseConfirmationPart)).toBe(true);
-		expect(cliSessions.length).toBe(0);
-
-		// User responds to confirmation
-		const request2 = new TestChatRequest('Copy Changes');
-		(request2 as any).acceptedConfirmationData = [{
-			step: 'uncommitted-changes',
-			metadata: {
-				prompt: 'First request',
-				references: [],
-				chatContext: context1
-			}
-		}];
-		const stream2 = new MockChatResponseStream();
-		const token2 = disposables.add(new CancellationTokenSource()).token;
-
-		await participant.createHandler()(request2, context1, stream2, token2);
 
 		// Session should be created
 		expect(cliSessions.length).toBe(1);
@@ -803,19 +754,19 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		expect(cliSessions[0].requests.length).toBe(1);
 		expect(cliSessions[0].requests[0].prompt).toBe('First request');
 
-		// Third request should reuse the same session
-		const request3 = new TestChatRequest('Third request');
-		const context3 = createChatContext(firstSessionId, false);
-		const stream3 = new MockChatResponseStream();
-		const token3 = disposables.add(new CancellationTokenSource()).token;
+		// Second request should reuse the same session
+		const request2 = new TestChatRequest('Second request');
+		const context2 = createChatContext(firstSessionId, false);
+		const stream2 = new MockChatResponseStream();
+		const token2 = disposables.add(new CancellationTokenSource()).token;
 
-		await participant.createHandler()(request3, context3, stream3, token3);
+		await participant.createHandler()(request2, context2, stream2, token2);
 
 		// Should not create a new session
 		expect(cliSessions.length).toBe(1);
 		expect(cliSessions[0].sessionId).toBe(firstSessionId);
 		expect(cliSessions[0].requests.length).toBe(2);
-		expect(cliSessions[0].requests[1].prompt).toBe('Third request');
+		expect(cliSessions[0].requests[1].prompt).toBe('Second request');
 	});
 
 	describe('Repository option locking behavior', () => {
@@ -871,6 +822,15 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 				folder: Uri.file(`${sep}workspace`)
 			}));
 			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+			// Trust rejection now happens in initializeFolderRepository (not in the removed hasUncommittedChangesToHandleInRequest)
+			const mockInitializeFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`),
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined
+			}));
+			(folderRepositoryManager.initializeFolderRepository as any) = mockInitializeFolderRepository;
 
 			const request = new TestChatRequest('Say hi');
 			const context = createChatContext(sessionId, true);
@@ -916,29 +876,15 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			}));
 			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
 
-			// First request: shows confirmation
-			const request1 = new TestChatRequest('Fix bug');
-			const context1 = createChatContext(sessionId, true);
-			const stream1 = new MockChatResponseStream();
-			const token1 = disposables.add(new CancellationTokenSource()).token;
+			// User cancels the confirmation
+			tools.nextConfirmationButton = 'Cancel';
 
-			await participant.createHandler()(request1, context1, stream1, token1);
-			(contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mockClear();
+			const request = new TestChatRequest('Fix bug');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
 
-			// Second request: user cancels
-			const request2 = new TestChatRequest('Cancel');
-			(request2 as any).acceptedConfirmationData = [{
-				step: 'uncommitted-changes',
-				metadata: {
-					prompt: 'Fix bug',
-					references: [],
-					chatContext: context1
-				}
-			}];
-			const stream2 = new MockChatResponseStream();
-			const token2 = disposables.add(new CancellationTokenSource()).token;
-
-			await participant.createHandler()(request2, context1, stream2, token2);
+			await participant.createHandler()(request, context, stream, token);
 
 			// Verify lock was called
 			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
@@ -1183,6 +1129,100 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			// Submodule repositories should use 'archive' icon (not 'repo')
 			expect(repoLockUpdate.value.icon.id).toBe('archive');
 			expect(repoLockUpdate.value.name).toBe('submodule-repo');
+		});
+
+		it('locks branch option alongside repository option when branch is selected', async () => {
+			const sessionId = 'untitled:temp-branch-lock';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			// Simulate branch selection via initial options
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			(context.chatSessionContext as any).initialSessionOptions = [
+				{ optionId: 'branch', value: 'feature-branch' }
+			];
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			// Find a lock call that includes both repo and branch locking
+			const branchLockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch' && update.value?.locked === true)
+			);
+			expect(branchLockCalls.length).toBeGreaterThan(0);
+
+			const branchLockUpdate = branchLockCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'branch' && update.value?.locked === true
+			);
+			expect(branchLockUpdate.value.name).toBe('feature-branch');
+			expect(branchLockUpdate.value.icon.id).toBe('git-branch');
+		});
+
+		it('does not lock branch option when no branch is selected', async () => {
+			const sessionId = 'untitled:temp-no-branch-lock';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const branchLockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch')
+			);
+			expect(branchLockCalls.length).toBe(0);
+		});
+
+		it('unlocks branch option alongside repository option when trust is denied', async () => {
+			const sessionId = 'untitled:temp-branch-unlock';
+			const mockGetFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`)
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+			const mockInitializeFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`),
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined
+			}));
+			(folderRepositoryManager.initializeFolderRepository as any) = mockInitializeFolderRepository;
+
+			// Simulate having a branch selected before running
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			(context.chatSessionContext as any).initialSessionOptions = [
+				{ optionId: 'branch', value: 'my-branch' }
+			];
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			// Find unlock calls (value is string, not an object with locked flag)
+			const branchUnlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch' && typeof update.value === 'string')
+			);
+			expect(branchUnlockCalls.length).toBeGreaterThan(0);
 		});
 	});
 });

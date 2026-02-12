@@ -952,6 +952,108 @@ describe('makeUriConfirmationChecker', async () => {
 		expect(await checker(secretsInWorkspace2)).toBe(ConfirmationCheckResult.Sensitive); // Sensitive
 	});
 
+	describe('hookFilesLocations', () => {
+		beforeEach(() => {
+			const workspaceFolder = URI.file('/workspace');
+			workspaceService = new TestWorkspaceService([workspaceFolder], []);
+		});
+
+		test('folder pattern marks JSON files inside as sensitive', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'.github/hooks': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const hookFile = URI.file('/workspace/.github/hooks/pre-commit.json');
+			expect(await checker(hookFile)).toBe(ConfirmationCheckResult.Sensitive);
+		});
+
+		test('folder pattern marks the folder itself as sensitive', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'.github/hooks': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const folderUri = URI.file('/workspace/.github/hooks');
+			expect(await checker(folderUri)).toBe(ConfirmationCheckResult.Sensitive);
+		});
+
+		test('folder pattern does not match non-JSON files', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'.github/hooks': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const txtFile = URI.file('/workspace/.github/hooks/readme.txt');
+			expect(await checker(txtFile)).toBe(ConfirmationCheckResult.NoConfirmation);
+		});
+
+		test('direct JSON file path marks only that file as sensitive', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'.github/hooks/hook.json': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const hookFile = URI.file('/workspace/.github/hooks/hook.json');
+			const otherFile = URI.file('/workspace/.github/hooks/other.json');
+			expect(await checker(hookFile)).toBe(ConfirmationCheckResult.Sensitive);
+			expect(await checker(otherFile)).toBe(ConfirmationCheckResult.NoConfirmation);
+		});
+
+		test('skips home directory patterns', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'~/hooks': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const fileInWorkspace = URI.file('/workspace/hooks/hook.json');
+			expect(await checker(fileInWorkspace)).toBe(ConfirmationCheckResult.NoConfirmation);
+		});
+
+		test('folder pattern with trailing slash matches JSON files', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'.copilot/hooks/': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const hookFile = URI.file('/workspace/.copilot/hooks/hook.json');
+			expect(await checker(hookFile)).toBe(ConfirmationCheckResult.Sensitive);
+		});
+
+		test('does not treat file extensions like .png as folders', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'assets/icon.png': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			// The .png file itself should be sensitive
+			const pngFile = URI.file('/workspace/assets/icon.png');
+			expect(await checker(pngFile)).toBe(ConfirmationCheckResult.Sensitive);
+
+			// But a JSON file next to it should not
+			const jsonFile = URI.file('/workspace/assets/icon.png/something.json');
+			expect(await checker(jsonFile)).toBe(ConfirmationCheckResult.NoConfirmation);
+		});
+
+		test('pattern starting with **/ is preserved as-is', async () => {
+			await configService.setNonExtensionConfig('chat.hookFilesLocations', {
+				'**/hooks': true,
+			});
+
+			const checker = makeUriConfirmationChecker(configService, workspaceService, customInstructionsService);
+
+			const hookFile = URI.file('/workspace/deeply/nested/hooks/hook.json');
+			expect(await checker(hookFile)).toBe(ConfirmationCheckResult.Sensitive);
+		});
+	});
+
 	test('complex glob patterns', async () => {
 		const workspaceFolder = URI.file('/workspace');
 		workspaceService = new TestWorkspaceService([workspaceFolder], []);

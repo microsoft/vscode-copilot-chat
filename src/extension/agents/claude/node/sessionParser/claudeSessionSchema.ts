@@ -172,6 +172,39 @@ assertValidatorAssignable<ValidatorType<typeof vToolResultBlock>, Anthropic.Tool
 export type ToolResultBlock = Anthropic.ToolResultBlockParam;
 
 /**
+ * Base64 image source with inline data.
+ * Matches Anthropic.Base64ImageSource from the SDK.
+ */
+const vBase64ImageSource = vObj({
+	type: vRequired(vLiteral('base64')),
+	media_type: vRequired(vEnum('image/jpeg', 'image/png', 'image/gif', 'image/webp')),
+	data: vRequired(vString()),
+});
+
+/**
+ * URL image source with a remote URL.
+ * Matches Anthropic.URLImageSource from the SDK.
+ */
+const vURLImageSource = vObj({
+	type: vRequired(vLiteral('url')),
+	url: vRequired(vString()),
+});
+
+/**
+ * Image content block in user messages.
+ * Matches Anthropic.ImageBlockParam from the SDK.
+ *
+ * Source is validated as a discriminated union of base64 and url shapes,
+ * ensuring required fields (type, media_type/data or url) are present.
+ */
+export const vImageBlock = vObj({
+	type: vRequired(vLiteral('image')),
+	source: vRequired(vUnion(vBase64ImageSource, vURLImageSource)),
+});
+assertValidatorAssignable<ValidatorType<typeof vImageBlock>, Anthropic.ImageBlockParam>();
+export type ImageBlock = Anthropic.ImageBlockParam;
+
+/**
  * Unknown content block type for forward compatibility.
  * Allows parsing of new block types the SDK may introduce.
  */
@@ -190,9 +223,10 @@ export const vContentBlock = vUnion(
 	vThinkingBlock,
 	vToolUseBlock,
 	vToolResultBlock,
+	vImageBlock,
 	vUnknownContentBlock
 );
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | UnknownContentBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock | UnknownContentBlock;
 
 // #endregion
 
@@ -365,6 +399,30 @@ export type MessageEntry = ValidatorType<typeof vMessageEntry>;
 
 // #region Type Guards
 
+export type ImageMediaType = Anthropic.Messages.Base64ImageSource['media_type'];
+
+// Record ensures a compile error if the SDK adds a new media type we haven't covered.
+const SUPPORTED_IMAGE_MEDIA_TYPES: Record<ImageMediaType, true> = {
+	'image/jpeg': true,
+	'image/png': true,
+	'image/gif': true,
+	'image/webp': true,
+};
+
+function isImageMediaType(value: string): value is ImageMediaType {
+	return Object.hasOwn(SUPPORTED_IMAGE_MEDIA_TYPES, value);
+}
+
+/**
+ * Normalizes a MIME type string to a supported Anthropic image media type.
+ * Handles variations like 'image/jpg' → 'image/jpeg'.
+ * Returns undefined for unsupported types.
+ */
+export function toAnthropicImageMediaType(mimeType: string): ImageMediaType | undefined {
+	const normalized = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase();
+	return isImageMediaType(normalized) ? normalized : undefined;
+}
+
 /**
  * Type guard for user message entries.
  */
@@ -399,6 +457,21 @@ export function isSummaryEntry(entry: SessionEntry): entry is SummaryEntry {
  */
 export function isChainLinkEntry(entry: SessionEntry): entry is ChainLinkEntry {
 	return 'uuid' in entry && 'parentUuid' in entry && !('message' in entry) && !('type' in entry);
+}
+
+/**
+ * Checks if a user message represents a genuine user request (not a tool result).
+ * Tool results have content that is solely tool_result blocks; genuine requests
+ * have string content or contain at least one non-tool_result block.
+ */
+export function isUserRequest(content: UserMessageContent['content']): boolean {
+	if (typeof content === 'string') {
+		return true;
+	}
+	if (!Array.isArray(content)) {
+		return false;
+	}
+	return content.some(block => block.type !== 'tool_result');
 }
 
 // #endregion
@@ -439,11 +512,8 @@ export interface ISubagentSession {
 /**
  * A parsed Claude Code session ready for use.
  */
-export interface IClaudeCodeSession {
-	readonly id: string;
-	readonly label: string;
+export interface IClaudeCodeSession extends IClaudeCodeSessionInfo {
 	readonly messages: readonly StoredMessage[];
-	readonly timestamp: Date;
 	readonly subagents: readonly ISubagentSession[];
 }
 
@@ -451,15 +521,21 @@ export interface IClaudeCodeSession {
  * Lightweight session metadata for listing sessions.
  * Contains only the information needed for ChatSessionItem display.
  * Does not include full message content to reduce memory usage.
+ *
+ * Timestamps are in milliseconds elapsed since January 1, 1970 00:00:00 UTC,
+ * matching the ChatSessionItem.timing API contract.
  */
 export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
-	readonly timestamp: Date;
-	/** Timestamp of the first message in the session (for timing.created) */
-	readonly firstMessageTimestamp: Date;
-	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
-	readonly lastMessageTimestamp: Date;
+	/** Timestamp when the session was created (first message) in ms since epoch. */
+	readonly created: number;
+	/** Timestamp when the most recent user request started in ms since epoch. */
+	readonly lastRequestStarted?: number;
+	/** Timestamp when the most recent request completed (last message) in ms since epoch. */
+	readonly lastRequestEnded?: number;
+	/** Basename of the workspace folder this session belongs to (for badge display) */
+	readonly folderName?: string;
 }
 
 // #endregion

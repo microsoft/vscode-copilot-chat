@@ -66,6 +66,17 @@ export namespace AsyncIterUtils {
 
 		return [arr, v.value];
 	}
+
+	export async function drainUntilReturn<T, R>(iterable: AsyncIterable<T, R>): Promise<R> {
+		const iter = iterable[Symbol.asyncIterator]();
+		let v: IteratorResult<T, R>;
+
+		do {
+			v = await iter.next();
+		} while (!v.done);
+
+		return v.value;
+	}
 }
 
 /**
