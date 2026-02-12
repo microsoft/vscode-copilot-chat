@@ -22,7 +22,7 @@ const BASE_PLAN_AGENT_CONFIG: AgentConfig = {
 	argumentHint: 'Outline the goal or problem to research',
 	target: 'vscode',
 	disableModelInvocation: true,
-	agents: ['Explore'],
+	agents: [], // Explore agent added dynamically when exploreSubagentEnabled
 	tools: [
 		...DEFAULT_READ_TOOLS,
 		'agent',
@@ -64,7 +64,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
 				e.affectsConfiguration(ConfigKey.AskQuestionsEnabled.fullyQualifiedId) ||
-				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.PlanAgentExploreSubagentEnabled.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -104,7 +105,27 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	static buildAgentBody(askQuestionsEnabled: boolean): string {
+	static buildAgentBody(askQuestionsEnabled: boolean, exploreSubagentEnabled: boolean): string {
+		const discoverySection = exploreSubagentEnabled
+			? `## 1. Discovery
+
+Run the *Explore* subagent to gather context and discover potential blockers or ambiguities. When the task spans **multiple independent areas** (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
+
+Update the plan with your findings.`
+			: `## 1. Discovery
+
+Run #tool:agent/runSubagent to gather context and discover potential blockers or ambiguities.
+MANDATORY: Instruct the subagent to work autonomously following <research_instructions>.
+<research_instructions>
+- Research the user's task comprehensively using read-only tools.
+- Start with high-level code searches before reading specific files.
+- Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
+- Identify missing information, conflicting requirements, or technical unknowns.
+- DO NOT draft a full plan yet — focus on discovery and feasibility.
+</research_instructions>
+
+After the subagent returns, analyze the results.`;
+
 		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
 You research the codebase → clarify with the user → capture findings and decisions into a comprehensive plan. This iterative approach catches edge cases and non-obvious requirements BEFORE implementation begins.
@@ -121,11 +142,7 @@ Your SOLE responsibility is planning. NEVER start implementation.
 <workflow>
 Cycle through these phases based on user input. This is iterative, not linear. If the user task is highly ambiguous, do only *Discovery* to outline a draft plan, then move on to alignment before fleshing out the full plan.
 
-## 1. Discovery
-
-Run the *Explore* subagent to gather context and discover potential blockers or ambiguities. When the task spans **multiple independent areas** (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
-
-Update the plan with your findings.
+${discoverySection}
 
 ## 2. Alignment
 
@@ -198,6 +215,8 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		// Check askQuestions config first (needed for both tools and body)
 		const askQuestionsEnabled = this.configurationService.getConfig(ConfigKey.AskQuestionsEnabled);
 
+		// Check if Explore subagent is enabled (internal experiment)
+		const exploreSubagentEnabled = this.configurationService.getConfig(ConfigKey.PlanAgentExploreSubagentEnabled);
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
@@ -231,12 +250,16 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 			? [...new Set([...BASE_PLAN_AGENT_CONFIG.tools, ...toolsToAdd])]
 			: [...BASE_PLAN_AGENT_CONFIG.tools];
 
+		// Conditionally add Explore agent when enabled
+		const agents = exploreSubagentEnabled ? ['Explore'] : [];
+
 		// Start with base config, using dynamic body based on askQuestions setting
 		return {
 			...BASE_PLAN_AGENT_CONFIG,
+			agents,
 			tools,
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
-			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled),
+			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled, exploreSubagentEnabled),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}

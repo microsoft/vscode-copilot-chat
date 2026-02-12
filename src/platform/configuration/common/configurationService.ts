@@ -978,6 +978,9 @@ export namespace ConfigKey {
 	/** Additional tools to enable for the Plan agent (additive to base tools) */
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);
 
+	/** Enable Explore subagent delegation in Plan agent (internal experiment) */
+	export const PlanAgentExploreSubagentEnabled = defineTeamInternalSetting<boolean>('chat.planAgent.exploreSubagentEnabled', ConfigType.Simple, false);
+
 	/** Model override for Implement agent (empty = use default) */
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
 
