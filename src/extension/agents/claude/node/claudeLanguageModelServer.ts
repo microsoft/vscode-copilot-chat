@@ -16,6 +16,7 @@ import { FinishedCallback, OptionalChatRequestParams } from '../../../../platfor
 import { Response } from '../../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IEndpointFetchOptions, IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { ChatCompletion } from '../../../../platform/networking/common/openai';
+import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../../platform/telemetry/common/telemetryData';
 import { ITokenizer, TokenizerType } from '../../../../util/common/tokenizer';
@@ -66,6 +67,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 		@ILogService private readonly logService: ILogService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
@@ -210,13 +212,21 @@ export class ClaudeLanguageModelServer extends Disposable {
 				this.exception(e as Error, `Failed to parse messages for logging`);
 			}
 
-			await streamingEndpoint.makeChatRequest2({
-				debugName: 'claudeLMServer',
+			const capturingToken = sessionId ? this.sessionStateService.getCapturingTokenForSession(sessionId) : undefined;
+
+			const doRequest = () => streamingEndpoint.makeChatRequest2({
+				debugName: 'Claude Copilot Proxy',
 				messages: messagesForLogging,
 				finishedCb: async () => undefined,
 				location: ChatLocation.MessagesProxy,
 				userInitiatedRequest: isUserInitiatedMessage
 			}, tokenSource.token);
+
+			if (capturingToken) {
+				await this.requestLogger.captureInvocation(capturingToken, doRequest);
+			} else {
+				await doRequest();
+			}
 
 			requestComplete = true;
 
