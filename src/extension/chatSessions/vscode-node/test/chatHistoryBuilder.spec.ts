@@ -73,8 +73,8 @@ function session(messages: StoredMessage[], subagents: ISubagentSession[] = []):
 		id: 'test-session',
 		label: 'Test',
 		messages,
-		firstMessageTimestamp: messages[0]?.timestamp ?? timestamp,
-		lastMessageTimestamp: messages[messages.length - 1]?.timestamp ?? timestamp,
+		created: (messages[0]?.timestamp ?? timestamp).getTime(),
+		lastRequestEnded: (messages[messages.length - 1]?.timestamp ?? timestamp).getTime(),
 		subagents,
 	};
 }
@@ -686,8 +686,8 @@ describe('buildChatHistory', () => {
 				id: 'fixture-session',
 				label: 'Fixture Test',
 				messages,
-				firstMessageTimestamp: new Date(),
-				lastMessageTimestamp: new Date(),
+				created: Date.now(),
+				lastRequestEnded: Date.now(),
 				subagents: [],
 			};
 
