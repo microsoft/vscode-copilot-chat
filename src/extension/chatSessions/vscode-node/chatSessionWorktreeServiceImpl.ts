@@ -43,8 +43,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				this._sessionWorktrees.set(key, value);
 			} else {
 				if (value.version === 1) {
-					// Worktree properties v1
-					this._sessionWorktrees.set(key, JSON.parse(value.data) satisfies ChatSessionWorktreeProperties);
+					// Worktree properties v1 (we need to explicitly add the version property since it may be missing)
+					this._sessionWorktrees.set(key, { ...JSON.parse(value.data), version: 1 } satisfies ChatSessionWorktreeProperties);
 				} else {
 					this.logService.warn(`[ChatSessionWorktreeService][loadWorktreeProperties] Unsupported worktree properties version: ${value.version} for session ${key}`);
 				}
@@ -97,7 +97,8 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 						branchName: branch,
 						baseCommit,
 						repositoryPath: activeRepository.rootUri.fsPath,
-						worktreePath
+						worktreePath,
+						version: 1
 					} satisfies ChatSessionWorktreeProperties;
 				}
 			}
@@ -130,11 +131,11 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	async setWorktreeProperties(sessionId: string, properties: string | ChatSessionWorktreeProperties): Promise<void> {
+	async setWorktreeProperties(sessionId: string, properties: ChatSessionWorktreeProperties): Promise<void> {
 		this._sessionWorktrees.set(sessionId, properties);
 
 		const sessionWorktreesProperties = this.extensionContext.globalState.get<Record<string, string | ChatSessionWorktreeData>>(CHAT_SESSION_WORKTREE_MEMENTO_KEY, {});
-		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: 1 };
+		sessionWorktreesProperties[sessionId] = { data: JSON.stringify(properties), version: properties.version };
 		await this.extensionContext.globalState.update(CHAT_SESSION_WORKTREE_MEMENTO_KEY, sessionWorktreesProperties);
 	}
 
