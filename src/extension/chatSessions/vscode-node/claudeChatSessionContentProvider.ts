@@ -38,6 +38,7 @@ import '../../agents/claude/vscode-node/mcpServers/index';
 const MODELS_OPTION_ID = 'model';
 const PERMISSION_MODE_OPTION_ID = 'permissionMode';
 const FOLDER_OPTION_ID = 'folder';
+const FORK_FROM_OPTION_ID = '__fork_from__'; // Internal option to track fork parent
 const MAX_MRU_ENTRIES = 10;
 
 /** Sentinel value indicating no Claude models with Messages API are available */
@@ -285,10 +286,16 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 			const sessionId = ClaudeSessionUri.getId(chatSessionContext.chatSessionItem.resource);
 			const yieldRequested = () => context.yieldRequested;
 
+			// Check if this is a fork request via initialSessionOptions
+			const initialOptions = chatSessionContext.initialSessionOptions;
+			const forkFromOption = initialOptions?.find(opt => opt.optionId === FORK_FROM_OPTION_ID);
+			const parentSessionId = typeof forkFromOption?.value === 'string' ? forkFromOption.value : undefined;
+
 			// Resolve the effective session ID first, before lookups, so that
 			// all property reads and writes use a consistent key.
 			let effectiveSessionId: string;
 			let isNewSession: boolean;
+			let isFork = false;
 			let shouldCommitUntitledSession = false;
 			if (chatSessionContext.isUntitled) {
 				const existing = this._untitledToEffectiveSessionId.get(sessionId);
@@ -298,6 +305,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 				} else {
 					effectiveSessionId = generateUuid();
 					isNewSession = true;
+					isFork = !!parentSessionId;
 					shouldCommitUntitledSession = true;
 					this._untitledToEffectiveSessionId.set(sessionId, effectiveSessionId);
 					this._effectiveToUntitledSessionId.set(effectiveSessionId, sessionId);
@@ -330,7 +338,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 
 			const prompt = request.prompt;
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.InProgress, prompt);
-			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested);
+			const result = await this.claudeAgentManager.handleRequest(effectiveSessionId, request, context, stream, token, isNewSession, yieldRequested, parentSessionId);
 			this._controller.updateItemStatus(effectiveSessionId, vscode.ChatSessionStatus.Completed, prompt);
 
 			// If this was an untitled session that we just created, commit it to a persistent session

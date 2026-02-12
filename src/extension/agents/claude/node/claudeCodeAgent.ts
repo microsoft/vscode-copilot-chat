@@ -63,7 +63,8 @@ export class ClaudeAgentManager extends Disposable {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken,
 		isNewSession: boolean,
-		yieldRequested?: () => boolean
+		yieldRequested?: () => boolean,
+		forkFromSessionId?: string
 	): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Read UI state from session state service
@@ -79,14 +80,14 @@ export class ClaudeAgentManager extends Disposable {
 			const langModelServer = await this.getLangModelServer();
 			const serverConfig = langModelServer.getConfig();
 
-			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${claudeSessionId}, modelId=${modelId}, permissionMode=${permissionMode}.`);
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${claudeSessionId}, modelId=${modelId}, permissionMode=${permissionMode}, forkFrom=${forkFromSessionId}.`);
 			let session: ClaudeCodeSession;
 			if (this._sessions.has(claudeSessionId)) {
 				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
 				session = this._sessions.get(claudeSessionId)!;
 			} else {
 				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${claudeSessionId}.`);
-				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, isNewSession);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, langModelServer, claudeSessionId, modelId, permissionMode, isNewSession, forkFromSessionId);
 				this._sessions.set(claudeSessionId, newSession);
 				session = newSession;
 			}
@@ -256,6 +257,7 @@ export class ClaudeCodeSession extends Disposable {
 		initialModelId: string,
 		initialPermissionMode: PermissionMode,
 		isNewSession: boolean,
+		private readonly forkFromSessionId: string | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@INativeEnvService private readonly envService: INativeEnvService,
@@ -446,10 +448,13 @@ export class ClaudeCodeSession extends Disposable {
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
-			// Use sessionId for new sessions, resume for existing ones (mutually exclusive)
-			...(this._isResumed
-				? { resume: this.sessionId }
-				: { sessionId: this.sessionId }),
+			// Handle forking: if forkFromSessionId is set, use resume + forkSession
+			// Otherwise, use sessionId for new sessions or resume for existing ones
+			...(this.forkFromSessionId
+				? { resume: this.forkFromSessionId, forkSession: true, sessionId: this.sessionId }
+				: this._isResumed
+					? { resume: this.sessionId }
+					: { sessionId: this.sessionId }),
 			// Pass the model selection to the SDK
 			model: this._currentModelId,
 			// Pass the permission mode to the SDK

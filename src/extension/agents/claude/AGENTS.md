@@ -33,6 +33,15 @@ This folder contains the Claude Code integration for VS Code Chat. It enables us
 - [Sessions](https://platform.claude.com/docs/en/agent-sdk/sessions) - Manage conversation history and context across interactions
 - [File Checkpointing](https://platform.claude.com/docs/en/agent-sdk/file-checkpointing) - Save and restore file states for undo/redo functionality
 
+> **Session Forking**: This extension supports session forking through the Claude Agent SDK's `forkSession` option. When you fork a session in VS Code (via the UI), the extension automatically:
+> - Creates a new session ID for the forked conversation
+> - Resumes from the parent session using `resume: <parent-session-id>`
+> - Passes `forkSession: true` to the SDK to create an independent branch
+> - Commits the forked session as a new persistent session after the first successful request
+>
+> This allows you to explore different approaches or solutions without affecting the original conversation.
+
+
 **Advanced Features:**
 - [Structured Outputs](https://platform.claude.com/docs/en/agent-sdk/structured-outputs) - Get reliable JSON responses with schema validation
 - [Modifying System Prompts](https://platform.claude.com/docs/en/agent-sdk/modifying-system-prompts) - Customize Claude's behavior and instructions
