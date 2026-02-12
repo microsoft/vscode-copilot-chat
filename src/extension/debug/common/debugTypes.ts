@@ -122,6 +122,16 @@ export interface DebugSubAgent {
 	readonly depth: number;
 	/** Summary or final result from the sub-agent */
 	readonly summary?: string;
+	/** Number of internal turns (model request cycles) within the sub-agent */
+	readonly internalTurns?: number;
+	/** Model requests made by this sub-agent */
+	readonly requests?: DebugRequest[];
+	/** Total prompt tokens used by this sub-agent */
+	readonly promptTokens?: number;
+	/** Total completion tokens used by this sub-agent */
+	readonly completionTokens?: number;
+	/** Total duration of sub-agent execution in milliseconds */
+	readonly durationMs?: number;
 }
 
 /**
@@ -210,8 +220,8 @@ export interface DebugTranscriptEvent {
 export interface DebugSession {
 	/** Session identifier */
 	readonly sessionId: string;
-	/** Source of the data ('live', 'chatreplay', 'trajectory', 'transcript') */
-	readonly source: 'live' | 'chatreplay' | 'trajectory' | 'transcript';
+	/** Source of the data ('live', 'chatreplay', 'trajectory', 'transcript', 'archive') */
+	readonly source: 'live' | 'chatreplay' | 'trajectory' | 'transcript' | 'archive';
 	/** Turns in the session */
 	readonly turns: DebugTurn[];
 	/** All tool calls (flattened for easy access) */
@@ -264,6 +274,7 @@ export const enum DebugQueryType {
 	Thinking = 'thinking',
 	Tokens = 'tokens',
 	Transcript = 'transcript',
+	Export = 'export',
 }
 
 /**

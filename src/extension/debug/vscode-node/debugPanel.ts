@@ -11,7 +11,7 @@ import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecy
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReplayExport, ExportedPrompt } from '../../replay/common/chatReplayTypes';
 import { IDebugContextService } from '../common/debugContextService';
-import { DebugQueryType, DebugSession } from '../common/debugTypes';
+import { DebugItemStatus, DebugQueryType, DebugSession, DebugSubAgent, DebugToolCall } from '../common/debugTypes';
 import { executeQuery, parseQuery } from '../node/debugQueryHandler';
 import {
 	buildSessionFromChatReplay,
@@ -26,7 +26,7 @@ import { getDebugPanelHtml } from './panelHtml';
  * Messages sent from webview to extension
  */
 interface WebviewToExtensionMessage {
-	type: 'query' | 'load' | 'ready' | 'aiQuery';
+	type: 'query' | 'load' | 'ready' | 'aiQuery' | 'export';
 	command?: string;
 	query?: string;
 }
@@ -117,9 +117,12 @@ export class DebugPanelManager extends Disposable {
 			this._handleWebviewMessage(message);
 		}));
 
-		// Handle panel disposal
+		// Handle panel disposal - reset to live mode
 		this._disposables.add(this._panel.onDidDispose(() => {
 			this._panel = undefined;
+			this._loadedFromFile = false;
+			this._session = undefined;
+			this._debugContextService.clearLoadedSession();
 		}));
 
 		// Load initial live session
@@ -146,6 +149,10 @@ export class DebugPanelManager extends Disposable {
 				if (message.query) {
 					await this._executeAiQuery(message.query);
 				}
+				break;
+
+			case 'export':
+				await this._exportSession();
 				break;
 
 			case 'load':
@@ -177,6 +184,11 @@ export class DebugPanelManager extends Disposable {
 				markdown: '*Session data refreshed from live session.*'
 			});
 			this._sendSessionInfo();
+			return;
+		}
+
+		if (query.type === DebugQueryType.Export) {
+			void this._exportSession();
 			return;
 		}
 
@@ -214,6 +226,71 @@ export class DebugPanelManager extends Disposable {
 			this._sendToWebview({
 				type: 'error',
 				error: `Failed to execute AI query: ${errorMsg}`
+			});
+		}
+	}
+
+	/**
+	 * Export the current session to a .debugsession.json file
+	 */
+	private async _exportSession(): Promise<void> {
+		if (!this._session) {
+			this._sendToWebview({
+				type: 'error',
+				error: 'No session data to export. Load or start a session first.'
+			});
+			return;
+		}
+
+		// Generate a default filename based on session info
+		const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+		const defaultName = `debug-session-${timestamp}.debugsession.json`;
+
+		const uri = await vscode.window.showSaveDialog({
+			defaultUri: vscode.Uri.file(defaultName),
+			filters: {
+				'Debug Session': ['debugsession.json', 'json'],
+				'All Files': ['*']
+			},
+			title: 'Export Debug Session'
+		});
+
+		if (!uri) {
+			return;
+		}
+
+		try {
+			// Prepare session for export (convert Maps to objects for JSON serialization)
+			const exportData = {
+				exportedAt: new Date().toISOString(),
+				version: 1,
+				session: {
+					...this._session,
+					// Override source to 'archive' when re-imported
+					source: 'archive',
+					metrics: {
+						...this._session.metrics,
+						// Convert Maps to plain objects for JSON
+						toolCallsByName: Object.fromEntries(this._session.metrics.toolCallsByName),
+						errorTypes: Object.fromEntries(this._session.metrics.errorTypes)
+					}
+				}
+			};
+
+			const content = JSON.stringify(exportData, null, 2);
+			await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(content));
+
+			const filename = uri.fsPath.split(/[/\\]/).pop() || 'session';
+			this._sendToWebview({
+				type: 'result',
+				title: 'Session Exported',
+				markdown: `Session exported to **${filename}**\n\n- ${this._session.metrics.totalTurns} turns\n- ${this._session.metrics.totalToolCalls} tool calls\n\n*You can reload this session later using \`/load\` command.*`
+			});
+		} catch (error) {
+			const errorMsg = error instanceof Error ? error.message : String(error);
+			this._sendToWebview({
+				type: 'error',
+				error: `Failed to export session: ${errorMsg}`
 			});
 		}
 	}
@@ -326,12 +403,14 @@ export class DebugPanelManager extends Disposable {
 
 			// Load trajectories first (for hierarchy analysis)
 			let trajectoriesLoaded = 0;
+			const loadedTrajectories: IAgentTrajectory[] = [];
 			for (const fileUri of trajectoryFiles) {
 				try {
 					const content = await vscode.workspace.fs.readFile(fileUri);
 					const text = new TextDecoder().decode(content);
 					const data = JSON.parse(text) as IAgentTrajectory;
 					this._debugContextService.addTrajectory(data);
+					loadedTrajectories.push(data);
 					trajectoriesLoaded++;
 				} catch {
 					// Skip invalid trajectory files
@@ -407,6 +486,11 @@ export class DebugPanelManager extends Disposable {
 				}
 			}
 
+			// Merge subagent tool data from linked trajectory files
+			if (sessionLoaded && loadedTrajectories.length > 0) {
+				this._mergeSubagentTrajectoryData(loadedTrajectories);
+			}
+
 			this._loadedFromFile = sessionLoaded;
 			this._sendSessionInfo();
 
@@ -468,7 +552,7 @@ export class DebugPanelManager extends Disposable {
 			canSelectFolders: false,
 			canSelectMany: false,
 			filters: {
-				'Session Files': ['json', 'chatreplay.json', 'trajectory.json', 'jsonl'],
+				'Session Files': ['json', 'chatreplay.json', 'trajectory.json', 'debugsession.json', 'jsonl'],
 				'All Files': ['*']
 			},
 			title: 'Load Debug Session'
@@ -533,10 +617,25 @@ export class DebugPanelManager extends Disposable {
 			// Parse as JSON
 			const data = JSON.parse(text);
 
-			// Detect file type
-			if ('prompts' in data && 'totalPrompts' in data) {
+			// Detect file type and build session
+			let session: DebugSession;
+			if ('version' in data && 'session' in data && data.session) {
+				// Exported debug session archive
+				const sessionData = data.session;
+				// Reconstruct Maps from plain objects
+				const metrics = {
+					...sessionData.metrics,
+					toolCallsByName: new Map(Object.entries(sessionData.metrics.toolCallsByName || {})),
+					errorTypes: new Map(Object.entries(sessionData.metrics.errorTypes || {}))
+				};
+				session = {
+					...sessionData,
+					source: 'archive' as const,
+					metrics
+				};
+			} else if ('prompts' in data && 'totalPrompts' in data) {
 				// ChatReplayExport (full export with multiple prompts)
-				this._session = buildSessionFromChatReplay(data as ChatReplayExport, filename);
+				session = buildSessionFromChatReplay(data as ChatReplayExport, filename);
 			} else if ('prompt' in data && 'logs' in data) {
 				// Single ExportedPrompt - wrap it in a ChatReplayExport structure
 				const wrappedExport: ChatReplayExport = {
@@ -545,27 +644,25 @@ export class DebugPanelManager extends Disposable {
 					totalLogEntries: (data as ExportedPrompt).logs.length,
 					prompts: [data as ExportedPrompt]
 				};
-				this._session = buildSessionFromChatReplay(wrappedExport, filename);
+				session = buildSessionFromChatReplay(wrappedExport, filename);
 			} else if ('schema_version' in data && 'steps' in data) {
 				// ATIF trajectory
-				this._session = buildSessionFromTrajectory(data as IAgentTrajectory, filename);
+				session = buildSessionFromTrajectory(data as IAgentTrajectory, filename);
 			} else {
-				throw new Error('Unknown file format. Expected .chatreplay.json, .trajectory.json, or .jsonl transcript');
+				throw new Error('Unknown file format. Expected .debugsession.json, .chatreplay.json, .trajectory.json, or .jsonl transcript');
 			}
 
+			this._session = session;
 			this._loadedFromFile = true;
 			// Also store in context service so tools can access it
-			this._debugContextService.loadSession(this._session, uri.fsPath);
+			this._debugContextService.loadSession(session, uri.fsPath);
 			this._sendSessionInfo();
 
-			const session = this._session;
-			if (session) {
-				this._sendToWebview({
-					type: 'result',
-					title: 'Session Loaded',
-					markdown: `Loaded **${filename}**\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.metrics.totalSubAgents} sub-agents\n\n*Session data is now available for AI analysis. Use "Ask AI" or type a question.*`
-				});
-			}
+			this._sendToWebview({
+				type: 'result',
+				title: session.source === 'archive' ? 'Archived Session Loaded' : 'Session Loaded',
+				markdown: `Loaded **${filename}**${session.source === 'archive' ? ' (📦 Archive)' : ''}\n\n- ${session.metrics.totalTurns} turns\n- ${session.metrics.totalToolCalls} tool calls\n- ${session.metrics.totalSubAgents} sub-agents\n\n*Session data is now available for AI analysis. Use "Ask AI" or type a question.*`
+			});
 
 		} catch (error) {
 			const errorMsg = error instanceof Error ? error.message : String(error);
@@ -616,5 +713,91 @@ export class DebugPanelManager extends Disposable {
 	public override dispose(): void {
 		this._panel?.dispose();
 		super.dispose();
+	}
+
+	/**
+	 * Merge subagent tool data from linked trajectory files into the session
+	 * This links subagent trajectories to DebugSubAgent entries based on session_id matching
+	 */
+	private _mergeSubagentTrajectoryData(trajectories: IAgentTrajectory[]): void {
+		if (!this._session || this._session.subAgents.length === 0) {
+			return;
+		}
+
+		// Build a map of session_id -> trajectory
+		const trajectoryMap = new Map<string, IAgentTrajectory>();
+		for (const traj of trajectories) {
+			trajectoryMap.set(traj.session_id, traj);
+		}
+
+		// Update each subagent with data from its trajectory
+		const updatedSubAgents: DebugSubAgent[] = [];
+		for (const subAgent of this._session.subAgents) {
+			const trajectory = trajectoryMap.get(subAgent.sessionId);
+			if (trajectory) {
+				// Extract tool calls from trajectory steps
+				const toolCalls: DebugToolCall[] = [];
+				let promptTokens = 0;
+				let completionTokens = 0;
+				let internalTurns = 0;
+
+				for (const step of trajectory.steps) {
+					if (step.source === 'agent') {
+						internalTurns++;
+
+						// Extract tool calls
+						if (step.tool_calls) {
+							for (const tc of step.tool_calls) {
+								toolCalls.push({
+									id: tc.tool_call_id,
+									name: tc.function_name,
+									args: tc.arguments,
+									status: DebugItemStatus.Success, // Trajectory doesn't track individual tool status
+									turnId: `subagent-${subAgent.sessionId}`,
+									durationMs: step.metrics?.duration_ms
+								});
+							}
+						}
+
+						// Extract metrics
+						if (step.metrics) {
+							promptTokens += step.metrics.prompt_tokens || 0;
+							completionTokens += step.metrics.completion_tokens || 0;
+						}
+					}
+				}
+
+				// Calculate duration from final metrics or sum of steps
+				let durationMs: number | undefined;
+				if (trajectory.steps.length > 0) {
+					const durations = trajectory.steps
+						.filter(s => s.metrics?.duration_ms)
+						.map(s => s.metrics!.duration_ms!);
+					if (durations.length > 0) {
+						durationMs = durations.reduce((a, b) => a + b, 0);
+					}
+				}
+
+				// Create updated subagent with merged data
+				updatedSubAgents.push({
+					...subAgent,
+					toolCalls,
+					internalTurns: internalTurns || undefined,
+					promptTokens: promptTokens || undefined,
+					completionTokens: completionTokens || undefined,
+					durationMs
+				});
+			} else {
+				// Keep original if no matching trajectory
+				updatedSubAgents.push(subAgent);
+			}
+		}
+
+		// Replace session with updated subagents
+		// Since DebugSession is readonly, we need to recreate it
+		this._session = {
+			...this._session,
+			subAgents: updatedSubAgents
+		};
 	}
 }

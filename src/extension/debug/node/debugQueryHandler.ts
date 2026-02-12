@@ -116,6 +116,10 @@ export function parseQuery(input: string): DebugQuery {
 			case 'log':
 				return { type: DebugQueryType.Transcript, options: { limit } };
 
+			case 'export':
+			case 'save':
+				return { type: DebugQueryType.Export, options: {} };
+
 			default:
 				// Unknown command, treat as search
 				return { type: DebugQueryType.Search, searchTerm: trimmed.substring(1), options: {} };
@@ -198,6 +202,15 @@ export function executeQuery(query: DebugQuery, session: DebugSession | undefine
 			success: true,
 			markdown: '*Refreshing session data...*',
 			title: 'Refresh'
+		};
+	}
+
+	if (query.type === DebugQueryType.Export) {
+		// Export is handled externally by the panel
+		return {
+			success: true,
+			markdown: '*Opening save dialog...*',
+			title: 'Export Session'
 		};
 	}
 

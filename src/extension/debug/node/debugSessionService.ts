@@ -237,6 +237,49 @@ export function buildSessionFromRequestLogger(
 		turnIndex++;
 	}
 
+	// Second pass: populate subagent tool calls and metrics from turns that belong to subagents
+	// Subagent turns have token.subAgentInvocationId set which matches DebugSubAgent.sessionId
+	for (const [token, entries] of turnMap) {
+		if (token?.subAgentInvocationId && subAgentMap.has(token.subAgentInvocationId)) {
+			const subAgent = subAgentMap.get(token.subAgentInvocationId)!;
+
+			// Collect tool calls from this subagent turn
+			const subagentToolCalls: DebugToolCall[] = [];
+			const subagentRequests: DebugRequest[] = [];
+			let promptTokens = 0;
+			let completionTokens = 0;
+
+			for (const entry of entries) {
+				if (entry.kind === LoggedInfoKind.ToolCall) {
+					const toolEntry = entry as ILoggedToolCall;
+					const toolCall = convertToolCall(toolEntry, token.label || 'subagent');
+					subagentToolCalls.push(toolCall);
+				} else if (entry.kind === LoggedInfoKind.Request) {
+					const reqEntry = entry as ILoggedRequestInfo;
+					const request = convertRequest(reqEntry, token.label || 'subagent');
+					subagentRequests.push(request);
+
+					// Extract token usage
+					if (reqEntry.entry.type === LoggedRequestKind.ChatMLSuccess && reqEntry.entry.usage) {
+						promptTokens += reqEntry.entry.usage.prompt_tokens || 0;
+						completionTokens += reqEntry.entry.usage.completion_tokens || 0;
+					}
+				}
+			}
+
+			// Update the subagent entry with collected data
+			// Since DebugSubAgent is readonly, we need to replace it in the map
+			subAgentMap.set(token.subAgentInvocationId, {
+				...subAgent,
+				toolCalls: [...subAgent.toolCalls, ...subagentToolCalls],
+				requests: [...(subAgent.requests || []), ...subagentRequests],
+				internalTurns: (subAgent.internalTurns || 0) + 1,
+				promptTokens: (subAgent.promptTokens || 0) + promptTokens,
+				completionTokens: (subAgent.completionTokens || 0) + completionTokens
+			});
+		}
+	}
+
 	// Build sub-agent hierarchy (filter out debug subagents if requested)
 	let rootSubAgents = buildSubAgentHierarchy(subAgentMap);
 	if (options?.excludeDebugSubagent) {
@@ -287,6 +330,58 @@ export function buildSessionFromChatReplay(
 	const allRequests: DebugRequest[] = [];
 	const subAgentMap = new Map<string, DebugSubAgent>();
 
+	// First pass: collect all subagent internal requests (tool/runSubagent entries)
+	// These are model requests made WITHIN a subagent, not the runSubagent tool call itself
+	const subagentInternalRequests: DebugRequest[] = [];
+	let subagentTotalPromptTokens = 0;
+	let subagentTotalCompletionTokens = 0;
+	let subagentStartTime: Date | undefined;
+	let subagentEndTime: Date | undefined;
+
+	for (const prompt of data.prompts) {
+		for (const log of prompt.logs) {
+			if (log.name === 'tool/runSubagent') {
+				// This is a model request made within a subagent execution
+				const response = log.response as { type?: string } | undefined;
+				const request: DebugRequest = {
+					id: log.id,
+					name: 'subagent-internal',
+					model: log.metadata?.model,
+					promptTokens: log.metadata?.usage?.prompt_tokens,
+					completionTokens: log.metadata?.usage?.completion_tokens,
+					durationMs: log.metadata?.duration,
+					timestamp: log.metadata?.startTime ? new Date(log.metadata.startTime) : undefined,
+					status: response?.type === 'success' ? DebugItemStatus.Success : DebugItemStatus.Failure,
+					responseType: response?.type,
+					turnId: 'subagent'
+				};
+				subagentInternalRequests.push(request);
+
+				// Track tokens
+				if (log.metadata?.usage?.prompt_tokens) {
+					subagentTotalPromptTokens += log.metadata.usage.prompt_tokens;
+				}
+				if (log.metadata?.usage?.completion_tokens) {
+					subagentTotalCompletionTokens += log.metadata.usage.completion_tokens;
+				}
+
+				// Track timing
+				if (log.metadata?.startTime) {
+					const startTs = new Date(log.metadata.startTime);
+					if (!subagentStartTime || startTs < subagentStartTime) {
+						subagentStartTime = startTs;
+					}
+				}
+				if (log.metadata?.endTime) {
+					const endTs = new Date(log.metadata.endTime);
+					if (!subagentEndTime || endTs > subagentEndTime) {
+						subagentEndTime = endTs;
+					}
+				}
+			}
+		}
+	}
+
 	for (let i = 0; i < data.prompts.length; i++) {
 		const prompt = data.prompts[i];
 		const turnId = prompt.promptId || `turn-${i}`;
@@ -298,6 +393,11 @@ export function buildSessionFromChatReplay(
 		let latestTimestamp: Date | undefined;
 
 		for (const log of prompt.logs) {
+			// Skip tool/runSubagent entries here - they're handled separately for subagent metrics
+			if (log.name === 'tool/runSubagent') {
+				continue;
+			}
+
 			// Track timestamps for turn duration calculation
 			// Check multiple possible timestamp fields: timestamp, time, metadata.startTime
 			const timeStr = log.timestamp || log.time || log.metadata?.startTime;
@@ -326,6 +426,34 @@ export function buildSessionFromChatReplay(
 				const toolCall = convertChatReplayToolCall(log, turnId);
 				turnToolCalls.push(toolCall);
 				allToolCalls.push(toolCall);
+
+				// Track runSubagent invocations
+				if (log.tool === 'runSubagent' || log.name === 'runSubagent') {
+					const subAgentId = `subagent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+					const description = log.args?.description as string || 'subagent';
+
+					// Calculate duration from internal request timestamps
+					let durationMs: number | undefined;
+					if (subagentStartTime && subagentEndTime) {
+						durationMs = subagentEndTime.getTime() - subagentStartTime.getTime();
+					}
+
+					subAgentMap.set(subAgentId, {
+						sessionId: subAgentId,
+						name: description.substring(0, 50),
+						parentToolCallId: log.id,
+						parentSessionId: `chatreplay-${Date.now()}`,
+						children: [],
+						toolCalls: [],
+						depth: 1,
+						// New fields for internal tracking
+						internalTurns: subagentInternalRequests.length,
+						requests: subagentInternalRequests,
+						promptTokens: subagentTotalPromptTokens || undefined,
+						completionTokens: subagentTotalCompletionTokens || undefined,
+						durationMs
+					});
+				}
 			} else if (log.kind === 'request') {
 				const request = convertChatReplayRequest(log, turnId);
 				turnRequests.push(request);
@@ -371,6 +499,31 @@ export function buildSessionFromChatReplay(
 		};
 
 		turns.push(turn);
+	}
+
+	// If we collected subagent internal requests but no explicit runSubagent tool call was found,
+	// create a subagent entry from the internal request data
+	if (subagentInternalRequests.length > 0 && subAgentMap.size === 0) {
+		let durationMs: number | undefined;
+		if (subagentStartTime && subagentEndTime) {
+			durationMs = subagentEndTime.getTime() - subagentStartTime.getTime();
+		}
+
+		const subAgentId = `subagent-inferred-${Date.now()}`;
+		subAgentMap.set(subAgentId, {
+			sessionId: subAgentId,
+			name: 'subagent',
+			parentToolCallId: '',
+			parentSessionId: `chatreplay-${Date.now()}`,
+			children: [],
+			toolCalls: [],
+			depth: 1,
+			internalTurns: subagentInternalRequests.length,
+			requests: subagentInternalRequests,
+			promptTokens: subagentTotalPromptTokens || undefined,
+			completionTokens: subagentTotalCompletionTokens || undefined,
+			durationMs
+		});
 	}
 
 	const rootSubAgents = buildSubAgentHierarchy(subAgentMap);

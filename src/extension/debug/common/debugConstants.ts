@@ -76,6 +76,8 @@ Deep dive into a specific turn.
 
 **Diagrams:** Mermaid code blocks render automatically in the UI - include them in your response.
 
+**Valid Mermaid diagram types:** flowchart, sequenceDiagram, gantt, pie, stateDiagram, erDiagram, journey, gitgraph, mindmap, timeline, quadrantChart, xychart-beta, sankey-beta, block-beta. Do NOT use invalid types like "bar" - use pie charts or tables for data summaries instead.
+
 ## Response Guidelines
 
 1. Include Mermaid diagrams and markdown tables from tool output when relevant

@@ -101,6 +101,16 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			color: var(--vscode-badge-foreground);
 		}
 
+		.session-badge.live {
+			background-color: var(--vscode-testing-iconPassed);
+			color: var(--vscode-editor-background);
+		}
+
+		.session-badge.archive {
+			background-color: var(--vscode-gitDecoration-stageModifiedResourceForeground, #d19a66);
+			color: var(--vscode-editor-background);
+		}
+
 		.ai-badge {
 			background-color: var(--vscode-testing-iconPassed);
 		}
@@ -450,7 +460,8 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			<button class="quick-btn" data-command="/flow">Flow</button>
 			<button class="quick-btn" data-command="/sequence">Sequence</button>
 			<button class="quick-btn" data-command="/transcript">Transcript</button>
-			<button class="quick-btn" data-command="/load">Load Session</button>
+			<button class="quick-btn" data-command="/load">Load</button>
+			<button class="quick-btn" data-command="/export">Export</button>
 			<button class="quick-btn" data-command="/help">Help</button>
 		</div>
 		<div class="quick-actions" id="ai-quick-actions" style="display: none;">
@@ -555,6 +566,8 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 				const cmd = btn.getAttribute('data-command');
 				if (cmd === '/load') {
 					vscode.postMessage({ type: 'load' });
+				} else if (cmd === '/export') {
+					vscode.postMessage({ type: 'export' });
 				} else {
 					vscode.postMessage({ type: 'query', command: cmd });
 				}
@@ -614,15 +627,19 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 		});
 
 		function updateSessionBadge(source, file) {
+			// Remove existing state classes
+			sessionBadge.classList.remove('live', 'archive');
+
 			if (source === 'live') {
-				sessionBadge.textContent = 'Live Session';
-				sessionBadge.style.backgroundColor = 'var(--vscode-testing-iconPassed)';
+				sessionBadge.textContent = '🟢 Live Session';
+				sessionBadge.classList.add('live');
+			} else if (source === 'archive') {
+				sessionBadge.textContent = '📦 ' + (file || 'Archived Session');
+				sessionBadge.classList.add('archive');
 			} else if (source === 'chatreplay' || source === 'trajectory' || source === 'transcript') {
-				sessionBadge.textContent = file || 'Loaded File';
-				sessionBadge.style.backgroundColor = 'var(--vscode-badge-background)';
+				sessionBadge.textContent = '📄 ' + (file || 'Loaded File');
 			} else {
 				sessionBadge.textContent = 'No Session';
-				sessionBadge.style.backgroundColor = 'var(--vscode-badge-background)';
 			}
 		}
 
@@ -706,16 +723,67 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			// Render all mermaid diagrams (both from message.mermaid and markdown code blocks)
 			const mermaidElements = div.querySelectorAll('.mermaid');
 			if (mermaidElements.length > 0) {
-				try {
-					await mermaid.run({
-						nodes: mermaidElements
-					});
-				} catch (err) {
-					console.error('Mermaid rendering error:', err);
+				// Filter to only valid mermaid diagrams
+				const validElements = Array.from(mermaidElements).filter(el => {
+					const content = el.textContent;
+					if (!isValidMermaid(content)) {
+						// Replace invalid mermaid with error message
+						const container = el.closest('.mermaid-container');
+						if (container) {
+							const attemptedType = content?.trim().split(/[\\s\\n\\(\\{\\[]/)[0] || '(empty)';
+							const errorDiv = document.createElement('div');
+							errorDiv.className = 'error-message';
+							errorDiv.textContent = 'Invalid Mermaid diagram type "' + attemptedType + '". Supported: flowchart, sequenceDiagram, gantt, pie, classDiagram, stateDiagram, erDiagram, journey, mindmap, timeline, gitgraph.';
+							container.replaceWith(errorDiv);
+						}
+						return false;
+					}
+					return true;
+				});
+
+				if (validElements.length > 0) {
+					try {
+						await mermaid.run({
+							nodes: validElements
+						});
+					} catch (err) {
+						console.error('Mermaid rendering error:', err);
+						// Show error for failed diagrams
+						validElements.forEach(el => {
+							if (!el.querySelector('svg')) {
+								const container = el.closest('.mermaid-container');
+								if (container) {
+									const errorDiv = document.createElement('div');
+									errorDiv.className = 'error-message';
+									errorDiv.textContent = 'Mermaid diagram rendering failed: ' + (err.message || 'Unknown error');
+									container.appendChild(errorDiv);
+								}
+							}
+						});
+					}
 				}
 			}
 
 			content.scrollTop = content.scrollHeight;
+		}
+
+		// Valid Mermaid diagram types (v10.x)
+		const VALID_MERMAID_TYPES = [
+			'flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
+			'stateDiagram-v2', 'erDiagram', 'journey', 'gantt', 'pie', 'quadrantChart',
+			'requirementDiagram', 'gitGraph', 'c4Context', 'mindmap', 'timeline',
+			'zenuml', 'sankey-beta', 'xychart-beta', 'block-beta'
+		];
+
+		// Check if mermaid content starts with a valid diagram type
+		function isValidMermaid(content) {
+			if (!content || typeof content !== 'string') return false;
+			const trimmed = content.trim();
+			// Check if it starts with a valid diagram type
+			return VALID_MERMAID_TYPES.some(type =>
+				trimmed.startsWith(type) ||
+				trimmed.toLowerCase().startsWith(type.toLowerCase())
+			);
 		}
 
 		function escapeHtml(text) {

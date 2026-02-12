@@ -11,6 +11,7 @@ import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
 import { IDebugContextService } from '../../common/debugContextService';
+import { getSubagentName, isSubagentTurn } from '../../common/debugFormatters';
 import { DebugSession, DebugTurn } from '../../common/debugTypes';
 import { buildSessionFromRequestLogger } from '../../node/debugSessionService';
 
@@ -213,16 +214,21 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 		// Mermaid gantt chart for timeline visualization
 		if (turns.some(t => t.timestamp)) {
 			lines.push('```mermaid');
-			// Theme configuration for visible colors: green for success, red for failures
-			lines.push('%%{init: {\'theme\': \'base\', \'themeVariables\': {\'primaryColor\': \'#4CAF50\', \'primaryTextColor\': \'#fff\', \'primaryBorderColor\': \'#388E3C\', \'critBkgColor\': \'#f44336\', \'critBorderColor\': \'#c62828\', \'doneBkgColor\': \'#4CAF50\', \'doneBorderColor\': \'#388E3C\'}}}%%');
+			// Theme configuration for visible colors: green for success, red for failures, active for subagents
+			lines.push('%%{init: {\'theme\': \'base\', \'themeVariables\': {\'primaryColor\': \'#4CAF50\', \'primaryTextColor\': \'#fff\', \'primaryBorderColor\': \'#388E3C\', \'critBkgColor\': \'#f44336\', \'critBorderColor\': \'#c62828\', \'doneBkgColor\': \'#4CAF50\', \'doneBorderColor\': \'#388E3C\', \'activeBackgroundColor\': \'#9C27B0\', \'activeBorderColor\': \'#7B1FA2\'}}}%%');
 			lines.push('gantt');
 			lines.push('    title Session Timeline');
 			lines.push('    dateFormat HH:mm:ss');
 			lines.push('    axisFormat %H:%M:%S');
 			lines.push('');
-			lines.push('    section Turns');
 
-			for (const turn of turns) {
+			// Separate main agent turns from subagent turns
+			const mainTurns = turns.filter(t => !isSubagentTurn(t.prompt));
+			const subagentTurns = turns.filter(t => isSubagentTurn(t.prompt));
+
+			// Main agent turns section
+			lines.push('    section Main Agent');
+			for (const turn of mainTurns) {
 				if (turn.timestamp) {
 					// Use crit for failures (red), done for success (green)
 					const status = turn.status === 'failure' ? 'crit, ' : 'done, ';
@@ -231,6 +237,44 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 					const endTime = addDuration(turn.timestamp, duration);
 					const label = escapeLabel(turn.prompt);
 					lines.push(`        ${label} : ${status}${startTime}, ${endTime}`);
+				}
+			}
+
+			// SubAgent turns section (grouped by subagent name)
+			if (subagentTurns.length > 0) {
+				// Group consecutive subagent turns by name
+				const subagentGroups: { name: string; turns: DebugTurn[] }[] = [];
+				let currentGroup: { name: string; turns: DebugTurn[] } | undefined;
+
+				for (const turn of subagentTurns) {
+					const name = getSubagentName(turn.prompt);
+					if (currentGroup && currentGroup.name === name) {
+						currentGroup.turns.push(turn);
+					} else {
+						if (currentGroup) {
+							subagentGroups.push(currentGroup);
+						}
+						currentGroup = { name, turns: [turn] };
+					}
+				}
+				if (currentGroup) {
+					subagentGroups.push(currentGroup);
+				}
+
+				lines.push('');
+				lines.push('    section SubAgents');
+				for (const group of subagentGroups) {
+					for (const turn of group.turns) {
+						if (turn.timestamp) {
+							// Use active for subagent turns (purple)
+							const status = turn.status === 'failure' ? 'crit, ' : 'active, ';
+							const startTime = formatTime(turn.timestamp);
+							const duration = turn.durationMs || 1000;
+							const endTime = addDuration(turn.timestamp, duration);
+							const label = `${group.name} ${escapeLabel(turn.prompt)}`.substring(0, 25);
+							lines.push(`        ${label} : ${status}${startTime}, ${endTime}`);
+						}
+					}
 				}
 			}
 
@@ -267,8 +311,9 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 			const statusIcon = turn.status === 'failure' ? '❌' : '✅';
 			const time = turn.timestamp ? turn.timestamp.toLocaleTimeString() : 'N/A';
 			const duration = includeTiming && turn.durationMs ? ` (${turn.durationMs}ms)` : '';
+			const subagentIndicator = isSubagentTurn(turn.prompt) ? ` 🤖 ${getSubagentName(turn.prompt)}` : '';
 
-			lines.push(`### ${time} - Turn ${turn.index + 1} ${statusIcon}${duration}`);
+			lines.push(`### ${time} - Turn ${turn.index + 1} ${statusIcon}${duration}${subagentIndicator}`);
 			lines.push(`> ${turn.prompt.substring(0, 100)}${turn.prompt.length > 100 ? '...' : ''}`);
 
 			if (includeToolCalls && turn.toolCalls.length > 0) {
@@ -291,18 +336,19 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 		const lines: string[] = [];
 
 		lines.push(`# Session History (Compact) - ${turns.length} of ${totalTurns} turns\n`);
-		lines.push('| Turn | Status | Prompt | Tools | Response |');
-		lines.push('|------|--------|--------|-------|----------|');
+		lines.push('| Turn | Type | Status | Prompt | Tools | Response |');
+		lines.push('|------|------|--------|--------|-------|----------|');
 
 		for (const turn of turns) {
 			const status = turn.status === 'failure' ? '❌' : turn.status === 'cancelled' ? '⚠️' : '✅';
+			const turnType = isSubagentTurn(turn.prompt) ? '🤖 Sub' : 'Main';
 			const prompt = turn.prompt.substring(0, 40).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 			const toolCount = turn.toolCalls.length;
 			const failedTools = turn.toolCalls.filter(t => t.status === 'failure').length;
 			const toolSummary = failedTools > 0 ? `${toolCount} (${failedTools}❌)` : `${toolCount}`;
 			const response = turn.response ? turn.response.substring(0, 30).replace(/\|/g, '\\|').replace(/\n/g, ' ') + '...' : '-';
 
-			lines.push(`| ${turn.index + 1} | ${status} | ${prompt}... | ${toolSummary} | ${response} |`);
+			lines.push(`| ${turn.index + 1} | ${turnType} | ${status} | ${prompt}... | ${toolSummary} | ${response} |`);
 		}
 
 		return lines.join('\n');

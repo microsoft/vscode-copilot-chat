@@ -11,6 +11,7 @@ import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '
 import { ToolName } from '../../../tools/common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../../../tools/common/toolsRegistry';
 import { IDebugContextService } from '../../common/debugContextService';
+import { getSubagentName, isSubagentTurn } from '../../common/debugFormatters';
 import { DebugSession } from '../../common/debugTypes';
 import { buildSessionFromRequestLogger } from '../../node/debugSessionService';
 
@@ -90,6 +91,9 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		const lines: string[] = [];
 		const m = session.metrics;
 
+		// Count subagent turns from prompts
+		const subagentTurnsCount = session.turns.filter(t => isSubagentTurn(t.prompt)).length;
+
 		const title = isLoadedSession
 			? `# Loaded Session${session.sourceFile ? ` (${session.sourceFile})` : ''}`
 			: '# Current Live Session';
@@ -99,7 +103,8 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		if (isLoadedSession && session.source) {
 			lines.push(`- **Source:** ${session.source}`);
 		}
-		lines.push(`- **Total Turns:** ${m.totalTurns}`);
+		const turnsBreakdown = subagentTurnsCount > 0 ? ` (${m.totalTurns - subagentTurnsCount} main, ${subagentTurnsCount} subagent)` : '';
+		lines.push(`- **Total Turns:** ${m.totalTurns}${turnsBreakdown}`);
 		lines.push(`- **Total Tool Calls:** ${m.totalToolCalls}${m.failedToolCalls > 0 ? ` (${m.failedToolCalls} failed)` : ''}`);
 		lines.push(`- **Total Requests:** ${m.totalRequests}${m.failedRequests > 0 ? ` (${m.failedRequests} failed)` : ''}`);
 		if (m.totalPromptTokens || m.totalCompletionTokens) {
@@ -118,8 +123,9 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 			const statusIcon = turn.status === 'failure' ? '❌' : turn.status === 'cancelled' ? '⚠️' : '✅';
 			const toolCount = turn.toolCalls.length;
 			const prompt = turn.prompt.length > 80 ? turn.prompt.substring(0, 80) + '...' : turn.prompt;
+			const subagentIndicator = isSubagentTurn(turn.prompt) ? ` 🤖 ${getSubagentName(turn.prompt)}` : '';
 
-			lines.push(`### Turn ${turn.index + 1} ${statusIcon}`);
+			lines.push(`### Turn ${turn.index + 1} ${statusIcon}${subagentIndicator}`);
 			lines.push(`**Prompt:** ${prompt}`);
 
 			if (turn.durationMs) {
@@ -252,6 +258,10 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		const lines: string[] = [];
 		const m = session.metrics;
 
+		// Count subagent turns from prompts (for chatreplay where metadata isn't available)
+		const subagentTurnsCount = session.turns.filter(t => isSubagentTurn(t.prompt)).length;
+		const mainAgentTurnsCount = m.totalTurns - subagentTurnsCount;
+
 		const title = isLoadedSession
 			? `# Session Metrics${session.sourceFile ? ` (${session.sourceFile})` : ''}`
 			: '# Session Metrics';
@@ -261,6 +271,10 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 		lines.push('| Metric | Value |');
 		lines.push('|--------|-------|');
 		lines.push(`| Total Turns | ${m.totalTurns} |`);
+		if (subagentTurnsCount > 0) {
+			lines.push(`| → Main Agent Turns | ${mainAgentTurnsCount} |`);
+			lines.push(`| → SubAgent Turns | ${subagentTurnsCount} |`);
+		}
 		lines.push(`| Total Tool Calls | ${m.totalToolCalls} |`);
 		lines.push(`| Failed Tool Calls | ${m.failedToolCalls} |`);
 		lines.push(`| Total Requests | ${m.totalRequests} |`);
@@ -312,6 +326,52 @@ class GetCurrentSessionTool implements ICopilotTool<IGetCurrentSessionParams> {
 			lines.push(`- **Avg Prompt Tokens per Turn:** ${avgPrompt}`);
 			lines.push(`- **Avg Completion Tokens per Turn:** ${avgCompletion}`);
 			lines.push(`- **Output/Input Ratio:** ${ratio}`);
+			lines.push('');
+
+			// Most expensive turns by token usage
+			const turnTokens = session.turns.map((turn, idx) => {
+				const promptTokens = turn.requests.reduce((sum, r) => sum + (r.promptTokens || 0), 0);
+				const completionTokens = turn.requests.reduce((sum, r) => sum + (r.completionTokens || 0), 0);
+				const total = promptTokens + completionTokens;
+				return { turnIndex: idx + 1, promptTokens, completionTokens, total, isSubagent: isSubagentTurn(turn.prompt) };
+			}).filter(t => t.total > 0);
+
+			if (turnTokens.length > 0) {
+				turnTokens.sort((a, b) => b.total - a.total);
+				const top5 = turnTokens.slice(0, 5);
+				const totalSessionTokens = m.totalPromptTokens + m.totalCompletionTokens;
+
+				lines.push('## Most Expensive Turns (by tokens)\n');
+				lines.push('| Rank | Turn | Type | Total Tokens | % of Session |');
+				lines.push('|------|------|------|--------------|--------------|');
+				top5.forEach((t, i) => {
+					const pct = ((t.total / totalSessionTokens) * 100).toFixed(1);
+					const type = t.isSubagent ? '🤖 Sub' : 'Main';
+					lines.push(`| ${i + 1} | ${t.turnIndex} | ${type} | ${t.total.toLocaleString()} | ${pct}% |`);
+				});
+				lines.push('');
+			}
+		}
+
+		// Sub-agent details (only if we have internal metrics)
+		if (session.subAgents.length > 0) {
+			const subagentsWithMetrics = session.subAgents.filter(sa => sa.internalTurns || sa.promptTokens);
+			if (subagentsWithMetrics.length > 0) {
+				lines.push('## Sub-Agent Details\n');
+				lines.push('| Name | Internal Turns | Tool Calls | Prompt Tokens | Completion Tokens | Duration |');
+				lines.push('|------|----------------|------------|---------------|-------------------|----------|');
+
+				for (const sa of session.subAgents) {
+					const turns = sa.internalTurns || 'N/A';
+					const tools = sa.toolCalls.length;
+					const promptTokens = sa.promptTokens ? sa.promptTokens.toLocaleString() : 'N/A';
+					const completionTokens = sa.completionTokens ? sa.completionTokens.toLocaleString() : 'N/A';
+					const duration = sa.durationMs ? `${(sa.durationMs / 1000).toFixed(1)}s` : 'N/A';
+					const name = sa.name.length > 30 ? sa.name.substring(0, 30) + '...' : sa.name;
+					lines.push(`| ${name} | ${turns} | ${tools} | ${promptTokens} | ${completionTokens} | ${duration} |`);
+				}
+				lines.push('');
+			}
 		}
 
 		return lines.join('\n');

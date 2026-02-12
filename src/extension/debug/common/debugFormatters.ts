@@ -86,11 +86,41 @@ export function escapeTableCell(text: string): string {
 }
 
 /**
+ * Helper to detect subagent turns from prompt text
+ */
+export function isSubagentTurn(prompt: string): boolean {
+	return prompt.includes('-subagent') ||
+		prompt.includes('You are Oracle-subagent') ||
+		prompt.includes('You are Sisyphus-subagent') ||
+		prompt.includes('You are Code-Review-subagent') ||
+		/You are [A-Za-z]+-subagent/.test(prompt);
+}
+
+/**
+ * Helper to extract subagent name from prompt
+ */
+export function getSubagentName(prompt: string): string {
+	const match = prompt.match(/You are ([A-Za-z]+(?:-subagent)?)/);
+	if (match) {
+		return match[1].replace('-subagent', '');
+	}
+	if (prompt.includes('-subagent')) {
+		const nameMatch = prompt.match(/([A-Za-z]+)-subagent/);
+		return nameMatch ? nameMatch[1] : 'subagent';
+	}
+	return 'subagent';
+}
+
+/**
  * Format a session summary as Markdown
  */
 export function formatSessionSummary(session: DebugSession): string {
 	const lines: string[] = [];
 	const m = session.metrics;
+
+	// Count subagent turns from prompts
+	const subagentTurnsCount = session.turns.filter(t => isSubagentTurn(t.prompt)).length;
+	const mainAgentTurnsCount = m.totalTurns - subagentTurnsCount;
 
 	lines.push('## 📊 Session Summary\n');
 
@@ -116,6 +146,10 @@ export function formatSessionSummary(session: DebugSession): string {
 	lines.push(`| Metric | Count |`);
 	lines.push(`|--------|-------|`);
 	lines.push(`| Total Turns | ${m.totalTurns} |`);
+	if (subagentTurnsCount > 0) {
+		lines.push(`| → Main Agent Turns | ${mainAgentTurnsCount} |`);
+		lines.push(`| → SubAgent Turns | ${subagentTurnsCount} |`);
+	}
 	lines.push(`| Tool Calls | ${m.totalToolCalls} |`);
 	lines.push(`| Model Requests | ${m.totalRequests} |`);
 	lines.push(`| Sub-Agents | ${m.totalSubAgents} |`);
@@ -287,8 +321,9 @@ export function formatTimeline(session: DebugSession): string {
 	for (let i = 0; i < session.turns.length; i++) {
 		const turn = session.turns[i];
 		const time = formatTimestamp(turn.timestamp);
+		const subagentIndicator = isSubagentTurn(turn.prompt) ? ` 🤖 ${getSubagentName(turn.prompt)}` : '';
 
-		lines.push(`### Turn ${i + 1} ${formatStatusBadge(turn.status)}`);
+		lines.push(`### Turn ${i + 1} ${formatStatusBadge(turn.status)}${subagentIndicator}`);
 		lines.push(`*${time}* | Duration: ${formatDuration(turn.durationMs)}\n`);
 
 		// User prompt
@@ -457,12 +492,13 @@ export function formatHelp(): string {
 ### Session
 | Command | Description |
 |---------|-------------|
-| \`/load\` | Load a session file (.chatreplay.json, .trajectory.json, .jsonl) |
+| \`/load\` | Load a session file (.debugsession.json, .chatreplay.json, .trajectory.json, .jsonl) |
+| \`/export\` | Export current session to a .debugsession.json file |
 | \`/refresh\` | Refresh live session data |
 | \`/help\` | Show this help |
 
 ---
-*Tip: Mermaid diagrams render inline when \`mermaid-chat.enabled\` is set.*
+*Tip: Use /export to save sessions for later review or sharing. Archived sessions show a 📦 badge.*
 `;
 }
 
