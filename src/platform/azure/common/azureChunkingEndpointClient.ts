@@ -162,7 +162,7 @@ export class AzureChunkingEndpointClient implements IChunkingEndpointClient {
 					}
 				}
 			} catch (err) {
-				this._logService.error(`AzureChunkingEndpointClient: embeddings failed: ${(err as Error).message}`);
+				this._logService.warn(`AzureChunkingEndpointClient: embeddings failed: ${(err as Error).message}`);
 				return undefined;
 			}
 		}

@@ -93,9 +93,9 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 				return { type: embeddingType, values: embeddingsOut };
 			}
 
-			const batch = inputs.slice(i, i + this.batchSize);
+			const batch = inputs.slice(i, i + this.batchSize).filter(s => s.trim().length > 0);
 			if (!batch.length) {
-				break;
+				continue;
 			}
 
 			try {
@@ -115,7 +115,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 
 				if (!response.ok) {
 					const errorText = await response.text();
-					this._logService.error(`Azure embeddings request failed: ${response.status} ${errorText}`);
+					this._logService.warn(`Azure embeddings request failed: ${response.status} ${errorText}`);
 					throw new Error(`Error fetching embeddings from Azure: ${response.status}`);
 				}
 
@@ -134,7 +134,7 @@ export class AzureEmbeddingsComputer implements IEmbeddingsComputer {
 
 				this._logService.debug(`Azure embeddings: computed ${batch.length} embeddings (batch ${Math.floor(i / this.batchSize) + 1})`);
 			} catch (err) {
-				this._logService.error(`Azure embeddings batch failed: ${(err as Error).message}`);
+				this._logService.warn(`Azure embeddings batch failed: ${(err as Error).message}`);
 				throw err;
 			}
 		}

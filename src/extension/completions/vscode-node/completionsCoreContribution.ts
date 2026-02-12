@@ -10,6 +10,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { registerUnificationCommands } from '../../completions-core/vscode-node/completionsServiceBridges';
+import { ensureInlineSuggestEnabled } from '../../completions-core/vscode-node/extension/src/config';
 import { ICopilotInlineCompletionItemProviderService } from '../common/copilotInlineCompletionItemProviderService';
 import { unificationStateObservable } from './completionsUnificationContribution';
 
@@ -24,6 +25,9 @@ export class CompletionsCoreContribution extends Disposable {
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService
 	) {
 		super();
+
+		// Azure-only fork: auto-enable inline suggestions so the UI shows them as active
+		void ensureInlineSuggestEnabled();
 
 		const unificationState = unificationStateObservable(this);
 

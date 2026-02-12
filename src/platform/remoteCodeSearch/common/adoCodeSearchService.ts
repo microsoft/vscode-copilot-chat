@@ -163,7 +163,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	private async getRemoteIndexStateImpl(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		const authToken = await this.getAdoAuthToken(auth.silent);
 		if (!authToken) {
-			this._logService.error(`AdoCodeSearchService::getRemoteIndexState(${repoId}). Failed to fetch indexing status. No valid ADO auth token.`);
+			this._logService.warn(`AdoCodeSearchService::getRemoteIndexState(${repoId}). Failed to fetch indexing status. No valid ADO auth token.`);
 			return Result.error<RemoteCodeSearchError>({ type: 'not-authorized' });
 		}
 

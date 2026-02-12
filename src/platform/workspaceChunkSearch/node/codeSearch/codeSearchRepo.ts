@@ -269,10 +269,10 @@ abstract class BaseRemoteCodeSearchRepo extends Disposable implements CodeSearch
 		const statusResult = await this.doFetchRemoteIndexState(token);
 		if (!statusResult.isOk()) {
 			if (statusResult.err.type === 'not-authorized') {
-				this._logService.error(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Unauthorized.`);
+				this._logService.warn(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Unauthorized.`);
 				return { status: CodeSearchRepoStatus.NotAuthorized };
 			} else {
-				this._logService.error(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Encountered error: ${statusResult.err.error}`);
+				this._logService.warn(`CodeSearchChunkSearch::getIndexedStatus(${this.remoteInfo.repoId}). Failed to fetch indexing status. Encountered error: ${statusResult.err.error}`);
 				return { status: CodeSearchRepoStatus.CouldNotCheckIndexStatus };
 			}
 		}

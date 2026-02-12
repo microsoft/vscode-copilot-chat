@@ -156,6 +156,21 @@ export function isInlineSuggestEnabled(): boolean | undefined {
 	return vscode.workspace.getConfiguration('editor.inlineSuggest').get<boolean>('enabled');
 }
 
+/**
+ * Azure-only fork: ensure inline suggestions are enabled on activation
+ * so the status bar shows the correct state without requiring manual toggle.
+ */
+export async function ensureInlineSuggestEnabled(): Promise<void> {
+	const config = vscode.workspace.getConfiguration('editor.inlineSuggest');
+	const inspect = config.inspect<boolean>('enabled');
+	// Only set if no explicit user/workspace value exists (i.e. using the default which may be false)
+	if (inspect?.globalValue === undefined && inspect?.workspaceValue === undefined && inspect?.workspaceFolderValue === undefined) {
+		if (!config.get<boolean>('enabled')) {
+			await config.update('enabled', true, vscode.ConfigurationTarget.Global);
+		}
+	}
+}
+
 type ConfigurationInspect = Exclude<ReturnType<vscode.WorkspaceConfiguration['inspect']>, undefined>;
 const inspectKinds: [keyof ConfigurationInspect, vscode.ConfigurationTarget, boolean][] = [
 	['workspaceFolderLanguageValue', vscode.ConfigurationTarget.WorkspaceFolder, true],
