@@ -22,9 +22,7 @@ export interface ChatSessionWorktreeData {
 	readonly version: number;
 }
 
-interface ChatSessionWorktreePropertiesV1 {
-	readonly version: 1;
-	readonly autoCommit: boolean;
+interface ChatSessionWorktreeBaseProperties {
 	readonly baseCommit: string;
 	readonly branchName: string;
 	readonly repositoryPath: string;
@@ -32,7 +30,18 @@ interface ChatSessionWorktreePropertiesV1 {
 	readonly changes?: readonly ChatSessionWorktreeFile[] | undefined;
 }
 
-export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1;
+interface ChatSessionWorktreePropertiesV1 extends ChatSessionWorktreeBaseProperties {
+	readonly version: 1;
+	readonly autoCommit: boolean;
+}
+
+interface ChatSessionWorktreePropertiesV2 extends ChatSessionWorktreeBaseProperties {
+	readonly version: 2;
+	readonly baseBranchName: string;
+	readonly pullRequestUrl?: string;
+}
+
+export type ChatSessionWorktreeProperties = ChatSessionWorktreePropertiesV1 | ChatSessionWorktreePropertiesV2;
 
 export const IChatSessionWorktreeService = createServiceIdentifier<IChatSessionWorktreeService>('IChatSessionWorktreeService');
 

@@ -690,6 +690,8 @@ export namespace ConfigKey {
 		export const SearchSubagentToolEnabled = defineSetting<boolean>('chat.searchSubagent.enabled', ConfigType.ExperimentBased, false);
 		/** Use the agentic proxy for the search subagent tool */
 		export const SearchSubagentUseAgenticProxy = defineSetting<boolean>('chat.searchSubagent.useAgenticProxy', ConfigType.Simple, false);
+		/** Model name for the agentic search endpoint */
+		export const AgenticProxySearchModelName = defineSetting<string>('chat.searchSubagent.agenticProxySearchModelName', ConfigType.Simple, 'agentic-search-v1');
 		/** Model to use for the search subagent */
 		export const SearchSubagentModel = defineSetting<string>('chat.searchSubagent.model', ConfigType.ExperimentBased, '');
 		/** Maximum number of tool calls the search subagent can make */

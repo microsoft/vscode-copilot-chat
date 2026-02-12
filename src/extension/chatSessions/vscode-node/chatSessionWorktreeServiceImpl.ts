@@ -42,12 +42,9 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 				// Legacy worktree path
 				this._sessionWorktrees.set(key, value);
 			} else {
-				if (value.version === 1) {
-					// Worktree properties v1 (we need to explicitly add the version property since it may be missing)
-					this._sessionWorktrees.set(key, { ...JSON.parse(value.data), version: 1 } satisfies ChatSessionWorktreeProperties);
-				} else {
-					this.logService.warn(`[ChatSessionWorktreeService][loadWorktreeProperties] Unsupported worktree properties version: ${value.version} for session ${key}`);
-				}
+				// For worktree properties v1 we need to explicitly add the version property since it may be missing
+				const parsedData = value.version === 1 ? { ...JSON.parse(value.data), version: 1 } : JSON.parse(value.data);
+				this._sessionWorktrees.set(key, parsedData satisfies ChatSessionWorktreeProperties);
 			}
 		}
 	}
@@ -82,25 +79,21 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 			const branch = `${branchPrefix}copilot-worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
 			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
-			if (worktreePath) {
-				let baseCommit = activeRepository.headCommitHash;
+			if (worktreePath && activeRepository.headCommitHash && activeRepository.headBranchName) {
+				let baseCommit: string | undefined = undefined;
 				if (baseBranch) {
 					const refs = await this.gitService.getRefs(activeRepository.rootUri, { pattern: `refs/heads/${baseBranch}` });
-					if (refs.length === 1 && refs[0].commit) {
-						baseCommit = refs[0].commit;
-					}
+					baseCommit = refs.length === 1 && refs[0].commit ? refs[0].commit : undefined;
 				}
 
-				if (baseCommit) {
-					return {
-						autoCommit: true,
-						branchName: branch,
-						baseCommit,
-						repositoryPath: activeRepository.rootUri.fsPath,
-						worktreePath,
-						version: 1
-					} satisfies ChatSessionWorktreeProperties;
-				}
+				return {
+					branchName: branch,
+					baseCommit: baseCommit ?? activeRepository.headCommitHash,
+					baseBranchName: baseBranch ?? activeRepository.headBranchName,
+					repositoryPath: activeRepository.rootUri.fsPath,
+					worktreePath,
+					version: 2
+				} satisfies ChatSessionWorktreeProperties;
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Failed to create worktree for isolation.');
@@ -164,7 +157,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 	async applyWorktreeChanges(sessionId: string): Promise<void> {
 		const worktreeProperties = this.getWorktreeProperties(sessionId);
 
-		if (worktreeProperties === undefined || worktreeProperties.autoCommit === false) {
+		if (worktreeProperties === undefined || (worktreeProperties.version === 1 && worktreeProperties.autoCommit === false)) {
 			// Legacy background session that has the changes staged in the worktree.
 			// To apply the changes, we need to migrate them from the worktree to the
 			// main repository using a stash.
@@ -267,7 +260,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		// so we can get them from the main repository or discovered worktree.
 		await this.gitService.initialize();
 
-		if (worktreeProperties.autoCommit === false) {
+		if (worktreeProperties.version === 1 && worktreeProperties.autoCommit === false) {
 			// These changes are staged in the worktree but not yet committed. Since the
 			// changes are not committed, we need to get them from the worktree repository
 			// state. To do that we need to open the worktree repository. The source control
