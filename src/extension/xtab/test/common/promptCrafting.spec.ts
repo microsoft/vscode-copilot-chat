@@ -7,6 +7,7 @@ import { assert, describe, expect, it, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { CurrentFileOptions, DEFAULT_OPTIONS, IncludeLineNumbersOption, PromptOptions } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { Result } from '../../../../util/common/result';
+import { splitLines } from '../../../../util/vs/base/common/strings';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
@@ -267,12 +268,14 @@ suite('Paged clipping - recently viewed files', () => {
 			);
 
 			// Empty string content produces a single empty line
-			expect(snippets).toMatchInlineSnapshot(`
+			expect(snippets.map(splitLines)).toMatchInlineSnapshot(`
 				[
-				  "<|recently_viewed_code_snippet|>
-				code_snippet_file_path: /src/first.txt
-				0| 
-				<|/recently_viewed_code_snippet|>",
+				  [
+				    "<|recently_viewed_code_snippet|>",
+				    "code_snippet_file_path: /src/first.txt",
+				    "0| ",
+				    "<|/recently_viewed_code_snippet|>",
+				  ],
 				]
 			`);
 		});
