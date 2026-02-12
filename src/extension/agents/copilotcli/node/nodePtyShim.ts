@@ -40,20 +40,24 @@ export async function ensureNodePtyShim(extensionPath: string, vscodeAppRoot: st
 }
 
 async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string, logService: ILogService): Promise<void> {
-	const nodePtyDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'prebuilds', process.platform + '-' + process.arch);
 	const vscodeNodePtyPath = path.join(vscodeAppRoot, 'node_modules', 'node-pty', 'build', 'Release');
 
-	logService.info(`Creating node-pty shim: source=${vscodeNodePtyPath}, dest=${nodePtyDir}`);
+	await copyNodePtyFiles(extensionPath, vscodeNodePtyPath, logService);
+}
+
+export async function copyNodePtyFiles(extensionPath: string, sourceNodePtyPath: string, logService: ILogService): Promise<void> {
+	const nodePtyDir = path.join(extensionPath, 'node_modules', '@github', 'copilot', 'sdk', 'prebuilds', process.platform + '-' + process.arch);
+	logService.info(`Creating node-pty shim: source=${sourceNodePtyPath}, dest=${nodePtyDir}`);
 
 	try {
 		await fs.mkdir(nodePtyDir, { recursive: true });
-		const entries = await fs.readdir(vscodeNodePtyPath);
+		const entries = await fs.readdir(sourceNodePtyPath);
 		const uniqueEntries = [...new Set(entries)];
 		logService.info(`Found ${uniqueEntries.length} entries to copy${uniqueEntries.length !== entries.length ? ` (${entries.length - uniqueEntries.length} duplicates ignored)` : ''}: ${uniqueEntries.join(', ')}`);
 
-		await copyNodePtyWithRetries(vscodeNodePtyPath, nodePtyDir, uniqueEntries, logService);
+		await copyNodePtyWithRetries(sourceNodePtyPath, nodePtyDir, uniqueEntries, logService);
 	} catch (error: any) {
-		logService.error(`Failed to create node-pty shim (vscode dir: ${vscodeNodePtyPath}, extension dir: ${nodePtyDir})`, error);
+		logService.error(`Failed to create node-pty shim (source dir: ${sourceNodePtyPath}, extension dir: ${nodePtyDir})`, error);
 		throw error;
 	}
 }
