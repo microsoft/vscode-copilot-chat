@@ -137,9 +137,24 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; branch?: string },
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
+
+	/**
+	 * Get repository information for a folder.
+	 *
+	 * Resolves whether the folder contains a git repository and returns
+	 * the repository URI and HEAD branch name.
+	 *
+	 * @param folder The folder URI to check
+	 * @param token Cancellation token
+	 * @returns Repository URI and HEAD branch name
+	 */
+	getRepositoryInfo(
+		folder: vscode.Uri,
+		token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
 	 * Get list of most recently used folders and repositories.

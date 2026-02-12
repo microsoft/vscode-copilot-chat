@@ -3949,6 +3949,15 @@
 						"tags": [
 							"experimental"
 						]
+					},
+					"github.copilot.chat.exploreAgent.model": {
+						"type": "string",
+						"default": "",
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.exploreAgent.model%",
+						"tags": [
+							"experimental"
+						]
 					}
 				}
 			},
@@ -4476,6 +4485,14 @@
 						"tags": [
 							"advanced",
 							"experimental"
+						]
+					},
+					"github.copilot.chat.cli.branchSupport.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.cli.branchSupport.enabled%",
+						"tags": [
+							"advanced"
 						]
 					},
 					"github.copilot.chat.agentCustomizationSkill.enabled": {
