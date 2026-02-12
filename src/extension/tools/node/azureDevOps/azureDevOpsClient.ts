@@ -93,6 +93,8 @@ export class AzureDevOpsClient {
 		const orgUrl = this.configurationService.getNonExtensionConfig<string>('yourcompany.ado.orgUrl') ?? '';
 		const pat = this.configurationService.getNonExtensionConfig<string>('yourcompany.ado.pat') ?? '';
 		const defaultProject = this.configurationService.getNonExtensionConfig<string>('yourcompany.ado.defaultProject') ?? '';
+		const redactedPat = pat.length > 4 ? pat.substring(0, 4) + '****' : '(empty)';
+		this.logService.debug(`[AzureDevOps] Config — orgUrl: "${orgUrl}", project: "${defaultProject}", pat: ${redactedPat}`);
 		return { orgUrl, pat, defaultProject };
 	}
 
@@ -129,13 +131,14 @@ export class AzureDevOpsClient {
 			...options.headers as Record<string, string>,
 		};
 
-		this.logService.debug(`[AzureDevOps] Fetching: ${url}`);
+		const method = (options.method ?? 'GET').toUpperCase();
+		this.logService.info(`[AzureDevOps] ${method} ${url}`);
 		const response = await fetch(url, { ...options, headers });
 
 		if (!response.ok) {
 			const body = await response.text();
-			this.logService.error(`[AzureDevOps] API error ${response.status}: ${body}`);
-			throw new Error(`Azure DevOps API error (${response.status}): ${body}`);
+			this.logService.error(`[AzureDevOps] ${method} ${url} → ${response.status}: ${body}`);
+			throw new Error(`Azure DevOps API error (${response.status}) on ${method} ${url}: ${body}`);
 		}
 
 		return response;
