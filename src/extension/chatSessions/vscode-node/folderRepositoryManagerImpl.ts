@@ -112,6 +112,20 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
 
+	/**
+	 * @inheritdoc
+	 */
+	async getRepositoryInfo(
+		folder: vscode.Uri,
+		_token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }> {
+		const repoContext = await this.gitService.getRepository(folder, true);
+		return {
+			repository: repoContext?.rootUri,
+			headBranchName: repoContext?.headBranchName
+		};
+	}
+
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
 		const selectedFolder = sessionId ? (this._untitledSessionFolders.get(sessionId)?.uri
@@ -229,10 +243,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 */
 	async initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken; branch?: string },
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo> {
-		const { stream, toolInvocationToken } = options;
+		const { stream, toolInvocationToken, branch } = options;
 
 		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
 		if (trusted === false) {
@@ -255,7 +269,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 
 		// Create worktree for the git repository
-		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream);
+		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream, branch);
 
 		if (!worktreeProperties) {
 			stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));

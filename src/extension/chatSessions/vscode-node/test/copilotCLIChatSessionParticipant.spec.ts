@@ -1120,5 +1120,99 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			expect(repoLockUpdate.value.icon.id).toBe('archive');
 			expect(repoLockUpdate.value.name).toBe('submodule-repo');
 		});
+
+		it('locks branch option alongside repository option when branch is selected', async () => {
+			const sessionId = 'untitled:temp-branch-lock';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			// Simulate branch selection via initial options
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			(context.chatSessionContext as any).initialSessionOptions = [
+				{ optionId: 'branch', value: 'feature-branch' }
+			];
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			// Find a lock call that includes both repo and branch locking
+			const branchLockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch' && update.value?.locked === true)
+			);
+			expect(branchLockCalls.length).toBeGreaterThan(0);
+
+			const branchLockUpdate = branchLockCalls.flatMap(call => call[1]).find(
+				(update: any) => update.optionId === 'branch' && update.value?.locked === true
+			);
+			expect(branchLockUpdate.value.name).toBe('feature-branch');
+			expect(branchLockUpdate.value.icon.id).toBe('git-branch');
+		});
+
+		it('does not lock branch option when no branch is selected', async () => {
+			const sessionId = 'untitled:temp-no-branch-lock';
+			const repoUri = Uri.file(`${sep}workspace${sep}myrepo`);
+			const mockGetFolderRepository = vi.fn(async () => ({
+				folder: repoUri,
+				repository: { rootUri: repoUri, kind: 'repository' } as unknown as RepoContext,
+				trusted: true
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			const branchLockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch')
+			);
+			expect(branchLockCalls.length).toBe(0);
+		});
+
+		it('unlocks branch option alongside repository option when trust is denied', async () => {
+			const sessionId = 'untitled:temp-branch-unlock';
+			const mockGetFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`)
+			}));
+			(folderRepositoryManager.getFolderRepository as any) = mockGetFolderRepository;
+			const mockInitializeFolderRepository = vi.fn(async () => ({
+				trusted: false,
+				folder: Uri.file(`${sep}workspace`),
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined
+			}));
+			(folderRepositoryManager.initializeFolderRepository as any) = mockInitializeFolderRepository;
+
+			// Simulate having a branch selected before running
+			const request = new TestChatRequest('Say hi');
+			const context = createChatContext(sessionId, true);
+			(context.chatSessionContext as any).initialSessionOptions = [
+				{ optionId: 'branch', value: 'my-branch' }
+			];
+			const stream = new MockChatResponseStream();
+			const token = disposables.add(new CancellationTokenSource()).token;
+
+			await participant.createHandler()(request, context, stream, token);
+
+			const allCalls = (contentProvider.notifySessionOptionsChange as unknown as ReturnType<typeof vi.fn>).mock.calls;
+			// Find unlock calls (value is string, not an object with locked flag)
+			const branchUnlockCalls = allCalls.filter(
+				call => call[1].some((update: any) => update.optionId === 'branch' && typeof update.value === 'string')
+			);
+			expect(branchUnlockCalls.length).toBeGreaterThan(0);
+		});
 	});
 });

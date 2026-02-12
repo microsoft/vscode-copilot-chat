@@ -76,6 +76,10 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
 	}
 
+	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> {
+		return { repository: undefined, headBranchName: undefined };
+	}
+
 	getFolderMRU(): FolderRepositoryMRUEntry[] {
 		return this._mruEntries;
 	}

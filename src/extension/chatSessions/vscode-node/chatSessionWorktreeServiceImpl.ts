@@ -52,14 +52,14 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		}
 	}
 
-	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream): Promise<ChatSessionWorktreeProperties | undefined> {
+	async createWorktree(repositoryPath: vscode.Uri, stream?: vscode.ChatResponseStream, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> {
 		if (!stream) {
-			return this._createWorktree(repositoryPath);
+			return this._createWorktree(repositoryPath, undefined, baseBranch);
 		}
 
 		return new Promise<ChatSessionWorktreeProperties | undefined>((resolve) => {
 			stream.progress(l10n.t('Creating isolated worktree for Background Agent session...'), async progress => {
-				const result = await this._createWorktree(repositoryPath, progress);
+				const result = await this._createWorktree(repositoryPath, progress, baseBranch);
 				resolve(result);
 				if (result) {
 					return l10n.t('Created isolated worktree at {0}', basename(vscode.Uri.file(result.worktreePath)));
@@ -69,7 +69,7 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 		});
 	}
 
-	private async _createWorktree(repositoryPath: vscode.Uri, progress?: vscode.Progress<vscode.ChatResponsePart>): Promise<ChatSessionWorktreeProperties | undefined> {
+	private async _createWorktree(repositoryPath: vscode.Uri, progress?: vscode.Progress<vscode.ChatResponsePart>, baseBranch?: string): Promise<ChatSessionWorktreeProperties | undefined> {
 		try {
 			const activeRepository = await this.gitService.getRepository(repositoryPath);
 			if (!activeRepository) {
@@ -80,16 +80,26 @@ export class ChatSessionWorktreeService extends Disposable implements IChatSessi
 
 			const branchPrefix = vscode.workspace.getConfiguration('git').get<string>('branchPrefix') ?? '';
 			const branch = `${branchPrefix}copilot-worktree-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
-			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch });
+			const worktreePath = await this.gitService.createWorktree(activeRepository.rootUri, { branch, commitish: baseBranch });
 
-			if (worktreePath && activeRepository.headCommitHash) {
-				return {
-					autoCommit: true,
-					branchName: branch,
-					baseCommit: activeRepository.headCommitHash,
-					repositoryPath: activeRepository.rootUri.fsPath,
-					worktreePath
-				} satisfies ChatSessionWorktreeProperties;
+			if (worktreePath) {
+				let baseCommit = activeRepository.headCommitHash;
+				if (baseBranch) {
+					const refs = await this.gitService.getRefs(activeRepository.rootUri, { pattern: `refs/heads/${baseBranch}` });
+					if (refs.length === 1 && refs[0].commit) {
+						baseCommit = refs[0].commit;
+					}
+				}
+
+				if (baseCommit) {
+					return {
+						autoCommit: true,
+						branchName: branch,
+						baseCommit,
+						repositoryPath: activeRepository.rootUri.fsPath,
+						worktreePath
+					} satisfies ChatSessionWorktreeProperties;
+				}
 			}
 			progress?.report(new vscode.ChatResponseWarningPart(vscode.l10n.t('Failed to create worktree for isolation, using default workspace directory')));
 			this.logService.error('[ChatSessionWorktreeService][_createWorktree] Failed to create worktree for isolation.');
