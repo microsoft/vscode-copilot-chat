@@ -333,13 +333,14 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 	});
 
 	it('uses worktree workingDirectory when isolation is enabled for a new untitled session', async () => {
-		const worktreeProperties: ChatSessionWorktreeProperties = {
+		const worktreeProperties = {
 			autoCommit: true,
 			baseCommit: 'deadbeef',
 			branchName: 'test',
 			repositoryPath: `${sep}repo`,
-			worktreePath: `${sep}worktree`
-		};
+			worktreePath: `${sep}worktree`,
+			version: 1
+		} satisfies ChatSessionWorktreeProperties;
 		// Set up untitled session folder
 		folderRepositoryManager.setUntitledSessionFolder('untitled:temp-new', Uri.file(`${sep}repo`));
 		// Configure git to return repository for the folder

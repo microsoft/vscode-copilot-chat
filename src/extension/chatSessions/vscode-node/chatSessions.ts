@@ -28,6 +28,7 @@ import { CopilotCLIPromptResolver } from '../../agents/copilotcli/node/copilotcl
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { CopilotCLIMCPHandler, ICopilotCLIMCPHandler } from '../../agents/copilotcli/node/mcpHandler';
 import { CopilotCLIContrib, getServices } from '../../agents/copilotcli/vscode-node/contribution';
+import { ICopilotCLISessionTracker } from '../../agents/copilotcli/vscode-node/copilotCLISessionTracker';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { prExtensionInstalledContextKey } from '../../contextKeys/vscode-node/contextKeys.contribution';
@@ -129,7 +130,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			));
 
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
-		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
+		if (!copilotcliSessionItemProvider.useController) {
+			this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
+		}
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
 		const promptResolver = copilotcliAgentInstaService.createInstance(CopilotCLIPromptResolver);
 		const gitService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IGitService));
@@ -147,6 +150,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const folderRepositoryManager = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFolderRepositoryManager));
 		const nativeEnvService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(INativeEnvService));
 		const fileSystemService = copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(IFileSystemService));
+		this._register(copilotcliAgentInstaService.invokeFunction(accessor => accessor.get(ICopilotCLISessionTracker)));
 		this._register(copilotcliAgentInstaService.createInstance(CopilotCLIContrib));
 
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());

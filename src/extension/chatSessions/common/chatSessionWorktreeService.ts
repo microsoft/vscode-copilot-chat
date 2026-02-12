@@ -23,6 +23,7 @@ export interface ChatSessionWorktreeData {
 }
 
 interface ChatSessionWorktreePropertiesV1 {
+	readonly version: 1;
 	readonly autoCommit: boolean;
 	readonly baseCommit: string;
 	readonly branchName: string;

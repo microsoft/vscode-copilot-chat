@@ -400,6 +400,7 @@
 	"github.copilot.config.cli.customAgents.enabled": "Enable Custom Agents for Background Agents.",
 	"github.copilot.config.cli.mcp.enabled": "Enable Model Context Protocol (MCP) server for Background Agents.",
 	"github.copilot.config.cli.branchSupport.enabled": "Enable branch support for Background Agents.",
+	"github.copilot.config.cli.sessionController.enabled": "Enable the new session controller API for Background Agents. Requires VS Code reload.",
 	"github.copilot.config.backgroundAgent.enabled": "Enable the Background Agent. When disabled, the Background Agent will not be available in 'Continue In' context menus.",
 	"github.copilot.config.cloudAgent.enabled": "Enable the Cloud Agent. When disabled, the Cloud Agent will not be available in 'Continue In' context menus.",
 	"github.copilot.config.copilotMemory.enabled": "Enable agentic memory for GitHub Copilot. When enabled, Copilot can store facts about your codebase conventions, structure, and preferences, and recall them in future conversations to provide more contextually relevant assistance. [Learn more](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/copilot-memory).",

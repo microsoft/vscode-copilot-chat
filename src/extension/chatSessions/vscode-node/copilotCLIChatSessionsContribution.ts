@@ -97,6 +97,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
+
+	public readonly useController: boolean;
+	private readonly controller: vscode.ChatSessionItemController | undefined;
+
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@ICopilotCLISessionTracker private readonly sessionTracker: ICopilotCLISessionTracker,
@@ -106,20 +110,40 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IChatSessionWorkspaceFolderService private readonly workspaceFolderService: IChatSessionWorkspaceFolderService,
 		@IGitService private readonly gitSevice: IGitService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
 		this._register(this.terminalIntegration);
+
+		this.useController = configurationService.getConfig(ConfigKey.Advanced.CLISessionController);
+		if (this.useController) {
+			this.controller = this._register(vscode.chat.createChatSessionItemController(
+				'copilotcli',
+				() => this.refreshControllerItems()
+			));
+		}
+
 		this._register(this.copilotcliSessionService.onDidChangeSessions(() => {
 			this.notifySessionsChange();
 		}));
 	}
 
 	public notifySessionsChange(): void {
-		this._onDidChangeChatSessionItems.fire();
+		if (this.useController) {
+			void this.controller!.refreshHandler();
+		} else {
+			this._onDidChangeChatSessionItems.fire();
+		}
 	}
 
 	public swap(original: vscode.ChatSessionItem, modified: vscode.ChatSessionItem): void {
-		this._onDidCommitChatSessionItem.fire({ original, modified });
+		if (this.useController) {
+			this.controller!.items.delete(original.resource);
+			const item = this.controller!.createChatSessionItem(modified.resource, modified.label);
+			this.controller!.items.add(item);
+		} else {
+			this._onDidCommitChatSessionItem.fire({ original, modified });
+		}
 	}
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
@@ -130,6 +154,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		this.commandExecutionService.executeCommand('setContext', 'github.copilot.chat.cliSessionsEmpty', count === 0);
 
 		return diskSessions;
+	}
+
+	private async refreshControllerItems(): Promise<void> {
+		const ctx = new vscode.CancellationTokenSource();
+		try {
+			const sessions = await this.provideChatSessionItems(ctx.token);
+			this.controller!.items.replace(sessions);
+		} finally {
+			ctx.dispose();
+		}
 	}
 
 	private shouldShowSession(sessionId: string): boolean | undefined {
@@ -206,6 +240,16 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			worktreePath: worktreeProperties?.worktreePath
 		} satisfies { readonly [key: string]: unknown };
 
+		if (this.controller) {
+			const item = this.controller.createChatSessionItem(resource, label);
+			item.badge = badge;
+			item.timing = session.timing;
+			item.changes = changes;
+			item.status = status;
+			item.metadata = metadata;
+			return item;
+		}
+
 		return {
 			resource,
 			label,
@@ -238,7 +282,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const token = new vscode.CancellationTokenSource();
 		try {
 			const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath ?? (await this.copilotcliSessionService.getSessionWorkingDirectory(id, token.token))?.fsPath;
-			await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+			const terminal = await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+			if (terminal) {
+				this.sessionTracker.setSessionTerminal(id, terminal);
+			}
 		} finally {
 			token.dispose();
 		}
