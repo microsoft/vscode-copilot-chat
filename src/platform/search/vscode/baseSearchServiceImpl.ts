@@ -12,11 +12,21 @@ export class BaseSearchServiceImpl extends AbstractSearchService {
 	}
 
 	findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
-		return vscode.workspace.findTextInFiles2(query, options, token);
+		if (typeof vscode.workspace.findTextInFiles2 === 'function') {
+			return vscode.workspace.findTextInFiles2(query, options, token);
+		}
+		// Fallback: proposed API unavailable, return empty response
+		const emptyAsyncIterable: AsyncIterable<vscode.TextSearchResult2> = { [Symbol.asyncIterator]: async function* () { } };
+		return { results: emptyAsyncIterable, complete: Promise.resolve({ limitHit: false }) };
 	}
 
 	override findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Thenable<vscode.Uri[]> {
-		const filePatternToUse = Array.isArray(filePattern) ? filePattern : [filePattern];
-		return vscode.workspace.findFiles2(filePatternToUse, options, token);
+		if (typeof vscode.workspace.findFiles2 === 'function') {
+			const filePatternToUse = Array.isArray(filePattern) ? filePattern : [filePattern];
+			return vscode.workspace.findFiles2(filePatternToUse, options, token);
+		}
+		// Fallback: proposed API unavailable, use stable findFiles API
+		const pattern = Array.isArray(filePattern) ? filePattern[0] : filePattern;
+		return vscode.workspace.findFiles(pattern, undefined, undefined, token);
 	}
 }

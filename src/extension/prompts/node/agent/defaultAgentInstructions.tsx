@@ -17,6 +17,8 @@ import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
+import { AdoRepoId, getOrderedRepoInfosFromContext, IGitService } from '../../../../platform/git/common/gitService';
+import * as paths from '../../../../util/vs/base/common/path';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 
 // Types and interfaces for reusable components
@@ -495,11 +497,35 @@ export class GenericEditingTips extends PromptElement<DefaultAgentPromptProps> {
 }
 
 export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptProps> {
+	constructor(
+		props: DefaultAgentPromptProps,
+		@IGitService private readonly gitService: IGitService,
+	) {
+		super(props);
+	}
+
 	async render() {
 		const hasAdoTools = !!this.props.availableTools?.find(tool => tool.name === ToolName.AdoGetWorkItem);
 		if (!hasAdoTools) {
 			return;
 		}
+
+		// Extract ADO repo info from the active git repository
+		let repoName: string | undefined;
+		const repoContext = this.gitService.activeRepository.get();
+		if (repoContext) {
+			for (const info of getOrderedRepoInfosFromContext(repoContext)) {
+				if (info.repoId instanceof AdoRepoId) {
+					repoName = info.repoId.repo;
+					break;
+				}
+			}
+			// Fallback: use the workspace folder name if no ADO remote detected
+			if (!repoName) {
+				repoName = paths.posix.basename(repoContext.rootUri.path);
+			}
+		}
+
 		return <Tag name='azureDevOpsInstructions'>
 			Azure DevOps tools are available. The project is pre-configured in settings — always search and operate within the default project. Do not ask the user which project to use.<br />
 			When the user asks about work items, bugs, tasks, user stories, sprints, boards, or wikis, use these tools instead of suggesting CLI commands or scripts:<br />
@@ -512,6 +538,33 @@ export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptPro
 			- Use {ToolName.AdoGetWikiPageTree} to browse the full page tree of a wiki (all pages and subpages). Always use this first to understand the wiki structure before reading or writing specific pages.<br />
 			- Use {ToolName.AdoGetWikiPage} to read a specific wiki page's content.<br />
 			- Use {ToolName.AdoCreateOrUpdateWikiPage} to create or edit wiki pages.<br />
+			<br />
+			<Tag name='adoWorkItemHierarchy'>
+				WORK ITEM HIERARCHY: In this organization, work items follow a specific hierarchy:<br />
+				- Epic = "Use Case" — the highest-level grouping. Each Epic represents a distinct use case or major initiative.<br />
+				- Feature = "Release" — Features live under Epics. A Feature represents what the team is usually actively working on (a release or deliverable within a use case).<br />
+				- Product Backlog Item (PBI) = "Main update" — PBIs live under Features. They represent the significant updates or changes within a release.<br />
+				- Task — Tasks live under PBIs. Tasks are low-level implementation details and are usually NOT important. Do not focus on Tasks unless the user explicitly asks about them.<br />
+				<br />
+				When the user says "use case", they mean an Epic. When they say "release" or "feature", they mean a Feature. When they say "main update" or "PBI", they mean a Product Backlog Item.<br />
+				When querying the hierarchy, use [System.WorkItemType] = 'Epic' for use cases, 'Feature' for releases/features, and 'Product Backlog Item' for PBIs.<br />
+				To find child items under a parent, use a link query, for example to find all Features under Epic 123: SELECT [System.Id], [System.Title], [System.State] FROM WorkItemLinks WHERE ([Source].[System.WorkItemType] = 'Epic' AND [Source].[System.Id] = 123) AND ([Target].[System.WorkItemType] = 'Feature') AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward') MODE (Recursive).<br />
+				To find all PBIs under a Feature, use the same pattern replacing the source type with 'Feature' and target type with 'Product Backlog Item'.
+			</Tag>
+			<br />
+			{repoName && <Tag name='adoRepoContext'>
+				CURRENT REPOSITORY: The current repository name is "{repoName}".<br />
+				The repository name typically contains a use case ID (Epic ID) — for example, "123-my-project" or "UC123-projectname" means the Epic ID is 123.<br />
+				When the user refers to "this repo's use case", "this use case", "our epic", or "this project's feature/release", you should:<br />
+				1. Extract a numeric ID from the repository name "{repoName}". Look for a leading number or a number preceded by prefixes like "UC", "usecase", or "epic" (case-insensitive).<br />
+				2. If you find an ID, use {ToolName.AdoGetWorkItem} to fetch that Epic, then scope subsequent queries to that Epic's hierarchy.<br />
+				3. If no numeric ID is found in the repo name, use {ToolName.ReadFile} to read the README.md file in the repository root — it often contains the use case ID or Epic link.<br />
+				4. If neither the repo name nor the README contains a clear Epic ID, ask the user which Epic or use case ID to use.
+			</Tag>}
+			{!repoName && <Tag name='adoRepoContextFallback'>
+				REPOSITORY CONTEXT: No active repository was detected. If the user refers to "this repo's use case" or similar, ask them for the repository name or Epic/use case ID.
+			</Tag>}
+			<br />
 			IMPORTANT: For any write operation (updating work items, creating work items, adding comments, writing wiki pages), if the user has not clearly specified the target (which work item, which wiki, which page), ALWAYS ask the user to clarify before proceeding. Never guess which item to modify.
 		</Tag>;
 	}

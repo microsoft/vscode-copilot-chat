@@ -28,6 +28,12 @@ export class PowerStateLogger extends Disposable implements IExtensionContributi
 			vscode.window.showInformationMessage(isActive ? 'Power save blocker is now active' : 'Power save blocker is now inactive');
 		}));
 
+		// Guard: vscode.env.power is a proposed API and may not be available
+		if (!vscode.env.power) {
+			this.logService.debug('[Power] Power API not available (proposed API)');
+			return;
+		}
+
 		// Log initial power state
 		this.logInitialPowerState();
 

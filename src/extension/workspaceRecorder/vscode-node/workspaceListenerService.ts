@@ -47,6 +47,10 @@ class StructuredLoggerReceiver<T> extends Disposable {
 	) {
 		super();
 
+		if (typeof env.getDataChannel !== 'function') {
+			return;
+		}
+
 		const channel = env.getDataChannel<T>('structuredLogger:' + key);
 		this._register(channel.onDidReceiveData(e => {
 			handler(e.data);

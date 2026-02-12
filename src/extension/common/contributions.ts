@@ -65,7 +65,11 @@ export class ContributionCollection extends Disposable {
 					}));
 				}
 			} catch (error) {
-				logService.error(error, `Error while loading contribution`);
+				if (error instanceof Error && error.message.includes('CANNOT use API proposal')) {
+					logService.warn(`Contribution skipped (proposed API unavailable): ${error.message}`);
+				} else {
+					logService.error(error, `Error while loading contribution`);
+				}
 			}
 		}
 	}

@@ -16,6 +16,10 @@ export class GithubTelemetryForwardingContrib extends Disposable implements IExt
 	) {
 		super();
 
+		if (typeof env.getDataChannel !== 'function') {
+			return;
+		}
+
 		const channel = env.getDataChannel<IEditTelemetryData>('editTelemetry');
 		this._register(channel.onDidReceiveData((args) => {
 			const r = this._gitService.activeRepository.get();

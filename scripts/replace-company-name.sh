@@ -47,9 +47,10 @@ echo "[1/7] Updating package.json ..."
 PKG="$REPO_ROOT/package.json"
 
 # Extension metadata
-sedi "s/\"name\": \"yourcompany-ai-assistant\"/\"name\": \"${COMPANY_LOWER}-ai-assistant\"/" "$PKG"
+# NOTE: "name" and "publisher" are NOT changed because they form the extension ID
+# (publisher.name) used by VS Code's proposed API allowlist. Changing them would
+# break proposed API access when installing via VSIX. Only displayName is user-visible.
 sedi "s/\"displayName\": \"Your Company AI Assistant\"/\"displayName\": \"${COMPANY_NAME} AI Assistant\"/" "$PKG"
-sedi "s/\"publisher\": \"yourcompany\"/\"publisher\": \"${COMPANY_LOWER}\"/" "$PKG"
 sedi "s/\"version\": \"0.38.0\"/\"version\": \"1.0.0\"/" "$PKG"
 
 # Chat participant full names & labels

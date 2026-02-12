@@ -1300,7 +1300,7 @@
 				"displayName": "Azure DevOps: Query Work Items",
 				"icon": "$(search)",
 				"userDescription": "Search Azure DevOps work items using WIQL",
-				"modelDescription": "Search for Azure DevOps work items using a WIQL (Work Item Query Language) query. Returns matching work items with their details. WIQL is SQL-like: SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = 'Active'. Common fields: System.Title, System.State, System.AssignedTo, System.WorkItemType, System.Tags, System.AreaPath, System.IterationPath, Microsoft.VSTS.Common.Priority. Use @me for the current user in WIQL.",
+				"modelDescription": "Search for Azure DevOps work items using a WIQL (Work Item Query Language) query. Returns matching work items with their details. Supports flat queries (FROM WorkItems) and hierarchical link queries (FROM WorkItemLinks with MODE (Recursive)) for parent-child traversal. WIQL is SQL-like: SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = 'Active'. Common fields: System.Title, System.State, System.AssignedTo, System.WorkItemType, System.Tags, System.AreaPath, System.IterationPath, Microsoft.VSTS.Common.Priority. Use @me for the current user in WIQL.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {

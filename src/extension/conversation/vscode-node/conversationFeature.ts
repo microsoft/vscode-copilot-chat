@@ -340,7 +340,11 @@ export class ConversationFeature implements IExtensionContribution {
 		}));
 	}
 
-	private registerTerminalQuickFixProviders() {
+	private registerTerminalQuickFixProviders(): IDisposable {
+		if (typeof vscode.window.registerTerminalQuickFixProvider !== 'function') {
+			this.logService.debug('ConversationFeature: registerTerminalQuickFixProvider not available (proposed API)');
+			return { dispose() { } };
+		}
 		const isEnabled = () => this.enabled;
 		return combinedDisposable(
 			vscode.window.registerTerminalQuickFixProvider('copilot-chat.fixWithCopilot', {
