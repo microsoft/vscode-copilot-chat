@@ -229,6 +229,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			alternativeAction,
 
 			...this._statelessNextEditTelemetry,
+			...(this._modelName !== undefined ? { modelName: this._modelName } : {}),
 
 			activeDocumentRepository,
 			repositoryUrls,
@@ -309,6 +310,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _request: StatelessNextEditRequest | undefined;
 	public setRequest(request: StatelessNextEditRequest): this {
 		this._request = request;
+		return this;
+	}
+
+	private _modelName: string | undefined;
+	public setModelName(modelName: string): this {
+		this._modelName = modelName;
 		return this;
 	}
 

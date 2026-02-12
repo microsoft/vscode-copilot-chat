@@ -253,6 +253,7 @@ export class GhostTextComputer {
 		}
 
 		const engineInfo = this.instantiationService.invokeFunction(getEngineRequestInfo, preIssuedTelemetryDataWithExp);
+		telemetryBuilder.setModelName(engineInfo.modelId);
 		const ghostTextOptions = { ...defaultOptions, ...options, tokenizer: engineInfo.tokenizer };
 		const prompt = await this.instantiationService.invokeFunction(extractPrompt,
 			ourRequestId,
