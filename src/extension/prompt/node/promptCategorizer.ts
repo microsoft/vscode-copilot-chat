@@ -38,7 +38,9 @@ export interface IPromptCategorizerService {
 }
 
 // Categorization outcome values for telemetry
-// Pipeline failures: outcome != '' (timeout, requestFailed, noToolCall, parseError, invalidClassification, partialClassification, error)
+// Success: outcome == '' — full classification with valid timeEstimates
+// Partial success: outcome == 'partialClassification' — core fields valid, timeEstimate malformed
+// Pipeline failures: other non-empty outcomes (timeout, requestFailed, noToolCall, parseError, invalidClassification, error)
 // Low confidence: outcome == '' AND confidence < 0.5
 const CATEGORIZATION_OUTCOMES = {
 	SUCCESS: '',
@@ -229,12 +231,12 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 							// Core fields valid but timeEstimate malformed — recover partial
 							classification = partial;
 							outcome = CATEGORIZATION_OUTCOMES.PARTIAL_CLASSIFICATION;
-							errorDetail = `Recovered core fields; raw: ${categorizationCall.arguments.substring(0, 200)}`;
-							this.logService.debug(`[PromptCategorizer] Partial classification recovered: ${errorDetail}`);
+							errorDetail = `Recovered core fields; invalid timeEstimate (arguments length: ${categorizationCall.arguments.length})`;
+							this.logService.debug(`[PromptCategorizer] Partial classification recovered; ${errorDetail}`);
 						} else {
 							outcome = CATEGORIZATION_OUTCOMES.INVALID_CLASSIFICATION;
-							errorDetail = categorizationCall.arguments.substring(0, 200);
-							this.logService.warn(`[PromptCategorizer] Invalid classification structure: ${errorDetail}`);
+							errorDetail = `Invalid classification structure (arguments length: ${categorizationCall.arguments.length})`;
+							this.logService.warn(`[PromptCategorizer] Invalid classification structure; ${errorDetail}`);
 						}
 					} catch (parseError) {
 						outcome = CATEGORIZATION_OUTCOMES.PARSE_ERROR;
@@ -285,12 +287,12 @@ export class PromptCategorizerService implements IPromptCategorizerService {
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The unique request identifier within the session" },
 				"modeName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode name being used" },
 				"currentLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language ID of the active editor" },
-				"outcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Classification outcome: empty string for success, or error kind (timeout, requestFailed, noToolCall, parseError, invalidClassification, partialClassification, error)" },
-				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified intent, or empty string on pipeline failure" },
-				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified domain, or empty string on pipeline failure" },
+				"outcome": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Classification outcome: empty string for success, partialClassification for recovered core fields, or error kind (timeout, requestFailed, noToolCall, parseError, invalidClassification, error)" },
+				"intent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified intent (populated on success or partialClassification, empty string on failure)" },
+				"domain": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified domain (populated on success or partialClassification, empty string on failure)" },
 				"timeEstimateBestCase": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for best case time estimate" },
 				"timeEstimateRealistic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "ISO 8601 duration for realistic time estimate" },
-				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified scope, or empty string on pipeline failure" },
+				"scope": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The classified scope (populated on success or partialClassification, empty string on failure)" },
 				"promptLength": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Length of the user prompt in characters" },
 				"numReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of context references attached to the request" },
 				"numToolReferences": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of tool references in the request" },
