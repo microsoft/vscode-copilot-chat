@@ -18,6 +18,7 @@ import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
+import { registerInlineCompletionItemProviderSafe } from '../../completions/vscode-node/safeRegisterInlineCompletionProvider';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
 
@@ -1635,7 +1636,7 @@ class CachePopulationTrigger implements vscode.Disposable {
 			// console.log(`Selection ${Date.now()}`);
 			this.didChangeTextEditorSelection(event);
 		}));
-		this.disposables.add(vscode.languages.registerInlineCompletionItemProvider([{ scheme: 'file', language: 'typescript' }, { scheme: 'file', language: 'typescriptreact' }], {
+		this.disposables.add(registerInlineCompletionItemProviderSafe([{ scheme: 'file', language: 'typescript' }, { scheme: 'file', language: 'typescriptreact' }], {
 			provideInlineCompletionItems: async (document, position, context, _token) => {
 				// console.log(`Inline completion ${Date.now()}`);
 				this.onInlineCompletion(document, position, context);

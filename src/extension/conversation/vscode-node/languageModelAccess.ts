@@ -351,6 +351,10 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			dispo.clear();
+			if (typeof vscode.lm?.registerEmbeddingsProvider !== 'function') {
+				// embeddings proposed API not available; skip registration
+				return;
+			}
 			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
 				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
 					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);

@@ -20,6 +20,7 @@ import { join } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
+import { registerInlineCompletionItemProviderSafe } from '../../completions/vscode-node/safeRegisterInlineCompletionProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { ExpectedEditCaptureController } from './components/expectedEditCaptureController';
@@ -205,7 +206,7 @@ export class InlineEditProviderFeature {
 				}
 			}
 
-			reader.store.add(languages.registerInlineCompletionItemProvider('*', provider, {
+			reader.store.add(registerInlineCompletionItemProviderSafe('*', provider, {
 				displayName: provider.displayName,
 				yieldTo: this._yieldToCopilot.read(reader) ? ['github.copilot'] : undefined,
 				debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings

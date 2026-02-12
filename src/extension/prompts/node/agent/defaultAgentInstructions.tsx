@@ -500,12 +500,16 @@ export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptPro
 	constructor(
 		props: DefaultAgentPromptProps,
 		@IGitService private readonly gitService: IGitService,
+		@IToolsService private readonly toolsService: IToolsService,
 	) {
 		super(props);
 	}
 
 	async render() {
-		const hasAdoTools = !!this.props.availableTools?.find(tool => tool.name === ToolName.AdoGetWorkItem);
+		// Check both the filtered available tools and all registered tools so that
+		// ADO instructions appear in ask/plan prompts even when the tool list is filtered.
+		const hasAdoTools = !!this.props.availableTools?.find(tool => tool.name === ToolName.AdoGetWorkItem)
+			|| this.toolsService.tools.some(tool => tool.name === ToolName.AdoGetWorkItem);
 		if (!hasAdoTools) {
 			return;
 		}

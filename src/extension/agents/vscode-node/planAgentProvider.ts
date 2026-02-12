@@ -8,8 +8,12 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AGENT_FILE_EXTENSION } from '../../../platform/customInstructions/common/promptTypes';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { AdoRepoId, getOrderedRepoInfosFromContext, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
+import * as paths from '../../../util/vs/base/common/path';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ToolName } from '../../tools/common/toolNames';
+import { IToolsService } from '../../tools/common/toolsService';
 
 /**
  * Handoff configuration for agent transitions
@@ -149,6 +153,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILogService private readonly logService: ILogService,
+		@IToolsService private readonly toolsService: IToolsService,
+		@IGitService private readonly gitService: IGitService,
 	) {
 		super();
 
@@ -322,12 +328,19 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 			send: true
 		};
 
+		// Build body, appending ADO instructions if ADO tools are registered
+		let body = PlanAgentProvider.buildAgentBody(askQuestionsEnabled);
+		const adoInstructions = this.buildAzureDevOpsInstructions();
+		if (adoInstructions) {
+			body += '\n\n' + adoInstructions;
+		}
+
 		// Start with base config, using dynamic body based on askQuestions setting
 		const config: PlanAgentConfig = {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools: [...BASE_PLAN_AGENT_CONFIG.tools],
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...BASE_PLAN_AGENT_CONFIG.handoffs],
-			body: PlanAgentProvider.buildAgentBody(askQuestionsEnabled)
+			body
 		};
 
 		// Collect tools to add
@@ -349,5 +362,83 @@ ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #
 		}
 
 		return config;
+	}
+
+	/**
+	 * Builds Azure DevOps instructions for the plan agent body when ADO tools are registered.
+	 */
+	private buildAzureDevOpsInstructions(): string | undefined {
+		const hasAdoTools = this.toolsService.tools.some(tool => tool.name === ToolName.AdoGetWorkItem);
+		if (!hasAdoTools) {
+			return undefined;
+		}
+
+		// Extract ADO repo info from the active git repository
+		let repoName: string | undefined;
+		const repoContext = this.gitService.activeRepository.get();
+		if (repoContext) {
+			for (const info of getOrderedRepoInfosFromContext(repoContext)) {
+				if (info.repoId instanceof AdoRepoId) {
+					repoName = info.repoId.repo;
+					break;
+				}
+			}
+			// Fallback: use the workspace folder name if no ADO remote detected
+			if (!repoName) {
+				repoName = paths.posix.basename(repoContext.rootUri.path);
+			}
+		}
+
+		const lines: string[] = [
+			'<azure_devops_context>',
+			'Azure DevOps tools are available. The project is pre-configured in settings — always search and operate within the default project. Do not ask the user which project to use.',
+			'When the user asks about work items, bugs, tasks, user stories, sprints, boards, or wikis, use these tools instead of suggesting CLI commands or scripts:',
+			`- Use ${ToolName.AdoQueryWorkItems} with a WIQL query to search work items. Use @me in WIQL for the current user.`,
+			`- Use ${ToolName.AdoGetWorkItem} to fetch a specific work item by ID.`,
+			`- Use ${ToolName.AdoUpdateWorkItem} to update work item fields.`,
+			`- Use ${ToolName.AdoCreateWorkItem} to create new work items.`,
+			`- Use ${ToolName.AdoAddComment} to add comments to work items.`,
+			`- Use ${ToolName.AdoListWikis} to discover available wikis before reading or writing pages.`,
+			`- Use ${ToolName.AdoGetWikiPageTree} to browse the full page tree of a wiki (all pages and subpages). Always use this first to understand the wiki structure before reading or writing specific pages.`,
+			`- Use ${ToolName.AdoGetWikiPage} to read a specific wiki page's content.`,
+			`- Use ${ToolName.AdoCreateOrUpdateWikiPage} to create or edit wiki pages.`,
+			'',
+			'WORK ITEM HIERARCHY: In this organization, work items follow a specific hierarchy:',
+			'- Epic = "Use Case" — the highest-level grouping. Each Epic represents a distinct use case or major initiative.',
+			'- Feature = "Release" — Features live under Epics. A Feature represents what the team is usually actively working on (a release or deliverable within a use case).',
+			'- Product Backlog Item (PBI) = "Main update" — PBIs live under Features. They represent the significant updates or changes within a release.',
+			'- Task — Tasks live under PBIs. Tasks are low-level implementation details and are usually NOT important. Do not focus on Tasks unless the user explicitly asks about them.',
+			'',
+			'When the user says "use case", they mean an Epic. When they say "release" or "feature", they mean a Feature. When they say "main update" or "PBI", they mean a Product Backlog Item.',
+			'When querying the hierarchy, use [System.WorkItemType] = \'Epic\' for use cases, \'Feature\' for releases/features, and \'Product Backlog Item\' for PBIs.',
+			'To find child items under a parent, use a link query, for example to find all Features under Epic 123: SELECT [System.Id], [System.Title], [System.State] FROM WorkItemLinks WHERE ([Source].[System.WorkItemType] = \'Epic\' AND [Source].[System.Id] = 123) AND ([Target].[System.WorkItemType] = \'Feature\') AND ([System.Links.LinkType] = \'System.LinkTypes.Hierarchy-Forward\') MODE (Recursive).',
+			'To find all PBIs under a Feature, use the same pattern replacing the source type with \'Feature\' and target type with \'Product Backlog Item\'.',
+		];
+
+		if (repoName) {
+			lines.push(
+				'',
+				`CURRENT REPOSITORY: The current repository name is "${repoName}".`,
+				'The repository name typically contains a use case ID (Epic ID) — for example, "123-my-project" or "UC123-projectname" means the Epic ID is 123.',
+				`When the user refers to "this repo's use case", "this use case", "our epic", or "this project's feature/release", you should:`,
+				`1. Extract a numeric ID from the repository name "${repoName}". Look for a leading number or a number preceded by prefixes like "UC", "usecase", or "epic" (case-insensitive).`,
+				`2. If you find an ID, use ${ToolName.AdoGetWorkItem} to fetch that Epic, then scope subsequent queries to that Epic's hierarchy.`,
+				`3. If no numeric ID is found in the repo name, use ${ToolName.ReadFile} to read the README.md file in the repository root — it often contains the use case ID or Epic link.`,
+				'4. If neither the repo name nor the README contains a clear Epic ID, ask the user which Epic or use case ID to use.',
+			);
+		} else {
+			lines.push(
+				'',
+				'REPOSITORY CONTEXT: No active repository was detected. If the user refers to "this repo\'s use case" or similar, ask them for the repository name or Epic/use case ID.',
+			);
+		}
+
+		lines.push(
+			'',
+			'IMPORTANT: For any write operation (updating work items, creating work items, adding comments, writing wiki pages), if the user has not clearly specified the target (which work item, which wiki, which page), ALWAYS ask the user to clarify before proceeding. Never guess which item to modify.',
+			'</azure_devops_context>',
+		);
+
+		return lines.join('\n');
 	}
 }

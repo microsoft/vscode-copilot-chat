@@ -37,6 +37,7 @@ import { GhostTextCompletionItem, GhostTextCompletionList } from '../../completi
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/vscode-node/extension/src/vscodeInlineCompletionItemProvider';
 import { ICopilotInlineCompletionItemProviderService } from '../../completions/common/copilotInlineCompletionItemProviderService';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
+import { registerInlineCompletionItemProviderSafe } from '../../completions/vscode-node/safeRegisterInlineCompletionProvider';
 import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { NesChangeHint } from '../common/nesTriggerHint';
 import { NESInlineCompletionContext } from '../node/nextEditProvider';
@@ -236,7 +237,7 @@ export class JointCompletionsProviderContribution extends Disposable implements 
 					}
 				}
 
-				reader.store.add(vscode.languages.registerInlineCompletionItemProvider(
+				reader.store.add(registerInlineCompletionItemProviderSafe(
 					'*',
 					singularProvider,
 					{
