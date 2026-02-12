@@ -147,13 +147,13 @@ describe('CopilotCLISessionTracker', () => {
 	describe('setSessionName and getSessionDisplayName', () => {
 		it('should return sessionId when no name is set', () => {
 			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
-			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Copilot CLI Session');
 		});
 
 		it('should return sessionId when name is empty string', () => {
 			tracker.registerSession('session-1', { pid: 1234, ppid: 5678 });
 			tracker.setSessionName('session-1', '');
-			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Copilot CLI Session');
 		});
 
 		it('should return custom name after setSessionName', () => {
@@ -175,7 +175,7 @@ describe('CopilotCLISessionTracker', () => {
 			expect(tracker.getSessionDisplayName('session-1')).toBe('My Session');
 
 			disposable.dispose();
-			expect(tracker.getSessionDisplayName('session-1')).toBe('session-1');
+			expect(tracker.getSessionDisplayName('session-1')).toBe('Copilot CLI Session');
 		});
 
 		it('should track names independently for different sessions', () => {
