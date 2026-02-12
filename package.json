@@ -1275,6 +1275,163 @@
 				"legacyToolReferenceFullNames": [
 					"editFiles"
 				]
+			},
+			{
+				"name": "assistant_adoGetWorkItem",
+				"toolReferenceName": "adoGetWorkItem",
+				"displayName": "Azure DevOps: Get Work Item",
+				"icon": "$(bug)",
+				"userDescription": "Get an Azure DevOps work item by ID",
+				"modelDescription": "Get a single Azure DevOps work item by its ID. Returns all fields including title, state, description, assigned to, iteration, area path, priority, tags, repro steps, and acceptance criteria.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "number",
+							"description": "The work item ID"
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["id"]
+				}
+			},
+			{
+				"name": "assistant_adoQueryWorkItems",
+				"toolReferenceName": "adoQueryWorkItems",
+				"displayName": "Azure DevOps: Query Work Items",
+				"icon": "$(search)",
+				"userDescription": "Search Azure DevOps work items using WIQL",
+				"modelDescription": "Search for Azure DevOps work items using a WIQL (Work Item Query Language) query. Returns matching work items with their details. WIQL is SQL-like: SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.State] = 'Active'. Common fields: System.Title, System.State, System.AssignedTo, System.WorkItemType, System.Tags, System.AreaPath, System.IterationPath, Microsoft.VSTS.Common.Priority. Use @me for the current user in WIQL.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"wiql": {
+							"type": "string",
+							"description": "The WIQL query string. Example: SELECT [System.Id], [System.Title], [System.State] FROM WorkItems WHERE [System.WorkItemType] = 'Bug' AND [System.State] = 'Active' ORDER BY [System.CreatedDate] DESC"
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						},
+						"top": {
+							"type": "number",
+							"description": "Maximum number of results to return. Defaults to 20."
+						}
+					},
+					"required": ["wiql"]
+				}
+			},
+			{
+				"name": "assistant_adoUpdateWorkItem",
+				"toolReferenceName": "adoUpdateWorkItem",
+				"displayName": "Azure DevOps: Update Work Item",
+				"icon": "$(edit)",
+				"userDescription": "Update an Azure DevOps work item",
+				"modelDescription": "Update an Azure DevOps work item. Can modify fields like state, title, assigned to, priority, tags, description, etc. Uses JSON Patch operations. Common field paths: /fields/System.Title, /fields/System.State, /fields/System.AssignedTo, /fields/System.Tags, /fields/System.Description, /fields/Microsoft.VSTS.Common.Priority.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "number",
+							"description": "The work item ID to update"
+						},
+						"operations": {
+							"type": "array",
+							"description": "Array of JSON Patch operations to apply",
+							"items": {
+								"type": "object",
+								"properties": {
+									"op": {
+										"type": "string",
+										"enum": ["add", "replace", "remove"],
+										"description": "The operation type. Use 'replace' to update an existing field, 'add' to set a field, 'remove' to clear a field."
+									},
+									"path": {
+										"type": "string",
+										"description": "The field path. Example: /fields/System.State"
+									},
+									"value": {
+										"description": "The new value for the field"
+									}
+								},
+								"required": ["op", "path"]
+							}
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["id", "operations"]
+				}
+			},
+			{
+				"name": "assistant_adoCreateWorkItem",
+				"toolReferenceName": "adoCreateWorkItem",
+				"displayName": "Azure DevOps: Create Work Item",
+				"icon": "$(add)",
+				"userDescription": "Create a new Azure DevOps work item",
+				"modelDescription": "Create a new Azure DevOps work item. Specify the type (Bug, Task, User Story, Feature, Epic, etc.) and field values. Common field paths: /fields/System.Title, /fields/System.Description, /fields/System.AssignedTo, /fields/System.State, /fields/System.Tags, /fields/Microsoft.VSTS.Common.Priority, /fields/System.IterationPath, /fields/System.AreaPath.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"workItemType": {
+							"type": "string",
+							"description": "The work item type. Common types: Bug, Task, User Story, Feature, Epic"
+						},
+						"fields": {
+							"type": "array",
+							"description": "Array of field values to set on the new work item",
+							"items": {
+								"type": "object",
+								"properties": {
+									"path": {
+										"type": "string",
+										"description": "The field path. Example: /fields/System.Title"
+									},
+									"value": {
+										"description": "The value for the field"
+									}
+								},
+								"required": ["path", "value"]
+							}
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["workItemType", "fields"]
+				}
+			},
+			{
+				"name": "assistant_adoAddComment",
+				"toolReferenceName": "adoAddComment",
+				"displayName": "Azure DevOps: Add Comment",
+				"icon": "$(comment)",
+				"userDescription": "Add a comment to an Azure DevOps work item",
+				"modelDescription": "Add a comment to an Azure DevOps work item discussion thread.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"workItemId": {
+							"type": "number",
+							"description": "The work item ID"
+						},
+						"text": {
+							"type": "string",
+							"description": "The comment text (supports HTML)"
+						},
+						"project": {
+							"type": "string",
+							"description": "The project name. Uses the default project from settings if not provided."
+						}
+					},
+					"required": ["workItemId", "text"]
+				}
 			}
 		],
 		"languageModelToolSets": [
@@ -2234,11 +2391,6 @@
 			{
 				"command": "copilot.claude.memory",
 				"title": "Open Memory Files",
-				"category": "Claude Agent"
-			},
-			{
-				"command": "copilot.claude.devops",
-				"title": "Azure DevOps Work Items",
 				"category": "Claude Agent"
 			},
 			{
@@ -5760,10 +5912,6 @@
 					{
 						"name": "memory",
 						"description": "Open memory files (CLAUDE.md) for editing"
-					},
-					{
-						"name": "devops",
-						"description": "Azure DevOps work items - search, view, and manage"
 					}
 				]
 			},

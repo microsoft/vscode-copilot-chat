@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { ILogService } from '../../../../../platform/log/common/logService';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ILogService } from '../../../../platform/log/common/logService';
 
 /**
  * Azure DevOps work item representation
@@ -128,12 +128,8 @@ export class AzureDevOpsClient {
 		const proj = project || config.defaultProject;
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems/${id}?api-version=7.1&$expand=all`;
-		} else {
-			url = `${baseUrl}/_apis/wit/workitems/${id}?api-version=7.1&$expand=all`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${id}?api-version=7.1&$expand=all`;
 
 		const response = await this._fetch(url);
 		return await response.json() as AzureDevOpsWorkItem;
@@ -152,12 +148,8 @@ export class AzureDevOpsClient {
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 		const idList = ids.join(',');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems?ids=${idList}&api-version=7.1&$expand=all`;
-		} else {
-			url = `${baseUrl}/_apis/wit/workitems?ids=${idList}&api-version=7.1&$expand=all`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems?ids=${idList}&api-version=7.1&$expand=all`;
 
 		const response = await this._fetch(url);
 		const result = await response.json() as { value: AzureDevOpsWorkItem[] };
@@ -172,12 +164,8 @@ export class AzureDevOpsClient {
 		const proj = project || config.defaultProject;
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/wiql?api-version=7.1`;
-		} else {
-			url = `${baseUrl}/_apis/wit/wiql?api-version=7.1`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		let url = `${baseUrl}${projectSegment}/_apis/wit/wiql?api-version=7.1`;
 
 		if (top !== undefined) {
 			url += `&$top=${top}`;
@@ -199,12 +187,8 @@ export class AzureDevOpsClient {
 		const proj = project || config.defaultProject;
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems/${id}?api-version=7.1`;
-		} else {
-			url = `${baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${id}?api-version=7.1`;
 
 		const response = await this._fetch(url, {
 			method: 'PATCH',
@@ -245,12 +229,8 @@ export class AzureDevOpsClient {
 		const proj = project || config.defaultProject;
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
-		} else {
-			url = `${baseUrl}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
 
 		const response = await this._fetch(url, {
 			method: 'POST',
@@ -268,12 +248,8 @@ export class AzureDevOpsClient {
 		const proj = project || config.defaultProject;
 		const baseUrl = config.orgUrl.replace(/\/$/, '');
 
-		let url: string;
-		if (proj) {
-			url = `${baseUrl}/${encodeURIComponent(proj)}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
-		} else {
-			url = `${baseUrl}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
-		}
+		const projectSegment = proj ? `/${encodeURIComponent(proj)}` : '';
+		const url = `${baseUrl}${projectSegment}/_apis/wit/workitems/${workItemId}/comments?api-version=7.1-preview.4`;
 
 		const response = await this._fetch(url);
 		const result = await response.json() as { comments: AzureDevOpsComment[] };

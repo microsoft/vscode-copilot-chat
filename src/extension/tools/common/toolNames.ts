@@ -69,7 +69,12 @@ export enum ToolName {
 	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation',
 	SearchSubagent = 'search_subagent',
 	AskQuestions = 'ask_questions',
-	SwitchAgent = 'switch_agent'
+	SwitchAgent = 'switch_agent',
+	AdoGetWorkItem = 'ado_get_work_item',
+	AdoQueryWorkItems = 'ado_query_work_items',
+	AdoUpdateWorkItem = 'ado_update_work_item',
+	AdoCreateWorkItem = 'ado_create_work_item',
+	AdoAddComment = 'ado_add_comment',
 }
 
 export enum ContributedToolName {
@@ -114,6 +119,11 @@ export enum ContributedToolName {
 	EditFilesPlaceholder = 'assistant_editFiles',
 	AskQuestions = 'assistant_askQuestions',
 	SwitchAgent = 'assistant_switchAgent',
+	AdoGetWorkItem = 'assistant_adoGetWorkItem',
+	AdoQueryWorkItems = 'assistant_adoQueryWorkItems',
+	AdoUpdateWorkItem = 'assistant_adoUpdateWorkItem',
+	AdoCreateWorkItem = 'assistant_adoCreateWorkItem',
+	AdoAddComment = 'assistant_adoAddComment',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -227,6 +237,13 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.AskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+
+	// Azure DevOps
+	[ToolName.AdoGetWorkItem]: ToolCategory.WebInteraction,
+	[ToolName.AdoQueryWorkItems]: ToolCategory.WebInteraction,
+	[ToolName.AdoUpdateWorkItem]: ToolCategory.WebInteraction,
+	[ToolName.AdoCreateWorkItem]: ToolCategory.WebInteraction,
+	[ToolName.AdoAddComment]: ToolCategory.WebInteraction,
 } as const;
 
 
