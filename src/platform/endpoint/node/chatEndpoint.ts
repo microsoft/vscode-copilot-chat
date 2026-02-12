@@ -68,50 +68,83 @@ export async function processOllamaStreamResponse(
 	finishCallback: FinishedCallback,
 	telemetryData: TelemetryData
 ): Promise<AsyncIterableObject<ChatCompletion>> {
-	const text = await response.text();
-	const lines = text.split('\n').filter(line => line.trim() !== '');
-	const completions: ChatCompletion[] = [];
-	let fullMessage = '';
 	const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
 	const ghRequestId = response.headers.get('x-github-request-id') ?? '';
 
-	for (const line of lines) {
-		try {
-			const data = JSON.parse(line);
+	let fullMessage = '';
+	const completions: ChatCompletion[] = [];
+	let buffer = '';
+	const decoder = new TextDecoder();
 
-			if (data.done) {
-				const completion: ChatCompletion = {
-					blockFinished: false,
-					choiceIndex: 0,
-					model: data.model,
-					filterReason: undefined,
-					finishReason: data.done_reason as FinishedCompletionReason,
-					message: {
-						role: ChatRole.Assistant,
-						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: fullMessage }]
-					},
-					usage: {
-						prompt_tokens: data.prompt_eval_count,
-						completion_tokens: data.eval_count,
-						total_tokens: (data.prompt_eval_count || 0) + (data.eval_count || 0)
-					},
-					tokens: [],
-					requestId: { headerRequestId: requestId, gitHubRequestId: ghRequestId, completionId: '', created: 0, deploymentId: '', serverExperiments: '' },
-					telemetryData: telemetryData
-				};
-				completions.push(completion);
-			}
+	try {
+		for await (const chunk of response.body) {
+			buffer += decoder.decode(chunk, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop() ?? '';
 
-			if (data.message?.content) {
-				fullMessage += data.message.content;
-				await finishCallback(data.message.content, 0, {
-					text: data.message.content,
-					copilotToolCalls: []
-				});
+			for (const line of lines) {
+				if (!line.trim()) {
+					continue;
+				}
+
+				try {
+					const data = JSON.parse(line);
+
+					if (data.message?.content) {
+						fullMessage += data.message.content;
+						await finishCallback(data.message.content, 0, {
+							text: data.message.content,
+							copilotToolCalls: []
+						});
+					}
+
+					if (!data.done) {
+						continue;
+					}
+
+					completions.push({
+						blockFinished: false,
+						choiceIndex: 0,
+						model: data.model ?? '',
+						finishReason: (data.done_reason ?? 'stop') as FinishedCompletionReason,
+						message: {
+							role: ChatRole.Assistant,
+							content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: fullMessage }]
+						},
+						usage: {
+							prompt_tokens: data.prompt_eval_count ?? 0,
+							completion_tokens: data.eval_count ?? 0,
+							total_tokens: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0)
+						},
+						tokens: [],
+						requestId: { headerRequestId: requestId, gitHubRequestId: ghRequestId, completionId: '', created: 0, deploymentId: '', serverExperiments: '' },
+						telemetryData
+					});
+				} catch (e) {
+					logService.error(`Failed to parse Ollama response: ${e}`);
+				}
 			}
-		} catch (e) {
-			logService.error(`Failed to parse Ollama response: ${e}`);
 		}
+
+		// Process the remaining data in the buffer
+		buffer += decoder.decode();
+		if (buffer.trim()) {
+			try {
+				const data = JSON.parse(buffer);
+				if (data.message?.content) {
+					fullMessage += data.message.content;
+					await finishCallback(data.message.content, 0, {
+						text: data.message.content,
+						copilotToolCalls: []
+					});
+				}
+			} catch (e) {
+				logService.error(`Failed to parse final Ollama line: ${e}`);
+			}
+		}
+	} catch (e) {
+		logService.error(`Ollama stream processing failed: ${e}`);
+		throw e;
 	}
 
 	return AsyncIterableObject.fromArray(completions);
