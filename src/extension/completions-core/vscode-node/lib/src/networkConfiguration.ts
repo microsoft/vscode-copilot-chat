@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from './auth/copilotTokenManager';
@@ -17,8 +18,17 @@ type ServiceEndpoints = {
 
 function getDefaultEndpoints(accessor: ServicesAccessor): ServiceEndpoints {
 	const capi = accessor.get(ICAPIClientService);
+
+	// Azure-only fork: prefer the user's Azure endpoint over the CAPI proxy URL,
+	// which may point to GitHub's backend instead of the user's own Azure resource.
+	const configService = accessor.get(IConfigurationService);
+	const azureEndpoint = configService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+	const proxyUrl = azureEndpoint
+		? azureEndpoint.replace(/\/$/, '')
+		: capi.proxyBaseURL;
+
 	return {
-		proxy: capi.proxyBaseURL,
+		proxy: proxyUrl,
 		'origin-tracker': capi.originTrackerURL,
 	};
 }
