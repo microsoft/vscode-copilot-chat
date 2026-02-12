@@ -13,7 +13,6 @@ import { INativeEnvService } from '../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { toGitUri } from '../../../platform/git/common/utils';
-import { RefType } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptsService, ParsedPromptFile } from '../../../platform/promptFiles/common/promptsService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -521,8 +520,8 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 	private async getBranchOptionItemsForRepository(repoUri: Uri, headBranchName: string | undefined): Promise<vscode.ChatSessionProviderOptionItem[]> {
 		const refs = await this.gitService.getRefs(repoUri, { sort: 'committerdate' });
 
-		// Filter to local branches only
-		const localBranches = refs.filter(ref => ref.type === RefType.Head && ref.name);
+		// Filter to local branches only (RefType.Head === 0)
+		const localBranches = refs.filter(ref => ref.type === 0 /* RefType.Head */ && ref.name);
 
 		// Build items with HEAD branch first
 		const items: vscode.ChatSessionProviderOptionItem[] = [];
