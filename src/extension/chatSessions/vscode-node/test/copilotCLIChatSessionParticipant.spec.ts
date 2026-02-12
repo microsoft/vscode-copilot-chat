@@ -7,7 +7,8 @@ import { Attachment } from '@github/copilot/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { Uri } from 'vscode';
-import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { NullNativeEnvService } from '../../../../platform/env/common/nullEnvService';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { IGitService, RepoContext } from '../../../../platform/git/common/gitService';
@@ -213,6 +214,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 		} as unknown as ICopilotCLISDK;
 		const services = disposables.add(createExtensionUnitTestingServices());
 		const accessor = services.createTestingAccessor();
+		disposables.add(accessor);
 		promptResolver = new class extends mock<CopilotCLIPromptResolver>() {
 			override resolvePrompt = vi.fn(async (request: vscode.ChatRequest, prompt: string | undefined) => {
 				return { prompt: prompt ?? request.prompt, attachments: [], references: [] };
@@ -284,6 +286,11 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			logService,
 			tools
 		);
+
+		instantiationService = accessor.get(IInstantiationService);
+		const mockConfigurationService = accessor.get(IConfigurationService) as InMemoryConfigurationService;
+		await mockConfigurationService.setConfig(ConfigKey.Advanced.CLIBranchSupport, true);
+
 		participant = new CopilotCLIChatSessionParticipant(
 			contentProvider,
 			promptResolver,
@@ -302,7 +309,7 @@ describe('CopilotCLIChatSessionParticipant.handleRequest', () => {
 			new PromptsServiceImpl(new NullWorkspaceService()),
 			delegationService,
 			folderRepositoryManager,
-			new DefaultsOnlyConfigurationService()
+			mockConfigurationService
 		);
 	});
 
