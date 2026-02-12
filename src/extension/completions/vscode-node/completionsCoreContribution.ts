@@ -32,8 +32,11 @@ export class CompletionsCoreContribution extends Disposable {
 			const configEnabled = configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.TeamInternal.InlineEditsEnableGhCompletionsProvider, experimentationService).read(reader);
 			const extensionUnification = unificationStateValue?.extensionUnification ?? false;
 
+			// Also enable completions provider when Azure BYOK endpoint is configured
+			const hasByokEndpoint = !!configurationService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+
 			let hasInstantiatedProvider = false;
-			if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || this._copilotToken.read(reader)?.isNoAuthUser) {
+			if (unificationStateValue?.codeUnification || extensionUnification || configEnabled || hasByokEndpoint || this._copilotToken.read(reader)?.isNoAuthUser) {
 				const provider = _copilotInlineCompletionItemProviderService.getOrCreateProvider();
 				reader.store.add(
 					languages.registerInlineCompletionItemProvider(
@@ -59,7 +62,9 @@ export class CompletionsCoreContribution extends Disposable {
 
 		this._register(autorun(reader => {
 			const token = this._copilotToken.read(reader);
-			void commands.executeCommand('setContext', 'github.copilot.activated', token !== undefined);
+			// Also consider activated when Azure BYOK endpoint is configured
+			const hasByokEndpoint = !!configurationService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+			void commands.executeCommand('setContext', 'github.copilot.activated', token !== undefined || hasByokEndpoint);
 		}));
 	}
 }

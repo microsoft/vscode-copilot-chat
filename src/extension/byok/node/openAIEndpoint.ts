@@ -296,9 +296,12 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 		if (body) {
 			if (this.modelMetadata.capabilities.supports.thinking) {
-				delete body.temperature;
-				body['max_completion_tokens'] = body.max_tokens;
-				delete body.max_tokens;
+				body.temperature = 1;
+				// Only set max_completion_tokens from max_tokens if super hasn't already handled it
+				if (body.max_tokens !== undefined) {
+					body['max_completion_tokens'] = body.max_tokens;
+					delete body.max_tokens;
+				}
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
