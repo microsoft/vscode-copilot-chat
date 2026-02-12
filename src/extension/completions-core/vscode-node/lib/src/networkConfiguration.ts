@@ -94,12 +94,13 @@ export function getEndpointUrl(
 	// Azure-only fork: rewrite URL for Azure OpenAI format
 	if (isAzureOpenAIEndpoint(root) && endpoint === 'proxy') {
 		// paths is typically ['v1/engines', modelId, 'completions']
-		// We need to extract the model ID and endpoint type, then construct Azure URL
+		// We need to extract the model ID, then construct Azure URL
 		if (paths.length >= 3 && paths[0] === 'v1/engines') {
 			const modelId = paths[1];
-			const endpointPath = paths.slice(2).join('/');
 			const apiVersion = '2024-12-01-preview';
-			return `${root}/openai/deployments/${modelId}/${endpointPath}?api-version=${apiVersion}`;
+			// Use chat/completions since modern Azure OpenAI models do not
+			// support the legacy /completions endpoint
+			return `${root}/openai/deployments/${modelId}/chat/completions?api-version=${apiVersion}`;
 		}
 	}
 

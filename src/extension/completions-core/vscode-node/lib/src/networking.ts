@@ -114,13 +114,16 @@ export function postRequest(
 		...instantiationService.invokeFunction(editorVersionHeaders),
 	};
 
-	// If we call byok endpoint, no need to add these headers
-	if (modelProviderName === undefined) {
+	// Azure-only fork: skip GitHub headers for Azure endpoints, skip for BYOK too
+	const isAzureEndpoint = url.includes('.openai.azure.com') || url.includes('.cognitiveservices.azure.com');
+	if (modelProviderName === undefined && !isAzureEndpoint) {
 		headers['Openai-Organization'] = 'github-copilot';
+		headers['X-GitHub-Api-Version'] = apiVersion;
+	}
+	if (modelProviderName === undefined) {
 		headers['X-Request-Id'] = requestId;
 		headers['VScode-SessionId'] = accessor.get(IEnvService).sessionId;
 		headers['VScode-MachineId'] = accessor.get(IEnvService).machineId;
-		headers['X-GitHub-Api-Version'] = apiVersion;
 	}
 
 	if (intent) {

@@ -6,7 +6,8 @@
 import { RequestType } from '@vscode/copilot-api';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { CHAT_MODEL } from '../../configuration/common/configurationService';
+import { IModelRouter } from '../../azure/common/modelRouter';
+import { CHAT_MODEL, IConfigurationService } from '../../configuration/common/configurationService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
 
@@ -14,9 +15,28 @@ export function createProxyXtabEndpoint(
 	instaService: IInstantiationService,
 	overriddenModelName: string | undefined,
 ) {
+	// Azure-only fork: route NES through the user's Azure endpoint
+	// instead of the CAPI proxy which points to GitHub
+	const configService = instaService.invokeFunction(acc => acc.get(IConfigurationService));
+	const azureEndpoint = configService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+
+	let urlOrRequestMetadata: IChatModelInformation['urlOrRequestMetadata'];
+	let modelId: string;
+
+	if (azureEndpoint) {
+		const modelRouter = instaService.invokeFunction(acc => acc.get(IModelRouter));
+		const deployment = modelRouter.getDeployment('chat');
+		modelId = overriddenModelName ?? deployment.deploymentName;
+		const baseUrl = azureEndpoint.replace(/\/$/, '');
+		urlOrRequestMetadata = `${baseUrl}/openai/deployments/${modelId}/chat/completions?api-version=2024-12-01-preview`;
+	} else {
+		modelId = overriddenModelName ?? CHAT_MODEL.NES_XTAB;
+		urlOrRequestMetadata = { type: RequestType.ProxyChatCompletions };
+	}
+
 	const defaultInfo: IChatModelInformation = {
-		id: overriddenModelName ?? CHAT_MODEL.NES_XTAB,
-		urlOrRequestMetadata: { type: RequestType.ProxyChatCompletions },
+		id: modelId,
+		urlOrRequestMetadata,
 		name: 'xtab-proxy',
 		model_picker_enabled: false,
 		is_chat_default: false,

@@ -26,6 +26,15 @@ export type FetchResponse = {
 
 export interface IFetchRequestParams extends Completions.ModelParams { }
 
+/**
+ * Azure-only fork: detect Azure OpenAI endpoints so we can transform
+ * legacy /completions requests into /chat/completions format.
+ */
+function isAzureChatCompletionsUrl(url: string): boolean {
+	return (url.includes('.openai.azure.com') || url.includes('.cognitiveservices.azure.com'))
+		&& url.includes('/chat/completions');
+}
+
 export class CompletionsFetchService implements ICompletionsFetchService {
 	readonly _serviceBrand: undefined;
 
@@ -52,13 +61,27 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			return Result.error(new Completions.RequestCancelled());
 		}
 
-		const options = {
-			requestId,
-			headers: this.getHeaders(requestId, secretKey, headerOverrides),
-			body: JSON.stringify({
+		const isAzureChat = isAzureChatCompletionsUrl(url);
+
+		// Azure-only fork: for Azure /chat/completions, transform the FIM
+		// request body from legacy completions format to chat messages format
+		let body: string;
+		if (isAzureChat) {
+			body = JSON.stringify(toChatCompletionsBody(params));
+		} else {
+			body = JSON.stringify({
 				...params,
 				stream: true,
-			})
+			});
+		}
+
+		// Azure-only fork: strip GitHub-specific headers for Azure endpoints
+		const headers = this.getHeaders(requestId, secretKey, headerOverrides, isAzureChat);
+
+		const options = {
+			requestId,
+			headers,
+			body,
 		};
 
 		const fetchResponse = await this._fetchFromUrl(url, options, ct);
@@ -70,7 +93,13 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		if (fetchResponse.val.status === 200) {
 
 			const jsonlStream = AsyncIterUtilsExt.splitLines(fetchResponse.val.body);
-			const completionsStream = jsonlStreamToCompletions(jsonlStream);
+
+			// Azure-only fork: if this is a chat completions response, transform
+			// the SSE events from chat format ({delta.content}) to completions
+			// format ({text}) so downstream processing works unchanged
+			const completionsStream = isAzureChat
+				? chatJsonlStreamToCompletions(jsonlStream)
+				: jsonlStreamToCompletions(jsonlStream);
 
 			const response = new ResponseStream(fetchResponse.val.response, completionsStream, fetchResponse.val.requestId, fetchResponse.val.headers);
 
@@ -154,17 +183,111 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		requestId: string,
 		secretKey: string,
 		headerOverrides: Record<string, string> = {},
+		isAzure: boolean = false,
 	): Record<string, string> {
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
-			'x-policy-id': 'nil',
 			Authorization: 'Bearer ' + secretKey,
 			'X-Request-Id': requestId,
-			'X-GitHub-Api-Version': '2025-04-01',
 			...headerOverrides,
 		};
 
+		// Azure-only fork: strip GitHub-specific headers for Azure endpoints
+		if (isAzure) {
+			delete headers['Openai-Organization'];
+			delete headers['X-GitHub-Api-Version'];
+			delete headers['x-policy-id'];
+		} else {
+			if (!headers['x-policy-id']) {
+				headers['x-policy-id'] = 'nil';
+			}
+			if (!headers['X-GitHub-Api-Version']) {
+				headers['X-GitHub-Api-Version'] = '2025-04-01';
+			}
+		}
+
 		return headers;
+	}
+}
+
+/**
+ * Azure-only fork: convert a legacy completions request body (prompt + suffix)
+ * into a chat completions request body (messages array).
+ *
+ * The FIM (fill-in-the-middle) prompt is converted to a system instruction
+ * plus a user message so that modern Azure models can produce code completions.
+ */
+function toChatCompletionsBody(params: IFetchRequestParams): Record<string, unknown> {
+	const { prompt, suffix, extra, nwo, ...rest } = params as unknown as Record<string, unknown>;
+
+	const messages: Array<{ role: string; content: string }> = [];
+
+	messages.push({
+		role: 'system',
+		content: 'You are a code completion assistant. You will be given code context (prefix and optionally suffix). Output ONLY the code that should be inserted at the cursor position. Do not include explanations, markdown formatting, or code fences. Do not repeat the prefix or suffix.',
+	});
+
+	let userContent = '';
+	if (prompt && typeof prompt === 'string') {
+		userContent += prompt;
+	}
+	if (suffix && typeof suffix === 'string') {
+		userContent += `\n[CURSOR_POSITION]\n${suffix}`;
+	}
+
+	if (userContent) {
+		messages.push({ role: 'user', content: userContent });
+	}
+
+	return {
+		messages,
+		stream: true,
+		max_tokens: rest.max_tokens ?? 500,
+		temperature: rest.temperature ?? 0,
+		top_p: rest.top_p,
+		n: rest.n ?? 1,
+		stop: rest.stop,
+	};
+}
+
+/**
+ * Azure-only fork: transform a chat completions SSE stream into the
+ * legacy completions format that the downstream SSE processor expects.
+ *
+ * Chat completions streaming:   {"choices": [{"delta": {"content": "text"}, "index": 0, "finish_reason": null}]}
+ * Legacy completions streaming: {"choices": [{"text": "text", "index": 0, "finish_reason": null}]}
+ */
+async function* chatJsonlStreamToCompletions(jsonlStream: AsyncIterable<string>): AsyncGenerator<import('../common/completionsAPI').Completion> {
+	for await (const line of jsonlStream) {
+		if (line.trim() === 'data: [DONE]') {
+			continue;
+		}
+
+		if (line.startsWith('data: ')) {
+			const message = JSON.parse(line.substring('data: '.length));
+
+			if (message.error) {
+				throw new Error(message.error.message);
+			}
+
+			// Transform chat completions choices to legacy completions format
+			const transformedChoices = (message.choices || []).map((choice: {
+				index: number;
+				delta?: { content?: string; role?: string };
+				finish_reason: string | null;
+			}) => ({
+				index: choice.index,
+				text: choice.delta?.content ?? '',
+				finish_reason: choice.finish_reason,
+			}));
+
+			yield {
+				choices: transformedChoices,
+				system_fingerprint: message.system_fingerprint ?? '',
+				object: 'text_completion',
+				usage: message.usage,
+			};
+		}
 	}
 }
 
