@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Terminal, window } from 'vscode';
+import { l10n, Terminal, window } from 'vscode';
 import { IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { createDecorator } from '../../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -64,7 +64,7 @@ export class CopilotCLISessionTracker implements ICopilotCLISessionTracker {
 	}
 
 	getSessionDisplayName(sessionId: string): string {
-		return this._sessionNames.get(sessionId) || sessionId;
+		return this._sessionNames.get(sessionId) || l10n.t('Copilot CLI Session');
 	}
 
 	getSessionIds(): readonly string[] {

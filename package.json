@@ -2870,12 +2870,14 @@
 			{
 				"command": "github.copilot.chat.copilotCLI.acceptDiff",
 				"title": "%github.copilot.command.chat.copilotCLI.acceptDiff%",
+				"enablement": "github.copilot.chat.copilotCLI.hasActiveDiff",
 				"icon": "$(check)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.chat.copilotCLI.rejectDiff",
 				"title": "%github.copilot.command.chat.copilotCLI.rejectDiff%",
+				"enablement": "github.copilot.chat.copilotCLI.hasActiveDiff",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
