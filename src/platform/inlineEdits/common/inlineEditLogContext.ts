@@ -382,7 +382,7 @@ export class InlineEditRequestLogContext {
 	setResponseResults(v: readonly unknown[]): void {
 		this._isVisible = true;
 		this._responseResults = v;
-		this._icon = Icon.lightbulbFull;
+		this._icon ??= Icon.lightbulbFull;
 	}
 
 	getDebugName(): string {
