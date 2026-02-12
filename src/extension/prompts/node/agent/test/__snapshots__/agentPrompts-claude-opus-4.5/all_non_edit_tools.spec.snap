@@ -83,7 +83,6 @@ get_search_view_results
 get_vscode_api
 github_repo
 install_extension
-memory
 open_simple_browser
 read_notebook_cell_output
 read_project_structure
@@ -152,6 +151,7 @@ PATH RULES:
 - Encode spaces only in the target (My File.md → My%20File.md).
 - Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.
 - Valid formats: [file.ts](file.ts#L10) only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10
+- Only create links for files that exist in the workspace. Do not link to files you are suggesting to create or that do not exist yet.
 
 USAGE EXAMPLES:
 - With path as display: The handler is in [src/handler.ts](src/handler.ts#L10).

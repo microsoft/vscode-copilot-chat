@@ -17,6 +17,7 @@ import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
+import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import * as path from '../../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -783,6 +784,7 @@ multiple lines.
 
 	class MockEndpointProvider implements IEndpointProvider {
 		declare readonly _serviceBrand: undefined;
+		readonly onDidModelsRefresh = Event.None;
 
 		private _endpoint = new MockChatEndpoint();
 

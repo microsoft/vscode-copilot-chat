@@ -205,7 +205,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					model: null!,
 					tools: new Map(),
 					id: '1',
-					sessionId: '1'
+					sessionId: '1',
+					hasHooksEnabled: false,
 				};
 				const intentInvocation = await intent.invoke({ location: ChatLocation.Other, request });
 				const progress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
@@ -539,7 +540,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				model: null!,
 				tools: new Map(),
 				id: '1',
-				sessionId: '1'
+				sessionId: '1',
+				hasHooksEnabled: false,
 			};
 			const intentInvocation = await searchKeywordsIntent.invoke({ location: ChatLocation.Other, request });
 			const fakeProgress: vscode.Progress<any | any> = {

@@ -284,6 +284,14 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - `npm run compile`: Development build
 - `npm run watch:*`: Various watch modes for development
 
+### Updating Dependencies
+
+**Anthropic SDK Packages:**
+When updating `@anthropic-ai/claude-agent-sdk` or `@anthropic-ai/sdk`, you **MUST** follow the upgrade guide in **[src/extension/agents/claude/AGENTS.md](../src/extension/agents/claude/AGENTS.md#upgrading-anthropic-sdk-packages)**. This includes:
+1. Reviewing changelogs for breaking changes
+2. Checking compilation errors in key Claude integration files
+3. Running through the testing checklist for core functionality, tools, hooks, and slash commands
+
 ### Testing
 - `npm run test:unit`: Unit tests
 - `npm run test:extension`: VS Code integration tests
@@ -337,5 +345,9 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 This extension is a complex, multi-layered system that provides comprehensive AI assistance within VS Code. Understanding the service architecture, contribution system, and separation between platform and extension layers is crucial for making effective changes.
 
 ## Best Practices
-- Use services and dependency injection whenever possible instead of using node or vscode APIs directly. For example, use `IFileSystemService` instead of node's `fs`.
+- Use services and dependency injection over VS Code extension APIs when possible:
+  - Use `IFileSystemService` instead of Node's `fs` or `vscode.workspace.fs`
+  - Use `ILogService` instead of `console.log`
+  - Look for existing `I*Service` interfaces before reaching for raw APIs
+  - **Why**: Enables unit testing without VS Code host, supports simulation tests, provides cross-platform abstractions (Node vs web), and adds features like caching and size limits
 - Always use the URI type instead of using string file paths. There are many helpers available for working with URIs.

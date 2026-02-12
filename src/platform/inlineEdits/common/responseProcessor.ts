@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
@@ -66,7 +65,7 @@ export namespace ResponseProcessor {
 	 * @param modifiedLines
 	 * @param cursorOriginalLinesOffset offset of cursor within original lines
 	 */
-	export async function* diff(originalLines: string[], modifiedLines: AsyncIterableObject<string>, cursorOriginalLinesOffset: number, params: DiffParams): AsyncIterable<LineReplacement> {
+	export async function* diff(originalLines: string[], modifiedLines: AsyncIterable<string>, cursorOriginalLinesOffset: number, params: DiffParams): AsyncIterable<LineReplacement> {
 
 		const lineToIdxs = new ArrayMap<string, number>();
 		for (const [i, line] of originalLines.entries()) {
@@ -207,6 +206,17 @@ export namespace ResponseProcessor {
 			// Check if emit is allowed based on the setting
 			const originalLine = originalLines[editWindowIdx];
 			const newLine = state.newLines[0];
+
+			// When the cursor is on an empty line and the model outputs content that matches
+			// (or is a prefix of) the next original line, it's likely deleting the empty line
+			// rather than replacing it. Skip fast-emit to avoid line duplication.
+			if (originalLine.trim() === '' && editWindowIdx + 1 < originalLines.length) {
+				const nextLine = originalLines[editWindowIdx + 1];
+				if (newLine === nextLine || nextLine.startsWith(newLine)) {
+					return;
+				}
+			}
+
 			if (params.emitFastCursorLineChange === EmitFastCursorLineChange.AdditiveOnly && !isAdditiveEdit(originalLine, newLine)) {
 				return;
 			}

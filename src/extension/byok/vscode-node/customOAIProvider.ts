@@ -57,6 +57,7 @@ interface _CustomOAIModelConfig {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
+	streaming?: boolean;
 	editTools?: EndpointEditToolName[];
 	requestHeaders?: Record<string, string>;
 	zeroDataRetentionEnabled?: boolean;
@@ -139,6 +140,7 @@ export abstract class AbstractCustomOAIBYOKModelProvider extends AbstractOpenAIC
 			name: model.name,
 			url,
 			thinking: modelConfiguration?.thinking ?? false,
+			streaming: modelConfiguration?.streaming,
 			requestHeaders: modelConfiguration?.requestHeaders,
 			zeroDataRetentionEnabled: modelConfiguration?.zeroDataRetentionEnabled
 		};

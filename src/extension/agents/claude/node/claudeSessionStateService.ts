@@ -6,14 +6,16 @@
 import { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { CapturingToken } from '../../../../platform/requestLogger/common/capturingToken';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { arrayEquals } from '../../../../util/vs/base/common/equals';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IClaudeCodeModels } from './claudeCodeModels';
+import type { ClaudeFolderInfo } from '../common/claudeFolderInfo';
 
 export interface SessionState {
 	modelId: string | undefined;
 	permissionMode: PermissionMode;
 	capturingToken: CapturingToken | undefined;
+	folderInfo: ClaudeFolderInfo | undefined;
 }
 
 /**
@@ -23,6 +25,7 @@ export interface SessionStateChangeEvent {
 	readonly sessionId: string;
 	readonly modelId?: string;
 	readonly permissionMode?: PermissionMode;
+	readonly folderInfo?: ClaudeFolderInfo;
 }
 
 export interface IClaudeSessionStateService {
@@ -34,10 +37,9 @@ export interface IClaudeSessionStateService {
 	readonly onDidChangeSessionState: Event<SessionStateChangeEvent>;
 
 	/**
-	 * Gets the model ID for a session. Falls back to default if not set.
-	 * @throws {NoClaudeModelsAvailableError} if no Claude models with Messages API are available
+	 * Gets the stored model ID for a session (does not apply fallback logic).
 	 */
-	getModelIdForSession(sessionId: string): Promise<string>;
+	getModelIdForSession(sessionId: string): string | undefined;
 
 	/**
 	 * Sets the model ID for a session.
@@ -63,6 +65,16 @@ export interface IClaudeSessionStateService {
 	 * Sets the capturing token for a session.
 	 */
 	setCapturingTokenForSession(sessionId: string, token: CapturingToken | undefined): void;
+
+	/**
+	 * Gets the folder info for a session.
+	 */
+	getFolderInfoForSession(sessionId: string): ClaudeFolderInfo | undefined;
+
+	/**
+	 * Sets the folder info for a session.
+	 */
+	setFolderInfoForSession(sessionId: string, folderInfo: ClaudeFolderInfo): void;
 }
 
 export const IClaudeSessionStateService = createServiceIdentifier<IClaudeSessionStateService>('IClaudeSessionStateService');
@@ -77,19 +89,13 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 	// TODO: What about expiration of state for old sessions?
 	private readonly _sessionState = new Map<string, SessionState>();
 
-	constructor(
-		@IClaudeCodeModels private readonly claudeCodeModels: IClaudeCodeModels,
-	) {
+	constructor() {
 		super();
 	}
 
-	async getModelIdForSession(sessionId: string): Promise<string> {
+	getModelIdForSession(sessionId: string): string | undefined {
 		const state = this._sessionState.get(sessionId);
-		if (state?.modelId !== undefined) {
-			return state.modelId;
-		}
-		// Fall back to default
-		return this.claudeCodeModels.getDefaultModel();
+		return state?.modelId;
 	}
 
 	setModelIdForSession(sessionId: string, modelId: string | undefined): void {
@@ -100,7 +106,8 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		this._sessionState.set(sessionId, {
 			modelId,
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
-			capturingToken: existing?.capturingToken
+			capturingToken: existing?.capturingToken,
+			folderInfo: existing?.folderInfo,
 		});
 		this._onDidChangeSessionState.fire({ sessionId, modelId });
 	}
@@ -117,7 +124,8 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		this._sessionState.set(sessionId, {
 			modelId: existing?.modelId,
 			permissionMode: mode,
-			capturingToken: existing?.capturingToken
+			capturingToken: existing?.capturingToken,
+			folderInfo: existing?.folderInfo,
 		});
 		this._onDidChangeSessionState.fire({ sessionId, permissionMode: mode });
 	}
@@ -131,8 +139,27 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		this._sessionState.set(sessionId, {
 			modelId: existing?.modelId,
 			permissionMode: existing?.permissionMode ?? 'acceptEdits',
-			capturingToken: token
+			capturingToken: token,
+			folderInfo: existing?.folderInfo,
 		});
+	}
+
+	getFolderInfoForSession(sessionId: string): ClaudeFolderInfo | undefined {
+		return this._sessionState.get(sessionId)?.folderInfo;
+	}
+
+	setFolderInfoForSession(sessionId: string, folderInfo: ClaudeFolderInfo): void {
+		const existing = this._sessionState.get(sessionId);
+		if (existing?.folderInfo?.cwd === folderInfo.cwd && arrayEquals(existing?.folderInfo?.additionalDirectories ?? [], folderInfo.additionalDirectories)) {
+			return;
+		}
+		this._sessionState.set(sessionId, {
+			modelId: existing?.modelId,
+			permissionMode: existing?.permissionMode ?? 'acceptEdits',
+			capturingToken: existing?.capturingToken,
+			folderInfo,
+		});
+		this._onDidChangeSessionState.fire({ sessionId, folderInfo });
 	}
 
 	override dispose(): void {

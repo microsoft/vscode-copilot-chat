@@ -18,19 +18,26 @@ import { ResourceMap } from '../../../../util/vs/base/common/map';
 import { extUriBiasedIgnorePathCase } from '../../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../../util/vs/base/common/themables';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
+import { ChatQuestion, ChatQuestionType, ChatRequestTurn2, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatSessionStatus, ChatToolInvocationPart, EventEmitter, Uri } from '../../../../vscodeTypes';
 import { ExternalEditTracker } from '../../common/externalEditTracker';
 import { buildChatHistoryFromEvents, getAffectedUrisForEditTool, isCopilotCliEditToolCall, processToolExecutionComplete, processToolExecutionStart, ToolCall, UnknownToolCall } from '../common/copilotCLITools';
 import { IChatDelegationSummaryService } from '../common/delegationSummaryService';
 import { CopilotCLISessionOptions, ICopilotCLISDK } from './copilotCli';
 import { ICopilotCLIImageSupport } from './copilotCLIImageSupport';
 import { PermissionRequest, requiresFileEditconfirmation } from './permissionHelpers';
+import { convertBackgroundQuestionToolResponseToAnswers, UserInputRequest, UserInputResponse } from './userInputHelpers';
 
 type PermissionHandler = (
 	permissionRequest: PermissionRequest,
 	toolCall: ToolCall | undefined,
 	token: CancellationToken,
 ) => Promise<boolean>;
+
+type UserInputHandler = (
+	userInputRequest: UserInputRequest,
+	toolCall: ToolCall | undefined,
+	token: CancellationToken,
+) => Promise<UserInputResponse>;
 
 export interface ICopilotCLISession extends IDisposable {
 	readonly sessionId: string;
@@ -76,6 +83,15 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 	public readonly onPermissionRequested = this._onPermissionRequested.event;
 	private _permissionHandler?: PermissionHandler;
 	private readonly _permissionHandlerSet = this.add(new Emitter<void>());
+	private readonly _onUserInputRequested = this.add(new EventEmitter<UserInputRequest>());
+	public readonly onUserInputRequested = this._onUserInputRequested.event;
+	private _userInputHandler?: UserInputHandler;
+	private readonly _userInputHandlerSet = this.add(new Emitter<void>());
+	private _userInputRequested?: UserInputRequest;
+	public get userInputRequested(): UserInputRequest | undefined {
+		return this._userInputRequested;
+	}
+
 	private _stream?: vscode.ChatResponseStream;
 	public get sdkSession() {
 		return this._sdkSession;
@@ -121,6 +137,16 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return toDisposable(() => {
 			if (this._permissionHandler === handler) {
 				this._permissionHandler = undefined;
+			}
+		});
+	}
+
+	attachUserInputHandler(handler: UserInputHandler): IDisposable {
+		this._userInputHandler = handler;
+		this._userInputHandlerSet.fire();
+		return toDisposable(() => {
+			if (this._userInputHandler === handler) {
+				this._userInputHandler = undefined;
 			}
 		});
 	}
@@ -185,6 +211,39 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 
 			return response;
 		}));
+		disposables.add(this._options.addUserInputHandler(async (userInputRequest) => {
+			if (!this._stream) {
+				this.logService.warn('[AskQuestionsTool] No stream available, cannot show question carousel');
+
+				return {
+					answer: '',
+					wasFreeform: false
+				};
+			}
+
+			const chatQuestion = new ChatQuestion(userInputRequest.question,
+				userInputRequest.choices && userInputRequest.choices.length > 0 ? ChatQuestionType.MultiSelect : ChatQuestionType.Text,
+				userInputRequest.question,
+				{
+					message: userInputRequest.question,
+					options: userInputRequest.choices?.map(choice => ({ label: choice, id: choice, value: choice })),
+					allowFreeformInput: userInputRequest.allowFreeform
+				}
+			);
+			const carouselAnswers = await this._stream.questionCarousel([chatQuestion], false);
+			const answers = convertBackgroundQuestionToolResponseToAnswers([chatQuestion], carouselAnswers, this.logService);
+			const answer = chatQuestion.title in answers.answers ? answers.answers[chatQuestion.title] : undefined;
+			if (answer) {
+				return {
+					answer: answer.freeText ? answer.freeText : (answer.selected.length ? answer.selected.join(', ') : ''),
+					wasFreeform: !!answer.freeText
+				};
+			}
+			return {
+				answer: '',
+				wasFreeform: false
+			};
+		}));
 		const chunkMessageIds = new Set<string>();
 		const assistantMessageChunks: string[] = [];
 		const logStartTime = Date.now();
@@ -242,6 +301,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					if (responsePart instanceof ChatResponseThinkingProgressPart) {
 						this._stream?.push(responsePart);
 						this._stream?.push(new ChatResponseThinkingProgressPart('', '', { vscodeReasoningDone: true }));
+					} else if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+						this._stream?.push(responsePart);
 					}
 				}
 				this.logService.trace(`[CopilotCLISession] Start Tool ${event.data.toolName || '<unknown>'}`);
@@ -260,8 +322,12 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 					return;
 				}
 
-				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService) ?? [];
-				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
+				// Just complete the tool invocation - the part was already pushed with partial updates enabled
+				const [responsePart,] = processToolExecutionComplete(event, pendingToolInvocations, this.logService, this.options.workingDirectory) ?? [];
+				if (responsePart) {
+					if (responsePart instanceof ChatToolInvocationPart) {
+						responsePart.enablePartialUpdate = true;
+					}
 					this._stream?.push(responsePart);
 				}
 
@@ -341,7 +407,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService);
+		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
 	}
 
 	private async requestPermission(
@@ -375,12 +441,9 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		// Get hold of file thats being edited if this is a edit tool call (requiring write permissions).
 		const toolCall = permissionRequest.toolCallId ? getToolCall(permissionRequest.toolCallId) : undefined;
 		const editFiles = toolCall ? getAffectedUrisForEditTool(toolCall) : undefined;
-		const editFile = editFiles && editFiles.length ? editFiles[0] : undefined;
-		if (workingDirectory && permissionRequest.kind === 'write' && editFile && toolCall) {
-			// TODO:@rebornix @lszomoru
-			// If user is writing a file in the working directory configured for the session, AND the working directory is not a workspace folder,
-			// auto-approve the write request. Currently we only set non-workspace working directories when using git worktrees.
-
+		// Sometimes we don't get a tool call id for the edit permission request
+		const editFile = permissionRequest.kind === 'write' ? (editFiles && editFiles.length ? editFiles[0] : (permissionRequest.fileName ? Uri.file(permissionRequest.fileName) : undefined)) : undefined;
+		if (workingDirectory && permissionRequest.kind === 'write' && editFile) {
 			const isWorkspaceFile = this.workspaceService.getWorkspaceFolder(editFile);
 			const isWorkingDirectoryFile = !this.workspaceService.getWorkspaceFolder(Uri.file(workingDirectory)) && extUriBiasedIgnorePathCase.isEqualOrParent(editFile, Uri.file(workingDirectory));
 
@@ -488,7 +551,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
 		});
 		result.push(`~~~`);
 		result.push(``);
@@ -583,7 +646,7 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		result.push(`## Attachments`);
 		result.push(`~~~`);
 		attachments.forEach(attachment => {
-			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.path})`);
+			result.push(`- ${attachment.displayName} (${attachment.type}, ${attachment.type === 'selection' ? attachment.filePath : attachment.path})`);
 		});
 		result.push(`~~~`);
 		result.push(``);

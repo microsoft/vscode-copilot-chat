@@ -10,6 +10,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
+import { AskAgentProvider } from './askAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
@@ -34,6 +35,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Plan agent provider for dynamic settings-based customization
 			const planProvider = instantiationService.createInstance(PlanAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(planProvider));
+
+			// Register Ask agent provider for read-only Q&A mode
+			const askProvider = instantiationService.createInstance(AskAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(askProvider));
 		}
 
 		// Register instructions provider

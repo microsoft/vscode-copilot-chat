@@ -34,7 +34,7 @@ export class PromptPieces {
 		public readonly areaAroundCodeToEdit: string,
 		public readonly langCtx: LanguageContextResponse | undefined,
 		public readonly aggressivenessLevel: AggressivenessLevel,
-		public readonly lintErrors: LintErrors | undefined,
+		public readonly lintErrors: LintErrors,
 		public readonly computeTokens: (s: string) => number,
 		public readonly opts: PromptOptions,
 	) {
@@ -58,7 +58,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath, aggressivenessLevel) : '';
 
-	const lintsWithNewLinePadding = lintErrors ? `\n${lintErrors.getFormattedLintErrors()}\n` : '';
+	const lintsWithNewLinePadding = opts.lintOptions ? `\n${lintErrors.getFormattedLintErrors(opts.lintOptions)}\n` : '';
 
 	const basePrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
@@ -129,11 +129,16 @@ function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath:
 		case PromptingStrategy.Nes41Miniv3:
 			postScript = `The developer was working on a section of code within the tags <|code_to_edit|> in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`<|cursor|>\`, please continue the developer's work. Update the <|code_to_edit|> section by predicting and completing the changes they would have made next. Start your response with <EDIT> or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
 			break;
+		case PromptingStrategy.Xtab275EditIntentShort:
+		case PromptingStrategy.Xtab275EditIntent:
 		case PromptingStrategy.Xtab275:
 			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
 			break;
 		case PromptingStrategy.XtabAggressiveness:
 			postScript = `<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
+			break;
+		case PromptingStrategy.Xtab275Aggressiveness:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.\n<|aggressive|>${aggressivenessLevel}<|/aggressive|>`;
 			break;
 		case PromptingStrategy.PatchBased:
 			postScript = `Output a modified diff style format with the changes you want. Each change patch must start with \`<filename>:<line number>\` and then include some non empty "anchor lines" preceded by \`-\` and the new lines meant to replace them preceded by \`+\`. Put your changes in the order that makes the most sense, for example edits inside the code_to_edit region and near the user's <|cursor|> should always be prioritized. Output "<NO_EDIT>" if you don't have a good edit candidate.`;

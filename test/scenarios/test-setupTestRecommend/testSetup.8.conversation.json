@@ -1,7 +1,7 @@
 [
   {
     "name": "nodeExpressApp",
-    "question": "@workspace /setupTests",
+    "question": "/setupTests",
     "keywords": {
       "anyOf": [
         "jest",

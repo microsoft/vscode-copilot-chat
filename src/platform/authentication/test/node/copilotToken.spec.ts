@@ -656,6 +656,9 @@ class StaticFetcherService implements IFetcherService {
 	isFetcherError(err: any): boolean {
 		throw new Error('Method not implemented.');
 	}
+	isNetworkProcessCrashedError(err: any): boolean {
+		throw new Error('Method not implemented.');
+	}
 	getUserMessageForFetcherError(err: any): string {
 		throw new Error('Method not implemented.');
 	}

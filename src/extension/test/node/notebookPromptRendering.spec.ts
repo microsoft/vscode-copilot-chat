@@ -291,9 +291,7 @@ describe('Notebook Prompt Rendering', function () {
 			name: 'Test',
 			family: 'Test',
 			version: 'Test',
-			policy: 'enabled',
 			showInModelPicker: false,
-			isDefault: false,
 			isFallback: false,
 			urlOrRequestMetadata: '',
 			model: CHAT_MODEL.GPT41,
@@ -301,7 +299,6 @@ describe('Notebook Prompt Rendering', function () {
 				return accessor.get(ITokenizerProvider).acquireTokenizer({ tokenizer: TokenizerType.O200K });
 			},
 			processResponseFromChatEndpoint: async () => { throw new Error('Method not implemented.'); },
-			acceptChatPolicy: async () => true,
 			cloneWithTokenOverride: () => endpoint,
 			createRequestBody: () => { return {}; },
 			makeChatRequest2: () => { throw new Error('Method not implemented.'); },

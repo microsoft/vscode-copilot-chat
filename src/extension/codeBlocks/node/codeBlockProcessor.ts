@@ -109,6 +109,13 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		};
 	}
 
+	/**
+	 * If you are adding a new ChatResponseStream type, please make sure to either:
+	 * - Update the date on the vscode engine version in package.json to a date when the API will be available in VS Code (sufficient if it's a purely additive/backwards-compatible change)
+	 * - Or bump the proposed API version (required if the change is not backwards compatible (changes the shape of an existing API))
+	 * to ensure that this extension version only runs in versions of VS Code that contain the necessary API support.
+	 */
+
 	button = this.forward(this._wrapped.button.bind(this._wrapped));
 	filetree = this.forward(this._wrapped.filetree.bind(this._wrapped));
 	progress = this._wrapped.progress.bind(this._wrapped);
@@ -118,12 +125,14 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 	workspaceEdit = this.forward(this._wrapped.workspaceEdit?.bind(this._wrapped) || (() => { }));
 	confirmation = this.forward(this._wrapped.confirmation.bind(this._wrapped));
 	warning = this.forward(this._wrapped.warning.bind(this._wrapped));
+	hookProgress = this.forward(this._wrapped.hookProgress?.bind(this._wrapped) ?? (() => { }));
 	reference2 = this.forward(this._wrapped.reference2.bind(this._wrapped));
 	codeCitation = this.forward(this._wrapped.codeCitation.bind(this._wrapped));
 	anchor = this.forward(this._wrapped.anchor.bind(this._wrapped));
 	externalEdit = this.forward(this._wrapped.externalEdit.bind(this._wrapped));
 	beginToolInvocation = this.forward(this._wrapped.beginToolInvocation.bind(this._wrapped));
 	updateToolInvocation = this.forward(this._wrapped.updateToolInvocation.bind(this._wrapped));
+	usage = this.forward(this._wrapped.usage.bind(this._wrapped));
 
 	questionCarousel(questions: ChatQuestion[], allowSkip?: boolean): Thenable<Record<string, unknown> | undefined> {
 		this._codeBlockProcessor.flush();

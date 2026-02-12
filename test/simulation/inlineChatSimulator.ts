@@ -31,7 +31,6 @@ import { ChatRequestTurn, ChatResponseTurn } from '../../src/util/common/test/sh
 import { ExtHostNotebookDocumentData } from '../../src/util/common/test/shims/notebookDocument';
 import { createTextDocumentData, IExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
-import { Event } from '../../src/util/vs/base/common/event';
 import { ResourceMap } from '../../src/util/vs/base/common/map';
 import { isEqual } from '../../src/util/vs/base/common/resources';
 import { commonPrefixLength, commonSuffixLength } from '../../src/util/vs/base/common/strings';
@@ -381,14 +380,15 @@ export async function simulateEditingScenario(
 				model: null!, // https://github.com/microsoft/vscode-copilot/issues/9475
 				tools: new Map(),
 				id: '1',
-				sessionId: '1'
+				sessionId: '1',
+				hasHooksEnabled: false,
 			};
 
 			// Run intent detection
 			if (!request.command) {
 				const intentDetector = instaService.createInstance(IntentDetector);
 				const participants = readBuiltinIntents(location);
-				const detectedParticipant = await intentDetector.provideParticipantDetection(request, { history }, { participants, location: ChatLocation.Editor }, CancellationToken.None);
+				const detectedParticipant = await intentDetector.provideParticipantDetection(request, { history, yieldRequested: false }, { participants, location: ChatLocation.Editor }, CancellationToken.None);
 				if (detectedParticipant?.command) {
 					request = { ...request, command: detectedParticipant.command };
 				}
@@ -489,7 +489,7 @@ export async function simulateEditingScenario(
 				intentId: request.command
 			};
 
-			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, Event.None);
+			const requestHandler = instaService.createInstance(ChatParticipantRequestHandler, history, request, stream, CancellationToken.None, agentArgs, () => false);
 			const result = await requestHandler.getResult();
 			history.push(new ChatRequestTurn(request.prompt, request.command, [...request.references], '', []));
 			history.push(new ChatResponseTurn([new ChatResponseMarkdownPart(markdownChunks.join(''))], result, ''));

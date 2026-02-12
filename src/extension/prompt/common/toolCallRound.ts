@@ -15,6 +15,8 @@ import { IToolCall, IToolCallRound } from './intents';
  */
 export class ToolCallRound implements IToolCallRound {
 	public summary: string | undefined;
+	public phase?: string;
+	public phaseModelId?: string;
 
 	/**
 	 * Creates a ToolCallRound from an existing IToolCallRound object.
@@ -27,9 +29,12 @@ export class ToolCallRound implements IToolCallRound {
 			params.toolInputRetry,
 			params.id,
 			params.statefulMarker,
-			params.thinking
+			params.thinking,
+			params.timestamp,
 		);
 		round.summary = params.summary;
+		round.phase = params.phase;
+		round.phaseModelId = params.phaseModelId;
 		return round;
 	}
 
@@ -39,6 +44,8 @@ export class ToolCallRound implements IToolCallRound {
 	 * @param toolInputRetry The number of times this round has been retried due to tool input validation failures
 	 * @param id A stable identifier for this round
 	 * @param statefulMarker Optional stateful marker used with the responses API
+	 * @param thinking Optional thinking/reasoning data
+	 * @param timestamp Epoch millis when this round started (defaults to `Date.now()`)
 	 */
 	constructor(
 		public readonly response: string,
@@ -46,7 +53,8 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly toolInputRetry: number = 0,
 		public readonly id: string = ToolCallRound.generateID(),
 		public readonly statefulMarker?: string,
-		public readonly thinking?: ThinkingData
+		public readonly thinking?: ThinkingData,
+		public readonly timestamp: number = Date.now(),
 	) { }
 
 	private static generateID(): string {

@@ -358,7 +358,7 @@ ssuite({ title: `/tests`, location: 'panel', language: 'typescript' }, function 
 		stest('can consume #file without active editor',
 			generateScenarioTestRunner([{
 				name: 'can consume #file without active editor',
-				question: '@workspace /tests test #file:foo.ts',
+				question: '/tests test #file:foo.ts',
 				scenarioFolderPath: root,
 				stateFile: path,
 				getState: () => deserializeWorkbenchState(dirname(path), path),

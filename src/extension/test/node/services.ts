@@ -5,7 +5,9 @@
 
 import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
+import { IChatHookService } from '../../../platform/chat/common/chatHookService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ISessionTranscriptService, NullSessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
@@ -55,6 +57,7 @@ import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageMode
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
+import { IPowerService, NullPowerService } from '../../power/common/powerService';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
@@ -64,6 +67,7 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { AgentMemoryService, IAgentMemoryService } from '../../tools/common/agentMemoryService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { IMemoryCleanupService, MemoryCleanupService } from '../../tools/common/memoryCleanupService';
 import { IToolsService } from '../../tools/common/toolsService';
 import { IToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
@@ -132,11 +136,33 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
 	testingServiceCollection.define(IAgentMemoryService, new SyncDescriptor(AgentMemoryService));
+	testingServiceCollection.define(IMemoryCleanupService, new SyncDescriptor(MemoryCleanupService));
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
 	testingServiceCollection.define(IGitCommitMessageService, new SyncDescriptor(NoopGitCommitMessageService));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
+	testingServiceCollection.define(IPowerService, new SyncDescriptor(NullPowerService));
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
+	testingServiceCollection.define(IChatHookService, new SyncDescriptor(NullChatHookService));
+	testingServiceCollection.define(ISessionTranscriptService, new SyncDescriptor(NullSessionTranscriptService));
 	return testingServiceCollection;
+}
+
+class NullChatHookService implements IChatHookService {
+	declare readonly _serviceBrand: undefined;
+
+	logConfiguredHooks(): void { }
+
+	async executeHook(): Promise<never[]> {
+		return [];
+	}
+
+	async executePreToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
+
+	async executePostToolUseHook(): Promise<undefined> {
+		return undefined;
+	}
 }

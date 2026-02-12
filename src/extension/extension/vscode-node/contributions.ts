@@ -36,6 +36,7 @@ import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
+import { PowerStateLogger } from '../../power/vscode-node/powerStateLogger';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
@@ -45,6 +46,7 @@ import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settings
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
 import { SetupTestsContribution } from '../../testing/vscode/setupTestContributions';
 import { ToolsContribution } from '../../tools/vscode-node/tools';
+import { TrajectoryExportCommands } from '../../trajectory/vscode-node/trajectoryExportCommands';
 import { InlineCompletionContribution } from '../../typescriptContext/vscode-node/languageContextService';
 import { NesRenameContribution } from '../../typescriptContext/vscode-node/nesRenameService';
 import * as workspaceChunkSearchContribution from '../../workspaceChunkSearch/node/workspaceChunkSearch.contribution';
@@ -67,6 +69,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(AuthenticationContrib),
 	chatBlockLanguageContribution,
 	asContributionFactory(LoggingActionsContrib),
+	asContributionFactory(PowerStateLogger),
 	asContributionFactory(ContextKeysContribution),
 	asContributionFactory(CopilotDebugCommandContribution),
 	asContributionFactory(DebugCommandsContribution),
@@ -120,4 +123,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(LanguageModelProxyContrib),
 	asContributionFactory(PromptFileContribution),
 	newWorkspaceContribution,
+	asContributionFactory(TrajectoryExportCommands),
 ];

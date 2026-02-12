@@ -53,6 +53,7 @@ import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
 import { INextEditProvider, NESInlineCompletionContext, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySender } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
+import { IPowerService, NullPowerService } from '../../extension/power/common/powerService';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
 import { IAuthenticationService } from '../../platform/authentication/common/authentication';
@@ -106,11 +107,12 @@ import { IExperimentationService, TreatmentsChangeEvent } from '../../platform/t
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { unwrapEventNameFromPrefix } from '../../platform/telemetry/node/azureInsightsReporter';
+import { ITerminalService, NullTerminalService } from '../../platform/terminal/common/terminalService';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
-import { Emitter } from '../../util/vs/base/common/event';
+import { Emitter, Event as VsEvent } from '../../util/vs/base/common/event';
 import { Disposable, IDisposable } from '../../util/vs/base/common/lifecycle';
 import { IObservableWithChange } from '../../util/vs/base/common/observableInternal';
 import { URI } from '../../util/vs/base/common/uri';
@@ -171,6 +173,7 @@ export interface INESProviderOptions {
 	readonly workspace: ObservableWorkspace;
 	readonly fetcher: IFetcher;
 	readonly copilotTokenManager: ICopilotTokenManager;
+	readonly terminalService: ITerminalService;
 	readonly telemetrySender: ITelemetrySender;
 	readonly logTarget?: ILogTarget;
 	/**
@@ -363,6 +366,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
 	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [createStaticGitHubTokenProvider()]));
 	builder.define(ICopilotTokenManager, copilotTokenManager);
+	builder.define(IPowerService, new SyncDescriptor(NullPowerService));
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
@@ -378,6 +382,7 @@ function setupServices(options: INESProviderOptions) {
 	builder.define(IProxyModelsService, new SyncDescriptor(ProxyModelsService));
 	builder.define(IInlineEditsModelService, new SyncDescriptor(InlineEditsModelService));
 	builder.define(IUndesiredModelsManager, options.undesiredModelsManager || new SyncDescriptor(NullUndesiredModelsManager));
+	builder.define(ITerminalService, options.terminalService || new SyncDescriptor(NullTerminalService));
 	return builder.seal();
 }
 
@@ -475,6 +480,9 @@ class SingleFetcherService implements IFetcherService {
 	}
 	isFetcherError(e: any): boolean {
 		return this._fetcher.isFetcherError(e);
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._fetcher.isNetworkProcessCrashedError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
@@ -831,6 +839,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 		readonly devDeviceId = editorSession.machineId;
 		readonly vscodeVersion = options.editorInfo.version;
 		readonly isActive = true;
+		readonly onDidChangeWindowState: vscode.Event<vscode.WindowState> = VsEvent.None;
 		readonly remoteName = editorSession.remoteName;
 		readonly uiKind = editorSession.uiKind === 'web' ? 'web' : 'desktop';
 		readonly OS = process.platform === 'darwin' ? OperatingSystem.Macintosh : process.platform === 'win32' ? OperatingSystem.Windows : OperatingSystem.Linux;
@@ -857,6 +866,7 @@ function setupCompletionServices(options: IInlineCompletionsProviderOptions): II
 	});
 	builder.define(ILanguageContextProviderService, options.languageContextProvider ?? new NullLanguageContextProviderService());
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
+	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 
 	return builder.seal();
 }

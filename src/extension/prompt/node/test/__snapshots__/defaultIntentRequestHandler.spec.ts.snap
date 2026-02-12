@@ -22,10 +22,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   "toolCallRounds": [
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 0",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -37,10 +40,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 1",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -52,10 +58,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 2",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -85,10 +94,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
   "toolCallRounds": [
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 3",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -100,10 +112,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 4",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -115,10 +130,13 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     },
     ToolCallRound {
       "id": "static-id",
+      "phase": undefined,
+      "phaseModelId": undefined,
       "response": "response number 5",
       "statefulMarker": undefined,
       "summary": undefined,
       "thinking": undefined,
+      "timestamp": 0,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -191,10 +209,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 0",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -206,10 +227,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 1",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -221,10 +245,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 2",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -236,10 +263,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 3",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -250,17 +280,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -303,10 +322,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 4",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -318,10 +340,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 5",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -333,10 +358,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 6",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -348,10 +376,13 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response number 7",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -362,17 +393,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -633,7 +653,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -869,7 +891,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -1105,7 +1129,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -1341,7 +1367,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -1627,7 +1655,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -1863,7 +1893,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -2099,7 +2131,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -2335,7 +2369,9 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -2456,25 +2492,17 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -2660,7 +2688,9 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -2789,10 +2819,13 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
     "toolCallRounds": [
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "some response here :)",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2804,25 +2837,17 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       },
       ToolCallRound {
         "id": "static-id",
+        "phase": undefined,
+        "phaseModelId": undefined,
         "response": "response to tool call",
         "statefulMarker": undefined,
         "summary": undefined,
         "thinking": undefined,
+        "timestamp": 0,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
     ],
-  },
-  "usage": {
-    "completionTokens": 0,
-    "promptTokenDetails": [
-      {
-        "category": "User Context",
-        "label": "Messages",
-        "percentageOfPrompt": 70,
-      },
-    ],
-    "promptTokens": 0,
   },
 }
 `;
@@ -3008,7 +3033,9 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",
@@ -3244,7 +3271,9 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "isParticipantDetected": "false",
         "languageId": undefined,
+        "mode": "ask",
         "model": "gpt-4.1-2025-04-14",
+        "parentRequestId": undefined,
         "promptTypes": "1:12",
         "requestId": "turn-id-0",
         "responseId": "turn-id-0",

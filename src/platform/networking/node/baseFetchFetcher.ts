@@ -104,6 +104,9 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	}
 	abstract isInternetDisconnectedError(e: any): boolean;
 	abstract isFetcherError(e: any): boolean;
+	isNetworkProcessCrashedError(_e: any): boolean {
+		return false;
+	}
 	getUserMessageForFetcherError(err: any): string {
 		return `Please check your firewall rules and network connection then try again. Error Code: ${collectSingleLineErrorMessage(err)}.`;
 	}

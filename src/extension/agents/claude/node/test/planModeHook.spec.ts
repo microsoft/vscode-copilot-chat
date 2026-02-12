@@ -39,7 +39,7 @@ describe('PlanModeHook', () => {
 				// Capture the callback to simulate events
 				return { dispose: () => { } };
 			}),
-			getModelIdForSession: sinon.stub().resolves('claude-sonnet-4-20250514'),
+			getModelIdForSession: sinon.stub().returns('claude-sonnet-4-20250514'),
 			setModelIdForSession: sinon.stub(),
 			getPermissionModeForSession: sinon.stub().returns('acceptEdits'),
 			setPermissionModeForSession: sinon.stub().callsFake((sessionId: string, mode: string) => {

@@ -223,6 +223,7 @@ export class ConversationFeature implements IExtensionContribution {
 			vscode.commands.registerCommand('github.copilot.interactiveSession.feedback', async () => {
 				return vscode.env.openExternal(vscode.Uri.parse(FEEDBACK_URL));
 			}),
+			vscode.commands.registerCommand('github.copilot.chat.compact', () => vscode.commands.executeCommand('workbench.action.chat.open', { query: '/compact' })),
 			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalLastCommand', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalLastCommand` })),
 			vscode.commands.registerCommand('github.copilot.terminal.fixTerminalLastCommand', async () => generateTerminalFixes(this.instantiationService)),
 			vscode.commands.registerCommand('github.copilot.terminal.generateCommitMessage', async () => {

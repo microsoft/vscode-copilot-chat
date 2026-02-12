@@ -5,7 +5,6 @@
 
 import { NoNextEditReason, StreamedEdit } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { fromUnknown } from '../../../util/common/errors';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -57,15 +56,17 @@ class Patch {
 export class XtabCustomDiffPatchResponseHandler {
 
 	public static async *handleResponse(
-		linesStream: AsyncIterableObject<string>,
+		linesStream: AsyncIterable<string>,
 		documentBeforeEdits: StringText,
 		window: OffsetRange | undefined,
+		originalWindow?: OffsetRange,
 	): AsyncGenerator<StreamedEdit, NoNextEditReason, void> {
 		try {
 			for await (const edit of XtabCustomDiffPatchResponseHandler.extractEdits(linesStream)) {
 				yield {
 					edit: XtabCustomDiffPatchResponseHandler.resolveEdit(edit),
 					window,
+					originalWindow,
 					isFromCursorJump: true,
 					// targetDocument, // TODO@ulugbekna: implement target document resolution
 				} satisfies StreamedEdit;
@@ -82,7 +83,7 @@ export class XtabCustomDiffPatchResponseHandler {
 		return new LineReplacement(new LineRange(patch.lineNumZeroBased + 1, patch.lineNumZeroBased + 1 + patch.removedLines.length), patch.addedLines);
 	}
 
-	public static async *extractEdits(linesStream: AsyncIterableObject<string>): AsyncGenerator<Patch> {
+	public static async *extractEdits(linesStream: AsyncIterable<string>): AsyncGenerator<Patch> {
 		let currentPatch: Patch | null = null;
 		for await (const line of linesStream) {
 			// if no current patch, try to parse a new one
