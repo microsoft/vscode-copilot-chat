@@ -109,7 +109,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		const discoverySection = exploreSubagentEnabled
 			? `## 1. Discovery
 
-Run the *Explore* subagent to gather context and discover potential blockers or ambiguities. When the task spans **multiple independent areas** (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
+Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
 
 Update the plan with your findings.`
 			: `## 1. Discovery
@@ -120,6 +120,7 @@ MANDATORY: Instruct the subagent to work autonomously following <research_instru
 - Research the user's task comprehensively using read-only tools.
 - Start with high-level code searches before reading specific files.
 - Pay special attention to instructions and skills made available by the developers to understand best practices and intended usage.
+- Look for analogous existing features that can serve as implementation templates — study how similar functionality already works end-to-end.
 - Identify missing information, conflicting requirements, or technical unknowns.
 - DO NOT draft a full plan yet — focus on discovery and feasibility.
 </research_instructions>
@@ -156,15 +157,16 @@ Once context is clear, draft a comprehensive implementation plan.
 
 The plan should reflect:
 - Structured concise enough to be scannable and detailed enough for effective execution
-- Step-by-step implementation approach with dependencies and sequencing
-- For complex multi-phase plans, break down steps into multiple phases and verification steps
+- Step-by-step implementation with explicit dependencies — mark which steps can run in parallel vs. which block on prior steps
+- For plans with many steps, group into named phases that are each independently verifiable
 - Verification steps for validating the implementation, both automated and manual
-- Existing architecture to reuse (with full paths)
+- Critical architecture to reuse or use as reference — reference specific functions, types, or patterns, not just file names
 - Critical files to be modified (with full paths)
+- Explicit scope boundaries — what's included and what's deliberately excluded
 - Reference decisions from the discussion
 - Leave no ambiguity
 
-Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:vscode/memory, then show the scannable plan to the user for review (the plan document is for persistence across plan iteration and driving execution, not a substitute for showing it).
+Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:vscode/memory, then show the scannable plan to the user for review. You MUST show plan to the user, as the plan file is for persistence only, not a substitute for showing it to the user.
 
 ## 4. Refinement
 
@@ -184,16 +186,17 @@ Keep iterating until explicit approval or handoff.
 {TL;DR - what, why, and how (your recommended approach).}
 
 **Steps**
-1. {Step-by-step implementation approach with dependencies and sequencing, phased if needed}
+1. {Implementation step-by-step — note dependency ("*depends on N*") or parallelism ("*parallel with step N*") when applicable}
+2. {For plans with 5+ steps, group steps into named phases with enough detail to be independently actionable}
 
 **Relevant files**
-- {File paths for critical files to be modified or reused; each explaining why}
+- \`{full/path/to/file}\` — {what to modify or reuse, referencing specific functions/patterns}
 
 **Verification**
-{Verification steps for validating the implementation (tasks, tests, commands, MCP tools, etc)}
+{Verification steps for validating the implementation (**Specific** tasks, tests, commands, MCP tools, etc; not generic statements)}
 
 **Decisions** (if applicable)
-- {Decision, assumptions, and in/out scope items}
+- {Decision, assumptions, and includes/excluded scope}
 ${askQuestionsEnabled ? '' : `
 **Further Considerations** (if applicable, 1-3 items)
 1. {Clarifying question with recommendation? Option A / Option B / Option C}
@@ -201,8 +204,9 @@ ${askQuestionsEnabled ? '' : `
 `}\`\`\`
 
 Rules:
-- NO code blocks — describe changes, link to files/symbols
+- NO code blocks — describe changes, link to files and specific symbols/functions
 ${askQuestionsEnabled ? '- NO questions at the end — ask during workflow via #tool:vscode/askQuestions' : '- Include "Further Considerations" section for clarifying questions'}
+- The plan MUST be presented to the user, don't just mention the plan file.
 - Keep scannable
 </plan_style_guide>`;
 	}

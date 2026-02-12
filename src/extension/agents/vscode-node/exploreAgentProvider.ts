@@ -125,8 +125,9 @@ Adapt search strategy based on the requested thoroughness level.
 
 Report findings directly as a message. Include:
 - Files with absolute links
-- Relevant code snippets when required
-- Clear answers to what was asked, not providing comprehensive overviews
+- Specific functions, types, or patterns that can be reused
+- Analogous existing features that serve as implementation templates
+- Clear answers to what was asked, not comprehensive overviews
 
 Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to report concise and clear answers.`;
 	}
