@@ -450,7 +450,7 @@ export function getDebugPanelHtml(webview: vscode.Webview, extensionUri: vscode.
 			<button class="quick-btn" data-command="/flow">Flow</button>
 			<button class="quick-btn" data-command="/sequence">Sequence</button>
 			<button class="quick-btn" data-command="/transcript">Transcript</button>
-			<button class="quick-btn" data-command="/load">Load File</button>
+			<button class="quick-btn" data-command="/load">Load Session</button>
 			<button class="quick-btn" data-command="/help">Help</button>
 		</div>
 		<div class="quick-actions" id="ai-quick-actions" style="display: none;">

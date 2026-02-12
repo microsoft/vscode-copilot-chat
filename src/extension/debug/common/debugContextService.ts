@@ -436,6 +436,45 @@ export class DebugContextService extends Disposable implements IDebugContextServ
 	getToolCalls(filter?: { sessionId?: string; toolName?: string; failedOnly?: boolean }): IToolCallInfo[] {
 		const toolCalls: IToolCallInfo[] = [];
 
+		// First, check for tool calls in the loaded session (chatreplay/session data)
+		if (this._loadedSession) {
+			const sessId = this._loadedSession.sessionId;
+			// Skip if filtering by sessionId and this isn't it
+			if (!filter?.sessionId || sessId === filter.sessionId || sessId.includes(filter.sessionId)) {
+				for (const turn of this._loadedSession.turns) {
+					for (const tc of turn.toolCalls) {
+						// Apply tool name filter
+						if (filter?.toolName && !tc.name.toLowerCase().includes(filter.toolName.toLowerCase())) {
+							continue;
+						}
+
+						const failed = tc.status === 'failure';
+
+						// Apply failed filter
+						if (filter?.failedOnly && !failed) {
+							continue;
+						}
+
+						toolCalls.push({
+							sessionId: sessId,
+							agentName: 'session',
+							stepId: turn.index,
+							timestamp: tc.timestamp?.toISOString(),
+							toolCallId: tc.id,
+							toolName: tc.name,
+							arguments: tc.args,
+							result: tc.result || tc.fullResult,
+							error: tc.error,
+							failed,
+							durationMs: tc.durationMs,
+							subAgentSessionId: tc.subAgentSessionId
+						});
+					}
+				}
+			}
+		}
+
+		// Then check ATIF trajectory data
 		for (const [sessId, trajectory] of this._trajectories) {
 			// Skip if filtering by sessionId and this isn't it
 			if (filter?.sessionId && sessId !== filter.sessionId) {

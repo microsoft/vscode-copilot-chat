@@ -213,6 +213,8 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 		// Mermaid gantt chart for timeline visualization
 		if (turns.some(t => t.timestamp)) {
 			lines.push('```mermaid');
+			// Theme configuration for visible colors: green for success, red for failures
+			lines.push('%%{init: {\'theme\': \'base\', \'themeVariables\': {\'primaryColor\': \'#4CAF50\', \'primaryTextColor\': \'#fff\', \'primaryBorderColor\': \'#388E3C\', \'critBkgColor\': \'#f44336\', \'critBorderColor\': \'#c62828\', \'doneBkgColor\': \'#4CAF50\', \'doneBorderColor\': \'#388E3C\'}}}%%');
 			lines.push('gantt');
 			lines.push('    title Session Timeline');
 			lines.push('    dateFormat HH:mm:ss');
@@ -222,7 +224,8 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 
 			for (const turn of turns) {
 				if (turn.timestamp) {
-					const status = turn.status === 'failure' ? 'crit, ' : '';
+					// Use crit for failures (red), done for success (green)
+					const status = turn.status === 'failure' ? 'crit, ' : 'done, ';
 					const startTime = formatTime(turn.timestamp);
 					const duration = turn.durationMs || 1000;
 					const endTime = addDuration(turn.timestamp, duration);
@@ -238,9 +241,10 @@ class GetSessionHistoryTool implements ICopilotTool<IGetSessionHistoryParams> {
 					lines.push('    section Tool Calls');
 
 					for (const turn of turns) {
-						for (const tc of turn.toolCalls.slice(0, 3)) {
+						for (const tc of turn.toolCalls) {
 							if (tc.timestamp) {
-								const status = tc.status === 'failure' ? 'crit, ' : '';
+								// Use crit for failures (red), done for success (green)
+								const status = tc.status === 'failure' ? 'crit, ' : 'done, ';
 								const startTime = formatTime(tc.timestamp);
 								const duration = tc.durationMs || 100;
 								const endTime = addDuration(tc.timestamp, duration);

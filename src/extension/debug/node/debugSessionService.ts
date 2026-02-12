@@ -294,8 +294,34 @@ export function buildSessionFromChatReplay(
 		const turnRequests: DebugRequest[] = [];
 		let turnStatus = DebugItemStatus.Success;
 		let responseText: string | undefined;
+		let earliestTimestamp: Date | undefined;
+		let latestTimestamp: Date | undefined;
 
 		for (const log of prompt.logs) {
+			// Track timestamps for turn duration calculation
+			// Check multiple possible timestamp fields: timestamp, time, metadata.startTime
+			const timeStr = log.timestamp || log.time || log.metadata?.startTime;
+			if (timeStr) {
+				const ts = new Date(timeStr);
+				if (!isNaN(ts.getTime())) {
+					if (!earliestTimestamp || ts < earliestTimestamp) {
+						earliestTimestamp = ts;
+					}
+					if (!latestTimestamp || ts > latestTimestamp) {
+						latestTimestamp = ts;
+					}
+				}
+			}
+			// Also check metadata.endTime for latest timestamp
+			if (log.metadata?.endTime) {
+				const endTs = new Date(log.metadata.endTime);
+				if (!isNaN(endTs.getTime())) {
+					if (!latestTimestamp || endTs > latestTimestamp) {
+						latestTimestamp = endTs;
+					}
+				}
+			}
+
 			if (log.kind === 'toolCall') {
 				const toolCall = convertChatReplayToolCall(log, turnId);
 				turnToolCalls.push(toolCall);
@@ -326,14 +352,20 @@ export function buildSessionFromChatReplay(
 			turnStatus = DebugItemStatus.Failure;
 		}
 
+		// Calculate duration from timestamps
+		let durationMs: number | undefined;
+		if (earliestTimestamp && latestTimestamp) {
+			durationMs = latestTimestamp.getTime() - earliestTimestamp.getTime();
+		}
+
 		const turn: DebugTurn = {
 			id: turnId,
 			prompt: prompt.prompt,
 			response: responseText,
 			toolCalls: turnToolCalls,
 			requests: turnRequests,
-			timestamp: undefined,
-			durationMs: undefined,
+			timestamp: earliestTimestamp,
+			durationMs,
 			status: turnStatus,
 			index: i
 		};
@@ -792,7 +824,7 @@ function convertChatReplayToolCall(log: ExportedLogEntry, turnId: string): Debug
 		args: log.args || {},
 		result,
 		durationMs: undefined,
-		timestamp: log.timestamp ? new Date(log.timestamp) : undefined,
+		timestamp: (log.time || log.timestamp) ? new Date(log.time || log.timestamp!) : undefined,
 		status,
 		error,
 		turnId,

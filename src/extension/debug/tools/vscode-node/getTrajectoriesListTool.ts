@@ -67,7 +67,7 @@ class GetTrajectoriesList implements ICopilotTool<IGetTrajectoriesParams> {
 			lines.push(`| ${shortId} | ${trajectory.agent.name} | ${trajectory.steps.length} | ${toolCallCount} | ${trajectory.agent.model_name || '-'} |`);
 		}
 
-		lines.push('\n*Use `debug_getTrajectory` with a session ID to get full details.*');
+		// Note: Don't encourage calling debug_getTrajectory for each one - that leads to excessive tool calls
 
 		return new LanguageModelToolResult([new LanguageModelTextPart(lines.join('\n'))]);
 	}
