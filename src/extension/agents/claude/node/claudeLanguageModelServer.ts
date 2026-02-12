@@ -109,22 +109,18 @@ export class ClaudeLanguageModelServer extends Disposable {
 	private async handleMessagesRequest(req: http.IncomingMessage, res: http.ServerResponse) {
 		try {
 			const body = await this.readRequestBody(req);
-			const sessionId = this.extractSessionId(req);
-			if (sessionId === undefined) {
+			const auth = extractSessionId(req.headers, this.config.nonce);
+			if (!auth.valid) {
 				this.error('Invalid auth key');
 				this.sendErrorResponse(res, 401, 'authentication_error', 'Invalid authentication');
 				return;
 			}
 
-			await this.handleAuthedMessagesRequest(body, req.headers, res, sessionId);
+			await this.handleAuthedMessagesRequest(body, req.headers, res, auth.sessionId);
 		} catch (error) {
 			this.sendErrorResponse(res, 500, 'api_error', error instanceof Error ? error.message : String(error));
 		}
 		return;
-	}
-
-	private extractSessionId(req: http.IncomingMessage): string | undefined {
-		return extractSessionId(req.headers, this.config.nonce);
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
@@ -140,7 +136,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 		});
 	}
 
-	private async handleAuthedMessagesRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse, sessionId: string): Promise<void> {
+	private async handleAuthedMessagesRequest(bodyString: string, headers: http.IncomingHttpHeaders, res: http.ServerResponse, sessionId: string | undefined): Promise<void> {
 		// Create cancellation token for the request
 		const tokenSource = new CancellationTokenSource();
 
@@ -156,7 +152,7 @@ export class ClaudeLanguageModelServer extends Disposable {
 				return;
 			}
 
-			const endpointModel = this.sessionStateService.getModelIdForSession(sessionId);
+			const endpointModel = sessionId ? this.sessionStateService.getModelIdForSession(sessionId) : undefined;
 			let selectedEndpoint = endpoints.find(e => e.model === endpointModel);
 			selectedEndpoint ??= this.selectEndpoint(endpoints, requestBody.model);
 			if (!selectedEndpoint) {
@@ -344,15 +340,21 @@ export class ClaudeLanguageModelServer extends Disposable {
 	}
 }
 
+export interface ExtractSessionIdResult {
+	/** Whether the auth nonce is valid. */
+	readonly valid: boolean;
+	/** The session ID, if present in the `nonce.sessionId` format. `undefined` for legacy (nonce-only) format. */
+	readonly sessionId: string | undefined;
+}
+
 /**
  * Extracts and validates the session ID from HTTP request headers.
  * The API key format is `nonce.sessionId` where the nonce is used for auth
  * and the sessionId identifies which Claude session is making the request.
  *
  * Checks `x-api-key` header first (used by SDK), then `Authorization: Bearer` (used by CLI).
- * @returns The session ID if auth is valid, undefined otherwise
  */
-export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonce: string): string | undefined {
+export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonce: string): ExtractSessionIdResult {
 	let apiKey: string | undefined;
 
 	// Check x-api-key header (used by SDK)
@@ -370,19 +372,20 @@ export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonc
 	}
 
 	if (!apiKey) {
-		return undefined;
+		return { valid: false, sessionId: undefined };
 	}
 
 	// Parse `nonce.sessionId` format
 	const dotIndex = apiKey.indexOf('.');
 	if (dotIndex === -1) {
 		// Legacy format without session ID — validate nonce only
-		return apiKey === expectedNonce ? '' : undefined;
+		return { valid: apiKey === expectedNonce, sessionId: undefined };
 	}
 
 	const nonce = apiKey.slice(0, dotIndex);
 	const sessionId = apiKey.slice(dotIndex + 1);
-	return nonce === expectedNonce ? sessionId : undefined;
+	const valid = nonce === expectedNonce;
+	return { valid, sessionId: valid ? sessionId : undefined };
 }
 
 /**

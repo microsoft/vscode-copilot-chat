@@ -12,44 +12,44 @@ describe('extractSessionId', () => {
 	describe('x-api-key header', () => {
 		it('extracts session ID from nonce.sessionId format', () => {
 			const result = extractSessionId({ 'x-api-key': `${NONCE}.my-session-123` }, NONCE);
-			assert.strictEqual(result, 'my-session-123');
+			assert.deepStrictEqual(result, { valid: true, sessionId: 'my-session-123' });
 		});
 
-		it('returns empty string for legacy format without session ID', () => {
+		it('returns valid with no session ID for legacy format', () => {
 			const result = extractSessionId({ 'x-api-key': NONCE }, NONCE);
-			assert.strictEqual(result, '');
+			assert.deepStrictEqual(result, { valid: true, sessionId: undefined });
 		});
 
-		it('returns undefined for invalid nonce', () => {
+		it('returns invalid for wrong nonce with session ID', () => {
 			const result = extractSessionId({ 'x-api-key': 'wrong-nonce.session-1' }, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 
-		it('returns undefined for invalid legacy nonce', () => {
+		it('returns invalid for wrong legacy nonce', () => {
 			const result = extractSessionId({ 'x-api-key': 'wrong-nonce' }, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 
 		it('handles session ID containing dots', () => {
 			const result = extractSessionId({ 'x-api-key': `${NONCE}.session.with.dots` }, NONCE);
-			assert.strictEqual(result, 'session.with.dots');
+			assert.deepStrictEqual(result, { valid: true, sessionId: 'session.with.dots' });
 		});
 	});
 
 	describe('Authorization Bearer header', () => {
 		it('extracts session ID from Bearer token with nonce.sessionId format', () => {
 			const result = extractSessionId({ 'authorization': `Bearer ${NONCE}.my-session` }, NONCE);
-			assert.strictEqual(result, 'my-session');
+			assert.deepStrictEqual(result, { valid: true, sessionId: 'my-session' });
 		});
 
-		it('returns empty string for legacy Bearer format', () => {
+		it('returns valid with no session ID for legacy Bearer format', () => {
 			const result = extractSessionId({ 'authorization': `Bearer ${NONCE}` }, NONCE);
-			assert.strictEqual(result, '');
+			assert.deepStrictEqual(result, { valid: true, sessionId: undefined });
 		});
 
-		it('returns undefined for invalid Bearer nonce', () => {
+		it('returns invalid for wrong Bearer nonce', () => {
 			const result = extractSessionId({ 'authorization': 'Bearer wrong-nonce.session' }, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 	});
 
@@ -59,24 +59,24 @@ describe('extractSessionId', () => {
 				'x-api-key': `${NONCE}.from-api-key`,
 				'authorization': `Bearer ${NONCE}.from-bearer`,
 			}, NONCE);
-			assert.strictEqual(result, 'from-api-key');
+			assert.deepStrictEqual(result, { valid: true, sessionId: 'from-api-key' });
 		});
 	});
 
 	describe('missing headers', () => {
-		it('returns undefined when no auth headers are present', () => {
+		it('returns invalid when no auth headers are present', () => {
 			const result = extractSessionId({}, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 
-		it('returns undefined for non-Bearer Authorization header', () => {
+		it('returns invalid for non-Bearer Authorization header', () => {
 			const result = extractSessionId({ 'authorization': `Basic ${NONCE}.session` }, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 
-		it('returns undefined for non-string x-api-key', () => {
+		it('returns invalid for non-string x-api-key', () => {
 			const result = extractSessionId({ 'x-api-key': ['array-value'] }, NONCE);
-			assert.strictEqual(result, undefined);
+			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
 	});
 });
