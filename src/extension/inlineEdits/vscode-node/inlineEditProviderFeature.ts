@@ -65,6 +65,11 @@ export class InlineEditProviderFeature {
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
 
 	public readonly inlineEditsEnabled = derived(this, (reader) => {
+		// Allow inline edits when Azure BYOK endpoint is configured, even without GitHub auth
+		const byokEndpoint = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+		if (byokEndpoint) {
+			return true;
+		}
 		const copilotToken = this._copilotToken.read(reader);
 		if (copilotToken === undefined) {
 			return false;
@@ -113,6 +118,16 @@ export class InlineEditProviderFeature {
 		return autorun(async (reader) => {
 			if (this._vscodeExtensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey)) {
 				return; // We already updated the setting for the user once. No need to run this logic again.
+			}
+
+			// Auto-enable for BYOK users with Azure endpoint configured
+			const byokEndpoint = this._configurationService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+			if (byokEndpoint) {
+				this._vscodeExtensionContext.globalState.update(hasUpdatedNesSettingKey, true);
+				if (!this._configurationService.isConfigured(ConfigKey.InlineEditsEnabled)) {
+					this._configurationService.setConfig(ConfigKey.InlineEditsEnabled, true);
+				}
+				return;
 			}
 
 			const copilotToken = this._copilotToken.read(reader);
