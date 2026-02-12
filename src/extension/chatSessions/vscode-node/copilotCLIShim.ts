@@ -143,7 +143,7 @@ function installCopilotCLI(label: string, update = false): boolean {
 	}
 	// Try brew
 	if (hasCommand('brew')) {
-		log('npm is not available or installation failed. Trying brew...');
+		log(`npm is not available or ${update ? 'update' : 'installation'} failed. Trying brew...`);
 		if (runBrew(label)) { return true; }
 	}
 	// Try curl
