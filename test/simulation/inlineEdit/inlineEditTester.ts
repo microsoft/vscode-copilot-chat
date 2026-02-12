@@ -7,12 +7,11 @@ import { rename } from 'fs/promises';
 import { basename, dirname, join } from 'path';
 import { VisualizationTestRun } from '../../../src/extension/inlineChat/node/rendererVisualization';
 import { IRecordingInformation, ObservableWorkspaceRecordingReplayer } from '../../../src/extension/inlineEdits/common/observableWorkspaceRecordingReplayer';
-import { createNextEditProvider } from '../../../src/extension/inlineEdits/node/createNextEditProvider';
 import { DebugRecorder } from '../../../src/extension/inlineEdits/node/debugRecorder';
 import { NESInlineCompletionContext, NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
 import { NextEditResult } from '../../../src/extension/inlineEdits/node/nextEditResult';
-import { ConfigKey, IConfigurationService } from '../../../src/platform/configuration/common/configurationService';
+import { XtabProvider } from '../../../src/extension/xtab/node/xtabProvider';
 import { IGitExtensionService } from '../../../src/platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../src/platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../src/platform/inlineEdits/common/dataTypes/edit';
@@ -24,7 +23,6 @@ import { IHistoryContextProvider } from '../../../src/platform/inlineEdits/commo
 import { NesHistoryContextProvider } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { INotebookService } from '../../../src/platform/notebook/common/notebookService';
-import { IExperimentationService } from '../../../src/platform/telemetry/common/nullExperimentationService';
 import { TestingServiceCollection } from '../../../src/platform/test/node/services';
 import { IWorkspaceService } from '../../../src/platform/workspace/common/workspaceService';
 import { TaskQueue } from '../../../src/util/common/async';
@@ -125,8 +123,6 @@ export class InlineEditTester {
 
 	private async _runTest(accessor: ServicesAccessor, docId: DocumentId, workspace: ObservableWorkspace, historyContextProvider: IHistoryContextProvider, nesXtabHistoryTracker: NesXtabHistoryTracker, debugRecorder: DebugRecorder | undefined) {
 		const instaService = accessor.get(IInstantiationService);
-		const configService = accessor.get(IConfigurationService);
-		const expService = accessor.get(IExperimentationService);
 		const gitExtensionService = accessor.get(IGitExtensionService);
 		const notebookService = accessor.get(INotebookService);
 		const workspaceService = accessor.get(IWorkspaceService);
@@ -163,8 +159,7 @@ export class InlineEditTester {
 			stestRuntime.writeFile('nesUserEditHistory.json', JSON.stringify(nesUserEditHistory, null, 2), NES_USER_EDITS_HISTORY_TAG);
 		}
 
-		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsProviderId, expService);
-		const statelessNextEditProvider = createNextEditProvider(nextEditProviderId, instaService);
+		const statelessNextEditProvider = instaService.createInstance(XtabProvider);
 		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder);
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
@@ -177,6 +172,7 @@ export class InlineEditTester {
 		try {
 			nextEditResult = await nextEditProvider.getNextEdit(activeDocument.docId, context, logContext, CancellationToken.None, telemetryBuilder.nesBuilder);
 		} finally {
+			statelessNextEditProvider.dispose();
 			nextEditProvider.dispose();
 			telemetryBuilder.dispose();
 		}

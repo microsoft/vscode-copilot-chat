@@ -230,7 +230,7 @@ class NESProvider extends Disposable implements INESProvider<NESResult> {
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		super();
-		const statelessNextEditProvider = instantiationService.createInstance(XtabProvider);
+		const statelessNextEditProvider = this._register(instantiationService.createInstance(XtabProvider));
 		const git = instantiationService.createInstance(ObservableGit);
 		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabDiffNEntries, this._expService);

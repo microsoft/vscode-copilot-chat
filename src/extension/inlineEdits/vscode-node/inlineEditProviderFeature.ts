@@ -30,7 +30,6 @@ import { InlineCompletionProviderImpl } from './inlineCompletionProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
-import { makeSettable } from './utils/observablesUtils';
 
 const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNotebookNES';
 
@@ -55,8 +54,6 @@ export class InlineEditProviderFeatureContribution extends Disposable implements
 }
 
 export class InlineEditProviderFeature {
-
-	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsProviderId, this._expService));
 
 	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsHideInternalInterface);
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
@@ -142,8 +139,6 @@ export class InlineEditProviderFeature {
 
 			const logger = reader.store.add(this._instantiationService.createInstance(InlineEditLogger));
 
-			const statelessProviderId = this._inlineEditsProviderId.read(reader);
-
 			const workspace = this._workspace.read(reader);
 			const git = reader.store.add(this._instantiationService.createInstance(ObservableGit));
 			const historyContextProvider = new NesHistoryContextProvider(workspace, git);
@@ -153,7 +148,7 @@ export class InlineEditProviderFeature {
 				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
-			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
+			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, workspace, historyContextProvider, diagnosticsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 
@@ -166,7 +161,7 @@ export class InlineEditProviderFeature {
 				void LogContextRecorder.cleanupOldRecordings(recordingDirPath);
 			}
 
-			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
+			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder));
 
 			const telemetrySender = reader.store.add(this._instantiationService.createInstance(TelemetrySender));
 

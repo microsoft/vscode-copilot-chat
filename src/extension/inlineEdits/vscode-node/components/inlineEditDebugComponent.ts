@@ -3,22 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Command, commands, ThemeIcon, window } from 'vscode';
-import { ConfigKey } from '../../../../platform/configuration/common/configurationService';
+import { Command, commands, ThemeIcon } from 'vscode';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { TsExpr } from '../../../../platform/inlineEdits/common/utils/tsExpr';
 import { LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
 import { assertNever } from '../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IObservable, ISettableObservable } from '../../../../util/vs/base/common/observableInternal';
+import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 import { basename, extname } from '../../../../util/vs/base/common/path';
 import { openIssueReporter } from '../../../conversation/vscode-node/feedbackReporter';
-import { XtabProvider } from '../../../xtab/node/xtabProvider';
-import { defaultNextEditProviderId } from '../../node/createNextEditProvider';
 import { DebugRecorder } from '../../node/debugRecorder';
 
 export const reportFeedbackCommandId = 'github.copilot.debug.inlineEdit.reportFeedback';
-const pickProviderId = 'github.copilot.debug.inlineEdit.pickProvider';
 
 export type InlineCompletionCommand = { command: Command; icon: ThemeIcon };
 
@@ -28,7 +24,6 @@ export class InlineEditDebugComponent extends Disposable {
 		private readonly _internalActionsEnabled: IObservable<boolean>,
 		private readonly _inlineEditsEnabled: IObservable<boolean>,
 		private readonly _debugRecorder: DebugRecorder,
-		private readonly _inlineEditsProviderId: ISettableObservable<string | undefined>,
 	) {
 		super();
 
@@ -95,21 +90,6 @@ export class InlineEditDebugComponent extends Disposable {
 				public: !isInternalUser
 			});
 		}));
-
-		this._register(commands.registerCommand(pickProviderId, async (args: unknown) => {
-			if (!this._inlineEditsEnabled.get()) { return; }
-			if (!this._internalActionsEnabled.get()) { return; }
-
-			const selectedProvider = await window.showQuickPick(this._getAvailableProviderIds(), { placeHolder: 'Select inline edits provider' });
-			if (!selectedProvider || selectedProvider === this._inlineEditsProviderId.get()) { return; }
-
-			this._inlineEditsProviderId.set(selectedProvider, undefined);
-
-			const pick = await window.showWarningMessage(`Inline edits provider set to ${selectedProvider}. Reloading will undo this change. Set "github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}": "${selectedProvider}" in your settings file to make the change persistent.`, 'Open settings (JSON)');
-			if (!pick) { return; }
-
-			await commands.executeCommand('workbench.action.openSettingsJson', { revealSetting: { key: `github.copilot.${ConfigKey.TeamInternal.InlineEditsProviderId.id}`, edit: true } });
-		}));
 	}
 
 	getCommands(logContext: InlineEditRequestLogContext): InlineCompletionCommand[] {
@@ -123,30 +103,7 @@ export class InlineEditDebugComponent extends Disposable {
 			icon: new ThemeIcon('feedback')
 		});
 
-		if (this._internalActionsEnabled.get()) {
-			if (this._getAvailableProviderIds().length > 1) {
-				menuCommands.push({
-					command: {
-						command: pickProviderId,
-						title: `Model: ${this._inlineEditsProviderId.get() ?? defaultNextEditProviderId}`,
-					},
-					icon: new ThemeIcon('wand'),
-				});
-			}
-		}
-
 		return menuCommands;
-	}
-
-	private _getAvailableProviderIds(): string[] {
-		const providers = [XtabProvider.ID];
-
-		const providerId = this._inlineEditsProviderId.get();
-		if (providerId && !providers.includes(providerId)) {
-			providers.push(providerId);
-		}
-
-		return providers;
 	}
 }
 
