@@ -5,7 +5,6 @@
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import * as l10n from '@vscode/l10n';
 import { OpenAI, Raw } from '@vscode/prompt-tsx';
-import { ChatRole } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
@@ -60,94 +59,6 @@ export async function defaultChatResponseProcessor(
 		return prepareChatCompletionForReturn(telemetryService, logService, solution, telemetryData);
 	});
 	return chatCompletions;
-}
-
-export async function processOllamaStreamResponse(
-	logService: ILogService,
-	response: Response,
-	finishCallback: FinishedCallback,
-	telemetryData: TelemetryData
-): Promise<AsyncIterableObject<ChatCompletion>> {
-	const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
-	const ghRequestId = response.headers.get('x-github-request-id') ?? '';
-
-	let fullMessage = '';
-	const completions: ChatCompletion[] = [];
-	let buffer = '';
-	const decoder = new TextDecoder();
-
-	try {
-		for await (const chunk of response.body) {
-			buffer += decoder.decode(chunk, { stream: true });
-			const lines = buffer.split('\n');
-			buffer = lines.pop() ?? '';
-
-			for (const line of lines) {
-				if (!line.trim()) {
-					continue;
-				}
-
-				try {
-					const data = JSON.parse(line);
-
-					if (data.message?.content) {
-						fullMessage += data.message.content;
-						await finishCallback(data.message.content, 0, {
-							text: data.message.content,
-							copilotToolCalls: []
-						});
-					}
-
-					if (!data.done) {
-						continue;
-					}
-
-					completions.push({
-						blockFinished: false,
-						choiceIndex: 0,
-						model: data.model ?? '',
-						finishReason: (data.done_reason ?? 'stop') as FinishedCompletionReason,
-						message: {
-							role: ChatRole.Assistant,
-							content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: fullMessage }]
-						},
-						usage: {
-							prompt_tokens: data.prompt_eval_count ?? 0,
-							completion_tokens: data.eval_count ?? 0,
-							total_tokens: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0)
-						},
-						tokens: [],
-						requestId: { headerRequestId: requestId, gitHubRequestId: ghRequestId, completionId: '', created: 0, deploymentId: '', serverExperiments: '' },
-						telemetryData
-					});
-				} catch (e) {
-					logService.error(`Failed to parse Ollama response: ${e}`);
-				}
-			}
-		}
-
-		// Process the remaining data in the buffer
-		buffer += decoder.decode();
-		if (buffer.trim()) {
-			try {
-				const data = JSON.parse(buffer);
-				if (data.message?.content) {
-					fullMessage += data.message.content;
-					await finishCallback(data.message.content, 0, {
-						text: data.message.content,
-						copilotToolCalls: []
-					});
-				}
-			} catch (e) {
-				logService.error(`Failed to parse final Ollama line: ${e}`);
-			}
-		}
-	} catch (e) {
-		logService.error(`Ollama stream processing failed: ${e}`);
-		throw e;
-	}
-
-	return AsyncIterableObject.fromArray(completions);
 }
 
 export async function defaultNonStreamChatResponseProcessor(response: Response, finishCallback: FinishedCallback, telemetryData: TelemetryData) {
@@ -469,8 +380,6 @@ export class ChatEndpoint implements IChatEndpoint {
 			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
-		} else if (this.isOllamaEndpoint) {
-			return processOllamaStreamResponse(logService, response, finishCallback, telemetryData);
 		} else {
 			return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
 		}
