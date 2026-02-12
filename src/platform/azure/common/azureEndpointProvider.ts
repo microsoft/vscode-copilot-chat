@@ -374,8 +374,22 @@ export class AzureEndpointProvider implements IEndpointProvider {
 	}
 
 	async getAllCompletionModels(_forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
-		// No completions models in Azure-only mode
-		return [];
+		// Return completion model based on model router's completions routing
+		// so the completions-core subsystem uses the correct Azure deployment
+		const routing = this._modelRouter.getDeployment('completions');
+		return [{
+			id: routing.deploymentName,
+			name: routing.deploymentName,
+			model_picker_enabled: false,
+			is_chat_default: false,
+			is_chat_fallback: false,
+			version: '1.0.0',
+			capabilities: {
+				type: 'completion',
+				family: routing.deploymentName,
+				tokenizer: TokenizerType.O200K,
+			},
+		}];
 	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {

@@ -600,14 +600,15 @@ export class LiveOpenAIFetcher extends OpenAIFetcher {
 					...this.instantiationService.invokeFunction(editorVersionHeaders),
 				};
 
-				// If we call byok endpoint, no need to add these headers
-				// if (modelProviderName === undefined) {
-				fullHeaders['Openai-Organization'] = 'github-copilot';
+				// Azure-only fork: only add GitHub-specific headers for non-Azure endpoints
+				const isAzureEndpoint = uri.includes('.openai.azure.com') || uri.includes('.cognitiveservices.azure.com');
+				if (!isAzureEndpoint) {
+					fullHeaders['Openai-Organization'] = 'github-copilot';
+					fullHeaders['X-GitHub-Api-Version'] = apiVersion;
+				}
 				fullHeaders['X-Request-Id'] = ourRequestId;
 				fullHeaders['VScode-SessionId'] = this.envService.sessionId;
 				fullHeaders['VScode-MachineId'] = this.envService.machineId;
-				fullHeaders['X-GitHub-Api-Version'] = apiVersion;
-				// }
 
 				if (intent) {
 					fullHeaders['OpenAI-Intent'] = intent;

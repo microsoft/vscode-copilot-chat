@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { IAuthenticationService } from '../../../../../platform/authentication/common/authentication';
+import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { ServicesAccessor } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotToken } from './auth/copilotTokenManager';
@@ -17,8 +18,17 @@ type ServiceEndpoints = {
 
 function getDefaultEndpoints(accessor: ServicesAccessor): ServiceEndpoints {
 	const capi = accessor.get(ICAPIClientService);
+
+	// Azure-only fork: prefer the user's Azure endpoint over the CAPI proxy URL,
+	// which may point to GitHub's backend instead of the user's own Azure resource.
+	const configService = accessor.get(IConfigurationService);
+	const azureEndpoint = configService.getNonExtensionConfig<string>('yourcompany.ai.endpoint');
+	const proxyUrl = azureEndpoint
+		? azureEndpoint.replace(/\/$/, '')
+		: capi.proxyBaseURL;
+
 	return {
-		proxy: capi.proxyBaseURL,
+		proxy: proxyUrl,
 		'origin-tracker': capi.originTrackerURL,
 	};
 }
@@ -84,12 +94,13 @@ export function getEndpointUrl(
 	// Azure-only fork: rewrite URL for Azure OpenAI format
 	if (isAzureOpenAIEndpoint(root) && endpoint === 'proxy') {
 		// paths is typically ['v1/engines', modelId, 'completions']
-		// We need to extract the model ID and endpoint type, then construct Azure URL
+		// We need to extract the model ID, then construct Azure URL
 		if (paths.length >= 3 && paths[0] === 'v1/engines') {
 			const modelId = paths[1];
-			const endpointPath = paths.slice(2).join('/');
 			const apiVersion = '2024-12-01-preview';
-			return `${root}/openai/deployments/${modelId}/${endpointPath}?api-version=${apiVersion}`;
+			// Use chat/completions since modern Azure OpenAI models do not
+			// support the legacy /completions endpoint
+			return `${root}/openai/deployments/${modelId}/chat/completions?api-version=${apiVersion}`;
 		}
 	}
 
