@@ -133,8 +133,11 @@ Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to repo
 	}
 
 	private _buildCustomizedConfig(): AgentConfig {
+		// Model selection priority: core config > extension config > fallback list
+		// Empty string means "not set", so we explicitly check for truthy values
 		const coreDefaultModel = this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel');
-		const model: string | readonly string[] = coreDefaultModel || this._configurationService.getConfig(ConfigKey.ExploreAgentModel) || EXPLORE_AGENT_FALLBACK_MODELS;
+		const extModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
+		const model: string | readonly string[] = coreDefaultModel || extModel || EXPLORE_AGENT_FALLBACK_MODELS;
 
 		return {
 			...BASE_EXPLORE_AGENT_CONFIG,
