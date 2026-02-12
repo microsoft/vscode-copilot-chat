@@ -19,12 +19,6 @@ import { OpenAIEndpoint } from './openAIEndpoint';
  * and this class serves as a marker to ensure the correct response processor is used.
  */
 export class OllamaChatEndpoint extends OpenAIEndpoint {
-	/**
-	 * Flag indicating this is an Ollama endpoint.
-	 * Used by ChatEndpoint to select the appropriate response processor.
-	 */
-	public readonly isOllama = true;
-
 	constructor(
 		modelMetadata: IChatModelInformation,
 		apiKey: string,
@@ -49,5 +43,9 @@ export class OllamaChatEndpoint extends OpenAIEndpoint {
 			expService,
 			logService
 		);
+	}
+
+	protected override get isOllamaEndpoint(): boolean {
+		return true;
 	}
 }

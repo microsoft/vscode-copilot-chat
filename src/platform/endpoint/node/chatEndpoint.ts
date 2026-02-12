@@ -335,6 +335,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		return !!(enableMessagesApi && this.modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Messages));
 	}
 
+	protected get isOllamaEndpoint(): boolean {
+		return false;
+	}
+
 	public get degradationReason(): string | undefined {
 		return this.modelMetadata.warning_messages?.at(0)?.message ?? this.modelMetadata.info_messages?.at(0)?.message;
 	}
@@ -465,7 +469,7 @@ export class ChatEndpoint implements IChatEndpoint {
 			return processResponseFromMessagesEndpoint(this._instantiationService, telemetryService, logService, response, finishCallback, telemetryData);
 		} else if (!this._supportsStreaming) {
 			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
-		} else if ('isOllama' in this && this.isOllama === true) {
+		} else if (this.isOllamaEndpoint) {
 			return processOllamaStreamResponse(logService, response, finishCallback, telemetryData);
 		} else {
 			return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
