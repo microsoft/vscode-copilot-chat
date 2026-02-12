@@ -1,5 +1,5 @@
 ---
-name: debug
+name: debugSession
 description: Analyze and debug the current chat session, agent trajectories, and tool call failures
 argument-hint: Describe what you want to debug or investigate
 tools:
