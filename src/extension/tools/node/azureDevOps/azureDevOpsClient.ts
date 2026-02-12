@@ -17,13 +17,16 @@ export interface AzureDevOpsWorkItem {
 }
 
 /**
- * Azure DevOps work item query result
+ * Azure DevOps work item query result.
+ * Flat queries (`FROM WorkItems`) populate `workItems`.
+ * Link/tree queries (`FROM WorkItemLinks`) populate `workItemRelations`.
  */
 export interface AzureDevOpsQueryResult {
 	readonly queryType: string;
 	readonly queryResultType: string;
 	readonly asOf: string;
-	readonly workItems: readonly { readonly id: number; readonly url: string }[];
+	readonly workItems?: readonly { readonly id: number; readonly url: string }[];
+	readonly workItemRelations?: readonly { readonly target: { readonly id: number; readonly url: string }; readonly rel: string | null; readonly source: { readonly id: number; readonly url: string } | null }[];
 }
 
 /**
@@ -72,7 +75,7 @@ export interface AzureDevOpsWikiPage {
 	readonly path: string;
 	readonly content?: string;
 	readonly etag: string;
-	readonly subPages?: readonly { readonly id: number; readonly path: string }[];
+	readonly subPages?: readonly AzureDevOpsWikiPage[];
 }
 
 /**
@@ -353,8 +356,37 @@ export class AzureDevOpsClient {
 
 		const response = await this._fetch(url);
 		const etag = response.headers.get('etag') ?? '';
-		const page = await response.json() as { id: number; path: string; content?: string; subPages?: { id: number; path: string }[] };
+		const page = await response.json() as AzureDevOpsWikiPage;
 		return { ...page, etag };
+	}
+
+	/**
+	 * Get the full page tree of a wiki, recursing through all subpages.
+	 * Returns the root page with nested subPages arrays.
+	 */
+	async getWikiPageTree(wikiIdentifier: string, path: string = '/'): Promise<AzureDevOpsWikiPage> {
+		const { baseUrl, projectSegment } = this._getBaseUrlWithProject();
+		const url = `${baseUrl}${projectSegment}/_apis/wiki/wikis/${encodeURIComponent(wikiIdentifier)}/pages?path=${encodeURIComponent(path)}&recursionLevel=full&api-version=7.1`;
+
+		const response = await this._fetch(url);
+		const etag = response.headers.get('etag') ?? '';
+		const page = await response.json() as AzureDevOpsWikiPage;
+		return { ...page, etag };
+	}
+
+	/**
+	 * Format a wiki page tree into an indented outline.
+	 */
+	formatWikiPageTree(page: AzureDevOpsWikiPage, indent: number = 0): string {
+		const prefix = '  '.repeat(indent);
+		const bullet = indent === 0 ? '' : '- ';
+		let result = `${prefix}${bullet}${page.path}\n`;
+		if (page.subPages) {
+			for (const sub of page.subPages) {
+				result += this.formatWikiPageTree(sub, indent + 1);
+			}
+		}
+		return result;
 	}
 
 	/**

@@ -1472,6 +1472,28 @@
 					},
 					"required": ["wikiIdentifier", "path", "content"]
 				}
+			},
+			{
+				"name": "assistant_adoGetWikiPageTree",
+				"toolReferenceName": "adoGetWikiPageTree",
+				"displayName": "Azure DevOps: Browse Wiki Page Tree",
+				"icon": "$(list-tree)",
+				"userDescription": "Browse the full page tree of an Azure DevOps wiki",
+				"modelDescription": "Get the full page tree (table of contents) of an Azure DevOps wiki, including all pages and subpages recursively. Returns an indented outline of all page paths. Use this to discover the structure of a wiki before reading specific pages with the get wiki page tool. Optionally specify a starting path to get only a subtree.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"wikiIdentifier": {
+							"type": "string",
+							"description": "The wiki name or ID. Use the list wikis tool to discover available wikis."
+						},
+						"path": {
+							"type": "string",
+							"description": "The root path to start from. Defaults to '/' (entire wiki). Use a subpath like '/Architecture' to get only that section."
+						}
+					},
+					"required": ["wikiIdentifier"]
+				}
 			}
 		],
 		"languageModelToolSets": [

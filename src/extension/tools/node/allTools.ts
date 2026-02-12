@@ -49,3 +49,4 @@ import './azureDevOps/adoAddCommentTool';
 import './azureDevOps/adoListWikisTool';
 import './azureDevOps/adoGetWikiPageTool';
 import './azureDevOps/adoCreateOrUpdateWikiPageTool';
+import './azureDevOps/adoGetWikiPageTreeTool';

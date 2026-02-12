@@ -45,11 +45,27 @@ class AdoQueryWorkItemsTool implements ICopilotTool<IAdoQueryWorkItemsParams> {
 		const queryResult = await this.client.queryWorkItems(options.input.wiql, top);
 		checkCancellation(token);
 
-		if (queryResult.workItems.length === 0) {
+		// Extract IDs from either flat queries (workItems) or link/tree queries (workItemRelations)
+		let ids: number[];
+		if (queryResult.workItems) {
+			ids = queryResult.workItems.map(wi => wi.id);
+		} else if (queryResult.workItemRelations) {
+			// Deduplicate target IDs from link results, filtering out null targets
+			const idSet = new Set<number>();
+			for (const rel of queryResult.workItemRelations) {
+				if (rel.target) {
+					idSet.add(rel.target.id);
+				}
+			}
+			ids = [...idSet];
+		} else {
+			ids = [];
+		}
+
+		if (ids.length === 0) {
 			return new LanguageModelToolResult([new LanguageModelTextPart('No work items found matching the query.')]);
 		}
 
-		const ids = queryResult.workItems.map(wi => wi.id);
 		const workItems = await this.client.getWorkItems(ids);
 		checkCancellation(token);
 

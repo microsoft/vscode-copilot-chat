@@ -78,6 +78,7 @@ export enum ToolName {
 	AdoListWikis = 'ado_list_wikis',
 	AdoGetWikiPage = 'ado_get_wiki_page',
 	AdoCreateOrUpdateWikiPage = 'ado_create_or_update_wiki_page',
+	AdoGetWikiPageTree = 'ado_get_wiki_page_tree',
 }
 
 export enum ContributedToolName {
@@ -130,6 +131,7 @@ export enum ContributedToolName {
 	AdoListWikis = 'assistant_adoListWikis',
 	AdoGetWikiPage = 'assistant_adoGetWikiPage',
 	AdoCreateOrUpdateWikiPage = 'assistant_adoCreateOrUpdateWikiPage',
+	AdoGetWikiPageTree = 'assistant_adoGetWikiPageTree',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -253,6 +255,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.AdoListWikis]: ToolCategory.WebInteraction,
 	[ToolName.AdoGetWikiPage]: ToolCategory.WebInteraction,
 	[ToolName.AdoCreateOrUpdateWikiPage]: ToolCategory.WebInteraction,
+	[ToolName.AdoGetWikiPageTree]: ToolCategory.WebInteraction,
 } as const;
 
 

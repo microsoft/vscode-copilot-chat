@@ -112,6 +112,7 @@ export const getAgentTools = async (accessor: ServicesAccessor, request: vscode.
 	allowTools[ToolName.AdoListWikis] = true;
 	allowTools[ToolName.AdoGetWikiPage] = true;
 	allowTools[ToolName.AdoCreateOrUpdateWikiPage] = true;
+	allowTools[ToolName.AdoGetWikiPageTree] = true;
 
 	allowTools[ToolName.EditFilesPlaceholder] = false;
 	// todo@connor4312: string check here is for back-compat for 1.109 Insiders

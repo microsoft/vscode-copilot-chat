@@ -509,7 +509,8 @@ export class AzureDevOpsInstructions extends PromptElement<DefaultAgentPromptPro
 			- Use {ToolName.AdoCreateWorkItem} to create new work items.<br />
 			- Use {ToolName.AdoAddComment} to add comments to work items.<br />
 			- Use {ToolName.AdoListWikis} to discover available wikis before reading or writing pages.<br />
-			- Use {ToolName.AdoGetWikiPage} to read wiki page content.<br />
+			- Use {ToolName.AdoGetWikiPageTree} to browse the full page tree of a wiki (all pages and subpages). Always use this first to understand the wiki structure before reading or writing specific pages.<br />
+			- Use {ToolName.AdoGetWikiPage} to read a specific wiki page's content.<br />
 			- Use {ToolName.AdoCreateOrUpdateWikiPage} to create or edit wiki pages.<br />
 			IMPORTANT: For any write operation (updating work items, creating work items, adding comments, writing wiki pages), if the user has not clearly specified the target (which work item, which wiki, which page), ALWAYS ask the user to clarify before proceeding. Never guess which item to modify.
 		</Tag>;
