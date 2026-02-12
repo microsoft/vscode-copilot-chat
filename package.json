@@ -4348,7 +4348,7 @@
                     },
                     "github.copilot.chat.executionSubagent.model": {
                         "type": "string",
-                        "default": "claude-sonnet-4.5",
+                        "default": "",
                         "markdownDescription": "%github.copilot.config.executionSubagent.model%",
                         "tags": [
                             "advanced",
