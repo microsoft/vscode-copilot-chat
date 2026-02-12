@@ -10,19 +10,20 @@ import { CancellationToken } from '../../completions-core/vscode-node/types/src'
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { resolveToolInputPath } from '../node/toolUtils';
+import { DECORATION_TYPE } from './highlightLinesTool';
 
-export interface IOpenFileParams {
+export interface IClearHighlightsParams {
 	filePath: string;
 }
 
-export class OpenFileTool implements ICopilotTool<IOpenFileParams> {
-	public static readonly toolName = ToolName.OpenFile;
+export class ClearHighlightsTool implements ICopilotTool<IClearHighlightsParams> {
+	public static readonly toolName = ToolName.ClearHighlights;
 
 	constructor(
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IOpenFileParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<IClearHighlightsParams>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		// resolve the file path
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 		if (!uri) {
@@ -31,9 +32,16 @@ export class OpenFileTool implements ICopilotTool<IOpenFileParams> {
 			]);
 		}
 
-		// open the file
-		const document = await vscode.workspace.openTextDocument(uri);
-		await vscode.window.showTextDocument(document);
+		// if the file isn't open, do nothing
+		const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
+		if (!editor) {
+			return new LanguageModelToolResult([
+				new LanguageModelTextPart(JSON.stringify({ success: true, message: `File not open, nothing to clear.` }))
+			]);
+		}
+
+		// clear decorations
+		editor.setDecorations(DECORATION_TYPE, []);
 
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(JSON.stringify({ success: true }))
@@ -41,4 +49,4 @@ export class OpenFileTool implements ICopilotTool<IOpenFileParams> {
 	}
 }
 
-ToolRegistry.registerTool(OpenFileTool);
+ToolRegistry.registerTool(ClearHighlightsTool);

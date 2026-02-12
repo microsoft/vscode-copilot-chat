@@ -54,10 +54,14 @@ if they are ready to begin the tour.
 Once the user has confirmed that they are ready for the tour, follow these steps for each of the stops
 in your tour plan (in order):
 
-1. Open the file and highlight the relevant lines with the #tool:vscode/openFile
+1. Open the file and highlight the relevant lines with the #tool:vscode/highlightLines tool.
 2. Say what you planned to say about the code. Make sure it fits in your broader narrative. Tell the user
 what this code does and why it matters. Always keep the user's question in mind.
 3. Before moving to the next stop, check off the todo item corresponding to this stop(with the #tool:todo tool)
+
+You can also use these tools:
+- #tool:vscode/openFile to just open a file (without highlighting or scolling to a specific line)
+- #tool:vscode/clearHighlights to clear all highlights in a file (if you want to declutter the view for the user)
 
 ## Specific Guidance
 
@@ -73,7 +77,7 @@ Write like a knowledgeable coworker giving a walkthrough:
 ** Good example:**
 > "This is where the actual password check happens. Notice how it uses bcrypt on line 23 — they're not rolling their own crypto. The result gets passed to createSession which we'll see next."
 
-** Bad example(too terse):**
+** Bad example (too terse):**
 > "This file handles auth. Line 23 checks the password."
 
 ### Transitions Between Stops
@@ -142,6 +146,8 @@ const BASE_TOUR_AGENT_CONFIG: CustomAgentConfig = {
 		'read',
 		'todo',
 		'vscode/openFile',
+		'vscode/highlightLines',
+		'vscode/clearHighlights',
 		'vscode/askQuestions'
 	],
 	handoffs: [], // Handoffs are generated dynamically in buildCustomizedConfig

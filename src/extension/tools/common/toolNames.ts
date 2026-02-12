@@ -70,7 +70,9 @@ export enum ToolName {
 	SearchSubagent = 'search_subagent',
 	AskQuestions = 'ask_questions',
 	SwitchAgent = 'switch_agent',
-	OpenFile = 'openFile',
+	OpenFile = 'open_file',
+	HighlightLines = 'highlight_lines',
+	ClearHighlights = 'clear_highlights',
 }
 
 export enum ContributedToolName {
@@ -116,6 +118,8 @@ export enum ContributedToolName {
 	AskQuestions = 'copilot_askQuestions',
 	SwitchAgent = 'copilot_switchAgent',
 	OpenFile = 'copilot_openFile',
+	HighlightLines = 'copilot_highlightLines',
+	ClearHighlights = 'copilot_clearHighlights',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -181,6 +185,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.SearchSubagent]: ToolCategory.Core,
 	[ToolName.Memory]: ToolCategory.Core,
 	[ToolName.OpenFile]: ToolCategory.Core,
+	[ToolName.HighlightLines]: ToolCategory.Core,
+	[ToolName.ClearHighlights]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
