@@ -123,7 +123,7 @@ describe('TerminalSlashCommand', () => {
 					name: 'Claude',
 					env: {
 						ANTHROPIC_BASE_URL: 'http://localhost:12345',
-						ANTHROPIC_AUTH_TOKEN: 'test-nonce-123',
+						ANTHROPIC_AUTH_TOKEN: 'test-nonce-123.terminal',
 					}
 				})
 			);

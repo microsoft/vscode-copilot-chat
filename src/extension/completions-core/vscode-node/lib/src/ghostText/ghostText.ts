@@ -452,8 +452,9 @@ export class GhostTextComputer {
 					.filter(c => c !== undefined);
 			}
 
-			if (choices && choices[1] === ResultType.Cache) {
+			if (choices && (choices[1] === ResultType.Cache || choices[1] === ResultType.TypingAsSuggested)) {
 				telemetryBuilder.setIsFromCache();
+				logContext.markAsFromCache();
 			}
 
 			if (choices !== undefined && choices[0].length === 0) {

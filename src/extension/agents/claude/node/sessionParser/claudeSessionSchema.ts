@@ -459,6 +459,21 @@ export function isChainLinkEntry(entry: SessionEntry): entry is ChainLinkEntry {
 	return 'uuid' in entry && 'parentUuid' in entry && !('message' in entry) && !('type' in entry);
 }
 
+/**
+ * Checks if a user message represents a genuine user request (not a tool result).
+ * Tool results have content that is solely tool_result blocks; genuine requests
+ * have string content or contain at least one non-tool_result block.
+ */
+export function isUserRequest(content: UserMessageContent['content']): boolean {
+	if (typeof content === 'string') {
+		return true;
+	}
+	if (!Array.isArray(content)) {
+		return false;
+	}
+	return content.some(block => block.type !== 'tool_result');
+}
+
 // #endregion
 
 // #region Session Output Types
@@ -497,11 +512,8 @@ export interface ISubagentSession {
 /**
  * A parsed Claude Code session ready for use.
  */
-export interface IClaudeCodeSession {
-	readonly id: string;
-	readonly label: string;
+export interface IClaudeCodeSession extends IClaudeCodeSessionInfo {
 	readonly messages: readonly StoredMessage[];
-	readonly timestamp: Date;
 	readonly subagents: readonly ISubagentSession[];
 }
 
@@ -509,15 +521,19 @@ export interface IClaudeCodeSession {
  * Lightweight session metadata for listing sessions.
  * Contains only the information needed for ChatSessionItem display.
  * Does not include full message content to reduce memory usage.
+ *
+ * Timestamps are in milliseconds elapsed since January 1, 1970 00:00:00 UTC,
+ * matching the ChatSessionItem.timing API contract.
  */
 export interface IClaudeCodeSessionInfo {
 	readonly id: string;
 	readonly label: string;
-	readonly timestamp: Date;
-	/** Timestamp of the first message in the session (for timing.created) */
-	readonly firstMessageTimestamp: Date;
-	/** Timestamp of the last message in the session (for timing.lastRequestEnded) */
-	readonly lastMessageTimestamp: Date;
+	/** Timestamp when the session was created (first message) in ms since epoch. */
+	readonly created: number;
+	/** Timestamp when the most recent user request started in ms since epoch. */
+	readonly lastRequestStarted?: number;
+	/** Timestamp when the most recent request completed (last message) in ms since epoch. */
+	readonly lastRequestEnded?: number;
 	/** Basename of the workspace folder this session belongs to (for badge display) */
 	readonly folderName?: string;
 }
