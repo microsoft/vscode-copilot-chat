@@ -238,7 +238,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const token = new vscode.CancellationTokenSource();
 		try {
 			const cwd = worktreeProperties?.worktreePath ?? workspaceFolder?.fsPath ?? (await this.copilotcliSessionService.getSessionWorkingDirectory(id, token.token))?.fsPath;
-			await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+			const terminal = await this.terminalIntegration.openTerminal(terminalName, cliArgs, cwd);
+			if (terminal) {
+				this.sessionTracker.setSessionTerminal(id, terminal);
+			}
 		} finally {
 			token.dispose();
 		}
