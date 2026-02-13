@@ -701,6 +701,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -713,6 +714,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 0",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -940,6 +942,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -952,6 +955,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 1",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -1179,6 +1183,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -1191,6 +1196,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 2",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -1418,6 +1424,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -1430,6 +1437,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 3",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -1707,6 +1715,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -1719,6 +1728,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 4",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -1946,6 +1956,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -1958,6 +1969,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 5",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -2185,6 +2197,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -2197,6 +2210,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 6",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -2424,6 +2438,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -2436,6 +2451,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "requestId": "some-uuid",
         "response": "response number 7",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -2744,6 +2760,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -2756,6 +2773,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "requestId": "some-uuid",
         "response": "some response here :)",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -3090,6 +3108,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -3102,6 +3121,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "some-uuid",
         "response": "some response here :)",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
@@ -3329,6 +3349,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
       "eventName": "interactiveSessionResponse",
       "eventType": "internal",
       "measurements": {
+        "skillsDiscoveredCount": undefined,
         "turnNumber": 1,
       },
       "properties": {
@@ -3341,6 +3362,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "requestId": "some-uuid",
         "response": "response to tool call",
         "sessionId": "some-session-id",
+        "skillsDiscovered": "",
       },
     },
     {
