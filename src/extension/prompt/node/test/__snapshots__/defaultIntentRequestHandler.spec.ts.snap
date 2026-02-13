@@ -661,6 +661,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -899,6 +900,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1137,6 +1139,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1375,6 +1378,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1663,6 +1667,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -1901,6 +1906,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2139,6 +2145,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2377,6 +2384,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -2696,6 +2704,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3041,6 +3050,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{"my_func":1}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
@@ -3279,6 +3289,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "responseId": "turn-id-0",
         "responseType": "success",
         "toolCounts": "{}",
+        "vscodeRequestId": "some-uuid",
       },
     },
     {
