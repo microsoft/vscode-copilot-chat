@@ -289,7 +289,7 @@ class HiddenModelHPrompt extends PromptElement<DefaultAgentPromptProps> {
 class HiddenModelHPromptResolver implements IAgentPrompt {
 
 	static async matchesModel(endpoint: IChatEndpoint): Promise<boolean> {
-		return isHiddenModelH(endpoint) || endpoint.family === 'gpt-5.3-codex-spark-preview';
+		return isHiddenModelH(endpoint);
 	}
 
 	static readonly familyPrefixes = [];
