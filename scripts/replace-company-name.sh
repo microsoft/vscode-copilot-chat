@@ -46,12 +46,15 @@ sedi() {
 echo "[1/7] Updating package.json ..."
 PKG="$REPO_ROOT/package.json"
 
-# Extension metadata
-# NOTE: "name" and "publisher" are NOT changed because they form the extension ID
-# (publisher.name) used by VS Code's proposed API allowlist. Changing them would
-# break proposed API access when installing via VSIX. Only displayName is user-visible.
+# Extension metadata — name + publisher form the extension ID (publisher.name).
+# VS Code gates proposed API access by extension ID, so after changing these you
+# must also allowlist the new ID. The script prints instructions at the end.
+sedi "s/\"name\": \"yourcompany-ai-assistant\"/\"name\": \"${COMPANY_LOWER}-ai-assistant\"/" "$PKG"
+sedi "s/\"publisher\": \"yourcompany\"/\"publisher\": \"${COMPANY_LOWER}\"/" "$PKG"
 sedi "s/\"displayName\": \"Your Company AI Assistant\"/\"displayName\": \"${COMPANY_NAME} AI Assistant\"/" "$PKG"
 sedi "s/\"version\": \"0.38.0\"/\"version\": \"1.0.0\"/" "$PKG"
+
+NEW_EXTENSION_ID="${COMPANY_LOWER}.${COMPANY_LOWER}-ai-assistant"
 
 # Chat participant full names & labels
 sedi "s/\"fullName\": \"GitHub Copilot\"/\"fullName\": \"${COMPANY_NAME} Copilot\"/g" "$PKG"
@@ -96,8 +99,8 @@ sedi "s/= 'GitHub Copilot Log (Code References)'/= '${COMPANY_NAME} Copilot Log 
 sedi "s/= 'GitHub Copilot Chat'/= '${COMPANY_NAME} Copilot Chat'/" \
 	"$REPO_ROOT/src/platform/trajectory/node/trajectoryLoggerAdapter.ts"
 
-# Extension ID
-sedi "s/= 'GitHub\.copilot-chat'/= '${COMPANY_LOWER}.copilot-chat'/" \
+# Extension ID (must match publisher.name from package.json)
+sedi "s/= 'GitHub\.copilot-chat'/= '${COMPANY_LOWER}.${COMPANY_LOWER}-ai-assistant'/" \
 	"$REPO_ROOT/src/extension/common/constants.ts"
 
 # Diagnostic header
@@ -200,3 +203,27 @@ echo ""
 echo "=== Done! ==="
 echo "Review changes with: git diff"
 echo "Revert with: git checkout ."
+echo ""
+echo "=== IMPORTANT: Enable Proposed APIs for VSIX Installation ==="
+echo ""
+echo "The extension ID is now: ${NEW_EXTENSION_ID}"
+echo "VS Code blocks proposed APIs for extension IDs not in its built-in allowlist."
+echo "You MUST do one of the following before installing the VSIX:"
+echo ""
+echo "  Option A — argv.json (recommended, persists across launches):"
+echo "    Add to your VS Code argv.json file:"
+echo ""
+echo "      \"enable-proposed-api\": [\"${NEW_EXTENSION_ID}\"]"
+echo ""
+echo "    File locations:"
+echo "      Linux:   ~/.vscode/argv.json"
+echo "      macOS:   ~/Library/Application Support/Code/argv.json"
+echo "      Windows: %APPDATA%\\Code\\argv.json"
+echo ""
+echo "  Option B — CLI flag (per-launch):"
+echo "    code --enable-proposed-api ${NEW_EXTENSION_ID}"
+echo ""
+echo "  Option C — Custom VS Code build:"
+echo "    Add \"${NEW_EXTENSION_ID}\" to extensionAllowedProposedApi"
+echo "    in your VS Code product.json"
+echo ""
