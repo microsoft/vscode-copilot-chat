@@ -83,7 +83,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 	}
 
 	constructor(
-		public readonly id: string,
+		public readonly headerRequestId: string,
 		public readonly opportunityId: string,
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
@@ -118,7 +118,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 
 	serialize(): ISerializedNextEditRequest {
 		return {
-			id: this.id,
+			id: this.headerRequestId,
 			documents: this.documents.map(d => d.serialize()),
 			activeDocumentIdx: this.activeDocumentIdx,
 			recording: this.recording,
@@ -412,7 +412,7 @@ export class StatelessNextEditTelemetryBuilder {
 	 */
 	constructor(request: StatelessNextEditRequest) {
 		this.startTime = Date.now();
-		this.requestUuid = request.id;
+		this.requestUuid = request.headerRequestId;
 	}
 
 	public build(result: Result<void, NoNextEditReason>): IStatelessNextEditTelemetry {

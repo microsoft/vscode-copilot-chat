@@ -445,7 +445,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const ctxRequest: Copilot.ResolveRequest = {
 				opportunityId: request.opportunityId,
-				completionId: request.id,
+				completionId: request.headerRequestId,
 				documentContext: {
 					uri: textDoc.uri.toString(),
 					languageId: textDoc.languageId,
@@ -614,7 +614,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const firstTokenReceived = new DeferredPromise<void>();
 
-		logContext.setHeaderRequestId(request.id);
+		logContext.setHeaderRequestId(request.headerRequestId);
 
 		telemetryBuilder.setFetchStartedAt();
 		logContext.setFetchStartTime();
@@ -647,7 +647,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				} satisfies OptionalChatRequestParams,
 				userInitiatedRequest: undefined,
 				telemetryProperties: {
-					requestId: request.id,
+					requestId: request.headerRequestId,
 				},
 				useFetcher,
 				customMetadata: {
