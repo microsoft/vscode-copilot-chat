@@ -87,15 +87,19 @@ export interface APIErrorResponse {
 	metadata?: Record<string, any>;
 }
 
+export const openAIContextManagementCompactionType = 'compaction';
+
+
+
 export interface OpenAIContextManagement {
-	type: 'compaction';
+	type: typeof openAIContextManagementCompactionType;
 	compact_threshold: number;
 }
 
 
 export interface OpenAIContextManagementResponse {
 	encrypted_content: string;
-	type: 'compaction';
+	type: typeof openAIContextManagementCompactionType;
 	id: string;
 }
 

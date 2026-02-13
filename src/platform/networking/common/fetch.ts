@@ -6,7 +6,7 @@
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
 import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
 import { IHeaders } from './fetcherService';
-import { ChoiceLogProbs, FilterReason, OpenAIContextManagementResponse } from './openai';
+import { ChoiceLogProbs, FilterReason, openAIContextManagementCompactionType, OpenAIContextManagementResponse } from './openai';
 
 
 // Request helpers
@@ -163,7 +163,7 @@ export interface IResponseDelta {
 }
 
 export function isOpenAIContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is OpenAIContextManagementResponse {
-	return 'type' in value && value.type === 'compaction';
+	return 'type' in value && value.type === openAIContextManagementCompactionType;
 }
 
 export function isAnthropicContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is ContextManagementResponse {

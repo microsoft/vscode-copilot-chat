@@ -18,7 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, OpenAIContextManagementResponse, TokenLogProb } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, openAIContextManagementCompactionType, OpenAIContextManagementResponse, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -38,8 +38,8 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
 		context_management: [{
-			'type': 'compaction',
-			'compact_threshold': 1000
+			'type': openAIContextManagementCompactionType,
+			'compact_threshold': 4000
 		}],
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
@@ -233,7 +233,7 @@ function extractCompactionData(content: Raw.ChatCompletionContentPart[]): OpenAI
 			const compaction = rawPartAsCompactionData(part);
 			if (compaction) {
 				return {
-					type: 'compaction',
+					type: openAIContextManagementCompactionType,
 					id: compaction.id,
 					encrypted_content: compaction.encrypted_content,
 				} as unknown as OpenAI.Responses.ResponseInputItem;
@@ -474,18 +474,6 @@ export class OpenAIResponsesProcessor {
 				});
 			}
 			case 'response.output_item.added':
-				if (chunk.item.type.toString() === 'compaction') {
-					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
-					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
-					return onProgress({
-						text: '',
-						contextManagement: {
-							type: 'compaction',
-							id: compactionItem.id,
-							encrypted_content: compactionItem.encrypted_content,
-						}
-					});
-				}
 				if (chunk.item.type === 'function_call') {
 					this.toolCallInfo.set(chunk.output_index, { name: chunk.item.name, callId: chunk.item.call_id, arguments: '' });
 					onProgress({
@@ -510,13 +498,13 @@ export class OpenAIResponsesProcessor {
 				return;
 			}
 			case 'response.output_item.done':
-				if (chunk.item.type.toString() === 'compaction') {
+				if (chunk.item.type.toString() === openAIContextManagementCompactionType) {
 					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
 					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
 					return onProgress({
 						text: '',
 						contextManagement: {
-							type: 'compaction',
+							type: openAIContextManagementCompactionType,
 							id: compactionItem.id,
 							encrypted_content: compactionItem.encrypted_content,
 						}
@@ -571,20 +559,6 @@ export class OpenAIResponsesProcessor {
 				});
 			case 'response.completed':
 				onProgress({ text: '', statefulMarker: chunk.response.id });
-				// Emit compaction items from the final output so they are captured for round-tripping
-				for (const item of chunk.response.output) {
-					if (checkIfItemIsCompactionType(item)) {
-						const compactionItem = item as unknown as OpenAIContextManagementResponse;
-						onProgress({
-							text: '',
-							contextManagement: {
-								type: 'compaction',
-								encrypted_content: compactionItem.encrypted_content,
-								id: compactionItem.id,
-							}
-						});
-					}
-				}
 				return {
 					blockFinished: true,
 					choiceIndex: 0,
@@ -619,10 +593,6 @@ export class OpenAIResponsesProcessor {
 				};
 		}
 	}
-}
-
-function checkIfItemIsCompactionType(responseOutputItem: OpenAI.Responses.ResponseOutputItem): boolean {
-	return responseOutputItem.type.toString() === 'compaction';
 }
 
 function mapLogProp(text: Lazy<Uint8Array>, lp: OpenAI.Responses.ResponseTextDeltaEvent.Logprob.TopLogprob): TokenLogProb {
