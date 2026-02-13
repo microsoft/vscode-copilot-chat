@@ -6,7 +6,13 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { OpenAI } from 'openai';
 import { describe, expect, it } from 'vitest';
-import { responseApiInputToRawMessagesForLogging } from '../responsesApi';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ILogService } from '../../../log/common/logService';
+import { TelemetryData } from '../../../telemetry/common/telemetryData';
+import { SpyingTelemetryService } from '../../../telemetry/node/spyingTelemetryService';
+import { createFakeStreamResponse } from '../../../test/node/fetcher';
+import { createPlatformServices } from '../../../test/node/services';
+import { processResponseFromChatEndpoint, responseApiInputToRawMessagesForLogging } from '../responsesApi';
 
 describe('responseApiInputToRawMessagesForLogging', () => {
 
@@ -205,5 +211,66 @@ describe('responseApiInputToRawMessagesForLogging', () => {
 		expect(result).toHaveLength(1);
 		expect(result[0].role).toBe(Raw.ChatRole.Assistant);
 		expect((result[0] as Raw.AssistantChatMessage).toolCalls).toHaveLength(2);
+	});
+});
+
+describe('processResponseFromChatEndpoint telemetry', () => {
+	it('emits engine.messages for Responses API assistant output', async () => {
+		const services = createPlatformServices();
+		const accessor = services.createTestingAccessor();
+		const instantiationService = accessor.get(IInstantiationService);
+		const logService = accessor.get(ILogService);
+		const telemetryService = new SpyingTelemetryService();
+
+		const completedEvent = {
+			type: 'response.completed',
+			response: {
+				id: 'resp_123',
+				model: 'gpt-5-mini',
+				created_at: 123,
+				usage: {
+					input_tokens: 11,
+					output_tokens: 7,
+					total_tokens: 18,
+					input_tokens_details: { cached_tokens: 0 },
+					output_tokens_details: { reasoning_tokens: 0 },
+				},
+				output: [
+					{
+						type: 'message',
+						content: [{ type: 'output_text', text: 'final assistant reply' }],
+					}
+				],
+			}
+		};
+
+		const response = createFakeStreamResponse(`data: ${JSON.stringify(completedEvent)}\n\n`);
+		const telemetryData = TelemetryData.createAndMarkAsIssued({ modelCallId: 'model-call-1' }, {});
+
+		const stream = await processResponseFromChatEndpoint(
+			instantiationService,
+			telemetryService,
+			logService,
+			response,
+			1,
+			async () => { },
+			telemetryData
+		);
+
+		for await (const _ of stream) {
+			// consume all completions to flush telemetry side effects
+		}
+
+		const events = telemetryService.getEvents().telemetryServiceEvents.filter(e => e.eventName === 'engine.messages');
+		expect(events.length).toBeGreaterThan(0);
+
+		const outputEvent = events[events.length - 1];
+		const messagesJson = JSON.parse(String(outputEvent.properties?.messagesJson));
+		expect(messagesJson).toHaveLength(1);
+		expect(messagesJson[0].role).toBe('assistant');
+		expect(messagesJson[0].content).toBe('final assistant reply');
+
+		accessor.dispose();
+		services.dispose();
 	});
 });
