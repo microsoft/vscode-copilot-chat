@@ -556,6 +556,18 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 			}
 		];
 
+		if (this._selectedRepoForBranches && isIsolationOptionFeatureEnabled(this.configurationService)) {
+			optionGroups.push({
+				id: ISOLATION_OPTION_ID,
+				name: l10n.t('Isolation'),
+				description: l10n.t('Pick Isolation Mode'),
+				items: [
+					{ id: 'workspace', name: l10n.t('Workspace'), icon: new vscode.ThemeIcon('folder') },
+					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('git-branch') },
+				]
+			});
+		}
+
 		// Handle repository options based on workspace type
 		if (this.isUntitledWorkspace()) {
 			// For untitled workspaces, show last used repositories and "Open Repository..." command
@@ -585,18 +597,6 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 					items: repositories
 				});
 			}
-		}
-
-		if (this._selectedRepoForBranches && isIsolationOptionFeatureEnabled(this.configurationService)) {
-			optionGroups.push({
-				id: ISOLATION_OPTION_ID,
-				name: l10n.t('Isolation'),
-				description: l10n.t('Pick Isolation Mode'),
-				items: [
-					{ id: 'workspace', name: l10n.t('Workspace'), icon: new vscode.ThemeIcon('folder') },
-					{ id: 'worktree', name: l10n.t('Worktree'), icon: new vscode.ThemeIcon('git-branch') },
-				]
-			});
 		}
 
 		if (this._selectedRepoForBranches && isBranchOptionFeatureEnabled(this.configurationService) && this.isWorktreeIsolationSelected()) {
