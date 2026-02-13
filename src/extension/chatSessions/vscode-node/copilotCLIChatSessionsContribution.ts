@@ -481,14 +481,15 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 						locked: true
 					};
 				}
-				if (isIsolationOptionFeatureEnabled(this.configurationService)) {
-					options[ISOLATION_OPTION_ID] = {
-						id: isolationEnabled ? 'worktree' : 'workspace',
-						name: isolationEnabled ? l10n.t('Worktree') : l10n.t('Workspace'),
-						icon: new vscode.ThemeIcon(isolationEnabled ? 'git-branch' : 'folder'),
-						locked: true
-					};
-				}
+			}
+			if (isIsolationOptionFeatureEnabled(this.configurationService)) {
+				const isWorktree = !!worktreeProperties;
+				options[ISOLATION_OPTION_ID] = {
+					id: isWorktree ? 'worktree' : 'workspace',
+					name: isWorktree ? l10n.t('Worktree') : l10n.t('Workspace'),
+					icon: new vscode.ThemeIcon(isWorktree ? 'git-branch' : 'folder'),
+					locked: true
+				};
 			}
 		}
 
@@ -1072,10 +1073,17 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 
 
 	private async commitWorktreeChangesIfNeeded(session: ICopilotCLISession, token: vscode.CancellationToken): Promise<void> {
-		if (session.status === vscode.ChatSessionStatus.Completed && session.options.isolationEnabled && !token.isCancellationRequested) {
-			// When isolation is enabled and we are using a git worktree, we either stage
-			// or commit all changes in the working directory when the session is completed
-			await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
+		if (session.status === vscode.ChatSessionStatus.Completed && !token.isCancellationRequested) {
+			if (session.options.isolationEnabled) {
+				// When isolation is enabled and we are using a git worktree, so we commit
+				// all the changes in the worktree directory when the session is completed
+				await this.copilotCLIWorktreeManagerService.handleRequestCompleted(session.sessionId);
+			} else if (session.options.workingDirectory) {
+				// When isolation is not enabled, we are operating in the workspace directly,
+				// so we stage all the changes in the workspace directory when the session is
+				// completed
+				await this.gitService.add(session.options.workingDirectory, []);
+			}
 		}
 	}
 

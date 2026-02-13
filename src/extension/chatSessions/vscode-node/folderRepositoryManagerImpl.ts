@@ -263,7 +263,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 			this.logService.info(`[FolderRepositoryManager] Workspace isolation mode selected for session ${sessionId}, skipping worktree creation`);
 			return {
 				folder: folder ?? repository,
-				repository,
+				repository: undefined,
 				worktree: undefined,
 				worktreeProperties: undefined,
 				trusted: true
