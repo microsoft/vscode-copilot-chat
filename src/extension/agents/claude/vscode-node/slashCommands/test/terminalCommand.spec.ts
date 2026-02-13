@@ -10,10 +10,12 @@ import { ILogService } from '../../../../../../platform/log/common/logService';
 import { ITerminalService, NullTerminalService } from '../../../../../../platform/terminal/common/terminalService';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../../util/common/test/testUtils';
 import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
+import * as uuid from '../../../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../../test/node/services';
 import { MockChatResponseStream } from '../../../../../test/node/testHelpers';
 import { ClaudeLanguageModelServer } from '../../../node/claudeLanguageModelServer';
+import { IClaudeSessionStateService } from '../../../node/claudeSessionStateService';
 import { TerminalSlashCommand } from '../terminalCommand';
 
 // Mock child_process.execFile
@@ -57,10 +59,16 @@ describe('TerminalSlashCommand', () => {
 	let mockLogService: ILogService;
 	let mockLanguageModelServer: MockLanguageModelServer;
 	let execFileMock: ReturnType<typeof vi.fn>;
+	let mockSessionStateService: IClaudeSessionStateService;
+
+	const TEST_SESSION_ID = 'test-uuid-1234';
 
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
 	beforeEach(() => {
+		// Mock generateUuid to return a deterministic value
+		vi.spyOn(uuid, 'generateUuid').mockReturnValue(TEST_SESSION_ID);
+
 		// Setup execFile mock - default to claude being available
 		execFileMock = vi.fn((cmd: string, args: string[], callback: (error: Error | null) => void) => {
 			if (args[0] === 'claude') {
@@ -89,6 +97,7 @@ describe('TerminalSlashCommand', () => {
 
 		const accessor = serviceCollection.createTestingAccessor();
 		mockLogService = accessor.get(ILogService);
+		mockSessionStateService = accessor.get(IClaudeSessionStateService);
 
 		terminalCommand = accessor.get(IInstantiationService).createInstance(TerminalSlashCommand);
 		// Set the mock language model server directly using defineProperty to bypass type checking
@@ -123,7 +132,8 @@ describe('TerminalSlashCommand', () => {
 					name: 'Claude',
 					env: {
 						ANTHROPIC_BASE_URL: 'http://localhost:12345',
-						ANTHROPIC_AUTH_TOKEN: 'test-nonce-123.terminal',
+						ANTHROPIC_AUTH_TOKEN: `test-nonce-123.${TEST_SESSION_ID}`,
+						CLAUDE_CODE_HIDE_ACCOUNT_INFO: '1',
 					}
 				})
 			);
@@ -152,7 +162,7 @@ describe('TerminalSlashCommand', () => {
 
 			await terminalCommand.handle('', mockStream, CancellationToken.None);
 
-			expect(testTerminalService.mockTerminal.sendText).toHaveBeenCalledWith('claude');
+			expect(testTerminalService.mockTerminal.sendText).toHaveBeenCalledWith(`claude --session-id ${TEST_SESSION_ID}`);
 		});
 
 		it('sends agency claude command when only agency is available', async () => {
@@ -169,7 +179,7 @@ describe('TerminalSlashCommand', () => {
 
 			await terminalCommand.handle('', mockStream, CancellationToken.None);
 
-			expect(testTerminalService.mockTerminal.sendText).toHaveBeenCalledWith('agency claude');
+			expect(testTerminalService.mockTerminal.sendText).toHaveBeenCalledWith(`agency claude --session-id ${TEST_SESSION_ID}`);
 		});
 
 		it('shows download button when neither CLI is available', async () => {
@@ -211,6 +221,22 @@ describe('TerminalSlashCommand', () => {
 			await terminalCommand.handle('', mockStream, CancellationToken.None);
 
 			expect(mockStream.output.some(o => o.includes('Error creating terminal'))).toBe(true);
+		});
+
+		it('sets capturing token on session state service', async () => {
+			const mockStream = new MockChatResponseStream();
+			const setCapturingSpy = vi.spyOn(mockSessionStateService, 'setCapturingTokenForSession');
+
+			await terminalCommand.handle('', mockStream, CancellationToken.None);
+
+			expect(setCapturingSpy).toHaveBeenCalledWith(
+				TEST_SESSION_ID,
+				expect.objectContaining({
+					label: 'Claude Code CLI',
+					icon: 'claude',
+					flattenSingleChild: false,
+				})
+			);
 		});
 
 		it('logs terminal creation info', async () => {

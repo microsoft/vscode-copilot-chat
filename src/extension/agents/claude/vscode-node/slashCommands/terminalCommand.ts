@@ -7,11 +7,14 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../../platform/log/common/logService';
+import { CapturingToken } from '../../../../../platform/requestLogger/common/capturingToken';
 import { ITerminalService } from '../../../../../platform/terminal/common/terminalService';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
+import { generateUuid } from '../../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeLanguageModelServer } from '../../node/claudeLanguageModelServer';
-import { IClaudeSlashCommandHandler } from './claudeSlashCommandRegistry';
+import { IClaudeSessionStateService } from '../../node/claudeSessionStateService';
+import { IClaudeSlashCommandHandler, registerClaudeSlashCommand } from './claudeSlashCommandRegistry';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,6 +47,7 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@ITerminalService private readonly terminalService: ITerminalService,
+		@IClaudeSessionStateService private readonly sessionStateService: IClaudeSessionStateService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
@@ -52,20 +56,20 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 		stream: vscode.ChatResponseStream | undefined,
 		_token: CancellationToken
 	): Promise<vscode.ChatResult> {
-		stream?.markdown(vscode.l10n.t('Creating Claude Code CLI instance...'));
+		stream?.markdown(vscode.l10n.t('Creating Claude CLI instance...'));
 
 		try {
 			// Check which CLI is available
 			const cliCommand = await this._getClaudeCliCommand();
 			if (!cliCommand) {
 				const installUrl = 'https://code.claude.com';
-				const downloadLabel = vscode.l10n.t('Download Claude Code CLI');
+				const downloadLabel = vscode.l10n.t('Download Claude CLI');
 				if (stream) {
-					stream.markdown(vscode.l10n.t('Claude Code CLI is not installed. Download Claude Code CLI to get started.'));
+					stream.markdown(vscode.l10n.t('Claude CLI is not installed. Download Claude CLI to get started.'));
 					stream.button({ command: 'vscode.open', arguments: [vscode.Uri.parse(installUrl)], title: downloadLabel });
 				} else {
 					vscode.window.showErrorMessage(
-						vscode.l10n.t('Claude Code CLI is not installed.'),
+						vscode.l10n.t('Claude CLI is not installed.'),
 						downloadLabel
 					).then(selection => {
 						if (selection === downloadLabel) {
@@ -80,23 +84,34 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 			const server = await this._getLanguageModelServer();
 			const config = server.getConfig();
 
+			// Generate a unique session ID for this terminal session
+			const sessionId = generateUuid();
+
+			// Create a capturing token for this terminal session to group requests
+			this.sessionStateService.setCapturingTokenForSession(
+				sessionId,
+				new CapturingToken(`Claude CLI (${sessionId})`, 'claude', false)
+			);
+
 			// Create terminal with environment variables configured
 			const terminal = this.terminalService.createTerminal({
 				name: 'Claude',
-				message: '\n\x1b[1;36m▸ ' + vscode.l10n.t('This instance of Claude Code CLI is configured to use your GitHub Copilot subscription.') + '\x1b[0m\n',
+				message: '\n\x1b[1;36m▸ ' + vscode.l10n.t('This instance of Claude CLI is configured to use your GitHub Copilot subscription.') + '\x1b[0m\n',
 				env: {
 					ANTHROPIC_BASE_URL: `http://localhost:${config.port}`,
-					ANTHROPIC_AUTH_TOKEN: `${config.nonce}.terminal`
+					ANTHROPIC_AUTH_TOKEN: `${config.nonce}.${sessionId}`,
+					// Hide account info banner in CLI since it's redundant with the message above
+					CLAUDE_CODE_HIDE_ACCOUNT_INFO: '1',
 				}
 			});
 
 			// Show the terminal
 			terminal.show();
 
-			// Send the appropriate command to the terminal
-			terminal.sendText(cliCommand);
+			// Send the appropriate command to the terminal with the session ID
+			terminal.sendText(`${cliCommand} --session-id ${sessionId}`);
 
-			this.logService.info(`[TerminalSlashCommand] Created terminal with Claude CLI configured on port ${config.port}, command: ${cliCommand}`);
+			this.logService.info(`[TerminalSlashCommand] Created terminal with Claude CLI configured on port ${config.port}, command: ${cliCommand}, sessionId: ${sessionId}`);
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			this.logService.error('[TerminalSlashCommand] Error creating terminal:', error);
@@ -152,6 +167,4 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	}
 }
 
-// TODO: Re-enable after legal review is complete
-// Self-register the terminal command
-// registerClaudeSlashCommand(TerminalSlashCommand);
+registerClaudeSlashCommand(TerminalSlashCommand);
