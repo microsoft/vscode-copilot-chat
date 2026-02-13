@@ -232,7 +232,7 @@ describe('TerminalSlashCommand', () => {
 			expect(setCapturingSpy).toHaveBeenCalledWith(
 				TEST_SESSION_ID,
 				expect.objectContaining({
-					label: 'Claude Code CLI',
+					label: `Claude CLI (${TEST_SESSION_ID})`,
 					icon: 'claude',
 					flattenSingleChild: false,
 				})

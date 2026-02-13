@@ -87,12 +87,6 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 			// Generate a unique session ID for this terminal session
 			const sessionId = generateUuid();
 
-			// Create a capturing token for this terminal session to group requests
-			this.sessionStateService.setCapturingTokenForSession(
-				sessionId,
-				new CapturingToken(`Claude CLI (${sessionId})`, 'claude', false)
-			);
-
 			// Create terminal with environment variables configured
 			const terminal = this.terminalService.createTerminal({
 				name: 'Claude',
@@ -110,6 +104,12 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 
 			// Send the appropriate command to the terminal with the session ID
 			terminal.sendText(`${cliCommand} --session-id ${sessionId}`);
+
+			// Set capturing token only after terminal is successfully created to avoid leaking stale session state
+			this.sessionStateService.setCapturingTokenForSession(
+				sessionId,
+				new CapturingToken(`Claude CLI (${sessionId})`, 'claude', false)
+			);
 
 			this.logService.info(`[TerminalSlashCommand] Created terminal with Claude CLI configured on port ${config.port}, command: ${cliCommand}, sessionId: ${sessionId}`);
 		} catch (error) {
