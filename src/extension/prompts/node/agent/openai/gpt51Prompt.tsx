@@ -145,6 +145,7 @@ class Gpt51Prompt extends PromptElement<DefaultAgentPromptProps> {
 				- Analyzing code for vulnerabilities is allowed.<br />
 				- Showing user code and tool call details is allowed.<br />
 				{tools[ToolName.SearchSubagent] && <>For codebase exploration, prefer {ToolName.SearchSubagent} to search and gather data instead of directly calling {ToolName.FindTextInFiles}, {ToolName.Codebase} or {ToolName.FindFiles}.<br /></>}
+				{tools[ToolName.ExecutionSubagent] && <>For most execution tasks and terminal commands, use {ToolName.ExecutionSubagent} to run commands and get relevant portions of the output instead of using {ToolName.CoreRunInTerminal}.<br /></>}
 				- Use the {ToolName.ApplyPatch} tool to edit files (NEVER try `applypatch` or `apply-patch`, only `apply_patch`): {`{"input":"*** Begin Patch\\n*** Update File: path/to/file.py\\n@@ def example():\\n-  pass\\n+  return 123\\n*** End Patch"}`}.<br />
 				<br />
 				If completing the user's task requires writing or modifying files, your code and final answer should follow these coding guidelines, though user instructions (i.e. copilot-instructions.md) may override these guidelines:<br />
