@@ -1651,7 +1651,7 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual(call[1].result, 'success');
 	});
 
-	test('should skip diff when getCommit fails', async () => {
+	test('should return mergeBaseTooOld when getCommit fails', async () => {
 		setupInternalUser();
 		mockGitServiceWithRepository();
 		mockGitExtensionWithUpstream('abc123');
@@ -1677,11 +1677,13 @@ suite('RepoInfoTelemetry', () => {
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 
-		// Assert: no telemetry sent (bails out safely)
-		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
 	});
 
-	test('should skip diff when commit date is undefined', async () => {
+	test('should return mergeBaseTooOld when commit date is undefined', async () => {
 		setupInternalUser();
 		mockGitServiceWithRepository();
 		mockGitExtensionWithUpstream('abc123');
@@ -1711,8 +1713,10 @@ suite('RepoInfoTelemetry', () => {
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 
-		// Assert: no telemetry sent (bails out safely)
-		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
 	});
 
 	// ========================================

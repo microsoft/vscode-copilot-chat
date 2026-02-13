@@ -201,34 +201,35 @@ export class RepoInfoTelemetry {
 
 		// Check if the merge base commit is too old to avoid expensive diff operations
 		// on very stale branches where rename detection can consume many GB of memory.
-		// If we can't determine the commit age, bail out to avoid the potentially expensive diff.
+		// If we can't determine the commit age, treat it as too old to avoid the potentially expensive diff.
+		const mergeBaseTooOldResult: RepoInfoTelemetryData = {
+			properties: {
+				remoteUrl: normalizedFetchUrl,
+				repoType: repoInfo.repoId.type,
+				headCommitHash: upstreamCommit,
+				diffsJSON: undefined,
+				result: 'mergeBaseTooOld',
+			},
+			measurements: {
+				workspaceFileCount: 0,
+				changedFileCount: 0,
+				diffSizeBytes: 0,
+			}
+		};
+
 		try {
 			const mergeBaseCommit = await repository.getCommit(upstreamCommit);
-			if (!mergeBaseCommit.commitDate) {
-				this._logService.warn(`[RepoInfoTelemetry] Could not determine merge base commit date, skipping diff`);
-				return;
-			}
-			const ageDays = (Date.now() - mergeBaseCommit.commitDate.getTime()) / (1000 * 60 * 60 * 24);
-			if (ageDays > MAX_MERGE_BASE_AGE_DAYS) {
-				this._logService.debug(`[RepoInfoTelemetry] Merge base commit is ${Math.round(ageDays)} days old, skipping diff`);
-				return {
-					properties: {
-						remoteUrl: normalizedFetchUrl,
-						repoType: repoInfo.repoId.type,
-						headCommitHash: upstreamCommit,
-						diffsJSON: undefined,
-						result: 'mergeBaseTooOld',
-					},
-					measurements: {
-						workspaceFileCount: 0,
-						changedFileCount: 0,
-						diffSizeBytes: 0,
-					}
-				};
+			const ageDays = mergeBaseCommit.commitDate
+				? (Date.now() - mergeBaseCommit.commitDate.getTime()) / (1000 * 60 * 60 * 24)
+				: undefined;
+
+			if (ageDays === undefined || ageDays > MAX_MERGE_BASE_AGE_DAYS) {
+				this._logService.debug(`[RepoInfoTelemetry] Merge base commit age check failed (age: ${ageDays !== undefined ? Math.round(ageDays) + ' days' : 'unknown'}), skipping diff`);
+				return mergeBaseTooOldResult;
 			}
 		} catch (error) {
 			this._logService.warn(`[RepoInfoTelemetry] Failed to check merge base commit age: ${error}`);
-			return;
+			return mergeBaseTooOldResult;
 		}
 
 		// Before we calculate our async diffs, sign up for file system change events
