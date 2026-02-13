@@ -202,6 +202,22 @@ export class InstructionFileReference extends PromptReference {
 	}
 }
 
+export class SkillDiscoveryReference extends PromptReference {
+	constructor(public readonly skillNames: string[]) {
+		super({ variableName: 'skillDiscovery' });
+	}
+}
+
+export function getSkillDiscoveryTelemetry(references: readonly PromptReference[]): { skillsDiscovered: string; skillsDiscoveredCount: number } {
+	const skillNames: string[] = [];
+	for (const reference of references) {
+		if (reference instanceof SkillDiscoveryReference) {
+			skillNames.push(...reference.skillNames);
+		}
+	}
+	return { skillsDiscovered: skillNames.join(','), skillsDiscoveredCount: skillNames.length };
+}
+
 export function getCustomInstructionTelemetry(references: readonly PromptReference[]): { codeGenInstructionsCount: number; codeGenInstructionsLength: number; codeGenInstructionsFilteredCount: number; codeGenInstructionFileCount: number; codeGenInstructionSettingsCount: number } {
 	let codeGenInstructionsCount = 0;
 	let codeGenInstructionsFilteredCount = 0;

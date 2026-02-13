@@ -22,7 +22,7 @@ import { AgentIntent } from '../../intents/node/agentIntent';
 import { EditCodeIntent } from '../../intents/node/editCodeIntent';
 import { EditCode2Intent } from '../../intents/node/editCodeIntent2';
 import { DocumentToAstSelectionData } from '../../prompts/node/inline/inlineChatEditCodePrompt';
-import { getCustomInstructionTelemetry } from '../../prompts/node/panel/customInstructions';
+import { getCustomInstructionTelemetry, getSkillDiscoveryTelemetry } from '../../prompts/node/panel/customInstructions';
 import { PATCH_PREFIX } from '../../tools/node/applyPatch/parseApplyPatch';
 import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
@@ -50,11 +50,15 @@ type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetryPropert
 	// shareable but NOT
 	isParticipantDetected: string;
 	sessionId: string;
+
+	// skill discovery
+	skillsDiscovered: string;
 };
 
 // EVENT: interactiveSessionResponse
 type ResponseInternalPanelTelemetryMeasurements = {
 	turnNumber: number;
+	skillsDiscoveredCount?: number;
 };
 
 // EVENT: interactiveSessionResponse
@@ -747,6 +751,10 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 	}
 
 	protected override _sendResponseInternalTelemetryEvent(_responseType: ChatFetchResponseType, response: string): void {
+		// Only collect skill discovery on the first turn — skills don't change between turns
+		const skillTelemetry = this._firstTurn
+			? getSkillDiscoveryTelemetry(this._conversation.getLatestTurn().references)
+			: undefined;
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionResponse', {
 			// shared
@@ -761,8 +769,12 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			// shareable but NOT
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			sessionId: this._sessionId,
+
+			// skill discovery (first turn only)
+			skillsDiscovered: skillTelemetry?.skillsDiscovered ?? '',
 		} satisfies ResponseInternalPanelTelemetryProperties, {
 			turnNumber: this._conversation.turns.length,
+			skillsDiscoveredCount: skillTelemetry?.skillsDiscoveredCount,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
 	}
 }

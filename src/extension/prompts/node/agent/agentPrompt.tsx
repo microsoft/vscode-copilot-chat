@@ -36,7 +36,7 @@ import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables, UserQuery } from '../panel/chatVariables';
-import { CustomInstructions } from '../panel/customInstructions';
+import { CustomInstructions, SkillDiscoveryReference } from '../panel/customInstructions';
 import { HistoricalImage } from '../panel/image';
 import { NotebookFormat, NotebookReminderInstructions } from '../panel/notebookEditCodePrompt';
 import { NotebookSummaryChange } from '../panel/notebookSummaryChangePrompt';
@@ -510,9 +510,20 @@ class SkillAdherenceReminder extends PromptElement<SkillAdherenceReminderProps> 
 			return undefined;
 		}
 
-		return <Tag name='additional_skills_reminder'>
-			Always check if any skills apply to the user's request. If so, use the {ToolName.ReadFile} tool to read the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
-		</Tag>;
+		const skillNames: string[] = [];
+		for (const skillUri of indexFile.skills) {
+			const info = this.customInstructionsService.getSkillInfo(skillUri);
+			if (info) {
+				skillNames.push(info.skillName);
+			}
+		}
+
+		return <>
+			<references value={[new SkillDiscoveryReference(skillNames)]} />
+			<Tag name='additional_skills_reminder'>
+				Always check if any skills apply to the user's request. If so, use the {ToolName.ReadFile} tool to read the corresponding SKILL.md files. Multiple skill files may be needed for a single request. These files contain best practices built from testing that are needed for high-quality outputs.<br />
+			</Tag>
+		</>;
 	}
 }
 

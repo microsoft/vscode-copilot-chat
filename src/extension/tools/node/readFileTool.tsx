@@ -270,6 +270,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges, uri: URI | undefined) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 		const fileType = uri && this.customInstructionsService.isSkillFile(uri) ? 'skill' : '';
+		const skillName = fileType === 'skill' ? (this.customInstructionsService.getSkillInfo(uri!)?.skillName ?? '') : '';
 
 		/* __GDPR__
 			"readFileToolInvoked" : {
@@ -283,7 +284,8 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				"truncated": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The file length was truncated" },
 				"isV2": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool is a v2 version" },
 				"isEntireFile": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the entire file was read with v2 params" },
-				"fileType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of file being read" }
+				"fileType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of file being read" },
+				"skillName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the skill being read, if fileType is skill" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('readFileToolInvoked',
@@ -294,6 +296,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				isV2: isParamsV2(options.input) ? 'true' : 'false',
 				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
 				fileType,
+				skillName,
 				model
 			},
 			{
