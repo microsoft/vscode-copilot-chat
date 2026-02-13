@@ -4,7 +4,7 @@ description: 'Create an instruction file (.instructions.md) for a project rule o
 argument-hint: What rule or convention to enforce?
 agent: agent
 ---
-Related skill: `agent-customization`. Load and follow **instruction.md** for template and principles.
+Related skill: `agent-customization`. Load and follow **instructions.md** for template and principles.
 
 Guide the user to create an instruction file.
 

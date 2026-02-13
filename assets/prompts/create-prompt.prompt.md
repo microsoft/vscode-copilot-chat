@@ -4,7 +4,7 @@ description: 'Create a reusable prompt file (.prompt.md) for a common task.'
 argument-hint: What task should this prompt help with?
 agent: agent
 ---
-Related skill: `agent-customization`. Load and follow **prompt.md** for template and principles.
+Related skill: `agent-customization`. Load and follow **prompts.md** for template and principles.
 
 Guide the user to create a `.prompt.md`.
 

@@ -4,7 +4,7 @@ description: 'Create a custom agent (.agent.md) for a specific job.'
 argument-hint: What job should this agent do and how?
 agent: agent
 ---
-Related skill: `agent-customization`. Load and follow **agent.md** for template and principles.
+Related skill: `agent-customization`. Load and follow **agents.md** for template and principles.
 
 Guide the user to create an `.agent.md`.
 

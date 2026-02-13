@@ -4,7 +4,7 @@ description: 'Create a reusable skill (SKILL.md) that packages a workflow.'
 argument-hint: What should this skill produce?
 agent: agent
 ---
-Related skill: `agent-customization`. Load and follow **skill.md** for template and principles.
+Related skill: `agent-customization`. Load and follow **skills.md** for template and principles.
 
 Guide the user to create a `SKILL.md`.
 

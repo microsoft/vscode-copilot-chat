@@ -64,8 +64,8 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 
 	/**
 	 * Converts a virtual URI path to the corresponding physical URI in the extension assets.
-	 * Virtual: /agent-customization/primitives/agents.md
-	 * Physical: extensionUri/assets/prompts/skills/agent-customization/primitives/agents.md
+	 * Virtual: /agent-customization/references/agents.md
+	 * Physical: extensionUri/assets/prompts/skills/agent-customization/references/agents.md
 	 */
 	private _toAssetUri(virtualPath: string): vscode.Uri | undefined {
 		// Ensure the path is within our skill folder
@@ -110,7 +110,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 			};
 		}
 
-		// Handle nested files/directories (e.g., /agent-customization/primitives/agents.md)
+		// Handle nested files/directories (e.g., /agent-customization/references/agents.md)
 		const assetUri = this._toAssetUri(uri.path);
 		if (assetUri) {
 			try {

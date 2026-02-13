@@ -23,12 +23,12 @@ Consult the reference docs for templates, domain examples, advanced frontmatter 
 
 | Type | File | Location | Reference |
 |------|------|----------|-----------|
-| Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | [Link](./primitives/workspace-instructions.md) |
-| File Instructions | `*.instructions.md` | `.github/instructions/` | [Link](./primitives/instructions.md) |
-| Prompts | `*.prompt.md` | `.github/prompts/` | [Link](./primitives/prompts.md) |
-| Hooks | `*.json` | `.github/hooks/` | [Link](./primitives/hooks.md) |
-| Custom Agents | `*.agent.md` | `.github/agents/` | [Link](./primitives/agents.md) |
-| Skills | `SKILL.md` | `.github/skills/<name>/`, `.agents/skills/<name>/`, `.claude/skills/<name>/` | [Link](./primitives/skills.md) |
+| Workspace Instructions | `copilot-instructions.md`, `AGENTS.md` | `.github/` or root | [Link](./references/workspace-instructions.md) |
+| File Instructions | `*.instructions.md` | `.github/instructions/` | [Link](./references/instructions.md) |
+| Prompts | `*.prompt.md` | `.github/prompts/` | [Link](./references/prompts.md) |
+| Hooks | `*.json` | `.github/hooks/` | [Link](./references/hooks.md) |
+| Custom Agents | `*.agent.md` | `.github/agents/` | [Link](./references/agents.md) |
+| Skills | `SKILL.md` | `.github/skills/<name>/`, `.agents/skills/<name>/`, `.claude/skills/<name>/` | [Link](./references/skills.md) |
 
 **User-level**: `{{USER_PROMPTS_FOLDER}}/` (*.prompt.md, *.instructions.md, *.agent.md; not skills)
 Customizations roam with user's settings sync
@@ -71,4 +71,4 @@ After creating:
 
 **Skill vs Custom Agent?** Same capabilities for all steps → Skill. Need context isolation (subagent returns single output) or different tool restrictions per stage → Custom Agent.
 
-**Hooks vs Instructions?** Instructions *guide* agent behavior (non-deterministic). Hooks *enforce* behavior via shell commands at lifecycle events like `PreToolUse` or `PostToolUse` — they can block operations, require approval, or run formatters deterministically. See [hooks reference](./primitives/hooks.md).
+**Hooks vs Instructions?** Instructions *guide* agent behavior (non-deterministic). Hooks *enforce* behavior via shell commands at lifecycle events like `PreToolUse` or `PostToolUse` — they can block operations, require approval, or run formatters deterministically. See [hooks reference](./references/hooks.md).

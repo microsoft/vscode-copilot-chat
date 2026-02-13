@@ -4,7 +4,7 @@ description: 'Create a hook (.json) to enforce policy or automate agent lifecycl
 argument-hint: What should be enforced or automated?
 agent: agent
 ---
-Related skill: `agent-customization`. Load and follow **hook.md** for template and principles.
+Related skill: `agent-customization`. Load and follow **hooks.md** for template and principles.
 
 Guide the user to create a hook in `.github/hooks/`.
 
