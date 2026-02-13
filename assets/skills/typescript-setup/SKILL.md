@@ -16,7 +16,7 @@ description: How to set up a new TypeScript project using the newest and best pr
 ## Node Projects (server-side, CLI, scripts)
 
  * `npm install --save-dev @types/node`
- * In tsconfig.json, uncomment and set `"types": ["node"]`
+ * In tsconfig.json, set `"module": "nodenext"`, uncomment and set `"types": ["node"]`
  * **No-transpile mode** (if node >= 22.6.0; check `node -v`):
    * Set `"noEmit": true`, `"erasableSyntaxOnly": true`, `"allowImportingTsExtensions": true`
    * Use `.ts` extensions in all relative imports (e.g., `import { foo } from "./foo.ts"`)
