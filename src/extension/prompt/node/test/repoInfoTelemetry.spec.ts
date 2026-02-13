@@ -8,6 +8,7 @@ import { beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher, Uri } from 'vscode';
 import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
@@ -58,6 +59,7 @@ suite('RepoInfoTelemetry', () => {
 	let logService: ILogService;
 	let fileSystemService: IFileSystemService;
 	let workspaceFileIndex: IWorkspaceFileIndex;
+	let configurationService: IConfigurationService;
 	let mockWatcher: MockFileSystemWatcher;
 
 	beforeEach(() => {
@@ -109,6 +111,7 @@ suite('RepoInfoTelemetry', () => {
 		logService = accessor.get(ILogService);
 		fileSystemService = accessor.get(IFileSystemService);
 		workspaceFileIndex = accessor.get(IWorkspaceFileIndex);
+		configurationService = accessor.get(IConfigurationService);
 
 		// Create a new mock watcher for each test
 		mockWatcher = new MockFileSystemWatcher();
@@ -150,7 +153,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -176,7 +180,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -207,7 +212,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -233,7 +239,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -264,7 +271,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -297,7 +305,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -336,7 +345,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -368,7 +378,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -394,7 +405,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -436,7 +448,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -483,7 +496,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -537,7 +551,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -565,7 +580,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -589,7 +605,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -636,7 +653,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -677,7 +695,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -718,7 +737,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -764,7 +784,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -791,7 +812,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -828,7 +850,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -873,7 +896,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -918,7 +942,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -993,7 +1018,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1039,7 +1065,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1147,7 +1174,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1195,7 +1223,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1241,7 +1270,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1270,7 +1300,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1299,7 +1330,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1352,7 +1384,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1392,7 +1425,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1423,7 +1457,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1469,7 +1504,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		// Should not throw
@@ -1503,7 +1539,8 @@ suite('RepoInfoTelemetry', () => {
 			copilotTokenStore,
 			logService,
 			fileSystemService,
-			workspaceFileIndex
+			workspaceFileIndex,
+			configurationService
 		);
 
 		// Should not throw
