@@ -2501,6 +2501,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.chat.tools.memory.viewMemory",
+				"title": "%github.copilot.command.viewMemory%",
+				"category": "Chat"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
 				"category": "Chat"

@@ -14,6 +14,7 @@ import { isVscodeLanguageModelTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { IToolGroupingCache, IToolGroupingService } from '../common/virtualTools/virtualToolTypes';
 import '../node/allTools';
+import { extractSessionId } from '../node/memoryTool';
 import './allTools';
 
 export class ToolsContribution extends Disposable {
@@ -52,21 +53,74 @@ export class ToolsContribution extends Disposable {
 			vscode.window.showInformationMessage(l10n.t('Tool groups have been reset. They will be regenerated on the next agent request.'));
 		}));
 
-		this._register(vscode.commands.registerCommand('github.copilot.chat.tools.memory.openFolder', async () => {
+		this._register(vscode.commands.registerCommand('github.copilot.chat.tools.memory.viewMemory', async () => {
+			const globalStorageUri = this.extensionContext.globalStorageUri;
 			const storageUri = this.extensionContext.storageUri;
-			if (!storageUri) {
-				vscode.window.showErrorMessage(l10n.t('No workspace is currently open. Memory operations require an active workspace.'));
+
+			interface MemoryItem extends vscode.QuickPickItem {
+				fileUri?: URI;
+			}
+
+			const items: MemoryItem[] = [];
+
+			// Collect user-scoped memories from globalStorageUri/memory-tool/memories/
+			if (globalStorageUri) {
+				const userMemoryUri = URI.joinPath(globalStorageUri, 'memory-tool/memories');
+				try {
+					const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.from(userMemoryUri));
+					const fileEntries = entries.filter(([name, type]) => type === vscode.FileType.File && !name.startsWith('.'));
+					if (fileEntries.length > 0) {
+						items.push({ label: 'memory/', kind: vscode.QuickPickItemKind.Separator });
+						for (const [name] of fileEntries) {
+							items.push({
+								label: `$(file) ${name}`,
+								description: 'user',
+								fileUri: URI.joinPath(userMemoryUri, name),
+							});
+						}
+					}
+				} catch {
+					// User memory directory may not exist yet
+				}
+			}
+
+			// Collect session-scoped memories from storageUri/memory-tool/memories/<sessionId>/
+			const sessionResource = vscode.window.activeChatPanelSessionResource;
+			console.log('Active chat session resource:', sessionResource?.toString());
+			if (storageUri && sessionResource) {
+				const sessionId = extractSessionId(sessionResource.toString());
+				const sessionMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories', sessionId);
+				try {
+					const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.from(sessionMemoryUri));
+					const fileEntries = entries.filter(([name, type]) => type === vscode.FileType.File && !name.startsWith('.'));
+					if (fileEntries.length > 0) {
+						items.push({ label: `memory/${sessionId}/`, kind: vscode.QuickPickItemKind.Separator });
+						for (const [name] of fileEntries) {
+							items.push({
+								label: `$(file) ${name}`,
+								description: 'session',
+								fileUri: URI.joinPath(sessionMemoryUri, name),
+							});
+						}
+					}
+				} catch {
+					// Session memory directory may not exist yet
+				}
+			}
+
+			if (items.length === 0) {
+				vscode.window.showInformationMessage(l10n.t('No memories found.'));
 				return;
 			}
-			const memoryFolderUri = URI.joinPath(storageUri, 'memory-tool/memories');
-			try {
-				const stat = await vscode.workspace.fs.stat(vscode.Uri.from(memoryFolderUri));
-				if (stat.type === vscode.FileType.Directory) {
-					return vscode.env.openExternal(vscode.Uri.from(memoryFolderUri));
-				}
-			} catch {
+
+			const selected = await vscode.window.showQuickPick(items, {
+				title: l10n.t('Memory'),
+				placeHolder: l10n.t('Select a memory file to view'),
+			});
+
+			if (selected?.fileUri) {
+				await vscode.commands.executeCommand('vscode.open', vscode.Uri.from(selected.fileUri));
 			}
-			vscode.window.showInformationMessage(l10n.t('No memories have been saved yet. The memory folder will be created when the first memory is saved.'));
 		}));
 
 		this._register(autorun(reader => {
