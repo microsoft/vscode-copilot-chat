@@ -182,6 +182,9 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				method: 'GET',
 				headers: {
 					'Authorization': `Bearer ${session.accessToken}`
+				},
+				json: {
+					source: { agent: 'vscode' }
 				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
@@ -231,6 +234,9 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 				method: 'GET',
 				headers: {
 					'Authorization': `Bearer ${session.accessToken}`
+				},
+				json: {
+					source: { agent: 'vscode' }
 				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
@@ -310,7 +316,8 @@ export class AgentMemoryService extends Disposable implements IAgentMemoryServic
 					fact: memory.fact,
 					citations,
 					reason: memory.reason,
-					category: memory.category
+					category: memory.category,
+					source: { agent: 'vscode' }
 				}
 			}, {
 				type: RequestType.CopilotAgentMemory,
