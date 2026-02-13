@@ -249,14 +249,12 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					}
 
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
-					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
 						chatRequestId: props.requestId,
 						subAgentInvocationId,
-						subAgentName,
 						// Split on `__vscode` so it's the chat stream id
 						// TODO @lramos15 - This is a gross hack
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],

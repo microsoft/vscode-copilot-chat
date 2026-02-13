@@ -381,6 +381,7 @@ export async function simulateEditingScenario(
 				tools: new Map(),
 				id: '1',
 				sessionId: '1',
+				sessionResource: Uri.parse('chat:/1'),
 				hasHooksEnabled: false,
 			};
 
