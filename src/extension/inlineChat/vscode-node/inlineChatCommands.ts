@@ -340,12 +340,15 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 		const document = comment.document;
 
 		const selection = new vscode.Selection(comment.range.start, comment.range.end);
+		const textEditor = vscode.window.visibleTextEditors.find(editor => editor.document.uri.toString() === document.uri.toString()) ??
+			vscode.window.activeTextEditor ??
+			await vscode.window.showTextDocument(document.document, { preserveFocus: true, preview: false });
 
 		const command = Intent.Fix;
 		const prompt = message;
 		const request: vscode.ChatRequest = {
 			location: vscode.ChatLocation.Editor,
-			location2: new vscode.ChatRequestEditorData(document.document, selection, selection),
+			location2: new vscode.ChatRequestEditorData(textEditor, document.document, selection, selection),
 			command,
 			prompt,
 			references: [],

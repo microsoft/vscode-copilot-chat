@@ -326,6 +326,7 @@ export class ChatResponseTurn implements vscode.ChatResponseTurn {
 
 export class ChatRequestEditorData {
 	constructor(
+		readonly editor: vscode.TextEditor,
 		readonly document: vscode.TextDocument,
 		readonly selection: vscode.Selection,
 		readonly wholeRange: vscode.Range,

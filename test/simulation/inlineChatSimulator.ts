@@ -97,7 +97,7 @@ export async function simulateInlineChat(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		}
 	};
@@ -139,7 +139,7 @@ export async function simulateInlineChatIntent(
 			}
 			return {
 				location: ChatLocation.Editor,
-				location2: new ChatRequestEditorData(editor.document, editor.selection, wholeRange ?? editor.selection),
+				location2: new ChatRequestEditorData(editor, editor.document, editor.selection, wholeRange ?? editor.selection),
 			};
 		},
 		contributeAdditionalReferences(accessor, existingReferences) {
