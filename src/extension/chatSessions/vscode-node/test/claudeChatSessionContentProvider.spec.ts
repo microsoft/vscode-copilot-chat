@@ -1620,7 +1620,7 @@ describe('ClaudeChatSessionItemController', () => {
 			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
 
 			// Initially no repos → single-root with 0 repos, _computeShowBadge returns false
-			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+			await controller.updateItemStatus('test', ChatSessionStatus.Completed, 'hello');
 			expect(getItem('test')!.badge).toBeUndefined();
 
 			// Now simulate two repos opening (monorepo scenario)
@@ -1653,7 +1653,7 @@ describe('ClaudeChatSessionItemController', () => {
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
 			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
 
-			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+			await controller.updateItemStatus('test', ChatSessionStatus.Completed, 'hello');
 			expect(getItem('test')!.badge).toBeDefined();
 
 			// Close one repo → single non-worktree repo → badge should disappear
@@ -1666,6 +1666,36 @@ describe('ClaudeChatSessionItemController', () => {
 			const refreshedItem = getItem('test');
 			expect(refreshedItem).toBeDefined();
 			expect(refreshedItem!.badge).toBeUndefined();
+		});
+
+		it('preserves in-progress items after refresh', async () => {
+			const fakeGit = new FakeGitService();
+			fakeGit.repositories = [];
+			controller = createController([URI.file('/project')], fakeGit);
+
+			const sessionInfo: IClaudeCodeSessionInfo = {
+				id: 'test', label: 'Test',
+				created: Date.now(), lastRequestEnded: Date.now(),
+				folderName: 'repo1',
+			};
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(sessionInfo as any);
+			vi.mocked(mockSessionService.getAllSessions).mockResolvedValue([sessionInfo]);
+
+			await controller.updateItemStatus('test', ChatSessionStatus.InProgress, 'hello');
+			const itemBeforeRefresh = getItem('test');
+			expect(itemBeforeRefresh).toBeDefined();
+			expect(itemBeforeRefresh!.status).toBe(ChatSessionStatus.InProgress);
+
+			// Trigger a refresh via git event
+			const repo1 = { rootUri: URI.file('/project/r1'), kind: 'repository' } as unknown as RepoContext;
+			fakeGit.repositories = [repo1];
+			fakeGit.fireOpenRepository(repo1);
+
+			await new Promise(r => setTimeout(r, 0));
+
+			const refreshedItem = getItem('test');
+			expect(refreshedItem).toBeDefined();
+			expect(refreshedItem!.status).toBe(ChatSessionStatus.InProgress);
 		});
 	});
 
