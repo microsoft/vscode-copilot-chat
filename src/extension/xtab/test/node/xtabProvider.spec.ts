@@ -50,6 +50,64 @@ import {
 	XtabProvider,
 } from '../../node/xtabProvider';
 
+suite('editWindowCoversWholeFile check', () => {
+	test('should detect when edit window covers the entire file', () => {
+		const documentLines = 5;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(0, 5);
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(true);
+	});
+
+	test('should not trigger when edit window is smaller than file', () => {
+		const documentLines = 10;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(2, 6); // Only covers lines 2-5
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(false);
+	});
+
+	test('should detect when edit window is larger than file (edge case)', () => {
+		const documentLines = 3;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(0, 10); // Larger than file
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(true);
+	});
+
+	test('should not trigger when edit window starts at 0 but does not reach end', () => {
+		const documentLines = 10;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(0, 5); // Only covers first half
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(false);
+	});
+
+	test('should not trigger when edit window reaches end but does not start at 0', () => {
+		const documentLines = 10;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(5, 10); // Only covers second half
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(false);
+	});
+
+	test('should handle single-line file', () => {
+		const documentLines = 1;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(0, 1);
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(true);
+	});
+
+	test('should handle empty file', () => {
+		const documentLines = 0;
+		const entireFileRange = OffsetRange.ofLength(documentLines);
+		const editWindowLinesRange = new OffsetRange(0, 0);
+
+		expect(editWindowLinesRange.containsRange(entireFileRange)).toBe(true);
+	});
+});
+
 suite('findMergeConflictMarkersRange', () => {
 
 	test('should find merge conflict markers within edit window', () => {
