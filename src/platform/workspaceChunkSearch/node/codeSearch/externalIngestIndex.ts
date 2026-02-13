@@ -8,6 +8,7 @@ import * as l10n from '@vscode/l10n';
 import * as fs from 'node:fs';
 import sql from 'node:sqlite';
 import { Result } from '../../../../util/common/result';
+import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { Limiter, raceCancellationError } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Emitter } from '../../../../util/vs/base/common/event';
@@ -181,7 +182,7 @@ export class ExternalIngestIndex extends Disposable {
 	 * This deletes the remote file set and the checkpoint. We keep around the local database because it
 	 * has a cache of file shas.
 	 */
-	public async deleteIndex(token: CancellationToken): Promise<void> {
+	public async deleteIndex(callTracker: CallTracker, token: CancellationToken): Promise<void> {
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
 			return;
@@ -192,7 +193,7 @@ export class ExternalIngestIndex extends Disposable {
 		this._logService.info(`ExternalIngestIndex: Deleting index for fileset ${filesetName}`);
 
 		try {
-			await this._client.deleteFileset(filesetName, token);
+			await this._client.deleteFileset(filesetName, callTracker, token);
 			this.clearCurrentIndexCheckpoint();
 			this._onDidChangeState.fire();
 
@@ -251,7 +252,7 @@ export class ExternalIngestIndex extends Disposable {
 		return this._initializePromise;
 	}
 
-	async doIngest(onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
+	async doIngest(callTracker: CallTracker, onProgress: (message: string) => void, token: CancellationToken): Promise<Result<true, TriggerIndexingError>> {
 		await raceCancellationError(this.initialize(), token);
 
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
@@ -288,6 +289,7 @@ export class ExternalIngestIndex extends Disposable {
 					this.getFilesetName(primaryRoot),
 					currentCheckpoint,
 					this.getFilesToIndexFromDb(token),
+					callTracker,
 					token,
 					wrappedOnProgress
 				);
@@ -350,7 +352,7 @@ export class ExternalIngestIndex extends Disposable {
 		return updatePromise;
 	}
 
-	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
+	async search(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, callTracker: CallTracker, token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
 		const workspaceFolders = this._workspaceService.getWorkspaceFolders();
 		if (!workspaceFolders.length) {
 			return [];
@@ -361,7 +363,7 @@ export class ExternalIngestIndex extends Disposable {
 		try {
 			const resolvedQuery = await query.resolveQuery(token);
 
-			await raceCancellationError(this.doIngest(() => { }, token), token);
+			await raceCancellationError(this.doIngest(callTracker, () => { }, token), token);
 
 			// TODO: search changed files too
 			const primaryRoot = workspaceFolders[0];
@@ -370,6 +372,7 @@ export class ExternalIngestIndex extends Disposable {
 				primaryRoot,
 				resolvedQuery,
 				sizing.maxResultCountHint,
+				callTracker,
 				token), token);
 
 			/* __GDPR__
