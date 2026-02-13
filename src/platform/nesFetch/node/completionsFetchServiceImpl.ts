@@ -7,10 +7,14 @@ import { AsyncIterUtilsExt } from '../../../util/common/asyncIterableUtils';
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Codicon } from '../../../util/vs/base/common/codicons';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { getRequestId, RequestId } from '../../networking/common/fetch';
 import { FetchOptions, IFetcherService, IHeaders, Response } from '../../networking/common/fetcherService';
+import { IRequestLogger, LoggedRequestKind } from '../../requestLogger/node/requestLogger';
+import { Completion } from '../common/completionsAPI';
 import { Completions, ICompletionsFetchService } from '../common/completionsFetchService';
 import { ResponseStream } from '../common/responseStream';
 import { jsonlStreamToCompletions } from './streamTransformer';
@@ -32,6 +36,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 	constructor(
 		@IAuthenticationService private authService: IAuthenticationService,
 		@IFetcherService private fetcherService: IFetcherService,
+		@IRequestLogger private readonly requestLogger: IRequestLogger,
 	) {
 	}
 
@@ -47,9 +52,12 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		ct: CancellationToken,
 		headerOverrides?: Record<string, string>,
 	): Promise<Result<ResponseStream, Completions.CompletionsFetchFailure>> {
+		const startTimeMs = Date.now();
 
 		if (ct.isCancellationRequested) {
-			return Result.error(new Completions.RequestCancelled());
+			const result = Result.error(new Completions.RequestCancelled());
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 		}
 
 		const options = {
@@ -64,6 +72,7 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		const fetchResponse = await this._fetchFromUrl(url, options, ct);
 
 		if (fetchResponse.isError()) {
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, fetchResponse);
 			return fetchResponse;
 		}
 
@@ -74,7 +83,9 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 
 			const response = new ResponseStream(fetchResponse.val.response, completionsStream, fetchResponse.val.requestId, fetchResponse.val.headers);
 
-			return Result.ok(response);
+			const result = Result.ok(response);
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 
 		} else {
 			const error: Completions.CompletionsFetchFailure = new Completions.UnsuccessfulResponse(
@@ -84,7 +95,9 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 				() => collectAsyncIterableToString(fetchResponse.val.body).catch(() => ''),
 			);
 
-			return Result.error(error);
+			const result = Result.error(error);
+			this._logCompletionsRequest(url, params, requestId, startTimeMs, result);
+			return result;
 		}
 	}
 
@@ -148,6 +161,126 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 			const error = errors.fromUnknown(reason);
 			return Result.error(new Completions.Unexpected(error));
 		}
+	}
+
+	private _logCompletionsRequest(
+		url: string,
+		params: IFetchRequestParams,
+		requestId: string,
+		startTimeMs: number,
+		result: Result<ResponseStream, Completions.CompletionsFetchFailure>,
+	): void {
+		if (result.isOk()) {
+			// For successful requests, wait for the stream to complete so we can log the response
+			const responseStream = result.val;
+			void responseStream.response.then(aggregated => {
+				const aggregationStatus = aggregated.isOk() ? 'success' : 'failed';
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, aggregationStatus, aggregated);
+			});
+		} else {
+			const err = result.err;
+			if (err instanceof Completions.RequestCancelled) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'cancelled', undefined);
+			} else if (err instanceof Completions.UnsuccessfulResponse) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'failed', undefined, `${err.status} ${err.statusText}`);
+			} else if (err instanceof Completions.Unexpected) {
+				this._emitCompletionsLogEntry(url, params, requestId, startTimeMs, 'failed', undefined, err.error.message);
+			}
+		}
+	}
+
+	private _emitCompletionsLogEntry(
+		url: string,
+		params: IFetchRequestParams,
+		requestId: string,
+		startTimeMs: number,
+		status: 'success' | 'cancelled' | 'failed',
+		aggregatedResponse: Result<Completion, Error> | undefined,
+		errorReason?: string,
+	): void {
+		const durationMs = Date.now() - startTimeMs;
+		const lines: string[] = [];
+
+		lines.push(`> 🚨 Note: This log may contain personal information such as the contents of your files. Please review the contents carefully before sharing.`);
+		lines.push(`# completions`);
+		lines.push(``);
+
+		// Table of contents
+		lines.push(`- [Metadata](#metadata)`);
+		lines.push(`- [Prompt](#prompt)`);
+		if (params.suffix) {
+			lines.push(`- [Suffix](#suffix)`);
+		}
+		lines.push(`- [Response](#response)`);
+		lines.push(``);
+
+		// Metadata
+		lines.push(`## Metadata`);
+		lines.push(`<pre><code>`);
+		lines.push(`url              : ${url}`);
+		lines.push(`requestId        : ${requestId}`);
+		lines.push(`model            : ${params.model ?? '(default)'}`);
+		lines.push(`maxTokens        : ${params.max_tokens}`);
+		lines.push(`temperature      : ${params.temperature}`);
+		lines.push(`top_p            : ${params.top_p}`);
+		lines.push(`n                : ${params.n}`);
+		lines.push(`duration         : ${durationMs}ms`);
+		lines.push(`</code></pre>`);
+
+		// Prompt
+		lines.push(``);
+		lines.push(`## Prompt`);
+		lines.push(`~~~`);
+		lines.push(params.prompt);
+		lines.push(`~~~`);
+
+		// Suffix
+		if (params.suffix) {
+			lines.push(``);
+			lines.push(`## Suffix`);
+			lines.push(`~~~`);
+			lines.push(params.suffix);
+			lines.push(`~~~`);
+		}
+
+		// Response
+		lines.push(``);
+		lines.push(`## Response`);
+		if (status === 'cancelled') {
+			lines.push(`## CANCELED`);
+		} else if (status === 'failed') {
+			lines.push(`## FAILED: ${errorReason}`);
+		} else if (aggregatedResponse) {
+			if (aggregatedResponse.isOk()) {
+				const completion = aggregatedResponse.val;
+				const text = completion.choices[0]?.text ?? '';
+				const finishReason = completion.choices[0]?.finish_reason ?? 'unknown';
+				lines.push(`~~~`);
+				lines.push(text || '<EMPTY RESPONSE>');
+				lines.push(`~~~`);
+				lines.push(``);
+				lines.push(`<pre><code>`);
+				lines.push(`finishReason     : ${finishReason}`);
+				if (completion.usage) {
+					lines.push(`promptTokens     : ${completion.usage.prompt_tokens}`);
+					lines.push(`completionTokens : ${completion.usage.completion_tokens}`);
+					lines.push(`totalTokens      : ${completion.usage.total_tokens}`);
+				}
+				lines.push(`</code></pre>`);
+			} else {
+				lines.push(`## FAILED: stream error - ${aggregatedResponse.err.message}`);
+			}
+		}
+
+		const icon: ThemeIcon | undefined = status === 'success' ? undefined : Codicon.error;
+
+		this.requestLogger.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'Completions Request',
+			startTimeMs,
+			icon,
+			markdownContent: lines.join('\n'),
+		});
 	}
 
 	private getHeaders(

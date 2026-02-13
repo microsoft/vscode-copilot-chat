@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { ChatSessionWorktreeFile } from './chatSessionWorktreeService';
 
 export const IChatSessionWorkspaceFolderService = createServiceIdentifier<IChatSessionWorkspaceFolderService>('IChatSessionWorkspaceFolderService');
 
@@ -30,4 +31,16 @@ export interface IChatSessionWorkspaceFolderService {
 	 * Get the workspace folder associated with a session (if a workspace folder without git repo was selected)
 	 */
 	getSessionWorkspaceFolder(sessionId: string): vscode.Uri | undefined;
+
+	/**
+	 * Handle the completion of a request for a session.
+	 * @param workspaceFolderUri
+	 */
+	handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void>;
+
+	/**
+	 * Get the changes in the workspace folder for a session.
+	 * @param workspaceFolderUri
+	 */
+	getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined>;
 }

@@ -242,7 +242,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					const hookResult = await chatHookService.executePreToolUseHook(
 						props.toolCall.name, inputObj, props.toolCall.id,
 						promptContext.request?.hooks, promptContext.conversation?.sessionId,
-						CancellationToken.None
+						CancellationToken.None,
+						promptContext.stream
 					);
 
 					// Apply updatedInput from hook (input modification takes effect before invocation)
@@ -476,7 +477,8 @@ async function appendHookContext(
 		props.toolCall.name, toolInput,
 		toolResultToText(toolResult),
 		props.toolCall.id, promptContext.request?.hooks,
-		promptContext.conversation?.sessionId, CancellationToken.None
+		promptContext.conversation?.sessionId, CancellationToken.None,
+		promptContext.stream
 	);
 	if (postHookResult?.decision === 'block') {
 		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';

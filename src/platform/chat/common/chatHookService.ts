@@ -47,9 +47,10 @@ export interface IChatHookService {
 	 * @param hooks The resolved hook commands for the session (from request.hooks).
 	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
+	 * @param outputStream Optional output stream for displaying hook warnings/errors.
 	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
 	 */
-	executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPreToolUseHookResult | undefined>;
+	executePreToolUseHook(toolName: string, toolInput: unknown, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken, outputStream?: vscode.ChatResponseStream): Promise<IPreToolUseHookResult | undefined>;
 
 	/**
 	 * Execute the postToolUse hook and collapse results from all hooks into a single result.
@@ -64,9 +65,10 @@ export interface IChatHookService {
 	 * @param hooks The resolved hook commands for the session (from request.hooks).
 	 * @param sessionId Optional session ID — when provided the transcript is flushed first.
 	 * @param token Optional cancellation token.
+	 * @param outputStream Optional output stream for displaying hook warnings/errors.
 	 * @returns The collapsed hook result, or undefined if no hooks are registered or none returned a result.
 	 */
-	executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken): Promise<IPostToolUseHookResult | undefined>;
+	executePostToolUseHook(toolName: string, toolInput: unknown, toolResponseText: string, toolCallId: string, hooks: vscode.ChatRequestHooks | undefined, sessionId?: string, token?: vscode.CancellationToken, outputStream?: vscode.ChatResponseStream): Promise<IPostToolUseHookResult | undefined>;
 }
 
 /**
@@ -112,6 +114,20 @@ export interface UserPromptSubmitHookOutput {
 	 * Tells the agent why it should continue.
 	 */
 	readonly reason?: string;
+	/**
+	 * Hook-specific output from the UserPromptSubmit hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
+	 */
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the agent's context.
+		 * When multiple sources provide context (SessionStart/SubagentStart/UserPromptSubmit),
+		 * they are concatenated.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**
@@ -155,10 +171,18 @@ export interface SessionStartHookInput {
  */
 export interface SessionStartHookOutput {
 	/**
-	 * Additional context to add to the agent's context.
-	 * Multiple hooks' values are concatenated.
+	 * Hook-specific output from the SessionStart hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly additionalContext?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the agent's context.
+		 * Multiple hooks' values are concatenated.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**
@@ -180,9 +204,17 @@ export interface SubagentStartHookInput {
  */
 export interface SubagentStartHookOutput {
 	/**
-	 * Additional context to add to the subagent's context.
+	 * Hook-specific output from the SubagentStart hook.
+	 * This is nested under `hookSpecificOutput` to match the JSON contract used
+	 * by other hook types.
 	 */
-	readonly additionalContext?: string;
+	readonly hookSpecificOutput?: {
+		readonly hookEventName?: string;
+		/**
+		 * Additional context to add to the subagent's context.
+		 */
+		readonly additionalContext?: string;
+	};
 }
 
 /**

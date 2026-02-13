@@ -121,14 +121,28 @@ export class FetcherService implements IFetcherService {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService, this._telemetryService);
-		if (updatedFetchers) {
-			this._availableFetchers = updatedFetchers;
+		try {
+			const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService, this._telemetryService, this._experimentationService);
+			if (updatedFetchers) {
+				this._availableFetchers = updatedFetchers;
+			}
+			if (updatedKnownBadFetchers) {
+				this._knownBadFetchers = updatedKnownBadFetchers;
+			}
+			return res;
+		} catch (err) {
+			// Apply fetcher demotion if fetchWithFallbacks detected a network process crash
+			const demotion = (err as any)?._fetcherDemotion;
+			if (demotion) {
+				if (demotion.updatedFetchers) {
+					this._availableFetchers = demotion.updatedFetchers;
+				}
+				if (demotion.updatedKnownBadFetchers) {
+					this._knownBadFetchers = demotion.updatedKnownBadFetchers;
+				}
+			}
+			throw err;
 		}
-		if (updatedKnownBadFetchers) {
-			this._knownBadFetchers = updatedKnownBadFetchers;
-		}
-		return res;
 	}
 
 	disconnectAll(): Promise<unknown> {
@@ -144,10 +158,15 @@ export class FetcherService implements IFetcherService {
 		return this._getAvailableFetchers()[0].isInternetDisconnectedError(e);
 	}
 	isFetcherError(e: any): boolean {
-		return !!e?.fetcherId || this._getAvailableFetchers()[0].isFetcherError(e);
+		return !!e?.fetcherId || this._getAvailableFetchers().some(f => f.isFetcherError(e));
+	}
+	isNetworkProcessCrashedError(e: any): boolean {
+		return this._getAvailableFetchers().some(f => f.isNetworkProcessCrashedError(e));
 	}
 	getUserMessageForFetcherError(err: any): string {
-		return this._getAvailableFetchers()[0].getUserMessageForFetcherError(err);
+		// Use the fetcher that recognizes the error, falling back to the primary
+		const recognizing = this._getAvailableFetchers().find(f => f.isFetcherError(err));
+		return (recognizing ?? this._getAvailableFetchers()[0]).getUserMessageForFetcherError(err);
 	}
 }
 

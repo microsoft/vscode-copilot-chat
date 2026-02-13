@@ -61,7 +61,6 @@ export function registerDiagnosticsChangedNotification(logger: ILogger, httpServ
 	const handleDiagnosticsChange = (event: vscode.DiagnosticChangeEvent) => {
 		diagnosticsDelayer.trigger(() => {
 			const changedDiagnostics: DiagnosticInfo[] = event.uris.map(uri => getDiagnosticsForUri(uri));
-			logger.trace(`Diagnostics changed for ${event.uris.length} file(s)`);
 			httpServer.broadcastNotification('diagnostics_changed', {
 				uris: changedDiagnostics,
 			} as unknown as Record<string, unknown>);

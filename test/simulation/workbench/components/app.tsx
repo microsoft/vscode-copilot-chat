@@ -10,6 +10,7 @@ import * as mobxlite from 'mobx-react-lite';
 import * as React from 'react';
 import { InitArgs } from '../initArgs';
 import { AMLProvider } from '../stores/amlSimulations';
+import { NesExternalOptions } from '../stores/nesExternalOptions';
 import { RunnerOptions } from '../stores/runnerOptions';
 import { SimulationRunsProvider } from '../stores/simulationBaseline';
 import { SimulationRunner } from '../stores/simulationRunner';
@@ -29,6 +30,7 @@ type Props = {
 	testsProvider: SimulationTestsProvider;
 	runner: SimulationRunner;
 	runnerOptions: RunnerOptions;
+	nesExternalOptions: NesExternalOptions;
 	simulationRunsProvider: SimulationRunsProvider;
 	amlProvider: AMLProvider;
 	displayOptions: DisplayOptions;
@@ -37,7 +39,7 @@ type Props = {
 export type ThemeKind = 'light' | 'dark';
 
 export const App = mobxlite.observer(
-	({ initArgs, testsProvider, runner, runnerOptions, simulationRunsProvider, amlProvider, displayOptions }: Props) => {
+	({ initArgs, testsProvider, runner, runnerOptions, nesExternalOptions, simulationRunsProvider, amlProvider, displayOptions }: Props) => {
 
 		const [theme, setTheme] = useLocalStorageState<ThemeKind>('appTheme', undefined, 'light');
 
@@ -58,6 +60,7 @@ export const App = mobxlite.observer(
 							initArgs={initArgs}
 							runner={runner}
 							runnerOptions={runnerOptions}
+							nesExternalOptions={nesExternalOptions}
 							simulationRunsProvider={simulationRunsProvider}
 							simulationTestsProvider={testsProvider}
 							amlProvider={amlProvider}
@@ -73,7 +76,7 @@ export const App = mobxlite.observer(
 						{testsProvider.testSource.value === TestSource.External && (
 							<ScorecardByLanguage amlProvider={amlProvider} />
 						)}
-						{testsProvider.testSource.value === TestSource.Local && <TerminationMessageBar runner={runner} />}
+						{(testsProvider.testSource.value === TestSource.Local || testsProvider.testSource.value === TestSource.NesExternal) && <TerminationMessageBar runner={runner} />}
 						<div style={{ margin: '5px', display: 'flex', justifyContent: 'space-between' }}>
 							<div style={{ textAlign: 'left' }}>
 								<TestsInfo tests={testsProvider.tests} displayedTests={displayedTests} />

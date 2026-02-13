@@ -161,6 +161,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private toolCallRounds: IToolCallRound[] = [];
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
+	private stopHookUserInitiated = false;
+
+	public appendAdditionalHookContext(context: string): void {
+		if (!context) {
+			return;
+		}
+		this.additionalHookContext = this.additionalHookContext
+			? `${this.additionalHookContext}\n${context}`
+			: context;
+	}
 
 	private readonly _onDidBuildPrompt = this._register(new Emitter<{ result: IBuildPromptResult; tools: LanguageModelToolInformation[]; promptTokenLength: number; toolTokenCount: number }>());
 	public readonly onDidBuildPrompt = this._onDidBuildPrompt.event;
@@ -332,9 +342,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SessionStartHookOutput;
-						if (hookOutput.additionalContext) {
-							additionalContexts.push(hookOutput.additionalContext);
-							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SessionStart hook provided context: ${additionalContext.substring(0, 100)}...`);
 						}
 					}
 				},
@@ -374,9 +385,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				onSuccess: (output) => {
 					if (typeof output === 'object' && output !== null) {
 						const hookOutput = output as SubagentStartHookOutput;
-						if (hookOutput.additionalContext) {
-							additionalContexts.push(hookOutput.additionalContext);
-							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${hookOutput.additionalContext.substring(0, 100)}...`);
+						const additionalContext = hookOutput.hookSpecificOutput?.additionalContext;
+						if (additionalContext) {
+							additionalContexts.push(additionalContext);
+							this._logService.trace(`[ToolCallingLoop] SubagentStart hook provided context: ${additionalContext.substring(0, 100)}...`);
 						}
 					}
 				},
@@ -618,6 +630,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							result.round.hookContext = formatHookContext(stopHookResult.reasons);
 							this._logService.info(`[ToolCallingLoop] Stop hook blocked, continuing with reasons: ${joinedReasons}`);
 							stopHookActive = true;
+							this.stopHookUserInitiated = true;
 							continue;
 						}
 					}
@@ -645,7 +658,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				for (const part of result.content) {
 					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
 						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
-						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
+						outputStream?.push(new ChatResponsePullRequestPart({ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', data.linkTag), arguments: [Number(data.linkTag.substring(1))] }, data.title, data.description, data.author, data.linkTag));
 					}
 				}
 			}
@@ -904,14 +917,17 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId,
+			userInitiatedRequest: (iterationNumber === 0 && !isContinuation && !this.options.request.subAgentInvocationId) || this.stopHookUserInitiated,
 			disableThinking,
-		}, token);
+		}, token).finally(() => {
+			this.stopHookUserInitiated = false;
+		});
 
 		const promptTokenDetails = await computePromptTokenDetails({
 			messages: buildPromptResult.messages,
 			tokenizer,
 			tools: availableTools,
+			maxOutputTokens: endpoint.maxOutputTokens,
 		});
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;

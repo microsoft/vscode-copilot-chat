@@ -124,7 +124,7 @@ export function processHookResults(options: ProcessHookResultsOptions): void {
 	}
 
 	// Show aggregated warnings via hookProgress
-	if (warnings.length > 0 && outputStream) {
+	if (warnings.length > 0 && outputStream?.hookProgress) {
 		if (warnings.length === 1) {
 			outputStream.hookProgress(hookType, undefined, warnings[0]);
 		} else {
