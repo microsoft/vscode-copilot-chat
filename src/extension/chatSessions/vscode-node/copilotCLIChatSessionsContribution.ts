@@ -19,6 +19,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isUri } from '../../../util/common/types';
 import { DeferredPromise, disposableTimeout } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable, IReference, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -205,20 +206,30 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private async _toChatSessionItem(session: ICopilotCLISessionItem): Promise<vscode.ChatSessionItem> {
 		const resource = SessionIdForCLI.getResource(_untitledSessionIdMap.get(session.id) ?? session.id);
 		const worktreeProperties = this.worktreeManager.getWorktreeProperties(session.id);
+		const workingDirectory = worktreeProperties?.worktreePath ? vscode.Uri.file(worktreeProperties.worktreePath)
+			: await this.copilotcliSessionService.getSessionWorkingDirectory(session.id, CancellationToken.None);
 
 		const label = session.label;
 
 		// Badge
 		let badge: vscode.MarkdownString | undefined;
-		if (worktreeProperties?.repositoryPath && this.shouldShowBadge()) {
-			const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
-			badge = new vscode.MarkdownString(`$(folder) ${basename(repositoryPathUri)}`);
-			badge.supportThemeIcons = true;
+		if (this.shouldShowBadge()) {
+			if (worktreeProperties?.repositoryPath) {
+				// Worktree
+				const repositoryPathUri = vscode.Uri.file(worktreeProperties.repositoryPath);
+				badge = new vscode.MarkdownString(`$(folder) ${basename(repositoryPathUri)}`);
+				badge.supportThemeIcons = true;
+			} else if (workingDirectory) {
+				// Workspace
+				badge = new vscode.MarkdownString(`$(folder) ${basename(workingDirectory)}`);
+				badge.supportThemeIcons = true;
+			}
 		}
 
 		// Statistics
 		const changes: vscode.ChatSessionChangedFile2[] = [];
 		if (worktreeProperties) {
+			// Worktree
 			const worktreeChanges = await this.worktreeManager.getWorktreeChanges(session.id) ?? [];
 			changes.push(...worktreeChanges.map(change => new vscode.ChatSessionChangedFile2(
 				vscode.Uri.file(change.filePath),
@@ -230,17 +241,34 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 					: undefined,
 				change.statistics.additions,
 				change.statistics.deletions)));
+		} else if (workingDirectory) {
+			// Workspace
+			const workspaceChanges = await this.workspaceFolderService.getWorkspaceChanges(workingDirectory) ?? [];
+			changes.push(...workspaceChanges.map(change => new vscode.ChatSessionChangedFile2(
+				vscode.Uri.file(change.filePath),
+				change.originalFilePath
+					? toGitUri(vscode.Uri.file(change.originalFilePath), 'HEAD')
+					: undefined,
+				change.modifiedFilePath
+					? toGitUri(vscode.Uri.file(change.modifiedFilePath), '')
+					: undefined,
+				change.statistics.additions,
+				change.statistics.deletions)));
 		}
 
 		// Status
 		const status = session.status ?? vscode.ChatSessionStatus.Completed;
 
 		// Metadata
-		const metadata = {
-			branchName: worktreeProperties?.branchName,
-			repositoryPath: worktreeProperties?.repositoryPath,
-			worktreePath: worktreeProperties?.worktreePath
-		} satisfies { readonly [key: string]: unknown };
+		const metadata = worktreeProperties
+			? {
+				branchName: worktreeProperties?.branchName,
+				repositoryPath: worktreeProperties?.repositoryPath,
+				worktreePath: worktreeProperties?.worktreePath
+			} satisfies { readonly [key: string]: unknown }
+			: {
+				workingDirectoryPath: workingDirectory?.fsPath
+			} satisfies { readonly [key: string]: unknown };
 
 		if (this.controller) {
 			const item = this.controller.createChatSessionItem(resource, label);
@@ -1082,7 +1110,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				// When isolation is not enabled, we are operating in the workspace directly,
 				// so we stage all the changes in the workspace directory when the session is
 				// completed
-				await this.gitService.add(session.options.workingDirectory, []);
+				await this.workspaceFolderService.handleRequestCompleted(session.options.workingDirectory);
 			}
 		}
 	}
