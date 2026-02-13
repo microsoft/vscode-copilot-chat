@@ -450,10 +450,20 @@ export class DefaultIntentRequestHandler {
 	}
 
 	private getModeName(): string {
-		return this.request.modeInstructions2 ? 'custom' :
-			this.intent.id === 'editAgent' ? 'agent' :
-				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
-					'ask';
+		const modeInstructionsName = this.request.modeInstructions2?.name?.toLowerCase();
+		if (modeInstructionsName) {
+			return modeInstructionsName === 'plan' ? 'plan' : 'custom';
+		}
+
+		if (this.intent.id === 'editAgent') {
+			return 'agent';
+		}
+
+		if (this.intent.id === 'edit' || this.intent.id === 'edit2') {
+			return 'edit';
+		}
+
+		return 'ask';
 	}
 
 	private processOffTopicFetchResult(baseModelTelemetry: ConversationalBaseTelemetryData): ChatResult {
@@ -671,6 +681,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 				parentRequestId: this.options.request.parentRequestId,
 			},
+			parentRequestId: this.options.request.parentRequestId,
 			enableRetryOnFilter: true
 		}, token);
 	}

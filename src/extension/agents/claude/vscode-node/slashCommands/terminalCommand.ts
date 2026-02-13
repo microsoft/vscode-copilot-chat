@@ -86,7 +86,7 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 				message: '\n\x1b[1;36m▸ ' + vscode.l10n.t('This instance of Claude Code CLI is configured to use your GitHub Copilot subscription.') + '\x1b[0m\n',
 				env: {
 					ANTHROPIC_BASE_URL: `http://localhost:${config.port}`,
-					ANTHROPIC_AUTH_TOKEN: config.nonce
+					ANTHROPIC_AUTH_TOKEN: `${config.nonce}.terminal`
 				}
 			});
 

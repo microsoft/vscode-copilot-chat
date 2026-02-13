@@ -65,12 +65,16 @@ export class InlineEditRequestLogContext {
 		lines.push(`URL: ${this._endpointInfo?.url ?? '<NOT-SET>'}`);
 		lines.push('```');
 
-		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+		const fromCacheStatus = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
 
-		const isCachedStr = this._logContextOfCachedEdit ? `(cached #${this._logContextOfCachedEdit.requestId})` : '(not cached)';
+		lines.push(`Opportunity ID: ${this._context ? this._context.requestUuid : '<NOT-SET>'}`);
+		if (this.headerRequestId) {
+			lines.push('');
+			lines.push(`Header Request ID: ${this.headerRequestId} ${fromCacheStatus}`);
+		}
 
 		if (this._nextEditRequest) {
-			lines.push(`## Latest user edits ${isCachedStr}`);
+			lines.push(`## Latest user edits ${fromCacheStatus}`);
 			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push(this._nextEditRequest.toMarkdown());
 			lines.push('\n</details>\n');
@@ -86,7 +90,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._resultEdit) {
-			lines.push(`## Proposed inline suggestion ${isCachedStr}`);
+			lines.push(`## Proposed inline suggestion ${fromCacheStatus}`);
 			lines.push('<details open><summary>Edit</summary>\n');
 			lines.push('``` patch');
 			lines.push(this._resultEdit.toString());
@@ -95,7 +99,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this.prompt) {
-			lines.push(`## Prompt ${isCachedStr}`);
+			lines.push(`## Prompt ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			const e = this.prompt;
 			lines.push('````');
@@ -105,14 +109,14 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this.error) {
-			lines.push(`## Error ${isCachedStr}`);
+			lines.push(`## Error ${fromCacheStatus}`);
 			lines.push('```');
 			lines.push(errors.toString(errors.fromUnknown(this.error)));
 			lines.push('```');
 		}
 
 		if (this.response) {
-			lines.push(`## Response ${isCachedStr}`);
+			lines.push(`## Response ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			lines.push('````');
 			lines.push(this.response);
@@ -121,7 +125,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._responseResults) {
-			lines.push(`## Response Results ${isCachedStr}`);
+			lines.push(`## Response Results ${fromCacheStatus}`);
 			lines.push('<details><summary>Click to view</summary>\n');
 			lines.push('```');
 			lines.push(yaml.stringify(this._responseResults, null, '\t'));
@@ -249,6 +253,9 @@ export class InlineEditRequestLogContext {
 			if (logContextOfCachedEdit._endpointInfo) {
 				this.setEndpointInfo(logContextOfCachedEdit._endpointInfo.url, logContextOfCachedEdit._endpointInfo.modelName);
 			}
+			if (logContextOfCachedEdit.headerRequestId) {
+				this.setHeaderRequestId(logContextOfCachedEdit.headerRequestId);
+			}
 			if (logContextOfCachedEdit.prompt) {
 				this.setPrompt(logContextOfCachedEdit.prompt);
 			}
@@ -280,6 +287,14 @@ export class InlineEditRequestLogContext {
 		return this._endpointInfo;
 	}
 
+	private _headerRequestId: string | undefined = undefined;
+	public setHeaderRequestId(headerRequestId: string): void {
+		this._headerRequestId = headerRequestId;
+	}
+	get headerRequestId(): string | undefined {
+		return this._headerRequestId;
+	}
+
 	public _prompt: string | undefined = undefined;
 
 	get prompt(): string | undefined {
@@ -304,6 +319,11 @@ export class InlineEditRequestLogContext {
 	public setIsSkipped() {
 		this._isVisible = false;
 		this._icon = Icon.skipped;
+	}
+
+	public markAsFromCache() {
+		this._isVisible = true;
+		this._icon = Icon.database;
 	}
 
 	public markAsNoSuggestions() {
@@ -377,7 +397,7 @@ export class InlineEditRequestLogContext {
 	setResponseResults(v: readonly unknown[]): void {
 		this._isVisible = true;
 		this._responseResults = v;
-		this._icon = Icon.lightbulbFull;
+		this._icon ??= Icon.lightbulbFull;
 	}
 
 	getDebugName(): string {

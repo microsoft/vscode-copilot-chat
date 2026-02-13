@@ -922,6 +922,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			messages: buildPromptResult.messages,
 			tokenizer,
 			tools: availableTools,
+			maxOutputTokens: endpoint.maxOutputTokens,
 		});
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;
