@@ -1121,7 +1121,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	private getPredictedOutput(doc: StatelessNextEditDocument, editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
-		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
+		return this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction, this.expService)
 			? {
 				type: 'content',
 				content: getPredictionContents(doc, editWindowLines, responseFormat)
