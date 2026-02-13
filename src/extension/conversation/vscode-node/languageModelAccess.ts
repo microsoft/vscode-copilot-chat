@@ -179,22 +179,16 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = allEndpoints.filter(e => e.showInModelPicker || e.model === 'gpt-4o-mini');
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, allEndpoints);
 		chatEndpoints.push(autoEndpoint);
-		let defaultChatEndpoint: IChatEndpoint | undefined;
+		let defaultChatEndpoint: IChatEndpoint;
 		const defaultExpModel = this._expService.getTreatmentVariable<string>('chat.defaultLanguageModel')?.replace('copilot/', '');
-		if (this._authenticationService.copilotToken?.isNoAuthUser) {
-			// No Auth users always get Auto as the default model
+		if (this._authenticationService.copilotToken?.isNoAuthUser || !defaultExpModel || defaultExpModel === AutoChatEndpoint.pseudoModelId) {
+			// No auth, no experiment, and exp that sets auto to default all get default model
 			defaultChatEndpoint = autoEndpoint;
-		} else if (defaultExpModel === AutoChatEndpoint.pseudoModelId) {
-			// Auto is a fake model id so force map it
-			defaultChatEndpoint = autoEndpoint;
-		} else if (defaultExpModel) {
+		} else {
 			// Find exp default
-			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel);
+			defaultChatEndpoint = chatEndpoints.find(e => e.model === defaultExpModel) || autoEndpoint;
 		}
-		if (!defaultChatEndpoint) {
-			// Find a default set by CAPI
-			defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? chatEndpoints.find(e => e.showInModelPicker) ?? chatEndpoints[0];
-		}
+
 		const seenFamilies = new Set<string>();
 
 		for (const endpoint of chatEndpoints) {
@@ -283,7 +277,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				},
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
-					imageInput: endpoint.supportsVision,
+					imageInput: endpoint instanceof AutoChatEndpoint ? true : endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				}
 			};
@@ -429,7 +423,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super();
@@ -545,7 +538,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				this._blockedExtensionService.reportBlockedExtension(extensionId, result.retryAfter);
 				throw vscode.LanguageModelError.Blocked(blockedExtensionMessage);
 			} else if (result.type === ChatFetchResponseType.QuotaExceeded) {
-				const details = getErrorDetailsFromChatFetchError(result, await this._endpointProvider.getChatEndpoint('copilot-base'), (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const details = getErrorDetailsFromChatFetchError(result, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;

@@ -293,7 +293,6 @@ describe('Notebook Prompt Rendering', function () {
 			version: 'Test',
 			policy: 'enabled',
 			showInModelPicker: false,
-			isDefault: false,
 			isFallback: false,
 			urlOrRequestMetadata: '',
 			model: CHAT_MODEL.GPT41,

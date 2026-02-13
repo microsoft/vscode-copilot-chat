@@ -42,6 +42,10 @@ export class EnvServiceImpl implements IEnvService {
 		return vscode.window.state.active;
 	}
 
+	public get onDidChangeWindowState(): vscode.Event<vscode.WindowState> {
+		return vscode.window.onDidChangeWindowState;
+	}
+
 	public get OS(): OperatingSystem {
 		switch (platform) {
 			case Platform.Windows:

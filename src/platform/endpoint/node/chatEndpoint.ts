@@ -120,7 +120,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
 	public readonly showInModelPicker: boolean;
-	public readonly isDefault: boolean;
 	public readonly isFallback: boolean;
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
@@ -161,7 +160,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.isPremium = modelMetadata.billing?.is_premium;
 		this.multiplier = modelMetadata.billing?.multiplier;
 		this.restrictedToSkus = modelMetadata.billing?.restricted_to;
-		this.isDefault = modelMetadata.is_chat_default;
 		this.isFallback = modelMetadata.is_chat_fallback;
 		this.supportsToolCalls = !!modelMetadata.capabilities.supports.tool_calls;
 		this.supportsVision = !!modelMetadata.capabilities.supports.vision;
