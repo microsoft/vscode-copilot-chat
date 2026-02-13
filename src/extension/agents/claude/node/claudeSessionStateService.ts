@@ -39,7 +39,7 @@ export interface IClaudeSessionStateService {
 	/**
 	 * Gets the stored model ID for a session (does not apply fallback logic).
 	 */
-	getModelIdForSession(sessionId: string): Promise<string | undefined>;
+	getModelIdForSession(sessionId: string): string | undefined;
 
 	/**
 	 * Sets the model ID for a session.
@@ -93,7 +93,7 @@ export class ClaudeSessionStateService extends Disposable implements IClaudeSess
 		super();
 	}
 
-	async getModelIdForSession(sessionId: string): Promise<string | undefined> {
+	getModelIdForSession(sessionId: string): string | undefined {
 		const state = this._sessionState.get(sessionId);
 		return state?.modelId;
 	}

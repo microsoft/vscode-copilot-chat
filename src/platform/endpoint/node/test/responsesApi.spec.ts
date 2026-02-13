@@ -253,7 +253,7 @@ describe('processResponseFromChatEndpoint telemetry', () => {
 			logService,
 			response,
 			1,
-			async () => { },
+			async () => undefined,
 			telemetryData
 		);
 
@@ -265,7 +265,7 @@ describe('processResponseFromChatEndpoint telemetry', () => {
 		expect(events.length).toBeGreaterThan(0);
 
 		const outputEvent = events[events.length - 1];
-		const messagesJson = JSON.parse(String(outputEvent.properties?.messagesJson));
+		const messagesJson = JSON.parse(String((outputEvent.properties as Record<string, string>)?.messagesJson));
 		expect(messagesJson).toHaveLength(1);
 		expect(messagesJson[0].role).toBe('assistant');
 		expect(messagesJson[0].content).toBe('final assistant reply');

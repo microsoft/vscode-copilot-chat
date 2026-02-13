@@ -23,7 +23,8 @@ import {
 	FolderRepositoryInfo,
 	FolderRepositoryMRUEntry,
 	GetFolderRepositoryOptions,
-	IFolderRepositoryManager
+	IFolderRepositoryManager,
+	InitializeFolderRepositoryOptions
 } from '../common/folderRepositoryManager';
 import { isUntitledSessionId } from '../common/utils';
 
@@ -111,6 +112,20 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		options: GetFolderRepositoryOptions | undefined,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
+
+	/**
+	 * @inheritdoc
+	 */
+	async getRepositoryInfo(
+		folder: vscode.Uri,
+		_token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }> {
+		const repoContext = await this.gitService.getRepository(folder, true);
+		return {
+			repository: repoContext?.rootUri,
+			headBranchName: repoContext?.headBranchName
+		};
+	}
 
 	protected async getFolderRepositoryForNewSession(sessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<FolderRepositoryInfo> {
 		// Get the selected folder
@@ -229,10 +244,10 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 	 */
 	async initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: InitializeFolderRepositoryOptions,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo> {
-		const { stream, toolInvocationToken } = options;
+		const { stream, toolInvocationToken, branch, isolation } = options;
 
 		let { folder, repository, trusted, worktree, worktreeProperties } = await this.getFolderRepositoryForNewSession(sessionId, stream, token);
 		if (trusted === false) {
@@ -241,6 +256,18 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		if (!repository) {
 			// No git repository found, proceed without isolation
 			return { folder, repository, worktree, worktreeProperties, trusted: true };
+		}
+
+		// If user explicitly chose workspace mode, skip worktree creation
+		if (isolation === 'workspace') {
+			this.logService.info(`[FolderRepositoryManager] Workspace isolation mode selected for session ${sessionId}, skipping worktree creation`);
+			return {
+				folder: folder ?? repository,
+				repository: undefined,
+				worktree: undefined,
+				worktreeProperties: undefined,
+				trusted: true
+			};
 		}
 
 		// Check for uncommitted changes and prompt user before creating worktree
@@ -255,7 +282,7 @@ export abstract class FolderRepositoryManager extends Disposable implements IFol
 		}
 
 		// Create worktree for the git repository
-		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream);
+		worktreeProperties = worktreeProperties ?? await this.worktreeService.createWorktree(repository, stream, branch);
 
 		if (!worktreeProperties) {
 			stream.warning(l10n.t('Failed to create worktree. Proceeding without isolation.'));

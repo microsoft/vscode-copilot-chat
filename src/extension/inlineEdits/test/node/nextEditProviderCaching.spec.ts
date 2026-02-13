@@ -64,7 +64,7 @@ describe('NextEditProvider Caching', () => {
 		const statelessNextEditProvider: IStatelessNextEditProvider = {
 			ID: 'TestNextEditProvider',
 			provideNextEdit: async function* (request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken) {
-				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request);
+				const telemetryBuilder = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 				const lineEdit = LineEdit.createFromUnsorted(
 					[
 						new LineReplacement(

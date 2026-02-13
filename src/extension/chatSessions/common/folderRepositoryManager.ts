@@ -8,6 +8,23 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
 /**
+ * The isolation mode for a chat session.
+ * - `worktree`: Creates an isolated git worktree for the session.
+ * - `workspace`: Works directly in the workspace directory without isolation.
+ */
+export type IsolationMode = 'worktree' | 'workspace';
+
+/**
+ * Options for initializing a folder/repository for a session.
+ */
+export interface InitializeFolderRepositoryOptions {
+	readonly branch?: string;
+	readonly isolation?: IsolationMode;
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+}
+
+/**
  * Result of folder/repository resolution for a chat session.
  */
 export interface FolderRepositoryInfo {
@@ -137,9 +154,24 @@ export interface IFolderRepositoryManager {
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; toolInvocationToken: vscode.ChatParticipantToolToken },
+		options: InitializeFolderRepositoryOptions,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
+
+	/**
+	 * Get repository information for a folder.
+	 *
+	 * Resolves whether the folder contains a git repository and returns
+	 * the repository URI and HEAD branch name.
+	 *
+	 * @param folder The folder URI to check
+	 * @param token Cancellation token
+	 * @returns Repository URI and HEAD branch name
+	 */
+	getRepositoryInfo(
+		folder: vscode.Uri,
+		token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
 	 * Get list of most recently used folders and repositories.

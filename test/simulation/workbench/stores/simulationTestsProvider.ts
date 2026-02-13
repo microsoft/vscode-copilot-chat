@@ -10,6 +10,7 @@ import { EvaluationError } from './amlResults';
 import { AMLProvider } from './amlSimulations';
 import { BaselineJSONProvider } from './baselineJSONProvider';
 import { DetectedTests } from './detectedTests';
+import { NesExternalOptions } from './nesExternalOptions';
 import { ResolvedAMLRun } from './resolvedAMLRun';
 import { ResolvedSimulationRun } from './resolvedSimulationRun';
 import { RunnerTestStatus } from './runnerTestStatus';
@@ -33,6 +34,7 @@ export interface ISimulationTest {
 export class SimulationTestsProvider extends Disposable {
 
 	private readonly detectedTests: DetectedTests;
+	private readonly nesDetectedTests: DetectedTests;
 	private readonly resolvedBaseline: ResolvedSimulationRun;
 	private readonly resolvedAMLRun: ResolvedAMLRun;
 
@@ -77,6 +79,29 @@ export class SimulationTestsProvider extends Disposable {
 					};
 				});
 			}
+			case TestSource.NesExternal: {
+				const nesTests = this.nesDetectedTests.tests;
+				const baselineRunsArr = this.resolvedBaseline.runs.value;
+				const statusArr = this.runner.testStatus;
+
+				const baselineRunsMap = new Map<string, TestRuns>();
+				for (const el of baselineRunsArr) {
+					baselineRunsMap.set(el.name, el);
+				}
+
+				const statusMap = new Map<string, RunnerTestStatus>();
+				for (const el of statusArr) {
+					statusMap.set(el.name, el);
+				}
+
+				return nesTests.map((el): ISimulationTest => ({
+					name: el.name,
+					suiteName: el.suiteName,
+					baselineJSON: undefined,
+					baseline: baselineRunsMap.get(el.name),
+					runnerStatus: statusMap.get(el.name),
+				}));
+			}
 			case TestSource.Local: {
 				const detectedTests = this.detectedTests.tests;
 				const baselineJSONArr = this.comparedBaselineJSON === 'beforeRunBaselineJSON'
@@ -115,13 +140,21 @@ export class SimulationTestsProvider extends Disposable {
 		public readonly testSource: TestSourceValue,
 		private readonly runner: SimulationRunner,
 		baselineProvider: SimulationRunsProvider,
-		amlProvider: AMLProvider
+		amlProvider: AMLProvider,
+		nesExternalOptions: NesExternalOptions,
 	) {
 		super();
 
 		mobx.makeObservable(this);
 
 		this.detectedTests = this._register(new DetectedTests());
+		this.nesDetectedTests = this._register(new DetectedTests(() => {
+			const scenariosPath = nesExternalOptions.externalScenariosPath.value;
+			if (!scenariosPath) {
+				return [];
+			}
+			return ['--nes=external', `--external-scenarios=${scenariosPath}`, '--output=/dev/null'];
+		}));
 		this.baselineJSONProvider = this._register(new BaselineJSONProvider(runner));
 		this.resolvedBaseline = new ResolvedSimulationRun(baselineProvider);
 		this.resolvedAMLRun = new ResolvedAMLRun(amlProvider);

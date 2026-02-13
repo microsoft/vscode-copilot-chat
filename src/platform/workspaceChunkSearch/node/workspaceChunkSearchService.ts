@@ -8,7 +8,7 @@ import type * as vscode from 'vscode';
 import { createFencedCodeBlock, getLanguageId } from '../../../util/common/markdown';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
@@ -349,7 +349,9 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	deleteExternalIngestWorkspaceIndex(): Promise<void> {
-		return this._codeSearchChunkSearch.deleteExternalIngestWorkspaceIndex(CancellationToken.None);
+		return this._codeSearchChunkSearch.deleteExternalIngestWorkspaceIndex(
+			new CallTracker('WorkspaceChunkSearchService::deleteExternalIngestWorkspaceIndex'),
+			CancellationToken.None);
 	}
 
 	async searchFileChunks(

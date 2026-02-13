@@ -5,12 +5,15 @@
 
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ResourceMap } from '../../../util/vs/base/common/map';
+import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IChatSessionWorkspaceFolderService } from '../common/chatSessionWorkspaceFolderService';
+import { ChatSessionWorktreeFile } from '../common/chatSessionWorktreeService';
 import { isUntitledSessionId } from '../common/utils';
-import { isEqual } from '../../../util/vs/base/common/resources';
 
 const CHAT_SESSION_WORKSPACE_FOLDER_MEMENTO_KEY = 'github.copilot.cli.sessionWorkspaceFolders';
 
@@ -30,7 +33,10 @@ interface WorkspaceFolderEntry {
 export class ChatSessionWorkspaceFolderService extends Disposable implements IChatSessionWorkspaceFolderService {
 	declare _serviceBrand: undefined;
 
+	private readonly workspaceFolderChanges = new ResourceMap<ChatSessionWorktreeFile[]>();
+
 	constructor(
+		@IGitService private readonly gitService: IGitService,
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext
 	) {
@@ -111,5 +117,48 @@ export class ChatSessionWorkspaceFolderService extends Disposable implements ICh
 
 		const entry = sessionId in data ? data[sessionId] : undefined;
 		return entry?.folderPath ? URI.file(entry.folderPath) : undefined;
+	}
+
+	async handleRequestCompleted(workspaceFolderUri: vscode.Uri): Promise<void> {
+		// Stage all changes
+		await this.gitService.add(workspaceFolderUri, []);
+
+		// Clear changes cache
+		this.workspaceFolderChanges.delete(workspaceFolderUri);
+	}
+
+	async getWorkspaceChanges(workspaceFolderUri: vscode.Uri): Promise<readonly ChatSessionWorktreeFile[] | undefined> {
+		const cachedChanges = this.workspaceFolderChanges.get(workspaceFolderUri);
+		if (cachedChanges) {
+			return cachedChanges;
+		}
+
+		const repository = await this.gitService.getRepository(workspaceFolderUri);
+		if (!repository?.changes) {
+			return [];
+		}
+
+		const changes: ChatSessionWorktreeFile[] = [];
+		for (const change of [...repository.changes.indexChanges, ...repository.changes.workingTree]) {
+			try {
+				const fileStats = await this.gitService.diffIndexWithHEADShortStats(change.uri);
+				changes.push({
+					filePath: change.uri.fsPath,
+					originalFilePath: change.status !== 1 /* INDEX_ADDED */
+						? change.originalUri?.fsPath
+						: undefined,
+					modifiedFilePath: change.status !== 2 /* INDEX_DELETED */
+						? change.uri.fsPath
+						: undefined,
+					statistics: {
+						additions: fileStats?.insertions ?? 0,
+						deletions: fileStats?.deletions ?? 0
+					}
+				} satisfies ChatSessionWorktreeFile);
+			} catch (error) { }
+		}
+
+		this.workspaceFolderChanges.set(workspaceFolderUri, changes);
+		return changes;
 	}
 }

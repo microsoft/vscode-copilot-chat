@@ -36,6 +36,5 @@ import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
 import './testFailureTool';
 import './toolReplayTool';
-import './usagesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';

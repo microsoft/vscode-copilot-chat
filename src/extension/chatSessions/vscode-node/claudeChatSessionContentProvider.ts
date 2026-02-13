@@ -510,7 +510,7 @@ export class ClaudeChatSessionContentProvider extends Disposable implements vsco
 	private async _resolveModelForSession(session: IClaudeCodeSession | undefined): Promise<string> {
 		// 1. Check stored session state (user's explicit selection or cached value)
 		if (session) {
-			const cachedModel = await this.sessionStateService.getModelIdForSession(session.id);
+			const cachedModel = this.sessionStateService.getModelIdForSession(session.id);
 			if (cachedModel) {
 				// Keep the global default in sync with user's selection
 				await this.claudeCodeModels.setDefaultModel(cachedModel);
@@ -571,6 +571,7 @@ function mruToFolderOptionItems(mruItems: readonly FolderRepositoryMRUEntry[]): 
  */
 export class ClaudeChatSessionItemController extends Disposable {
 	private readonly _controller: vscode.ChatSessionItemController;
+	private readonly _inProgressItems = new Map<string, vscode.ChatSessionItem>();
 	private _showBadge: boolean;
 
 	constructor(
@@ -616,39 +617,38 @@ export class ClaudeChatSessionItemController extends Disposable {
 				};
 				item = this._createClaudeChatSessionItem(newlyCreatedSessionInfo);
 			}
+
+			this._controller.items.add(item);
 		}
 
 		item.status = status;
 		if (status === vscode.ChatSessionStatus.InProgress) {
-			if (!item.timing) {
-				item.timing = {
-					created: Date.now()
-				};
-			}
-			item.timing.lastRequestStarted = Date.now();
+			const timing = item.timing ? { ...item.timing } : { created: Date.now() };
+			timing.lastRequestStarted = Date.now();
 			// Clear lastRequestEnded while a request is in progress
-			item.timing.lastRequestEnded = undefined;
-		} else if (status === vscode.ChatSessionStatus.Completed) {
-			if (!item.timing) {
-				item.timing = {
-					created: Date.now(),
-					lastRequestEnded: Date.now()
-				};
-			} else {
-				item.timing.lastRequestEnded = Date.now();
+			timing.lastRequestEnded = undefined;
+			item.timing = timing;
+			this._inProgressItems.set(sessionId, item);
+		} else {
+			this._inProgressItems.delete(sessionId);
+			if (status === vscode.ChatSessionStatus.Completed) {
+				if (!item.timing) {
+					item.timing = {
+						created: Date.now(),
+						lastRequestEnded: Date.now()
+					};
+				} else {
+					item.timing = { ...item.timing, lastRequestEnded: Date.now() };
+				}
 			}
 		}
-		this._controller.items.add(item);
 	}
 
 	private async _refreshItems(token: vscode.CancellationToken): Promise<void> {
-		// TODO: How do we handle cleanup? It's not too important to start
-		// since on reload this will get cleared anyway.
 		const sessions = await this._claudeCodeSessionService.getAllSessions(token);
-		for (const session of sessions) {
-			const item = this._createClaudeChatSessionItem(session);
-			this._controller.items.add(item);
-		}
+		const items = sessions.map(session => this._createClaudeChatSessionItem(session));
+		items.push(...this._inProgressItems.values());
+		this._controller.items.replace(items);
 	}
 
 	private _createClaudeChatSessionItem(session: IClaudeCodeSessionInfo): vscode.ChatSessionItem {

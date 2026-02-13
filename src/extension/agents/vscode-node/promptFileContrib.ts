@@ -11,6 +11,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { AgentCustomizationSkillProvider } from './agentCustomizationSkillProvider';
 import { AskAgentProvider } from './askAgentProvider';
+import { ExploreAgentProvider } from './exploreAgentProvider';
 import { GitHubOrgCustomAgentProvider } from './githubOrgCustomAgentProvider';
 import { GitHubOrgInstructionsProvider } from './githubOrgInstructionsProvider';
 import { PlanAgentProvider } from './planAgentProvider';
@@ -39,6 +40,10 @@ export class PromptFileContribution extends Disposable implements IExtensionCont
 			// Register Ask agent provider for read-only Q&A mode
 			const askProvider = instantiationService.createInstance(AskAgentProvider);
 			this._register(vscode.chat.registerCustomAgentProvider(askProvider));
+
+			// Register Explore agent provider for code research subagent
+			const exploreProvider = instantiationService.createInstance(ExploreAgentProvider);
+			this._register(vscode.chat.registerCustomAgentProvider(exploreProvider));
 		}
 
 		// Register instructions provider
