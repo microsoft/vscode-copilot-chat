@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
-import { AnthropicMessagesTool, ContextManagementResponse, OpenAIContextManagementResponse } from './anthropic';
+import { AnthropicMessagesTool, ContextManagementResponse } from './anthropic';
 import { IHeaders } from './fetcherService';
-import { ChoiceLogProbs, FilterReason } from './openai';
+import { ChoiceLogProbs, FilterReason, OpenAIContextManagementResponse } from './openai';
 
 
 // Request helpers
@@ -160,6 +160,14 @@ export interface IResponseDelta {
 	contextManagement?: ContextManagementResponse | OpenAIContextManagementResponse;
 	/** Server-side tool calls (e.g., tool_search) - reported for logging but not validated/executed */
 	serverToolCalls?: IServerToolCall[];
+}
+
+export function isOpenAIContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is OpenAIContextManagementResponse {
+	return 'type' in value && value.type === 'compaction';
+}
+
+export function isAnthropicContextManagementResponse(value: ContextManagementResponse | OpenAIContextManagementResponse): value is ContextManagementResponse {
+	return 'applied_edits' in value;
 }
 
 export const enum ResponsePartKind {

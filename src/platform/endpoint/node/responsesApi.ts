@@ -18,7 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, OpenAIContextManagementResponse, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -86,9 +86,14 @@ interface ResponseOutputItemWithPhase {
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+	const latestCompactionMessageIndex = getLatestCompactionMessageIndex(messages);
+	if (latestCompactionMessageIndex !== undefined) {
+		messages = messages.slice(latestCompactionMessageIndex);
+	}
+
 	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(modelId, messages);
 	let previousResponseId: string | undefined;
-	if (statefulMarkerAndIndex) {
+	if (latestCompactionMessageIndex === undefined && statefulMarkerAndIndex) {
 		previousResponseId = statefulMarkerAndIndex.statefulMarker;
 		messages = messages.slice(statefulMarkerAndIndex.index + 1);
 	}
@@ -151,6 +156,19 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 	}
 
 	return { input, previous_response_id: previousResponseId };
+}
+
+function getLatestCompactionMessageIndex(messages: readonly Raw.ChatMessage[]): number | undefined {
+	for (let idx = messages.length - 1; idx >= 0; idx--) {
+		const message = messages[idx];
+		for (const part of message.content) {
+			if (part.type === Raw.ChatCompletionContentPartKind.Opaque && rawPartAsCompactionData(part)) {
+				return idx;
+			}
+		}
+	}
+
+	return undefined;
 }
 
 function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseInputContent | undefined {
@@ -216,7 +234,7 @@ function extractCompactionData(content: Raw.ChatCompletionContentPart[]): OpenAI
 			if (compaction) {
 				return {
 					type: 'compaction',
-					id: compaction.encrypted_content,
+					id: compaction.id,
 					encrypted_content: compaction.encrypted_content,
 				} as unknown as OpenAI.Responses.ResponseInputItem;
 			}
@@ -457,12 +475,14 @@ export class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.added':
 				if (chunk.item.type.toString() === 'compaction') {
+					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
 					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
 					return onProgress({
 						text: '',
 						contextManagement: {
 							type: 'compaction',
-							encrypted_content: chunk.item.id || '',
+							id: compactionItem.id,
+							encrypted_content: compactionItem.encrypted_content,
 						}
 					});
 				}
@@ -491,12 +511,14 @@ export class OpenAIResponsesProcessor {
 			}
 			case 'response.output_item.done':
 				if (chunk.item.type.toString() === 'compaction') {
+					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
 					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
 					return onProgress({
 						text: '',
 						contextManagement: {
 							type: 'compaction',
-							encrypted_content: chunk.item.id || '',
+							id: compactionItem.id,
+							encrypted_content: compactionItem.encrypted_content,
 						}
 					});
 				}
@@ -552,12 +574,13 @@ export class OpenAIResponsesProcessor {
 				// Emit compaction items from the final output so they are captured for round-tripping
 				for (const item of chunk.response.output) {
 					if (checkIfItemIsCompactionType(item)) {
-						const compactionItem = item as unknown as { encrypted_content: string; id: string; type: 'compaction' };
+						const compactionItem = item as unknown as OpenAIContextManagementResponse;
 						onProgress({
 							text: '',
 							contextManagement: {
 								type: 'compaction',
 								encrypted_content: compactionItem.encrypted_content,
+								id: compactionItem.id,
 							}
 						});
 					}

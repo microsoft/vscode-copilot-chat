@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, PromptElement, Raw } from '@vscode/prompt-tsx';
-import { OpenAIContextManagementResponse } from '../../networking/common/anthropic';
+import { OpenAIContextManagementResponse } from '../../networking/common/openai';
 import { CustomDataPartMimeTypes } from './endpointTypes';
 
 interface ICompactionDataOpaque {

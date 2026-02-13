@@ -54,21 +54,22 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 		}
 
 		// Handle context management
-		if (d.contextManagement) {
+		const appliedEdits = (d.contextManagement as { applied_edits?: Array<{ cleared_input_tokens?: number; cleared_tool_uses?: number; cleared_thinking_turns?: number }> } | undefined)?.applied_edits;
+		if (appliedEdits) {
 			if (i > 0 || text.length > 0) {
 				text += '\n';
 			}
 
-			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+			const totalClearedTokens = appliedEdits.reduce(
+				(sum: number, edit) => sum + (edit.cleared_input_tokens || 0),
 				0
 			);
-			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+			const totalClearedToolUses = appliedEdits.reduce(
+				(sum: number, edit) => sum + (edit.cleared_tool_uses || 0),
 				0
 			);
-			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+			const totalClearedThinkingTurns = appliedEdits.reduce(
+				(sum: number, edit) => sum + (edit.cleared_thinking_turns || 0),
 				0
 			);
 

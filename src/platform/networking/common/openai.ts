@@ -93,6 +93,13 @@ export interface OpenAIContextManagement {
 }
 
 
+export interface OpenAIContextManagementResponse {
+	encrypted_content: string;
+	type: 'compaction';
+	id: string;
+}
+
+
 export enum ChatRole {
 	System = 'system',
 	User = 'user',
