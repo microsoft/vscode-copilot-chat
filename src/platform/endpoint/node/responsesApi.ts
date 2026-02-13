@@ -33,7 +33,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
-	const modelswithoutContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
+	const modelsWithoutContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
 
 	const body: IEndpointBody = {
 		model,
@@ -56,7 +56,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		text: verbosity ? { verbosity } : undefined,
 	};
 
-	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelswithoutContextManagement.has(endpoint.family);
+	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelsWithoutContextManagement.has(endpoint.family);
 	if (contextManagementEnabled) {
 		body.context_management = [{
 			'type': openAIContextManagementCompactionType,
