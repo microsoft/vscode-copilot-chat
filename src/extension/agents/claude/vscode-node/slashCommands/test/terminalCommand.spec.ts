@@ -145,7 +145,7 @@ describe('TerminalSlashCommand', () => {
 			await terminalCommand.handle('', mockStream, CancellationToken.None);
 
 			const createTerminalCall = testTerminalService.createTerminalSpy.mock.calls[0][0] as TerminalOptions;
-			expect(createTerminalCall.message).toContain('\x1b[1;36m');
+			expect(createTerminalCall.message).toContain('\x1b[0;104m');
 			expect(createTerminalCall.message).toContain('GitHub Copilot subscription');
 		});
 
