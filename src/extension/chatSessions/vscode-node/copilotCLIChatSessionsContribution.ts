@@ -403,6 +403,7 @@ export class CopilotCLIChatSessionContentProvider extends Disposable implements 
 				}
 				const branchItems = await this.getBranchOptionItems();
 				if (branchItems.length > 0) {
+					_sessionBranch.set(copilotcliSessionId, branchItems[0].id);
 					options[BRANCH_OPTION_ID] = {
 						id: branchItems[0].id,
 						name: branchItems[0].name,

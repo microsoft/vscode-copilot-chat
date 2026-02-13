@@ -614,6 +614,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const firstTokenReceived = new DeferredPromise<void>();
 
+		logContext.setHeaderRequestId(request.id);
+
 		telemetryBuilder.setFetchStartedAt();
 		logContext.setFetchStartTime();
 
