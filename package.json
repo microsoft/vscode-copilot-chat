@@ -4503,15 +4503,6 @@
 							"advanced"
 						]
 					},
-					"github.copilot.chat.agentCustomizationSkill.enabled": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.agentCustomizationSkill.enabled%",
-						"tags": [
-							"advanced",
-							"onExp"
-						]
-					},
 					"github.copilot.chat.searchSubagent.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -5817,13 +5808,25 @@
 		"chatAgents": [],
 		"chatPromptFiles": [
 			{
-				"path": "./assets/prompts/savePrompt.prompt.md"
-			},
-			{
 				"path": "./assets/prompts/plan.prompt.md"
 			},
 			{
 				"path": "./assets/prompts/init.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-prompt.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-instruction.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-skill.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-agent.prompt.md"
+			},
+			{
+				"path": "./assets/prompts/create-hook.prompt.md"
 			}
 		],
 		"terminal": {

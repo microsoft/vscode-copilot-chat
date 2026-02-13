@@ -4,10 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 
@@ -42,8 +40,6 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super();
 
@@ -57,30 +53,6 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 		// This is required because VS Code's promptsService uses fileService.readFile()
 		// to read skill content, which only works with FileSystemProvider, not TextDocumentContentProvider.
 		this._register(vscode.workspace.registerFileSystemProvider(SKILL_SCHEME, this, { isReadonly: true }));
-
-		// Watch for configuration changes that affect the skill content
-		this._register(this.configurationService.onDidChangeConfiguration(e => {
-			if (this._affectsSkillContent(e)) {
-				this._invalidateCache();
-			}
-		}));
-	}
-
-	/**
-	 * Checks if a configuration change affects the skill content.
-	 */
-	private _affectsSkillContent(e: vscode.ConfigurationChangeEvent): boolean {
-		return e.affectsConfiguration(ConfigKey.Advanced.AgentCustomizationSkillEnabled.fullyQualifiedId);
-	}
-
-	/**
-	 * Invalidates the cached content and notifies listeners.
-	 */
-	private _invalidateCache(): void {
-		this._cachedContent = undefined;
-		this._onDidChangeFile.fire([{ type: vscode.FileChangeType.Changed, uri: this._skillContentUri }]);
-		this._onDidChangeSkills.fire();
-		this.logService.trace('[AgentCustomizationSkillProvider] Cache invalidated due to configuration change');
 	}
 
 	// #region FileSystemProvider implementation
@@ -266,7 +238,7 @@ export class AgentCustomizationSkillProvider extends Disposable implements vscod
 		token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
 		try {
-			if (token.isCancellationRequested || !this.configurationService.getExperimentBasedConfig(ConfigKey.Advanced.AgentCustomizationSkillEnabled, this.experimentationService)) {
+			if (token.isCancellationRequested) {
 				return [];
 			}
 

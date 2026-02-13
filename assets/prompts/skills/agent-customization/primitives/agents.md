@@ -19,7 +19,7 @@ tools: ["search", "web"]     # Optional: aliases, MCP (<server>/*), extension to
 model: "Claude Sonnet 4"     # Optional, uses picker default; supports array for fallback
 argument-hint: "Task..."     # Optional, input guidance
 agents: ["Agent1", "Agent2"] # Optional, restrict allowed subagents by name (omit = all, [] = none)
-user-invokable: true         # Optional, show in agent picker (default: true)
+user-invocable: true         # Optional, show in agent picker (default: true)
 disable-model-invocation: false  # Optional, prevent subagent invocation (default: false)
 handoffs: [...]              # Optional, transitions to other agents
 ---
@@ -29,7 +29,7 @@ handoffs: [...]              # Optional, transitions to other agents
 
 | Attribute | Default | Effect |
 |-----------|---------|--------|
-| `user-invokable: false` | `true` | Hide from agent picker, only accessible as subagent |
+| `user-invocable: false` | `true` | Hide from agent picker, only accessible as subagent |
 | `disable-model-invocation: true` | `false` | Prevent other agents from invoking as subagent |
 
 ### Model Fallback
@@ -73,7 +73,7 @@ To discover available tools, check your current tool list or use `#tool:` syntax
 ---
 description: "{Use when... trigger phrases for subagent discovery}"
 tools: ["{minimal set of tool aliases}"]
-user-invokable: false
+user-invocable: false
 ---
 You are a specialist at {specific task}. Your job is to {clear purpose}.
 
