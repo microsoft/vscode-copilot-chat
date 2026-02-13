@@ -22,6 +22,16 @@ import { TestRun } from './testRun';
 
 const SIMULATION_FOLDER_PATH = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME);
 
+export interface RunConfig {
+	grep: string;
+	cacheMode: CacheMode;
+	n: number;
+	noFetch: boolean;
+	additionalArgs: string;
+	/** NES external scenarios path. When set, `--nes=external` and `--external-scenarios` are added. */
+	nesExternalScenariosPath?: string;
+}
+
 export const enum StateKind {
 	Initializing,
 	Running,
@@ -177,7 +187,7 @@ export class SimulationRunner extends Disposable {
 		});
 	}
 
-	public startRunning(runConfig: { grep: string; cacheMode: CacheMode; n: number; noFetch: boolean; additionalArgs: string }): Result<string, 'AlreadyRunning'> {
+	public startRunning(runConfig: RunConfig): Result<string, 'AlreadyRunning'> {
 		return this._simulationExecutor.startRunning(runConfig);
 	}
 
@@ -342,11 +352,12 @@ class SimulationExecutor {
 		mobx.makeObservable(this);
 	}
 
-	public startRunning(runConfig: { grep: string; cacheMode: CacheMode; n: number; noFetch: boolean; additionalArgs: string }): Result<string, 'AlreadyRunning'> {
+	public startRunning(runConfig: RunConfig): Result<string, 'AlreadyRunning'> {
 		if (this.state.kind === StateKind.Running) {
 			return Result.error('AlreadyRunning');
 		}
-		const outputFolder = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME, generateOutputFolderName());
+		const isNesExternal = !!runConfig.nesExternalScenariosPath;
+		const outputFolder = path.join(REPO_ROOT, SIMULATION_FOLDER_NAME, generateOutputFolderName(isNesExternal ? 'external' : undefined));
 		const stdoutFile = path.join(outputFolder, STDOUT_FILENAME);
 
 		this.currentCancellationTokenSource = new CancellationTokenSource();
@@ -379,6 +390,10 @@ class SimulationExecutor {
 			args.push(`--no-fetch`);
 		}
 		args.push(`--output=${outputFolder}`);
+		if (runConfig.nesExternalScenariosPath) {
+			args.push(`--nes=external`);
+			args.push(`--external-scenarios=${runConfig.nesExternalScenariosPath}`);
+		}
 		Object.entries(minimist(runConfig.additionalArgs.split(' '))).filter(([k]) => k !== '_' && k !== '--').forEach(([k, v]) => {
 			args.push(v !== undefined ? `--${k}=${v}` : `--${k}`);
 		});

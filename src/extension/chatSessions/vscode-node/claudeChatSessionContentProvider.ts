@@ -571,6 +571,7 @@ function mruToFolderOptionItems(mruItems: readonly FolderRepositoryMRUEntry[]): 
  */
 export class ClaudeChatSessionItemController extends Disposable {
 	private readonly _controller: vscode.ChatSessionItemController;
+	private readonly _inProgressItems = new Map<string, vscode.ChatSessionItem>();
 	private _showBadge: boolean;
 
 	constructor(
@@ -627,23 +628,26 @@ export class ClaudeChatSessionItemController extends Disposable {
 			// Clear lastRequestEnded while a request is in progress
 			timing.lastRequestEnded = undefined;
 			item.timing = timing;
-		} else if (status === vscode.ChatSessionStatus.Completed) {
-			if (!item.timing) {
-				item.timing = {
-					created: Date.now(),
-					lastRequestEnded: Date.now()
-				};
-			} else {
-				item.timing = { ...item.timing, lastRequestEnded: Date.now() };
+			this._inProgressItems.set(sessionId, item);
+		} else {
+			this._inProgressItems.delete(sessionId);
+			if (status === vscode.ChatSessionStatus.Completed) {
+				if (!item.timing) {
+					item.timing = {
+						created: Date.now(),
+						lastRequestEnded: Date.now()
+					};
+				} else {
+					item.timing = { ...item.timing, lastRequestEnded: Date.now() };
+				}
 			}
 		}
 	}
 
 	private async _refreshItems(token: vscode.CancellationToken): Promise<void> {
-		// TODO: How do we handle cleanup? It's not too important to start
-		// since on reload this will get cleared anyway.
 		const sessions = await this._claudeCodeSessionService.getAllSessions(token);
 		const items = sessions.map(session => this._createClaudeChatSessionItem(session));
+		items.push(...this._inProgressItems.values());
 		this._controller.items.replace(items);
 	}
 
