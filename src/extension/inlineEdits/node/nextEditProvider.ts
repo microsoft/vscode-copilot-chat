@@ -757,7 +757,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				})();
 
 				// Return early with streaming result
-				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest));
+				nextEditResult = StatelessNextEditResult.streaming(new StatelessNextEditTelemetryBuilder(nextEditRequest.headerRequestId));
 			}
 
 		} catch (err) {

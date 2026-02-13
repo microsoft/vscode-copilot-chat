@@ -123,7 +123,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	public async *provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
-		const telemetry = new StatelessNextEditTelemetryBuilder(request);
+		const telemetry = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 
 		logContext.setProviderStartTime();
 		try {

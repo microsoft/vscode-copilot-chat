@@ -410,9 +410,9 @@ export class StatelessNextEditTelemetryBuilder {
 	/**
 	 * It takes a request to automatically capture some properties from the request.
 	 */
-	constructor(request: StatelessNextEditRequest) {
+	constructor(headerRequestId: string) {
 		this.startTime = Date.now();
-		this.requestUuid = request.headerRequestId;
+		this.requestUuid = headerRequestId;
 	}
 
 	public build(result: Result<void, NoNextEditReason>): IStatelessNextEditTelemetry {
