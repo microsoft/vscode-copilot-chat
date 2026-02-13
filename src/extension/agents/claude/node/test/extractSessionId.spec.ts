@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { assert, describe, it } from 'vitest';
-import { extractSessionId } from '../claudeLanguageModelServer';
+import { extractSessionId, filterSupportedBetas } from '../claudeLanguageModelServer';
 
 const NONCE = 'vscode-lm-test-nonce';
 
@@ -78,5 +78,45 @@ describe('extractSessionId', () => {
 			const result = extractSessionId({ 'x-api-key': ['array-value'] }, NONCE);
 			assert.deepStrictEqual(result, { valid: false, sessionId: undefined });
 		});
+	});
+});
+
+describe('filterSupportedBetas', () => {
+	it('allows exact match from supported list', () => {
+		assert.strictEqual(filterSupportedBetas('interleaved-thinking-2025-05-14'), 'interleaved-thinking-2025-05-14');
+	});
+
+	it('allows prefix match for context-management', () => {
+		assert.strictEqual(filterSupportedBetas('context-management-2025-06-27'), 'context-management-2025-06-27');
+	});
+
+	it('allows prefix match for advanced-tool-use', () => {
+		assert.strictEqual(filterSupportedBetas('advanced-tool-use-2025-11-20'), 'advanced-tool-use-2025-11-20');
+	});
+
+	it('filters out unsupported betas', () => {
+		assert.strictEqual(filterSupportedBetas('unsupported-beta-123'), undefined);
+	});
+
+	it('filters a comma-separated list to only supported betas', () => {
+		assert.strictEqual(
+			filterSupportedBetas('interleaved-thinking-2025-05-14,unsupported-beta,context-management-2025-06-27'),
+			'interleaved-thinking-2025-05-14,context-management-2025-06-27'
+		);
+	});
+
+	it('handles whitespace around commas', () => {
+		assert.strictEqual(
+			filterSupportedBetas('interleaved-thinking-2025-05-14 , context-management-2025-06-27'),
+			'interleaved-thinking-2025-05-14,context-management-2025-06-27'
+		);
+	});
+
+	it('returns undefined when all betas are unsupported', () => {
+		assert.strictEqual(filterSupportedBetas('foo,bar,baz'), undefined);
+	});
+
+	it('returns undefined for empty string', () => {
+		assert.strictEqual(filterSupportedBetas(''), undefined);
 	});
 });

@@ -13,12 +13,19 @@ Reusable task templates triggered on-demand in chat. Single focused task with pa
 
 ```yaml
 ---
-description: "<required>"    # Prompt description for discovery
+description: "<recommended>" # Optional, but improves discoverability
 name: "Prompt Name"          # Optional, defaults to filename
-agent: "agent"               # Optional: ask, edit, agent, or custom agent
-tools: ["search", "web"]     # Optional: built-in, MCP (<server>/*), extension
-model: "Claude Sonnet 4"     # Optional, uses picker default
+argument-hint: "Task..."     # Optional: hint shown in chat input
+agent: "agent"               # Optional: ask, agent, plan, or custom agent
+model: "GPT-5 (copilot)"     # Optional: selected model, or fallback array
+tools: ["search", "web"]    # Optional: built-in, tool sets, MCP (<server>/*), extension
 ---
+```
+
+Model fallback is supported:
+
+```yaml
+model: ['GPT-5 (copilot)', 'Claude Sonnet 4.5 (copilot)']
 ```
 
 ## Template
@@ -38,11 +45,20 @@ Generate comprehensive test cases for the provided code:
 
 ## Invocation
 
-- **Chat**: Type `/` → select prompt
+- **Chat**: Type `/` → select from prompts and skills
 - **Command**: `Chat: Run Prompt...`
 - **Editor**: Open prompt file → play button
 
+> Both prompts and skills appear as slash commands in chat. Skills provide multi-step workflows with bundled assets; prompts are single focused tasks.
+
 **Tip**: Use `chat.promptFilesRecommendations` to show prompts as actions when starting a new chat.
+
+## Tool Priority
+
+When both prompt and custom agent define tools:
+1. Tools from prompt file
+2. Tools from referenced custom agent
+3. Default tools for selected agent
 
 ## When to Use
 

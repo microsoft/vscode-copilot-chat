@@ -180,7 +180,7 @@ export class MemoryTool implements ICopilotTool<MemoryToolParams> {
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<MemoryToolParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const params = options.input;
-		const sessionResource = options.chatSessionResource;
+		const sessionResource = options.chatSessionResource?.toString();
 		const resultText = await this._dispatch(params, sessionResource);
 		return new LanguageModelToolResult([new LanguageModelTextPart(resultText)]);
 	}

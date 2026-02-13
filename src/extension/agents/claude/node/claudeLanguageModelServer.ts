@@ -28,6 +28,16 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IClaudeSessionStateService } from './claudeSessionStateService';
 
+/**
+ * A list of known Anthropic betas supported by CAPI. Used to filter incoming `anthropic-beta` header values
+ * to prevent unsupported betas from being sent to CAPI.
+ */
+const SUPPORTED_ANTHROPIC_BETAS = [
+	'interleaved-thinking',
+	'context-management',
+	'advanced-tool-use',
+];
+
 export interface IClaudeLanguageModelServerConfig {
 	readonly port: number;
 	readonly nonce: string;
@@ -399,6 +409,22 @@ export function extractSessionId(headers: http.IncomingHttpHeaders, expectedNonc
 }
 
 /**
+ * Filters a comma-separated `anthropic-beta` header value to only include
+ * betas that match {@link SUPPORTED_ANTHROPIC_BETAS}. Entries are matched by
+ * prefix so that e.g. `'context-management'` allows `'context-management-2025-06-27'`.
+ *
+ * Returns the filtered comma-separated string, or `undefined` if no betas matched.
+ */
+export function filterSupportedBetas(headerValue: string): string | undefined {
+	const filtered = headerValue
+		.split(',')
+		.map(b => b.trim())
+		.filter(b => b && SUPPORTED_ANTHROPIC_BETAS.some(supported => b.startsWith(supported + '-')));
+
+	return filtered.length > 0 ? filtered.join(',') : undefined;
+}
+
+/**
  * Converts Anthropic Messages API input to Raw.ChatMessage[] for logging purposes.
  */
 function messagesApiInputToRawMessagesForLogging(request: AnthropicMessagesRequest): Raw.ChatMessage[] {
@@ -469,6 +495,12 @@ class ClaudeStreamingPassThroughEndpoint implements IChatEndpoint {
 		const headers = this.base.getExtraHeaders?.(ChatLocation.MessagesProxy) ?? {};
 		if (this.requestHeaders['user-agent']) {
 			headers['User-Agent'] = this.getUserAgent(this.requestHeaders['user-agent']);
+		}
+		if (typeof this.requestHeaders['anthropic-beta'] === 'string') {
+			const filtered = filterSupportedBetas(this.requestHeaders['anthropic-beta']);
+			if (filtered) {
+				headers['anthropic-beta'] = filtered;
+			}
 		}
 		return headers;
 	}
