@@ -273,7 +273,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		const extensionSkillInfo = uri && this.customInstructionsService.getExtensionSkillInfo(uri);
 		const skillInfo = extensionSkillInfo || (uri && this.customInstructionsService.getSkillInfo(uri));
 		const fileType = skillInfo ? 'skill' : '';
-		const name = extensionSkillInfo ? extensionSkillInfo.skillName : skillInfo ? getCachedSha256Hash(skillInfo.skillName) : '';
+		const nameField = extensionSkillInfo ? extensionSkillInfo.skillName : skillInfo ? getCachedSha256Hash(skillInfo.skillName) : '';
 
 		/* __GDPR__
 			"readFileToolInvoked" : {
@@ -288,7 +288,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				"isV2": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool is a v2 version" },
 				"isEntireFile": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the entire file was read with v2 params" },
 				"fileType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The type of file being read" },
-				"name": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the agent customization. Plain text for extension sources, otherwise hashed." }
+				"nameField": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the agent customization. Plain text for extension sources, otherwise hashed." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('readFileToolInvoked',
@@ -299,7 +299,7 @@ export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				isV2: isParamsV2(options.input) ? 'true' : 'false',
 				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
 				fileType,
-				name,
+				nameField,
 				model
 			},
 			{
