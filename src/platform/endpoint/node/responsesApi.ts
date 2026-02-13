@@ -32,15 +32,13 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
+	// compaction supported for all the models but works well for codex models and any future models after 5.3
+	const modelswithoutContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
 
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
 		stream: true,
-		context_management: [{
-			'type': openAIContextManagementCompactionType,
-			'compact_threshold': 4000
-		}],
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
 			type: 'function',
@@ -57,6 +55,14 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		store: false,
 		text: verbosity ? { verbosity } : undefined,
 	};
+
+	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelswithoutContextManagement.has(endpoint.family);
+	if (contextManagementEnabled) {
+		body.context_management = [{
+			'type': openAIContextManagementCompactionType,
+			'compact_threshold': 1000
+		}];
+	}
 
 	body.truncation = configService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation) ?
 		'auto' :
@@ -103,8 +109,8 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 		switch (message.role) {
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
-					input.push(...extractThinkingData(message.content));
 					input.push(...extractCompactionData(message.content));
+					input.push(...extractThinkingData(message.content));
 					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
 					if (asstContent.length) {
 						const assistantMessage: ResponseOutputMessageWithPhase = {
@@ -500,7 +506,6 @@ export class OpenAIResponsesProcessor {
 			case 'response.output_item.done':
 				if (chunk.item.type.toString() === openAIContextManagementCompactionType) {
 					const compactionItem = chunk.item as unknown as OpenAIContextManagementResponse;
-					// Compaction items don't correspond to any content delta, so we can emit them immediately without waiting for a text delta. They also don't have an output_index, so we can identify them by type instead of index.
 					return onProgress({
 						text: '',
 						contextManagement: {
