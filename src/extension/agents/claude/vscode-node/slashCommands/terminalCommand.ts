@@ -90,7 +90,7 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 			// Create terminal with environment variables configured
 			const terminal = this.terminalService.createTerminal({
 				name: 'Claude',
-				message: '\n\x1b[1;36m▸ ' + vscode.l10n.t('This instance of Claude CLI is configured to use your GitHub Copilot subscription.') + '\x1b[0m\n',
+				message: formatMessageForTerminal(vscode.l10n.t('This instance of Claude CLI is configured to use your GitHub Copilot subscription.'), { loudFormatting: true }),
 				env: {
 					ANTHROPIC_BASE_URL: `http://localhost:${config.port}`,
 					ANTHROPIC_AUTH_TOKEN: `${config.nonce}.${sessionId}`,
@@ -128,6 +128,7 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 	/**
 	 * Check which Claude CLI command is available.
 	 * Returns 'claude' if available, 'agency claude' if agency is available, or undefined if neither.
+	 * TODO: support some way to specify custom path to CLI in case it's not in PATH
 	 */
 	private async _getClaudeCliCommand(): Promise<string | undefined> {
 		const whichCommand = process.platform === 'win32' ? 'where' : 'which';
@@ -165,6 +166,39 @@ export class TerminalSlashCommand implements IClaudeSlashCommandHandler {
 
 		return this._langModelServer;
 	}
+}
+
+// Taken from
+// https://github.com/microsoft/vscode/blob/30cd06b93d47b98d2cfa7c32be721d3c20aa0761/src/vs/platform/terminal/common/terminalStrings.ts#L18-L34
+
+export interface ITerminalFormatMessageOptions {
+	/**
+	 * Whether to exclude the new line at the start of the message. Defaults to false.
+	 */
+	excludeLeadingNewLine?: boolean;
+	/**
+	 * Whether to use "loud" formatting, this is for more important messages where the it's
+	 * desirable to visually break the buffer up. Defaults to false.
+	 */
+	loudFormatting?: boolean;
+}
+
+/**
+ * Formats a message from the product to be written to the terminal.
+ */
+export function formatMessageForTerminal(message: string, options: ITerminalFormatMessageOptions = {}): string {
+	let result = '';
+	if (!options.excludeLeadingNewLine) {
+		result += '\r\n';
+	}
+	result += '\x1b[0m\x1b[7m * ';
+	if (options.loudFormatting) {
+		result += '\x1b[0;104m';
+	} else {
+		result += '\x1b[0m';
+	}
+	result += ` ${message} \x1b[0m\n\r`;
+	return result;
 }
 
 registerClaudeSlashCommand(TerminalSlashCommand);
