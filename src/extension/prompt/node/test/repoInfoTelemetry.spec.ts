@@ -8,7 +8,8 @@ import { beforeEach, suite, test, vi } from 'vitest';
 import type { FileSystemWatcher, Uri } from 'vscode';
 import { CopilotToken, createTestExtendedTokenInfo } from '../../../../platform/authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../../platform/authentication/common/copilotTokenStore';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
@@ -1551,6 +1552,170 @@ suite('RepoInfoTelemetry', () => {
 	});
 
 	// ========================================
+	// Disable Setting and Merge Base Age Tests
+	// ========================================
+
+	test('should skip telemetry when disableRepoInfoTelemetry setting is enabled', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Enable the disable setting
+		(configurationService as InMemoryConfigurationService).setConfig(
+			ConfigKey.TeamInternal.DisableRepoInfoTelemetry, true
+		);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: no telemetry sent
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+	});
+
+	test('should return mergeBaseTooOld when upstream commit is older than 30 days', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('old-commit-abc');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to return a commit older than 30 days
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockResolvedValue({
+			hash: 'old-commit-abc',
+			message: 'old commit',
+			commitDate: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with mergeBaseTooOld result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'mergeBaseTooOld');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+	});
+
+	test('should proceed normally when upstream commit is within 30 days', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('recent-commit');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// getCommit already returns a recent commit by default in the mock
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with success result (not mergeBaseTooOld)
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+	});
+
+	test('should skip diff when getCommit fails', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to throw
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockRejectedValue(new Error('Failed to get commit'));
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: no telemetry sent (bails out safely)
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+	});
+
+	test('should skip diff when commit date is undefined', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Override getCommit to return a commit without a date
+		const mockApi = gitExtensionService.getExtensionApi();
+		const mockRepo = mockApi!.getRepository(URI.file('/test/repo'))!;
+		(mockRepo as any).getCommit.mockResolvedValue({
+			hash: 'abc123',
+			message: 'commit without date',
+			commitDate: undefined,
+		});
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex,
+			configurationService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: no telemetry sent (bails out safely)
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+	});
+
+	// ========================================
 	// Helper Functions
 	// ========================================
 
@@ -1596,6 +1761,7 @@ suite('RepoInfoTelemetry', () => {
 		const mockRepo = {
 			getMergeBase: vi.fn(),
 			getBranchBase: vi.fn(),
+			getCommit: vi.fn(),
 			state: {
 				HEAD: {
 					upstream: upstreamCommit ? {
@@ -1624,6 +1790,13 @@ suite('RepoInfoTelemetry', () => {
 
 		// Set up getBranchBase to return undefined by default
 		mockRepo.getBranchBase.mockResolvedValue(undefined);
+
+		// Set up getCommit to return a recent commit by default
+		mockRepo.getCommit.mockResolvedValue({
+			hash: upstreamCommit ?? 'abc123',
+			message: 'test commit',
+			commitDate: new Date(),
+		});
 
 		const mockApi = {
 			getRepository: () => mockRepo,
