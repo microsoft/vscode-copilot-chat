@@ -28,7 +28,7 @@ export type TerminalOpenLocation = 'panel' | 'editor' | 'editorBeside';
 
 export interface ICopilotCLITerminalIntegration extends Disposable {
 	readonly _serviceBrand: undefined;
-	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<void>;
+	openTerminal(name: string, cliArgs?: string[], cwd?: string, location?: TerminalOpenLocation): Promise<Terminal | undefined>;
 }
 
 type IShellInfo = {
@@ -110,7 +110,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor') {
+	public async openTerminal(name: string, cliArgs: string[] = [], cwd?: string, location: TerminalOpenLocation = 'editor'): Promise<Terminal | undefined> {
 		// Capture session type before mutating cliArgs.
 		// If cliArgs are provided (e.g. --resume), we are resuming a session; otherwise it's a new session.
 		const sessionType = cliArgs.length > 0 ? 'resume' : 'new';
@@ -137,7 +137,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				const command = this.buildCommandForPythonTerminal(shellPathAndArgs?.copilotCommand, cliArgs, shellPathAndArgs);
 				await this.sendCommandToTerminal(terminal, command, true, shellPathAndArgs);
 				this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'pythonTerminal', location);
-				return;
+				return terminal;
 			}
 		}
 
@@ -147,7 +147,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command, false, shellPathAndArgs);
 			this.sendTerminalOpenTelemetry(sessionType, 'unknown', 'fallbackTerminal', location);
-			return;
+			return terminal;
 		}
 
 		cliArgs.shift(); // Remove --clear as we are creating a new terminal with our own args.
@@ -158,7 +158,10 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = this._register(this.terminalService.createTerminal(options));
 			terminal.show();
 			this.sendTerminalOpenTelemetry(sessionType, shellPathAndArgs.shell, 'shellArgsTerminal', location);
+			return terminal;
 		}
+
+		return undefined;
 	}
 
 	private sendTerminalOpenTelemetry(sessionType: string, shell: string, terminalCreationMethod: string, location: TerminalOpenLocation): void {

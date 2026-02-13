@@ -195,6 +195,215 @@ describe('CopilotCLITools', () => {
 		});
 	});
 
+	describe('MCP tool result handling', () => {
+		it('handles MCP tool with text content in result.contents', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			const startEvent: any = {
+				type: 'tool.execution_start',
+				data: { toolName: 'custom_mcp_tool', toolCallId: 'mcp-1', mcpServerName: 'test-server', mcpToolName: 'my-tool', arguments: { foo: 'bar' } }
+			};
+			processToolExecutionStart(startEvent, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'custom_mcp_tool',
+					toolCallId: 'mcp-1',
+					mcpServerName: 'test-server',
+					mcpToolName: 'my-tool',
+					success: true,
+					result: {
+						contents: [
+							{ type: 'text', text: 'Hello from MCP tool' }
+						]
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.isComplete).toBe(true);
+			expect(completed.toolSpecificData).toBeDefined();
+			const mcpData = completed.toolSpecificData as any;
+			expect(mcpData.input).toContain('foo');
+			expect(mcpData.output).toHaveLength(1);
+		});
+
+		it('handles MCP tool with empty result.contents', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'empty_mcp', toolCallId: 'mcp-2', mcpServerName: 'server', mcpToolName: 'tool', arguments: {} }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'empty_mcp',
+					toolCallId: 'mcp-2',
+					mcpServerName: 'server',
+					mcpToolName: 'tool',
+					success: true,
+					result: { contents: [] }
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.toolSpecificData).toBeDefined();
+			const mcpData = completed.toolSpecificData as any;
+			expect(mcpData.output).toHaveLength(0);
+		});
+
+		it('handles MCP tool with undefined result.contents', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'no_contents_mcp', toolCallId: 'mcp-3', mcpServerName: 'server', mcpToolName: 'tool', arguments: {} }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'no_contents_mcp',
+					toolCallId: 'mcp-3',
+					mcpServerName: 'server',
+					mcpToolName: 'tool',
+					success: true,
+					result: {}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.toolSpecificData).toBeDefined();
+			const mcpData = completed.toolSpecificData as any;
+			expect(mcpData.output).toHaveLength(0);
+		});
+	});
+
+	describe('glob/grep tool with terminal content type', () => {
+		it('parses files from result.contents with terminal type', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'glob', toolCallId: 'glob-1', arguments: { pattern: '*.ts' } }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'glob',
+					toolCallId: 'glob-1',
+					success: true,
+					result: {
+						contents: [
+							{ type: 'terminal', text: './file1.ts\n./file2.ts\n./file3.ts' }
+						]
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.pastTenseMessage).toContain('3 results');
+			expect(completed.toolSpecificData).toBeDefined();
+			const data = completed.toolSpecificData as any;
+			expect(data.values).toHaveLength(3);
+		});
+
+		it('handles empty terminal text as no matches', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'grep', toolCallId: 'grep-1', arguments: { pattern: 'nonexistent' } }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'grep',
+					toolCallId: 'grep-1',
+					success: true,
+					result: {
+						contents: [
+							{ type: 'terminal', text: '' }
+						]
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.pastTenseMessage).toContain('.');
+			expect(completed.pastTenseMessage).not.toContain('result');
+			const data = completed.toolSpecificData as any;
+			expect(data.values).toHaveLength(0);
+		});
+
+		it('handles whitespace-only terminal text as no matches', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'rg', toolCallId: 'rg-1', arguments: { pattern: 'missing' } }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'rg',
+					toolCallId: 'rg-1',
+					success: true,
+					result: {
+						contents: [
+							{ type: 'terminal', text: '   \n\t\n  ' }
+						]
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const data = completed.toolSpecificData as any;
+			expect(data.values).toHaveLength(0);
+		});
+
+		it('falls back to result.content when contents is not present', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'glob', toolCallId: 'glob-2', arguments: { pattern: '*.js' } }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'glob',
+					toolCallId: 'glob-2',
+					success: true,
+					result: {
+						content: './app.js\n./index.js'
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			expect(completed.pastTenseMessage).toContain('2 results');
+			const data = completed.toolSpecificData as any;
+			expect(data.values).toHaveLength(2);
+		});
+
+		it('detects no matches message in legacy result.content format', () => {
+			const pending = new Map<string, [ChatToolInvocationPart | ChatResponseThinkingProgressPart, toolData: ToolCall]>();
+			processToolExecutionStart({
+				type: 'tool.execution_start',
+				data: { toolName: 'grep', toolCallId: 'grep-2', arguments: { pattern: 'xyz' } }
+			} as any, pending);
+
+			const completeEvent: any = {
+				type: 'tool.execution_complete',
+				data: {
+					toolName: 'grep',
+					toolCallId: 'grep-2',
+					success: true,
+					result: {
+						content: 'No matches found'
+					}
+				}
+			};
+			const [completed] = processToolExecutionComplete(completeEvent, pending, logger)! as [ChatToolInvocationPart, ToolCall];
+			const data = completed.toolSpecificData as any;
+			expect(data.values).toHaveLength(0);
+		});
+	});
+
 	describe('integration edge cases', () => {
 		it('ignores report_intent events inside history build', () => {
 			const events: any[] = [

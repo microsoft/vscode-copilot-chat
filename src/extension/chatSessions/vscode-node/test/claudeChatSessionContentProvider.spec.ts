@@ -120,6 +120,10 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 		return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined };
 	}
 
+	async getRepositoryInfo(): Promise<{ repository: undefined; headBranchName: undefined }> {
+		return { repository: undefined, headBranchName: undefined };
+	}
+
 	getFolderMRU(): FolderRepositoryMRUEntry[] {
 		return this._mruEntries;
 	}
@@ -310,7 +314,7 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(session as any);
 			const mockSessionStateService = accessor.get(IClaudeSessionStateService) as any;
-			mockSessionStateService.getModelIdForSession = vi.fn().mockResolvedValue('claude-sonnet-4-20250514');
+			mockSessionStateService.getModelIdForSession = vi.fn().mockReturnValue('claude-sonnet-4-20250514');
 
 			const sessionUri = createClaudeSessionUri('test-session');
 			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
