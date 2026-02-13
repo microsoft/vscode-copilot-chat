@@ -3826,6 +3826,13 @@
     }
   },
   {
+    "name": "InlineEdit Mechanical ([xtab]) [external] [typescript] - RespectEditWindowBoundaries00",
+    "contentFilterCount": 0,
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
+  },
+  {
     "name": "intent [inline] -  add documentation for this api",
     "contentFilterCount": 0,
     "passCount": 10,
