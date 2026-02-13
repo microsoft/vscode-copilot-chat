@@ -141,7 +141,7 @@ export class ExternalIngestClient extends Disposable implements IExternalIngestC
 	}
 
 	async updateIndex(filesetName: string, currentCheckpoint: string | undefined, allFiles: AsyncIterable<ExternalIngestFile>, inCallTracker: CallTracker, token: CancellationToken, onProgress?: (message: string) => void): Promise<Result<{ checkpoint: string }, Error>> {
-		const callTracker = inCallTracker.add('ExternalIngestClient::updateIndex'); callTracker.add('ExternalIngestClient::updateIndex');
+		const callTracker = inCallTracker.add('ExternalIngestClient::updateIndex');
 		const authToken = await raceCancellationError(this.getAuthToken(), token);
 		if (!authToken) {
 			this.logService.warn('ExternalIngestClient::updateIndex(): No auth token available');
