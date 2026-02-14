@@ -81,6 +81,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _localModelConfigObs = this._configService.getConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfiguration);
 	private _expBasedModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
 	private _defaultModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
+	private _useSlashModelsObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
 
 	private _modelsObs: IObservable<Model[]>;
 	private _currentModelObs: IObservable<Model>;
@@ -113,6 +114,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 				localModelConfig: this._localModelConfigObs.read(reader),
 				modelConfigString: this._expBasedModelConfigObs.read(reader),
 				defaultModelConfigString: this._defaultModelConfigObs.read(reader),
+				useSlashModels: this._useSlashModelsObs.read(reader),
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
@@ -200,12 +202,14 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			localModelConfig,
 			modelConfigString,
 			defaultModelConfigString,
+			useSlashModels,
 		}: {
 			copilotToken: CopilotToken | undefined;
 			fetchedNesModels: WireTypes.Model.t[] | undefined;
 			localModelConfig: ModelConfiguration | undefined;
 			modelConfigString: string | undefined;
 			defaultModelConfigString: string | undefined;
+			useSlashModels: boolean;
 		},
 	): Model[] {
 		const logger = this._logger.createSubLogger('aggregateModels');
@@ -237,7 +241,6 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 			}
 		}
 
-		const useSlashModels = this._configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
 		if (useSlashModels && fetchedNesModels && fetchedNesModels.length > 0) {
 			logger.trace(`Processing ${fetchedNesModels.length} fetched models...`);
 			const filteredFetchedModels = filterMap(fetchedNesModels, (m) => {
