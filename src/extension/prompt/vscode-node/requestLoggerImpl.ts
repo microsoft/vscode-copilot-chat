@@ -12,6 +12,7 @@ import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointPro
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
+import { ContextManagementResponse } from '../../../platform/networking/common/anthropic';
 import { IResponseDelta, isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IEndpointBody } from '../../../platform/networking/common/networking';
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
@@ -59,18 +60,18 @@ function processDeltasToMessage(deltas: IResponseDelta[]): string {
 				text += '\n';
 			}
 
-			const totalClearedTokens = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_input_tokens || 0),
+			const totalClearedTokens = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_input_tokens || 0),
 				0
-			);
-			const totalClearedToolUses = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_tool_uses || 0),
+			) || 0;
+			const totalClearedToolUses = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_tool_uses || 0),
 				0
-			);
-			const totalClearedThinkingTurns = d.contextManagement.applied_edits.reduce(
-				(sum, edit) => sum + (edit.cleared_thinking_turns || 0),
+			) || 0;
+			const totalClearedThinkingTurns = (d.contextManagement as ContextManagementResponse)?.applied_edits?.reduce(
+				(sum: number, edit) => sum + (edit.cleared_thinking_turns || 0),
 				0
-			);
+			) || 0;
 
 			const details: string[] = [];
 			if (totalClearedTokens > 0) {

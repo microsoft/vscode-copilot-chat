@@ -16,8 +16,9 @@ import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCa
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
-import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -872,6 +873,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let thinkingItem: ThinkingDataItem | undefined;
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
 		let phase: string | undefined;
+		let compaction: OpenAIContextManagementResponse | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -899,6 +901,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.phase) {
 					phase = delta.phase;
+				}
+				if (delta.contextManagement && isOpenAIContextManagementResponse(delta.contextManagement)) {
+					compaction = delta.contextManagement;
 				}
 				return stopEarly ? text.length : undefined;
 			},
@@ -988,6 +993,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					thinking: thinkingItem,
 					phase,
 					phaseModelId: phase ? endpoint.model : undefined,
+					compaction,
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
