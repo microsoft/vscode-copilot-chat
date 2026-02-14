@@ -5,9 +5,7 @@
 
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { ToolName } from '../../../tools/common/toolNames';
 import { Capabilities } from '../base/capabilities';
@@ -30,15 +28,12 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 	constructor(
 		props: PanelChatBasePromptProps,
 		@IEnvService private readonly envService: IEnvService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, history, chatVariables, } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const operatingSystem = this.envService.OS;
 
 		return (
@@ -73,7 +68,7 @@ export class PanelChatBasePrompt extends PromptElement<PanelChatBasePromptProps>
 					</InstructionMessage>
 				</HistoryWithInstructions>
 				<UserMessage flexGrow={2}>
-					{useProjectLabels && <ProjectLabels flexGrow={1} priority={600} />}
+					<ProjectLabels flexGrow={1} priority={600} />
 					<CustomInstructions flexGrow={1} priority={750} languageId={undefined} chatVariables={chatVariables} />
 					<ChatToolReferences priority={899} flexGrow={2} promptContext={this.props.promptContext} />
 					<ChatVariablesAndQuery flexGrow={3} flexReserve='/3' priority={900} chatVariables={chatVariables} query={query} includeFilepath={true} />

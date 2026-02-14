@@ -6,7 +6,6 @@
 import { PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelNeedsStrongReplaceStringHint, modelPrefersInstructionsAfterHistory } from '../../../../platform/endpoint/common/chatModelCapabilities';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { isLocation, isUri } from '../../../../util/common/types';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
@@ -128,15 +127,12 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 	constructor(
 		props: AgentPromptProps,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
 
 	async render(state: void, sizing: PromptSizing) {
 		const { query, chatVariables } = this.props.promptContext;
-		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.ProjectLabelsChat, this.experimentationService);
 		const hasReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.EditFile);
 		const hasMultiReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.MultiReplaceString);
@@ -144,7 +140,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 		return (
 			<>
 				<UserMessage>
-					{useProjectLabels && <ProjectLabels flexGrow={1} priority={600} />}
+					<ProjectLabels flexGrow={1} priority={600} />
 					<CustomInstructions flexGrow={6} priority={750} languageId={undefined} chatVariables={chatVariables} />
 					<NotebookFormat flexGrow={5} priority={810} chatVariables={chatVariables} query={query} />
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
