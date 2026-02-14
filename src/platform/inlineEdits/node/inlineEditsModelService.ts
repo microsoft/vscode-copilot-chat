@@ -228,7 +228,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		if (modelConfigString) {
 			logger.trace('Parsing modelConfigurationString...');
-			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
+			const parsedConfig = this.parseModelConfigString(modelConfigString, ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString);
 			if (parsedConfig && !models.some(m => m.modelName === parsedConfig.modelName)) {
 				logger.trace(`Adding model from modelConfigurationString: ${parsedConfig.modelName}`);
 				models.push({ ...parsedConfig, source: ModelSource.ExpConfig });
@@ -320,7 +320,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private determineDefaultModel(copilotToken: CopilotToken | undefined, defaultModelConfigString: string | undefined): Model {
 		// if a default model config string is specified, use that
 		if (defaultModelConfigString) {
-			const parsedConfig = this.parseModelConfigStringSetting(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
+			const parsedConfig = this.parseModelConfigString(defaultModelConfigString, ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString);
 			if (parsedConfig) {
 				return { ...parsedConfig, source: ModelSource.ExpDefaultConfig };
 			}
@@ -377,12 +377,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
 	}
 
-	private parseModelConfigStringSetting(configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
-		const configString = this._configService.getExperimentBasedConfig(configKey, this._expService);
-		if (configString === undefined) {
-			return undefined;
-		}
-
+	private parseModelConfigString(configString: string, configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
 		let parsedConfig: ModelConfiguration | undefined;
 		try {
 			parsedConfig = JSON.parse(configString);
