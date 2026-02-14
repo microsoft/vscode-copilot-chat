@@ -501,7 +501,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		// net::ERR_NETWORK_CHANGED: https://github.com/microsoft/vscode/issues/260297
 		const isNetworkChangedError = ['darwin', 'linux'].includes(process.platform) && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1;
-		const useFetcher = isNetworkChangedError ? 'node-fetch' : opts.useFetcher;
+		// When Electron's network process crashes, all requests through it fail permanently.
+		// Fall back to node-fetch which bypasses Electron's network stack entirely.
+		const fallbackEnabled = this._configurationService.getExperimentBasedConfig(
+			ConfigKey.TeamInternal.FallbackNodeFetchOnNetworkProcessCrash, this._experimentationService);
+		const isNetworkProcessCrash = processed.type === ChatFetchResponseType.NetworkError
+			&& processed.isNetworkProcessCrash === true
+			&& fallbackEnabled;
+		const useFetcher = (isNetworkChangedError || isNetworkProcessCrash) ? 'node-fetch' : opts.useFetcher;
 		this._logService.info(`Retrying chat request with ${useFetcher || 'default'} fetcher after: ${processed.reasonDetail || processed.reason}`);
 		const connectivity = await this._checkNetworkConnectivity(useFetcher);
 		const connectivityTestError = connectivity.connectivityTestError ? this.scrubErrorDetail(connectivity.connectivityTestError, usernameToScrub) : undefined;
@@ -1389,12 +1396,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: gitHubRequestId,
 			};
 		} else if (fetcher.isFetcherError(err)) {
+			const isNetworkProcessCrash = fetcher.isNetworkProcessCrashedError(err);
 			return {
 				type: ChatFetchResponseType.NetworkError,
 				reason: userMessage,
 				reasonDetail: scrubbedErrorDetail,
 				requestId: requestId,
 				serverRequestId: gitHubRequestId,
+				...(isNetworkProcessCrash ? { isNetworkProcessCrash: true } : {}),
 			};
 		} else {
 			return {

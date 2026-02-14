@@ -7,6 +7,7 @@ import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IChatHookService, IPreToolUseHookResult } from '../../../../platform/chat/common/chatHookService';
 import { ISessionTranscriptService } from '../../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -241,6 +242,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
+	const chatHookService = accessor.get(IChatHookService);
 	const agentBreakpointService = accessor.get(IAgentBreakpointService);
 	const trajectoryLogger = accessor.get(ITrajectoryLogger);
 	const tool = toolsService.getTool(props.toolCall.name);
@@ -292,18 +294,34 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						inputObj = await copilotTool.resolveInput(inputObj, promptContext, props.toolCallMode);
 					}
 
+					// Execute preToolUse hook before invoking the tool
+					const hookResult = await chatHookService.executePreToolUseHook(
+						props.toolCall.name, inputObj, props.toolCall.id,
+						promptContext.request?.hooks, promptContext.conversation?.sessionId,
+						CancellationToken.None,
+						promptContext.stream
+					);
+
+					// Apply updatedInput from hook (input modification takes effect before invocation)
+					if (hookResult?.updatedInput) {
+						inputObj = hookResult.updatedInput;
+					}
+
 					const subAgentInvocationId = promptContext.request?.subAgentInvocationId;
-					const subAgentName = promptContext.request?.subAgentName;
 					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
 						input: inputObj,
 						toolInvocationToken: props.toolInvocationToken,
 						tokenizationOptions,
 						chatRequestId: props.requestId,
 						subAgentInvocationId,
-						subAgentName,
 						// Split on `__vscode` so it's the chat stream id
 						// TODO @lramos15 - This is a gross hack
 						chatStreamToolCallId: props.toolCall.id.split('__vscode')[0],
+						preToolUseResult: hookResult ? {
+							permissionDecision: hookResult.permissionDecision,
+							permissionDecisionReason: hookResult.permissionDecisionReason,
+							updatedInput: hookResult.updatedInput,
+						} : undefined,
 					};
 
 					const transcriptSessionId = promptContext.conversation?.sessionId;
@@ -373,6 +391,9 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 							await agentBreakpointService.evaluateToolCallBreakpoint('after', props.toolCall.name, props.toolCall.id, props.toolCall.arguments, sessionId, toolResult, false, toolDurationMs, resultSize);
 						}
 					}
+
+					// Run hook context handling after tool execution
+					appendHookContext(toolResult, hookResult, chatHookService, props, inputObj, promptContext);
 
 					if (transcriptSessionId) {
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
@@ -572,6 +593,54 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 
 		return <Image src={imageSource} mimeType={part.mimeType} />;
 	}
+}
+
+/**
+ * Appends hook context to a tool result after execution.
+ * Handles preToolUse additionalContext and executes the postToolUse hook,
+ * appending block messages and additionalContext as `<*-context>` tags.
+ */
+async function appendHookContext(
+	toolResult: LanguageModelToolResult2,
+	preHookResult: IPreToolUseHookResult | undefined,
+	chatHookService: IChatHookService,
+	props: ToolResultOpts,
+	toolInput: unknown,
+	promptContext: IBuildPromptContext,
+): Promise<void> {
+	// Append additional context from preToolUse hook
+	if (preHookResult?.additionalContext) {
+		for (const context of preHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PreToolUse-context>\n' + context + '\n</PreToolUse-context>'));
+		}
+	}
+
+	// Execute postToolUse hook after successful tool execution
+	const postHookResult = await chatHookService.executePostToolUseHook(
+		props.toolCall.name, toolInput,
+		toolResultToText(toolResult),
+		props.toolCall.id, promptContext.request?.hooks,
+		promptContext.conversation?.sessionId, CancellationToken.None,
+		promptContext.stream
+	);
+	if (postHookResult?.decision === 'block') {
+		const blockReason = postHookResult.reason ?? 'Hook blocked tool result';
+		const blockMessage = `The PostToolUse hook blocked this tool result. Reason: ${blockReason}`;
+		toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + blockMessage + '\n</PostToolUse-context>'));
+	}
+	if (postHookResult?.additionalContext) {
+		for (const context of postHookResult.additionalContext) {
+			toolResult.content.push(new LanguageModelTextPart('\n<PostToolUse-context>\n' + context + '\n</PostToolUse-context>'));
+		}
+	}
+}
+
+function toolResultToText(result: LanguageModelToolResult2): string {
+	return result.content
+		.filter((part): part is LanguageModelTextPart | LanguageModelTextPart2 =>
+			part instanceof LanguageModelTextPart || part instanceof LanguageModelTextPart2)
+		.map(part => part.value)
+		.join('\n');
 }
 
 function textToolResult(text: string): LanguageModelToolResult {

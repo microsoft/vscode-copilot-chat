@@ -82,6 +82,7 @@ PATH RULES:
 - Encode spaces only in the target (My File.md → My%20File.md).
 - Non-contiguous lines require separate links. NEVER use comma-separated line references like #L10-L12, L20.
 - Valid formats: [file.ts](file.ts#L10) only. Invalid: ([file.ts#L10]) or [file.ts](file.ts)#L10
+- Only create links for files that exist in the workspace. Do not link to files you are suggesting to create or that do not exist yet.
 
 USAGE EXAMPLES:
 - With path as display: The handler is in [src/handler.ts](src/handler.ts#L10).
@@ -145,6 +146,8 @@ I am working in a workspace with the following folders:
 </context>
 <reminderInstructions>
 Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.
+
+IMPORTANT: Before calling any deferred tool that was not previously returned by tool_search_tool_regex, you MUST first use tool_search_tool_regex to load it. Calling a deferred tool without first loading it will fail. Tools returned by tool_search_tool_regex are automatically expanded and immediately available - do not search for them again.
 
 </reminderInstructions>
 <userRequest>

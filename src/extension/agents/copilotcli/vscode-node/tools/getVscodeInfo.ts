@@ -9,7 +9,7 @@ import { makeTextResult } from './utils';
 import { ILogger } from '../../../../../platform/log/common/logService';
 
 export function registerGetVscodeInfoTool(server: McpServer, logger: ILogger): void {
-	server.tool('get_vscode_info', 'Get information about the current VS Code instance', async () => {
+	server.registerTool('get_vscode_info', { description: 'Get information about the current VS Code instance' }, async () => {
 		logger.debug('Getting VS Code info');
 		logger.trace(`VS Code version: ${vscode.version}, app: ${vscode.env.appName}`);
 		return makeTextResult({

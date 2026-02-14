@@ -126,7 +126,22 @@ export class ModelFilePathLinkifier implements IContributedLinkifier {
 		const { text, targetPath, anchor } = parsed;
 		const textMatchesBase = targetPath === text;
 		const textIsFilename = !text.includes('/') && targetPath.endsWith(`/${text}`);
-		const descriptiveWithAnchor = !!anchor; // Allow any descriptive text when anchor is present
+
+		// Allow descriptive text with anchor, but if text looks like a filename (has extension),
+		// it must match the target's filename to prevent linking to wrong files
+		let descriptiveWithAnchor = false;
+		if (anchor) {
+			const textLooksLikeFilename = /\.\w+$/.test(text);
+			if (textLooksLikeFilename) {
+				// Text looks like a filename/path - require it ends with target's basename
+				const targetBasename = targetPath.split('/').pop() ?? '';
+				const textBasename = text.split('/').pop() ?? '';
+				descriptiveWithAnchor = textBasename === targetBasename;
+			} else {
+				// Text is truly descriptive (e.g., "widget initialization") - allow it
+				descriptiveWithAnchor = true;
+			}
+		}
 
 		return Boolean(workspaceFolders.length) && (textMatchesBase || textIsFilename || descriptiveWithAnchor);
 	}

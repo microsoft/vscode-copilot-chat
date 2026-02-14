@@ -145,6 +145,7 @@ type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	isParticipantDetected: string;
 	mode: string;
 	parentRequestId: string | undefined;
+	vscodeRequestId: string | undefined;
 };
 
 type RequestTelemetryMeasurements = {
@@ -428,7 +429,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	}
 
 	protected _getModeName(): string {
-		return this._request.modeInstructions2 ? 'custom' :
+		return this._request.modeInstructions2 ? (this._request.modeInstructions2.name.toLowerCase() === 'plan' ? 'plan' : 'custom') :
 			this._intent.id === AgentIntent.ID ? 'agent' :
 				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
 					(this._intent.id === Intent.InlineChat) ? 'inlineChatIntent' :
@@ -665,7 +666,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for a BYOK model" },
 				"isAuto": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the request was for an Auto model" },
 				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat mode used for this request (e.g., ask, edit, agent, custom)." },
-				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." }
+				"parentRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The parent request id if this request is from a subagent." },
+				"vscodeRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The VS Code chat request id, for joining with VS Code telemetry events." }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -683,7 +685,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			toolCounts: JSON.stringify(toolCounts),
 			mode: this._getModeNameWithSubagent(),
-			parentRequestId: this._request.parentRequestId
+			parentRequestId: this._request.parentRequestId,
+			vscodeRequestId: this._request.id
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
 			round: roundIndex,

@@ -40,6 +40,7 @@ class MockFolderRepositoryManager implements IFolderRepositoryManager {
 	deleteUntitledSessionFolder(): void { }
 	async getFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
 	async initializeFolderRepository(): Promise<any> { return { folder: undefined, repository: undefined, worktree: undefined, worktreeProperties: undefined, trusted: undefined }; }
+	async getRepositoryInfo(): Promise<any> { return { repository: undefined, headBranchName: undefined }; }
 	getFolderMRU(): FolderRepositoryMRUEntry[] { return this._mruEntries; }
 	async deleteMRUEntry(): Promise<void> { }
 	getLastUsedFolderIdInUntitledWorkspace(): undefined { return undefined; }

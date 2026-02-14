@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-// version: 11
+// version: 14
 
 declare module 'vscode' {
 
@@ -30,12 +30,17 @@ declare module 'vscode' {
 	}
 
 	export class ChatRequestEditorData {
+
+		readonly editor: TextEditor;
+
 		//TODO@API should be the editor
 		document: TextDocument;
 		selection: Selection;
+
+		/** @deprecated */
 		wholeRange: Range;
 
-		constructor(document: TextDocument, selection: Selection, wholeRange: Range);
+		constructor(editor: TextEditor, document: TextDocument, selection: Selection, wholeRange: Range);
 	}
 
 	export class ChatRequestNotebookData {
@@ -56,9 +61,16 @@ declare module 'vscode' {
 		readonly attempt: number;
 
 		/**
-		 * The session identifier for this chat request
+		 * The session identifier for this chat request.
+		 *
+		 * @deprecated Use {@link chatSessionResource} instead.
 		 */
 		readonly sessionId: string;
+
+		/**
+		 * The resource URI for the chat session this request belongs to.
+		 */
+		readonly sessionResource: Uri;
 
 		/**
 		 * If automatic command detection is enabled.
@@ -95,7 +107,7 @@ declare module 'vscode' {
 		readonly subAgentInvocationId?: string;
 
 		/**
-		 * The name of the subagent, used for logging and debugging purposes.
+		 * Display name of the subagent that is invoking this request.
 		 */
 		readonly subAgentName?: string;
 
@@ -246,14 +258,29 @@ declare module 'vscode' {
 		provideFileIgnored(uri: Uri, token: CancellationToken): ProviderResult<boolean>;
 	}
 
+	export type PreToolUsePermissionDecision = 'allow' | 'deny' | 'ask';
+
 	export interface LanguageModelToolInvocationOptions<T> {
 		chatRequestId?: string;
+		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: string;
+		chatSessionResource?: Uri;
 		chatInteractionId?: string;
 		terminalCommand?: string;
+		/**
+		 * Unique ID for the subagent invocation, used to group tool calls from the same subagent run together.
+		 */
 		subAgentInvocationId?: string;
-		subAgentName?: string;
+		/**
+		 * Pre-tool-use hook result, if the hook was already executed by the caller.
+		 * When provided, the tools service will skip executing its own preToolUse hook
+		 * and use this result for permission decisions and input modifications instead.
+		 */
+		preToolUseResult?: {
+			permissionDecision?: PreToolUsePermissionDecision;
+			permissionDecisionReason?: string;
+			updatedInput?: object;
+		};
 	}
 
 	export interface LanguageModelToolInvocationPrepareOptions<T> {
@@ -262,8 +289,9 @@ declare module 'vscode' {
 		 */
 		input: T;
 		chatRequestId?: string;
+		/** @deprecated Use {@link chatSessionResource} instead */
 		chatSessionId?: string;
-		chatSessionResource?: string;
+		chatSessionResource?: Uri;
 		chatInteractionId?: string;
 		/**
 		 * If set, tells the tool that it should include confirmation messages.
@@ -305,6 +333,19 @@ declare module 'vscode' {
 		export function registerChatParticipantDetectionProvider(participantDetectionProvider: ChatParticipantDetectionProvider): Disposable;
 
 		export const onDidDisposeChatSession: Event<string>;
+	}
+
+	export namespace window {
+		/**
+		 * The resource URI of the currently active chat panel session,
+		 * or `undefined` if there is no active chat panel session.
+		 */
+		export const activeChatPanelSessionResource: Uri | undefined;
+
+		/**
+		 * An event that fires when the active chat panel session resource changes.
+		 */
+		export const onDidChangeActiveChatPanelSessionResource: Event<Uri | undefined>;
 	}
 
 	// #endregion
@@ -352,5 +393,6 @@ declare module 'vscode' {
 		 */
 		readonly yieldRequested: boolean;
 	}
+
 	// #endregion
 }

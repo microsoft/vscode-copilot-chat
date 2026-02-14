@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AgentBreakpointsContribution } from '../../agentBreakpoints/vscode-node/agentBreakpoints.contribution';
-import { CopilotCLIContrib } from '../../agents/copilotcli/vscode-node/contribution';
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
@@ -99,7 +98,6 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
 	asContributionFactory(ChatSessionsContrib),
-	asContributionFactory(CopilotCLIContrib),
 	asContributionFactory(GitHubMcpContrib)
 ];
 

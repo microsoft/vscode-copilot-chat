@@ -8,6 +8,23 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ChatSessionWorktreeProperties } from './chatSessionWorktreeService';
 
 /**
+ * The isolation mode for a chat session.
+ * - `worktree`: Creates an isolated git worktree for the session.
+ * - `workspace`: Works directly in the workspace directory without isolation.
+ */
+export type IsolationMode = 'worktree' | 'workspace';
+
+/**
+ * Options for initializing a folder/repository for a session.
+ */
+export interface InitializeFolderRepositoryOptions {
+	readonly branch?: string;
+	readonly isolation?: IsolationMode;
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+}
+
+/**
  * Result of folder/repository resolution for a chat session.
  */
 export interface FolderRepositoryInfo {
@@ -41,6 +58,11 @@ export interface FolderRepositoryInfo {
 	 * - `undefined`: Trust was not requested (options.promptForTrust was not set)
 	 */
 	readonly trusted: boolean | undefined;
+
+	/**
+	 * Whether the user cancelled the operation (e.g., cancelled uncommitted changes prompt).
+	 */
+	readonly cancelled?: boolean;
 }
 
 /**
@@ -126,14 +148,30 @@ export interface IFolderRepositoryManager {
 	 * 1. Get the selected folder from memory or workspace folder service
 	 * 2. Check if the folder contains a git repository
 	 * 3. Verify trust on the repository/folder
-	 * 4. Create a worktree if a git repo is found
-	 * 5. Migrate uncommitted changes to worktree if requested
+	 * 4. Check for uncommitted changes and prompt the user via the provided callback
+	 * 5. Create a worktree if a git repo is found
+	 * 6. Migrate uncommitted changes to worktree if requested
 	 */
 	initializeFolderRepository(
 		sessionId: string | undefined,
-		options: { stream: vscode.ChatResponseStream; uncommittedChangesAction?: 'move' | 'copy' | 'skip' },
+		options: InitializeFolderRepositoryOptions,
 		token: vscode.CancellationToken
 	): Promise<FolderRepositoryInfo>;
+
+	/**
+	 * Get repository information for a folder.
+	 *
+	 * Resolves whether the folder contains a git repository and returns
+	 * the repository URI and HEAD branch name.
+	 *
+	 * @param folder The folder URI to check
+	 * @param token Cancellation token
+	 * @returns Repository URI and HEAD branch name
+	 */
+	getRepositoryInfo(
+		folder: vscode.Uri,
+		token: vscode.CancellationToken
+	): Promise<{ repository: vscode.Uri | undefined; headBranchName: string | undefined }>;
 
 	/**
 	 * Get list of most recently used folders and repositories.
