@@ -21,7 +21,7 @@ import { IProxyModelsService } from '../../proxyModels/common/proxyModelsService
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WireTypes } from '../common/dataTypes/inlineEditsModelsTypes';
-import { isPromptingStrategy, LintOptions, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
+import { isPromptingStrategy, LintOptions, MODEL_CONFIGURATION_VALIDATOR, ModelConfiguration, PromptingStrategy } from '../common/dataTypes/xtabPromptOptions';
 import { IInlineEditsModelService, IUndesiredModelsManager } from '../common/inlineEditsModelService';
 
 const enum ModelSource {
@@ -385,24 +385,29 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 	private parseModelConfigString(configString: string, configKey: ExperimentBasedConfig<string | undefined>): ModelConfiguration | undefined {
-		let parsedConfig: ModelConfiguration | undefined;
+		let errorMessage: string;
 		try {
-			parsedConfig = JSON.parse(configString);
-			// FIXME@ulugbekna: validate parsedConfig structure
+			const parsed: unknown = JSON.parse(configString);
+			const result = MODEL_CONFIGURATION_VALIDATOR.validate(parsed);
+			if (!result.error) {
+				return result.content;
+			}
+			errorMessage = result.error.message;
 		} catch (e: unknown) {
-			/* __GDPR__
-				"incorrectNesModelConfig" : {
-					"owner": "ulugbekna",
-					"comment": "Capture if model configuration string is invalid JSON.",
-					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
-					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." },
-					"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid JSON string." }
-				}
-			*/
-			this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)), configValue: configString });
+			errorMessage = errors.toString(errors.fromUnknown(e));
 		}
 
-		return parsedConfig;
+		/* __GDPR__
+			"incorrectNesModelConfig" : {
+				"owner": "ulugbekna",
+				"comment": "Capture if model configuration string is invalid or malformed.",
+				"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
+				"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from parsing or validation." },
+				"configValue": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The invalid config string." }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage, configValue: configString });
+		return undefined;
 	}
 }
 
