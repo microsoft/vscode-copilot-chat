@@ -416,10 +416,10 @@ export namespace UndesiredModels {
 	const UNDESIRED_MODELS_KEY = 'copilot.chat.nextEdits.undesiredModelIds';
 	type UndesiredModelsValue = string[];
 
-	export class Manager implements IUndesiredModelsManager {
+	export class Manager extends Disposable implements IUndesiredModelsManager {
 		declare _serviceBrand: undefined;
 
-		private readonly _onDidChange = new Emitter<void>();
+		private readonly _onDidChange = this._register(new Emitter<void>());
 		readonly onDidChange = this._onDidChange.event;
 
 		private readonly _queue = new TaskQueue();
@@ -427,6 +427,7 @@ export namespace UndesiredModels {
 		constructor(
 			@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		) {
+			super();
 		}
 
 		isUndesiredModelId(modelId: string) {
