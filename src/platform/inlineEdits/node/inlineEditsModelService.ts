@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { filterMap } from '../../../util/common/arrays';
+import { TaskQueue } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
@@ -418,6 +419,8 @@ export namespace UndesiredModels {
 		private readonly _onDidChange = new Emitter<void>();
 		readonly onDidChange = this._onDidChange.event;
 
+		private readonly _queue = new TaskQueue();
+
 		constructor(
 			@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		) {
@@ -429,22 +432,26 @@ export namespace UndesiredModels {
 		}
 
 		addUndesiredModelId(modelId: string): Promise<void> {
-			const models = this._getModels();
-			if (!models.includes(modelId)) {
-				models.push(modelId);
-				return this._setModels(models).then(() => this._onDidChange.fire());
-			}
-			return Promise.resolve();
+			return this._queue.schedule(async () => {
+				const models = this._getModels();
+				if (!models.includes(modelId)) {
+					models.push(modelId);
+					await this._setModels(models);
+					this._onDidChange.fire();
+				}
+			});
 		}
 
 		removeUndesiredModelId(modelId: string): Promise<void> {
-			const models = this._getModels();
-			const index = models.indexOf(modelId);
-			if (index !== -1) {
-				models.splice(index, 1);
-				return this._setModels(models).then(() => this._onDidChange.fire());
-			}
-			return Promise.resolve();
+			return this._queue.schedule(async () => {
+				const models = this._getModels();
+				const index = models.indexOf(modelId);
+				if (index !== -1) {
+					models.splice(index, 1);
+					await this._setModels(models);
+					this._onDidChange.fire();
+				}
+			});
 		}
 
 		private _getModels(): string[] {
