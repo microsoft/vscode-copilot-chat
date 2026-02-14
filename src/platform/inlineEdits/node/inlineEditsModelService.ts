@@ -8,7 +8,7 @@ import { filterMap } from '../../../util/common/arrays';
 import * as errors from '../../../util/common/errors';
 import { pushMany } from '../../../util/vs/base/common/arrays';
 import { assertNever, softAssert } from '../../../util/vs/base/common/assert';
-import { Event } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable, observableFromEvent } from '../../../util/vs/base/common/observable';
 import { CopilotToken } from '../../authentication/common/copilotToken';
@@ -82,6 +82,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	private _expBasedModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderModelConfigurationString, this._expService);
 	private _defaultModelConfigObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsXtabProviderDefaultModelConfigurationString, this._expService);
 	private _useSlashModelsObs = this._configService.getExperimentBasedConfigObservable(ConfigKey.TeamInternal.InlineEditsUseSlashModels, this._expService);
+	private _undesiredModelsObs = observableFromEvent(this, this._undesiredModelsManager.onDidChange, () => this._undesiredModelsManager);
 
 	private _modelsObs: IObservable<Model[]>;
 	private _currentModelObs: IObservable<Model>;
@@ -120,9 +121,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		this._currentModelObs = derived<Model, void>((reader) => {
 			logger.trace('computing current model');
+			const undesiredModelsManager = this._undesiredModelsObs.read(reader);
 			return this._pickModel({
 				preferredModelName: this._preferredModelNameObs.read(reader),
 				models: this._modelsObs.read(reader),
+				undesiredModelsManager,
 			});
 		}).recomputeInitiallyAndOnChange(this._store);
 
@@ -183,7 +186,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		// if user picks same as the default model, we should reset the user setting
 		// otherwise, update the model
-		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models });
+		const expectedDefaultModel = this._pickModel({ preferredModelName: 'none', models, undesiredModelsManager: this._undesiredModelsManager });
 		if (newPreferredModel.source === ModelSource.ExpConfig || // because exp-configured model already takes highest priority
 			(newPreferredModelId === expectedDefaultModel.modelName && !models.some(m => m.source === ModelSource.ExpConfig))
 		) {
@@ -341,10 +344,12 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	private _pickModel({
 		preferredModelName,
-		models
+		models,
+		undesiredModelsManager,
 	}: {
 		preferredModelName: string;
 		models: Model[];
+		undesiredModelsManager: IUndesiredModelsManager;
 	}): Model {
 		// priority of picking a model:
 		// 0. model from modelConfigurationString setting from ExP, unless marked as undesired
@@ -353,7 +358,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 		const expConfiguredModel = models.find(m => m.source === ModelSource.ExpConfig);
 		if (expConfiguredModel) {
-			const isUndesiredModelId = this._undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
+			const isUndesiredModelId = undesiredModelsManager.isUndesiredModelId(expConfiguredModel.modelName);
 			if (isUndesiredModelId) {
 				this._logger.trace(`Exp-configured model ${expConfiguredModel.modelName} is marked as undesired by the user. Skipping.`);
 			} else {
@@ -410,6 +415,9 @@ export namespace UndesiredModels {
 	export class Manager implements IUndesiredModelsManager {
 		declare _serviceBrand: undefined;
 
+		private readonly _onDidChange = new Emitter<void>();
+		readonly onDidChange = this._onDidChange.event;
+
 		constructor(
 			@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 		) {
@@ -424,7 +432,7 @@ export namespace UndesiredModels {
 			const models = this._getModels();
 			if (!models.includes(modelId)) {
 				models.push(modelId);
-				return this._setModels(models);
+				return this._setModels(models).then(() => this._onDidChange.fire());
 			}
 			return Promise.resolve();
 		}
@@ -434,7 +442,7 @@ export namespace UndesiredModels {
 			const index = models.indexOf(modelId);
 			if (index !== -1) {
 				models.splice(index, 1);
-				return this._setModels(models);
+				return this._setModels(models).then(() => this._onDidChange.fire());
 			}
 			return Promise.resolve();
 		}
