@@ -5803,6 +5803,11 @@
 				"path": "./assets/prompts/create-hook.prompt.md"
 			}
 		],
+		"chatSkills": [
+			{
+				"path": "./assets/skills/typescript-setup/SKILL.md"
+			}
+		],
 		"terminal": {
 			"profiles": [
 				{
