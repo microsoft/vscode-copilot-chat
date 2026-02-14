@@ -60,7 +60,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	if (contextManagementEnabled) {
 		body.context_management = [{
 			'type': openAIContextManagementCompactionType,
-			'compact_threshold': 1000
+			'compact_threshold': 5000 // this value is token threshold for when to trigger a compaction. Not sure what the right default is, but this should be low enough to trigger compactions during typical conversations, but high enough to avoid excessive compactions. We can adjust this based on telemetry after release.
 		}];
 	}
 
