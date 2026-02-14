@@ -91,6 +91,7 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 
 	public readonly onModelListUpdated: Event<void>;
 
+	private readonly _setModelQueue = new TaskQueue();
 	private _logger: ILogger;
 
 	constructor(
@@ -156,8 +157,11 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 
-	// FIXME@ulugbekna: don't do async risking race condition; use a TaskQueue to serialize updates?
-	async setCurrentModelId(newPreferredModelId: string): Promise<void> {
+	setCurrentModelId(newPreferredModelId: string): Promise<void> {
+		return this._setModelQueue.schedule(() => this._setCurrentModelIdCore(newPreferredModelId));
+	}
+
+	private async _setCurrentModelIdCore(newPreferredModelId: string): Promise<void> {
 		const currentPreferredModelId = this._configService.getExperimentBasedConfig(ConfigKey.Advanced.InlineEditsPreferredModel, this._expService);
 
 		const isSameModel = currentPreferredModelId === newPreferredModelId;
