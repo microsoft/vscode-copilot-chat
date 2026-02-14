@@ -341,6 +341,65 @@ suite('defaultIntentRequestHandler', () => {
 		expect(last2).toBeInstanceOf(ChatResponseMarkdownPart);
 		expect((last2 as ChatResponseMarkdownPart).value.value).toMatchInlineSnapshot(`"Let me know if there's anything else I can help with!"`);
 	});
+
+	test('tracks customAgentName in telemetry when subagent is invoked', async () => {
+		const request = new TestChatRequest();
+		// Set up request as a subagent invocation
+		(request as any).subAgentInvocationId = 'test-subagent-id';
+		(request as any).subAgentName = 'PlanAgent';
+		(request as any).parentRequestId = 'parent-request-id';
+
+		const handler = makeHandler({ request });
+		chatResponse[0] = 'subagent response';
+		promptResult = {
+			...nullRenderPromptResult(),
+			messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+		};
+
+		const result = await handler.getResult();
+		expect(result).toMatchSnapshot();
+		// Wait for event loop to finish as we often fire off telemetry without properly awaiting it as it doesn't matter when it is sent
+		await new Promise(setImmediate);
+		expect(getDerandomizedTelemetry()).toMatchSnapshot();
+	});
+
+	test('does not track customAgentName when not a subagent', async () => {
+		const request = new TestChatRequest();
+		// Normal request without subagent properties
+
+		const handler = makeHandler({ request });
+		chatResponse[0] = 'normal response';
+		promptResult = {
+			...nullRenderPromptResult(),
+			messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+		};
+
+		const result = await handler.getResult();
+		expect(result).toMatchSnapshot();
+		// Wait for event loop to finish
+		await new Promise(setImmediate);
+		expect(getDerandomizedTelemetry()).toMatchSnapshot();
+	});
+
+	test('does not track customAgentName when subAgentName is missing', async () => {
+		const request = new TestChatRequest();
+		// Set up request with subAgentInvocationId but without subAgentName
+		(request as any).subAgentInvocationId = 'test-subagent-id';
+		(request as any).parentRequestId = 'parent-request-id';
+
+		const handler = makeHandler({ request });
+		chatResponse[0] = 'subagent response';
+		promptResult = {
+			...nullRenderPromptResult(),
+			messages: [{ role: Raw.ChatRole.User, content: [toTextPart('hello world!')] }],
+		};
+
+		const result = await handler.getResult();
+		expect(result).toMatchSnapshot();
+		// Wait for event loop to finish
+		await new Promise(setImmediate);
+		expect(getDerandomizedTelemetry()).toMatchSnapshot();
+	});
 });
 
 
