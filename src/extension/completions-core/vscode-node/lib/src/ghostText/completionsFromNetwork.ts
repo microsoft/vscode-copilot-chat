@@ -5,8 +5,14 @@
 
 import { CancellationToken as ICancellationToken } from 'vscode-languageserver-protocol';
 import { ConfigKey as ChatConfigKey, IConfigurationService } from '../../../../../../platform/configuration/common/configurationService';
+import { NoNextEditReason, StatelessNextEditTelemetryBuilder } from '../../../../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IExperimentationService } from '../../../../../../platform/telemetry/common/nullExperimentationService';
+import { fromUnknown } from '../../../../../../util/common/errors';
+import { Result } from '../../../../../../util/common/result';
+import { assertNever } from '../../../../../../util/vs/base/common/assert';
+import { StringText } from '../../../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService, ServicesAccessor } from '../../../../../../util/vs/platform/instantiation/common/instantiation';
+import { LlmNESTelemetryBuilder } from '../../../../../inlineEdits/node/nextEditProviderTelemetry';
 import { BlockMode, shouldDoServerTrimming } from '../config';
 import { ICompletionsUserErrorNotifierService } from '../error/userErrorNotifier';
 import { ICompletionsFeaturesService } from '../experiments/featuresService';
@@ -51,13 +57,15 @@ export class CompletionsFromNetwork {
 		requestContext: RequestContext,
 		baseTelemetryData: TelemetryWithExp,
 		cancellationToken: ICancellationToken | undefined,
-		finishedCb: FinishedCallback
+		finishedCb: FinishedCallback,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<GetNetworkCompletionsType> {
 		return this.genericGetCompletionsFromNetwork(
 			requestContext,
 			baseTelemetryData,
 			cancellationToken,
 			finishedCb,
+			telemetryBuilder,
 			'completions',
 			async (requestStart, processingTime, choicesStream): Promise<GetNetworkCompletionsType> => {
 				const choicesIterator = choicesStream[Symbol.asyncIterator]();
@@ -149,13 +157,15 @@ export class CompletionsFromNetwork {
 		requestContext: RequestContext,
 		baseTelemetryData: TelemetryWithExp,
 		cancellationToken: ICancellationToken | undefined,
-		finishedCb: FinishedCallback
+		finishedCb: FinishedCallback,
+		telemetryBuilder: LlmNESTelemetryBuilder,
 	): Promise<GetAllNetworkCompletionsType> {
 		return this.genericGetCompletionsFromNetwork(
 			requestContext,
 			baseTelemetryData,
 			cancellationToken,
 			finishedCb,
+			telemetryBuilder,
 			'all completions',
 			async (requestStart, processingTime, choicesStream): Promise<GetAllNetworkCompletionsType> => {
 				const apiChoices: APIChoice[] = [];
@@ -196,6 +206,55 @@ export class CompletionsFromNetwork {
 		baseTelemetryData: TelemetryWithExp,
 		cancellationToken: ICancellationToken | undefined,
 		finishedCb: FinishedCallback,
+		telemetryBuilder: LlmNESTelemetryBuilder,
+		what: string,
+		processChoices: (
+			requestStart: number,
+			processingTime: number,
+			choicesStream: AsyncIterable<APIChoice>
+		) => Promise<GhostTextResultWithTelemetry<T>>
+	): Promise<GhostTextResultWithTelemetry<T>> {
+		const statelessTelemetryBuilder = new StatelessNextEditTelemetryBuilder(requestContext.ourRequestId);
+		const result = await this._genericGetCompletionsFromNetwork(
+			requestContext,
+			baseTelemetryData,
+			cancellationToken,
+			finishedCb,
+			statelessTelemetryBuilder,
+			what,
+			processChoices
+		);
+		let editResult: Result<void, NoNextEditReason>;
+		switch (result.type) {
+			case 'success':
+				editResult = Result.ok(undefined);
+				break;
+			case 'canceled':
+				editResult = Result.error(new NoNextEditReason.GotCancelled(result.reason));
+				break;
+			case 'empty':
+				editResult = Result.error(new NoNextEditReason.NoSuggestions(new StringText('') /* unused by completions anyway */, undefined));
+				break;
+			case 'failed':
+				editResult = Result.error(new NoNextEditReason.Uncategorized(fromUnknown(result.reason)));
+				break;
+			case 'abortedBeforeIssued':
+			case 'promptOnly':
+				editResult = Result.error(new NoNextEditReason.GotCancelled(result.reason));
+				break;
+			default:
+				assertNever(result);
+		}
+		telemetryBuilder.setStatelessNextEditTelemetry(statelessTelemetryBuilder.build(editResult));
+		return result;
+	}
+
+	private async _genericGetCompletionsFromNetwork<T>(
+		requestContext: RequestContext,
+		baseTelemetryData: TelemetryWithExp,
+		cancellationToken: ICancellationToken | undefined,
+		finishedCb: FinishedCallback,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		what: string,
 		processChoices: (
 			requestStart: number,
@@ -207,6 +266,8 @@ export class CompletionsFromNetwork {
 
 		// copy the base telemetry data
 		baseTelemetryData = baseTelemetryData.extendedBy();
+
+		telemetryBuilder.setModelName(requestContext.engineModelId);
 
 		// Request one choice for automatic requests, three for invoked (cycling) requests.
 		const n = requestContext.isCycling ? 3 : 1;

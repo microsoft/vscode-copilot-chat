@@ -178,6 +178,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				tools: new Map(),
 				id: request.id,
 				sessionId: '1',
+				sessionResource: request.sessionResource,
 				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		} else {
@@ -198,6 +199,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				tools: new Map(),
 				id: request.id,
 				sessionId: '1',
+				sessionResource: request.sessionResource,
 				hasHooksEnabled: request.hasHooksEnabled,
 			};
 		}
