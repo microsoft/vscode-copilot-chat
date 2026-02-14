@@ -6,7 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import { shouldInclude } from '../../../../util/common/glob';
 import { Result } from '../../../../util/common/result';
-import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { IntervalTimer, raceCancellationError, raceTimeout } from '../../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/base/common/cancellation';
@@ -557,7 +557,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 			// Also search external ingest for files not in code search repos (if enabled)
 			const externalIngestOperation = this.isExternalIngestEnabled()
-				? this._externalIngestIndex.value.search(sizing, query, token).catch(e => {
+				? this._externalIngestIndex.value.search(sizing, query, innerTelemetryInfo.callTracker, token).catch(e => {
 					if (!isCancellationError(e)) {
 						this._logService.warn(`External ingest search failed: ${e}`);
 					}
@@ -857,7 +857,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		// Update external ingest index if enabled
 		const externalIndexEnabled = this.isExternalIngestEnabled();
 		if (externalIndexEnabled) {
-			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(onProgress, token), token);
+			const result = await raceCancellationError(this._externalIngestIndex.value.doIngest(telemetryInfo.callTracker, onProgress, token), token);
 			if (result.isError()) {
 				return Result.error(result.err);
 			}
@@ -1006,7 +1006,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 	}
 
-	public deleteExternalIngestWorkspaceIndex(token: CancellationToken): Promise<void> {
-		return this._externalIngestIndex.value.deleteIndex(token);
+	public deleteExternalIngestWorkspaceIndex(callTracker: CallTracker, token: CancellationToken): Promise<void> {
+		return this._externalIngestIndex.value.deleteIndex(callTracker, token);
 	}
 }

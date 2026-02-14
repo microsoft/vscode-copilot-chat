@@ -282,11 +282,11 @@ export function stripReminders(text: string): string {
  * Extract PR metadata from assistant message content
  */
 function extractPRMetadata(content: string): { cleanedContent: string; prPart?: ChatResponsePullRequestPart } {
-	const prMetadataRegex = /<pr_metadata\s+uri="([^"]+)"\s+title="([^"]+)"\s+description="([^"]+)"\s+author="([^"]+)"\s+linkTag="([^"]+)"\s*\/?>/;
+	const prMetadataRegex = /<pr_metadata\s+uri="(?<uri>[^"]+)"\s+title="(?<title>[^"]+)"\s+description="(?<description>[^"]+)"\s+author="(?<author>[^"]+)"\s+linkTag="(?<linkTag>[^"]+)"\s*\/?>/;
 	const match = content.match(prMetadataRegex);
 
-	if (match) {
-		const [fullMatch, uri, title, description, author, linkTag] = match;
+	if (match?.groups) {
+		const { title, description, author, linkTag } = match.groups;
 		// Unescape XML entities
 		const unescapeXml = (text: string) => text
 			.replace(/&apos;/g, `'`)
@@ -296,14 +296,14 @@ function extractPRMetadata(content: string): { cleanedContent: string; prPart?: 
 			.replace(/&amp;/g, '&');
 
 		const prPart = new ChatResponsePullRequestPart(
-			Uri.parse(uri),
+			{ command: 'github.copilot.chat.openPullRequestReroute', title: l10n.t('View Pull Request {0}', linkTag), arguments: [Number(linkTag.substring(1))] },
 			unescapeXml(title),
 			unescapeXml(description),
 			unescapeXml(author),
 			unescapeXml(linkTag)
 		);
 
-		const cleanedContent = content.replace(fullMatch, '').trim();
+		const cleanedContent = content.replace(match[0], '').trim();
 		return { cleanedContent, prPart };
 	}
 

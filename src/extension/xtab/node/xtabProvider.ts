@@ -123,7 +123,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	public async *provideNextEdit(request: StatelessNextEditRequest, logger: ILogger, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): EditStreamingWithTelemetry {
-		const telemetry = new StatelessNextEditTelemetryBuilder(request);
+		const telemetry = new StatelessNextEditTelemetryBuilder(request.headerRequestId);
 
 		logContext.setProviderStartTime();
 		try {
@@ -445,7 +445,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 			const ctxRequest: Copilot.ResolveRequest = {
 				opportunityId: request.opportunityId,
-				completionId: request.id,
+				completionId: request.headerRequestId,
 				documentContext: {
 					uri: textDoc.uri.toString(),
 					languageId: textDoc.languageId,
@@ -614,6 +614,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const firstTokenReceived = new DeferredPromise<void>();
 
+		logContext.setHeaderRequestId(request.headerRequestId);
+
 		telemetryBuilder.setFetchStartedAt();
 		logContext.setFetchStartTime();
 
@@ -645,7 +647,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				} satisfies OptionalChatRequestParams,
 				userInitiatedRequest: undefined,
 				telemetryProperties: {
-					requestId: request.id,
+					requestId: request.headerRequestId,
 				},
 				useFetcher,
 				customMetadata: {
@@ -1119,7 +1121,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	private getPredictedOutput(doc: StatelessNextEditDocument, editWindowLines: string[], responseFormat: xtabPromptOptions.ResponseFormat): Prediction | undefined {
-		return this.configService.getConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction)
+		return this.configService.getExperimentBasedConfig(ConfigKey.TeamInternal.InlineEditsXtabProviderUsePrediction, this.expService)
 			? {
 				type: 'content',
 				content: getPredictionContents(doc, editWindowLines, responseFormat)
