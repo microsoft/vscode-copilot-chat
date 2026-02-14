@@ -919,6 +919,10 @@ export namespace ConfigKey {
 
 	export const UseInstructionFiles = defineSetting('chat.codeGeneration.useInstructionFiles', ConfigType.Simple, true);
 	export const ReviewAgent = defineSetting('chat.reviewAgent.enabled', ConfigType.Simple, true);
+	export const AgentBreakBeforeToolCall = defineSetting<boolean>('chat.agent.breakBeforeToolCall', ConfigType.Simple, false);
+	export const AgentBreakAfterToolCall = defineSetting<boolean>('chat.agent.breakAfterToolCall', ConfigType.Simple, false);
+	export const AgentBreakBeforeSubagent = defineSetting<boolean>('chat.agent.breakBeforeSubagent', ConfigType.Simple, false);
+	export const AgentBreakAfterSubagent = defineSetting<boolean>('chat.agent.breakAfterSubagent', ConfigType.Simple, false);
 	export const CodeFeedback = defineSetting('chat.reviewSelection.enabled', ConfigType.Simple, true);
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', ConfigType.Simple, [] as CodeGenerationInstruction[]);
 

@@ -17,6 +17,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
+import { IAgentBreakpointService } from '../../agentBreakpoints/common/agentBreakpointService';
 import { DEBUG_ALLOWED_TOOLS } from '../../debug/common/debugConstants';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { DebugSubagentPrompt } from '../../prompts/node/agent/debugSubagentPrompt';
@@ -55,8 +56,9 @@ export class DebugSubagentToolCallingLoop extends ToolCallingLoop<IDebugSubagent
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IAgentBreakpointService agentBreakpointService: IAgentBreakpointService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, agentBreakpointService);
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {

@@ -243,7 +243,11 @@
 					"properties": {
 						"format": {
 							"type": "string",
-							"enum": ["summary", "detailed", "metrics"],
+							"enum": [
+								"summary",
+								"detailed",
+								"metrics"
+							],
 							"description": "Output format: 'summary' (default), 'detailed', or 'metrics'"
 						},
 						"includeToolCalls": {
@@ -296,7 +300,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["conversation", "timeline", "compact"],
+							"enum": [
+								"conversation",
+								"timeline",
+								"compact"
+							],
 							"description": "Output format: 'conversation' (default), 'timeline', or 'compact'"
 						},
 						"excludeDebugSubagent": {
@@ -328,7 +336,12 @@
 						},
 						"focus": {
 							"type": "string",
-							"enum": ["all", "errors", "tools", "performance"],
+							"enum": [
+								"all",
+								"errors",
+								"tools",
+								"performance"
+							],
 							"description": "Focus area: 'all' (default), 'errors', 'tools', 'performance'"
 						},
 						"excludeDebugSubagent": {
@@ -372,7 +385,9 @@
 							"description": "Whether to include full tool call results (may be large)"
 						}
 					},
-					"required": ["sessionId"]
+					"required": [
+						"sessionId"
+					]
 				}
 			},
 			{
@@ -390,7 +405,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["tree", "mermaid", "detailed"],
+							"enum": [
+								"tree",
+								"mermaid",
+								"detailed"
+							],
 							"description": "Output format: 'tree' (default), 'mermaid', or 'detailed'"
 						}
 					}
@@ -447,7 +466,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["summary", "detailed", "timeline"],
+							"enum": [
+								"summary",
+								"detailed",
+								"timeline"
+							],
 							"description": "Output format: 'summary' (default), 'detailed', or 'timeline'"
 						}
 					}
@@ -471,7 +494,9 @@
 							"description": "Whether to append to existing loaded trajectories or replace them (default: false)"
 						}
 					},
-					"required": ["filePath"]
+					"required": [
+						"filePath"
+					]
 				}
 			},
 			{
@@ -1600,11 +1625,17 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["full", "summary", "steps"],
+							"enum": [
+								"full",
+								"summary",
+								"steps"
+							],
 							"description": "Output format: 'full' for all details, 'summary' for overview, 'steps' for step-by-step"
 						}
 					},
-					"required": ["sessionId"]
+					"required": [
+						"sessionId"
+					]
 				}
 			},
 			{
@@ -1624,7 +1655,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["tree", "mermaid", "detailed"],
+							"enum": [
+								"tree",
+								"mermaid",
+								"detailed"
+							],
 							"description": "Output format: 'tree' for ASCII, 'mermaid' for flowchart, 'detailed' for full info"
 						}
 					}
@@ -1673,7 +1708,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["summary", "detailed", "timeline"],
+							"enum": [
+								"summary",
+								"detailed",
+								"timeline"
+							],
 							"description": "Output format: 'summary' for counts, 'detailed' for full info, 'timeline' for chronological"
 						}
 					}
@@ -1695,7 +1734,9 @@
 							"description": "Absolute path to the ATIF trajectory file to load"
 						}
 					},
-					"required": ["filePath"]
+					"required": [
+						"filePath"
+					]
 				}
 			},
 			{
@@ -1711,7 +1752,11 @@
 					"properties": {
 						"format": {
 							"type": "string",
-							"enum": ["summary", "detailed", "metrics"],
+							"enum": [
+								"summary",
+								"detailed",
+								"metrics"
+							],
 							"description": "Output format: 'summary' for overview, 'detailed' for full info, 'metrics' for statistics"
 						},
 						"includeToolCalls": {
@@ -1762,7 +1807,11 @@
 						},
 						"format": {
 							"type": "string",
-							"enum": ["conversation", "timeline", "compact"],
+							"enum": [
+								"conversation",
+								"timeline",
+								"compact"
+							],
 							"description": "Output format: 'conversation', 'timeline', or 'compact'"
 						}
 					}
@@ -1780,7 +1829,10 @@
 					"type": "object",
 					"properties": {
 						"turn": {
-							"type": ["string", "number"],
+							"type": [
+								"string",
+								"number"
+							],
 							"description": "Which turn to analyze: 'last' (default) or a specific turn number"
 						},
 						"includeFullToolDetails": {
@@ -1793,7 +1845,12 @@
 						},
 						"focus": {
 							"type": "string",
-							"enum": ["all", "errors", "tools", "performance"],
+							"enum": [
+								"all",
+								"errors",
+								"tools",
+								"performance"
+							],
 							"description": "Focus area: 'all' for complete analysis, 'errors' for error analysis, 'tools' for tool flow, 'performance' for timing"
 						}
 					}
@@ -3012,6 +3069,26 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.agentBreakpoints.continue",
+				"title": "%github.copilot.command.agentBreakpoints.continue%",
+				"category": "Agent Breakpoints"
+			},
+			{
+				"command": "github.copilot.agentBreakpoints.step",
+				"title": "%github.copilot.command.agentBreakpoints.step%",
+				"category": "Agent Breakpoints"
+			},
+			{
+				"command": "github.copilot.agentBreakpoints.abort",
+				"title": "%github.copilot.command.agentBreakpoints.abort%",
+				"category": "Agent Breakpoints"
+			},
+			{
+				"command": "github.copilot.agentBreakpoints.skip",
+				"title": "%github.copilot.command.agentBreakpoints.skip%",
+				"category": "Agent Breakpoints"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
 				"category": "Chat"
@@ -3564,6 +3641,44 @@
 						"type": "boolean",
 						"default": false,
 						"markdownDescription": "%github.copilot.config.claudeAgent.allowDangerouslySkipPermissions%"
+					}
+				}
+			},
+			{
+				"id": "debug",
+				"title": "Debug",
+				"properties": {
+					"github.copilot.chat.agent.breakBeforeToolCall": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.agent.breakBeforeToolCall%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.agent.breakAfterToolCall": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.agent.breakAfterToolCall%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.agent.breakBeforeSubagent": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.agent.breakBeforeSubagent%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.agent.breakAfterSubagent": {
+						"type": "boolean",
+						"default": false,
+						"description": "%github.copilot.config.agent.breakAfterSubagent%",
+						"tags": [
+							"preview"
+						]
 					}
 				}
 			},

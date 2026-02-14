@@ -31,6 +31,9 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelTextPart, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
+import { AgentBreakpointCheckpoint } from '../../agentBreakpoints/common/agentBreakpointCheckpoint';
+import { IAgentBreakpointService } from '../../agentBreakpoints/common/agentBreakpointService';
+import { BreakpointResumeAction } from '../../agentBreakpoints/common/agentBreakpointTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { AnthropicTokenUsageMetadata, Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -183,8 +186,35 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IExperimentationService protected readonly _experimentationService: IExperimentationService,
 		@IChatHookService private readonly _chatHookService: IChatHookService,
 		@ISessionTranscriptService protected readonly _sessionTranscriptService: ISessionTranscriptService,
+		@IAgentBreakpointService private readonly _agentBreakpointService: IAgentBreakpointService,
 	) {
 		super();
+	}
+
+	/**
+	 * Creates a breakpoint checkpoint for the current tool calling loop run.
+	 * The checkpoint is set as the "active checkpoint" on the service so that
+	 * external resume commands can find it.
+	 */
+	private _createBreakpointCheckpoint(sessionId: string): AgentBreakpointCheckpoint | undefined {
+		const service = this._agentBreakpointService;
+		const hasBreakpoints = service.breakpoints.some(bp => bp.enabled) || service.isStepMode;
+		if (!hasBreakpoints) {
+			// Listen for breakpoints being added mid-run (lazy checkpoint creation)
+			// For now, return undefined — checkpoint will only be active if breakpoints
+			// exist at the start of the run. Future improvement: support adding
+			// breakpoints mid-session.
+			return undefined;
+		}
+
+		service.resetSession();
+		const checkpoint = new AgentBreakpointCheckpoint(sessionId, service, this._logService);
+		this._register(checkpoint);
+
+		// Store on the service so commands can resolve it for resume
+		(service as IAgentBreakpointService & { activeCheckpoint?: AgentBreakpointCheckpoint }).activeCheckpoint = checkpoint;
+
+		return checkpoint;
 	}
 
 	/** Builds a prompt with the context. */
@@ -555,6 +585,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
 
+		// Create a breakpoint checkpoint for this run (if breakpoints are active)
+		const breakpointCheckpoint = this._createBreakpointCheckpoint(sessionId);
+
 		// Execute SubagentStart hook for subagent requests to get additional context
 		if (this.options.request.subAgentInvocationId) {
 			const startHookResult = await this.executeSubagentStartHook({
@@ -576,6 +609,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			// Check if VS Code has requested we gracefully yield before starting the next iteration
 			if (lastResult && this.options.yieldRequested?.()) {
 				break;
+			}
+
+			// Agent breakpoint checkpoint: evaluate breakpoints between iterations
+			if (breakpointCheckpoint && lastResult) {
+				const lastRound = this.toolCallRounds.at(-1);
+				const hadToolError = lastRound ? lastRound.toolInputRetry > 0 : false;
+				const resumeAction = await breakpointCheckpoint.evaluate(i, lastRound, hadToolError);
+				if (resumeAction === BreakpointResumeAction.Abort) {
+					break;
+				}
 			}
 
 			try {
@@ -640,6 +683,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				throw e;
 			}
+		}
+
+		// Clean up the breakpoint checkpoint
+		if (breakpointCheckpoint) {
+			breakpointCheckpoint.cancelPending();
+			(this._agentBreakpointService as IAgentBreakpointService & { activeCheckpoint?: AgentBreakpointCheckpoint }).activeCheckpoint = undefined;
 		}
 
 		this.emitReadFileTrajectories().catch(err => {
@@ -942,6 +991,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		await finalizeStreams(streamParticipants);
 		this._onDidReceiveResponse.fire({ interactionOutcome: interactionOutcomeComputer, response: fetchResult, toolCalls });
+
+		// Record token usage for agent breakpoint threshold evaluation
+		if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+			this._agentBreakpointService.recordTokenUsage(
+				fetchResult.usage.prompt_tokens,
+				fetchResult.usage.completion_tokens,
+			);
+		}
 
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 

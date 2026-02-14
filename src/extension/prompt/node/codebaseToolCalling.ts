@@ -17,6 +17,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
+import { IAgentBreakpointService } from '../../agentBreakpoints/common/agentBreakpointService';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { CodebaseAgentPrompt } from '../../prompts/node/panel/codebaseAgentPrompt';
@@ -46,8 +47,9 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IAgentBreakpointService agentBreakpointService: IAgentBreakpointService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, agentBreakpointService);
 	}
 
 	private async getEndpoint(request: ChatRequest) {

@@ -21,6 +21,7 @@ import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { ITrajectoryLogger } from '../../../../platform/trajectory/common/trajectoryLogger';
 import { toErrorMessage } from '../../../../util/common/errorMessage';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -29,6 +30,8 @@ import { URI, UriComponents } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolMCPSource, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { IAgentBreakpointService } from '../../../agentBreakpoints/common/agentBreakpointService';
+import { BreakpointResumeAction } from '../../../agentBreakpoints/common/agentBreakpointTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -176,6 +179,56 @@ interface ToolResultOpts {
 const toolErrorSuffix = '\nPlease check your input and try again.';
 
 /**
+ * Extract subagent tool call stats from trajectory logger.
+ * The subagent's trajectory is keyed by subAgentInvocationId in toolMetadata.
+ */
+function getSubagentStatsFromTrajectory(
+	toolResult: LanguageModelToolResult2 | undefined,
+	trajectoryLogger: ITrajectoryLogger,
+	logService: ILogService
+): { callCount: number; toolNames: string[] } | undefined {
+	// Extract subAgentInvocationId from tool result metadata
+	const metadata = (toolResult as { toolMetadata?: { subAgentInvocationId?: string } } | undefined)?.toolMetadata;
+	const subAgentInvocationId = metadata?.subAgentInvocationId;
+	if (!subAgentInvocationId) {
+		logService.trace('[AgentBreakpoints] No subAgentInvocationId in tool result metadata');
+		return undefined;
+	}
+
+	// Query trajectory logger for the subagent's trajectory
+	const allTrajectories = trajectoryLogger.getAllTrajectories();
+	const subagentTrajectory = allTrajectories.get(subAgentInvocationId);
+	if (!subagentTrajectory) {
+		logService.trace(`[AgentBreakpoints] No trajectory found for subAgentInvocationId: ${subAgentInvocationId}`);
+		return undefined;
+	}
+
+	// Count tool calls from trajectory steps
+	const toolCounts = new Map<string, number>();
+	let totalCalls = 0;
+	for (const step of subagentTrajectory.steps) {
+		if (step.tool_calls) {
+			for (const tc of step.tool_calls) {
+				toolCounts.set(tc.function_name, (toolCounts.get(tc.function_name) || 0) + 1);
+				totalCalls++;
+			}
+		}
+	}
+
+	if (totalCalls === 0) {
+		return undefined;
+	}
+
+	// Format as "toolName (count)" for tools called more than once
+	const toolNames = Array.from(toolCounts.entries()).map(([name, count]) =>
+		count > 1 ? `${name} (${count})` : name
+	);
+
+	logService.trace(`[AgentBreakpoints] Found ${totalCalls} tool calls in subagent trajectory: ${toolNames.join(', ')}`);
+	return { callCount: totalCalls, toolNames };
+}
+
+/**
  * Creates a <ToolResult /> element. Eagerly starts the tool call if we know
  * that the tool will not need/consume sizing information (e.g. MCP calls) and
  * therefore don't need to wait for other elements to sequentially render.
@@ -188,6 +241,8 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 	const promptEndpoint: IPromptEndpoint = accessor.get(IPromptEndpoint);
 	const promptContext: IBuildPromptContext = accessor.get(IBuildPromptContext);
 	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
+	const agentBreakpointService = accessor.get(IAgentBreakpointService);
+	const trajectoryLogger = accessor.get(ITrajectoryLogger);
 	const tool = toolsService.getTool(props.toolCall.name);
 
 	async function getToolResult(sizing: PromptSizing) {
@@ -223,6 +278,10 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 
 			let outcome: ToolInvocationOutcome = toolResult === undefined ? ToolInvocationOutcome.Success : ToolInvocationOutcome.InvalidInput;
 			if (toolResult === undefined) {
+				const toolStartTime = Date.now();
+				// Tool calls inside subagents use a filtered stream that drops
+				// markdown/button parts, so breakpoints would hang the chat.
+				const isInsideSubagent = !!promptContext.request?.subAgentInvocationId;
 				try {
 					if (promptContext.tools && !promptContext.tools.availableTools.find(t => t.name === props.toolCall.name)) {
 						outcome = ToolInvocationOutcome.DisabledByUser;
@@ -254,8 +313,66 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						sessionTranscriptService.logToolExecutionStart(transcriptSessionId, props.toolCall.id, props.toolCall.name, parsedArgs);
 					}
 
-					toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
-					sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+					// Agent breakpoint: pause before tool call if breakpoint is set
+					if (!isInsideSubagent && agentBreakpointService.hasToolCallBreakpoints()) {
+						const sessionId = promptContext.conversation?.sessionId ?? '';
+						const stream = promptContext.stream;
+						if (stream) {
+							const argsPreview = props.toolCall.arguments.length > 200
+								? props.toolCall.arguments.substring(0, 200) + '...'
+								: props.toolCall.arguments;
+							const tokenUsage = agentBreakpointService.getTokenUsage();
+							const totalTokens = tokenUsage.promptTokens + tokenUsage.completionTokens;
+							stream.markdown(`\n\n---\n\u23f8\ufe0f **Breakpoint: before** \`${props.toolCall.name}\`\n\n\`\`\`json\n${argsPreview}\n\`\`\`\n\nSession tokens: ${totalTokens.toLocaleString()}\n`);
+							stream.button({ command: 'github.copilot.agentBreakpoints.continue', title: 'Continue' });
+							stream.markdown('\n\n---\n\n');
+						}
+						const beforeAction = await agentBreakpointService.evaluateToolCallBreakpoint('before', props.toolCall.name, props.toolCall.id, props.toolCall.arguments, sessionId);
+						if (beforeAction === BreakpointResumeAction.Skip) {
+							toolResult = textToolResult('[Tool call skipped by agent breakpoint]');
+							outcome = ToolInvocationOutcome.Cancelled;
+							if (transcriptSessionId) {
+								sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, false);
+							}
+						}
+					}
+
+					if (toolResult === undefined) {
+						toolResult = await toolsService.invokeToolWithEndpoint(props.toolCall.name, invocationOptions, promptEndpoint, CancellationToken.None);
+						const toolDurationMs = Date.now() - toolStartTime;
+						sendInvokedToolTelemetry(promptEndpoint.acquireTokenizer(), telemetryService, props.toolCall.name, toolResult);
+
+						// Agent breakpoint: pause after tool call if breakpoint is set
+						if (!isInsideSubagent && agentBreakpointService.hasToolCallBreakpoints()) {
+							const sessionId = promptContext.conversation?.sessionId ?? '';
+							const resultSize = estimateToolResultSize(toolResult);
+							const stream = promptContext.stream;
+							if (stream) {
+								const durationStr = `${(toolDurationMs / 1000).toFixed(1)}s`;
+								const sizeStr = formatBytesInline(resultSize);
+								const status = '✅ OK';
+								const tokenUsage = agentBreakpointService.getTokenUsage();
+								const totalTokens = tokenUsage.promptTokens + tokenUsage.completionTokens;
+
+								// For subagent tools, include inner tool call stats from trajectory
+								const subagentToolNames = new Set(['runSubagent', 'search_subagent', 'debug_subagent']);
+								const isSubagentTool = subagentToolNames.has(props.toolCall.name);
+								let subagentStatsStr = '';
+								if (isSubagentTool) {
+									const stats = getSubagentStatsFromTrajectory(toolResult, trajectoryLogger, logService);
+									if (stats) {
+										subagentStatsStr = `\n\nInner tool calls: ${stats.callCount} \u2022 Tools: ${stats.toolNames.join(', ')}`;
+									}
+								}
+
+								stream.markdown(`\n\n---\n\u23f8\ufe0f **Breakpoint: after** \`${props.toolCall.name}\` ${status}\n\nDuration: ${durationStr} \u2022 Size: ${sizeStr} \u2022 Session tokens: ${totalTokens.toLocaleString()}${subagentStatsStr}\n`);
+								stream.button({ command: 'github.copilot.agentBreakpoints.continue', title: 'Continue' });
+								stream.markdown('\n\n---\n\n');
+							}
+
+							await agentBreakpointService.evaluateToolCallBreakpoint('after', props.toolCall.name, props.toolCall.id, props.toolCall.arguments, sessionId, toolResult, false, toolDurationMs, resultSize);
+						}
+					}
 
 					if (transcriptSessionId) {
 						sessionTranscriptService.logToolExecutionComplete(transcriptSessionId, props.toolCall.id, true);
@@ -264,6 +381,7 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 					const errResult = toolCallErrorToResult(err);
 					toolResult = errResult.result;
 					isCancelled = errResult.isCancelled ?? false;
+					const toolDurationMs = Date.now() - toolStartTime;
 					if (errResult.isCancelled) {
 						outcome = ToolInvocationOutcome.Cancelled;
 					} else {
@@ -271,6 +389,36 @@ function buildToolResultElement(accessor: ServicesAccessor, props: ToolResultOpt
 						extraMetadata.push(new ToolFailureEncountered(props.toolCall.id));
 						logService.error(`Error from tool ${props.toolCall.name} with args ${props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
+
+					// Agent breakpoint: pause after tool call on error
+					if (!isInsideSubagent && !errResult.isCancelled && agentBreakpointService.hasToolCallBreakpoints()) {
+						const bpSessionId = promptContext.conversation?.sessionId ?? '';
+						const bpStream = promptContext.stream;
+						if (bpStream) {
+							const durationStr = `${(toolDurationMs / 1000).toFixed(1)}s`;
+							const errorMessage = err instanceof Error ? err.message : String(err);
+							const errorPreview = errorMessage.length > 300 ? errorMessage.substring(0, 300) + '...' : errorMessage;
+							const tokenUsage = agentBreakpointService.getTokenUsage();
+							const totalTokens = tokenUsage.promptTokens + tokenUsage.completionTokens;
+
+							// For subagent tools, include inner tool call stats from trajectory even on error
+							const subagentToolNames = new Set(['runSubagent', 'search_subagent', 'debug_subagent']);
+							const isSubagentTool = subagentToolNames.has(props.toolCall.name);
+							let subagentStatsStr = '';
+							if (isSubagentTool) {
+								const stats = getSubagentStatsFromTrajectory(toolResult, trajectoryLogger, logService);
+								if (stats) {
+									subagentStatsStr = `\n\nInner tool calls: ${stats.callCount} \u2022 Tools: ${stats.toolNames.join(', ')}`;
+								}
+							}
+
+							bpStream.markdown(`\n\n---\n\u23f8\ufe0f **Breakpoint: after** \`${props.toolCall.name}\` \u274c Error\n\nDuration: ${durationStr} \u2022 Session tokens: ${totalTokens.toLocaleString()}${subagentStatsStr}\n\n\`\`\`\n${errorPreview}\n\`\`\`\n`);
+							bpStream.button({ command: 'github.copilot.agentBreakpoints.continue', title: 'Continue' });
+							bpStream.markdown('\n\n---\n\n');
+						}
+						await agentBreakpointService.evaluateToolCallBreakpoint('after', props.toolCall.name, props.toolCall.id, props.toolCall.arguments, bpSessionId, toolResult, true, toolDurationMs);
+					}
+
 					if (promptContext.conversation?.sessionId) {
 						sessionTranscriptService.logToolExecutionComplete(promptContext.conversation.sessionId, props.toolCall.id, false);
 					}
@@ -428,6 +576,46 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 
 function textToolResult(text: string): LanguageModelToolResult {
 	return new LanguageModelToolResult([new LanguageModelTextPart(text)]);
+}
+
+/**
+ * Estimate the size of a tool result in bytes for display in breakpoint notifications.
+ */
+function estimateToolResultSize(toolResult: unknown): number {
+	if (!toolResult) {
+		return 0;
+	}
+	const result = toolResult as { content?: Array<{ value?: string; data?: unknown }> };
+	if (Array.isArray(result.content)) {
+		let size = 0;
+		for (const part of result.content) {
+			if (typeof part.value === 'string') {
+				size += part.value.length * 2; // rough UTF-16 estimate
+			} else if (part.data !== undefined) {
+				try {
+					size += JSON.stringify(part.data).length;
+				} catch {
+					size += 100; // fallback estimate
+				}
+			}
+		}
+		return size;
+	}
+	try {
+		return JSON.stringify(toolResult).length;
+	} catch {
+		return 0;
+	}
+}
+
+function formatBytesInline(bytes: number): string {
+	if (bytes < 1024) {
+		return `${bytes} B`;
+	} else if (bytes < 1024 * 1024) {
+		return `${(bytes / 1024).toFixed(1)} KB`;
+	} else {
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
 }
 
 export function toolCallErrorToResult(err: unknown) {

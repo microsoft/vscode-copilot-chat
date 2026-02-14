@@ -18,6 +18,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
+import { IAgentBreakpointService } from '../../agentBreakpoints/common/agentBreakpointService';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { SearchSubagentPrompt } from '../../prompts/node/agent/searchSubagentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -51,8 +52,9 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IChatHookService chatHookService: IChatHookService,
 		@ISessionTranscriptService sessionTranscriptService: ISessionTranscriptService,
+		@IAgentBreakpointService agentBreakpointService: IAgentBreakpointService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, configurationService, experimentationService, chatHookService, sessionTranscriptService, agentBreakpointService);
 	}
 
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {

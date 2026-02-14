@@ -78,6 +78,8 @@ import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../..
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IAgentBreakpointService } from '../../agentBreakpoints/common/agentBreakpointService';
+import { AgentBreakpointServiceImpl } from '../../agentBreakpoints/common/agentBreakpointServiceImpl';
 import { GitHubOrgChatResourcesService, IGitHubOrgChatResourcesService } from '../../agents/vscode-node/githubOrgChatResourcesService';
 import { ChatHookService } from '../../chat/vscode-node/chatHookService';
 import { SessionTranscriptService } from '../../chat/vscode-node/sessionTranscriptService';
@@ -239,6 +241,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IGitHubOrgChatResourcesService, new SyncDescriptor(GitHubOrgChatResourcesService));
 	builder.define(ITrajectoryLogger, new SyncDescriptor(TrajectoryLogger));
 	builder.define(IDebugContextService, new SyncDescriptor(DebugContextService));
+	builder.define(IAgentBreakpointService, new SyncDescriptor(AgentBreakpointServiceImpl));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {

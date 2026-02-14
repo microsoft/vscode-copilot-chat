@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AgentBreakpointsContribution } from '../../agentBreakpoints/vscode-node/agentBreakpoints.contribution';
 import { CopilotCLIContrib } from '../../agents/copilotcli/vscode-node/contribution';
 import { PromptFileContribution } from '../../agents/vscode-node/promptFileContrib';
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
@@ -128,4 +129,5 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	newWorkspaceContribution,
 	asContributionFactory(TrajectoryExportCommands),
 	asContributionFactory(DebugPanelContribution),
+	asContributionFactory(AgentBreakpointsContribution),
 ];
