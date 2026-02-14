@@ -9,6 +9,7 @@ import { ChatEndpointFamily } from '../../../platform/endpoint/common/endpointPr
 import { CapturingToken } from '../../../platform/requestLogger/common/capturingToken';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
@@ -25,8 +26,12 @@ const DEBUG_MODEL_FAMILY: ChatEndpointFamily = 'gpt-4.1';
 /**
  * Creates a minimal mock ChatRequest for use when invoking the debug subagent
  * from the panel (outside of chat context).
+ *
+ * @param subAgentInvocationId The subagent invocation ID to set on the request.
+ *   This ensures tool calls inside the debug agent are recognized as subagent
+ *   calls and skip interactive breakpoints (which would hang without chat UI).
  */
-function createMinimalChatRequest(): ChatRequest {
+function createMinimalChatRequest(subAgentInvocationId: string): ChatRequest {
 	// Create a minimal request with just enough properties to satisfy the loop
 	return {
 		// Core required properties
@@ -50,6 +55,9 @@ function createMinimalChatRequest(): ChatRequest {
 		location2: undefined,
 		modeInstructions2: undefined,
 		hasHooksEnabled: false,
+		sessionResource: URI.from({ scheme: 'copilot-debug', path: `/debug-session/${generateUuid()}` }),
+		// Mark as subagent so breakpoints are skipped (no chat UI to show them)
+		subAgentInvocationId,
 	} as ChatRequest;
 }
 
@@ -109,7 +117,7 @@ export class DebugSubagentInvoker {
 			const loop = this._instantiationService.createInstance(DebugSubagentToolCallingLoop, {
 				toolCallLimit: DEBUG_MAX_TOOL_CALLS,
 				conversation: new Conversation(parentSessionId, [new Turn(generateUuid(), { type: 'user', message: debugInstruction })]),
-				request: createMinimalChatRequest(),
+				request: createMinimalChatRequest(subAgentInvocationId),
 				location: ChatLocation.Panel,
 				promptText: query,
 				subAgentInvocationId: subAgentInvocationId,
