@@ -199,6 +199,8 @@ export type IChatRequestTelemetryProperties = {
 	subType?: string;
 	/** For a subagent: The request ID of the parent request that invoked this subagent. */
 	parentRequestId?: string;
+	/** For a subagent: The name of the custom agent being invoked (when invoked via runSubagent from an extension). */
+	customAgentName?: string;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

@@ -680,6 +680,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 				subType: this.options.request.subAgentInvocationId ? `subagent` : undefined,
 				parentRequestId: this.options.request.parentRequestId,
+				customAgentName: this.options.request.subAgentInvocationId && this.options.request.subAgentName ? this.options.request.subAgentName : undefined,
 			},
 			enableRetryOnFilter: true
 		}, token);
