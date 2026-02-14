@@ -288,19 +288,13 @@ export class InlineEditsModelService extends Disposable implements IInlineEditsM
 	}
 
 	public selectedModelConfiguration(): ModelConfiguration {
-		const logger = this._logger.createSubLogger('selectedModelConfiguration');
 		const model = this._currentModelObs.get();
-		if (model) {
-			logger.trace(`Selected model found: ${model.modelName}`);
-			return {
-				modelName: model.modelName,
-				promptingStrategy: model.promptingStrategy,
-				includeTagsInCurrentFile: model.includeTagsInCurrentFile,
-				lintOptions: model.lintOptions,
-			};
-		}
-		logger.trace('No selected model found, using default model.');
-		return this.determineDefaultModel(this._copilotTokenObs.get(), this._defaultModelConfigObs.get());
+		return {
+			modelName: model.modelName,
+			promptingStrategy: model.promptingStrategy,
+			includeTagsInCurrentFile: model.includeTagsInCurrentFile,
+			lintOptions: model.lintOptions,
+		};
 	}
 
 	public defaultModelConfiguration(): ModelConfiguration {
