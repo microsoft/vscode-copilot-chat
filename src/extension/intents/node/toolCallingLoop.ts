@@ -161,6 +161,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private stopHookReason: string | undefined;
 	private additionalHookContext: string | undefined;
 	private stopHookUserInitiated = false;
+	private _startHooksPromise: Promise<void> | undefined;
 
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
@@ -483,13 +484,22 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/**
 	 * Executes start hooks (SessionStart for regular sessions, SubagentStart for subagents).
-	 * Should be called before run() to allow hooks to provide context before the first prompt.
+	 *
+	 * This can be called before run() (e.g. when callers need start hooks to run before other
+	 * hooks like UserPromptSubmit). run() will also call this method to avoid foot-guns.
+	 *
+	 * This method is idempotent per ToolCallingLoop instance.
 	 *
 	 * - For subagents: Always executes SubagentStart hook
 	 * - For regular sessions: Only executes SessionStart hook on the first turn
 	 * @throws HookAbortError if a hook requests the session/subagent to abort
 	 */
 	public async runStartHooks(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<void> {
+		this._startHooksPromise ??= this.doRunStartHooks(outputStream, token);
+		return this._startHooksPromise;
+	}
+
+	private async doRunStartHooks(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<void> {
 		const sessionId = this.options.conversation.sessionId;
 		const hasHooks = this.options.request.hasHooksEnabled;
 
@@ -558,17 +568,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let stopHookActive = false;
 		const sessionId = this.options.conversation.sessionId;
 
-		// Execute SubagentStart hook for subagent requests to get additional context
-		if (this.options.request.subAgentInvocationId) {
-			const startHookResult = await this.executeSubagentStartHook({
-				agent_id: this.options.request.subAgentInvocationId,
-				agent_type: this.options.request.subAgentName ?? 'default',
-			}, sessionId, outputStream, token);
-			if (startHookResult.additionalContext) {
-				this.additionalHookContext = startHookResult.additionalContext;
-				this._logService.info(`[ToolCallingLoop] SubagentStart hook provided context for subagent ${this.options.request.subAgentInvocationId}`);
-			}
-		}
+		// Ensure hooks (SessionStart/SubagentStart) and transcript initialization run exactly once
+		await this.runStartHooks(outputStream, token);
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
