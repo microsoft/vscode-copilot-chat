@@ -12,11 +12,21 @@ export enum IncludeLineNumbersOption {
 	None = 'none',
 }
 
+export enum RecentFileClippingStrategy {
+	/** Current behavior: clip from top of file (greedy, most-recent-first). */
+	TopToBottom = 'topToBottom',
+	/** Center clipping around the edit location in each file (greedy budget). */
+	AroundEditRange = 'aroundEditRange',
+	/** Proportionally allocate budget across files, centered on edit locations. */
+	Proportional = 'proportional',
+}
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
 	readonly includeViewedFiles: boolean;
 	readonly includeLineNumbers: IncludeLineNumbersOption;
+	readonly clippingStrategy: RecentFileClippingStrategy;
 }
 
 export type LanguageContextLanguages = { [languageId: string]: boolean };
@@ -261,6 +271,7 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		maxTokens: 2000,
 		includeViewedFiles: false,
 		includeLineNumbers: IncludeLineNumbersOption.None,
+		clippingStrategy: RecentFileClippingStrategy.TopToBottom,
 	},
 	languageContext: {
 		enabled: false,

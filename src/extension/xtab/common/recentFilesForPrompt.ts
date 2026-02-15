@@ -5,7 +5,7 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { PromptOptions, RecentFileClippingStrategy } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind } from '../../../platform/languageServer/common/languageContextService';
@@ -26,10 +26,17 @@ export function getRecentCodeSnippets(
 	opts: PromptOptions,
 ): { codeSnippets: string; documents: Set<DocumentId> } {
 
-	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
+	const { includeViewedFiles, nDocuments, clippingStrategy } = opts.recentlyViewedDocuments;
 
-	const docsBesidesActiveDoc = collectRecentDocuments(xtabHistory, activeDoc.id, includeViewedFiles, nDocuments);
-	const recentlyViewedCodeSnippets = docsBesidesActiveDoc.map(historyEntryToCodeSnippet);
+	let recentlyViewedCodeSnippets: RecentCodeSnippet[];
+
+	if (clippingStrategy === RecentFileClippingStrategy.Proportional) {
+		const grouped = collectRecentDocumentsGrouped(xtabHistory, activeDoc.id, includeViewedFiles, nDocuments);
+		recentlyViewedCodeSnippets = grouped.map(g => historyEntriesToCodeSnippet(g.entries));
+	} else {
+		const docsBesidesActiveDoc = collectRecentDocuments(xtabHistory, activeDoc.id, includeViewedFiles, nDocuments);
+		recentlyViewedCodeSnippets = docsBesidesActiveDoc.map(d => historyEntryToCodeSnippet(d, clippingStrategy));
+	}
 
 	const { snippets, docsInPrompt } = buildCodeSnippetsUsingPagedClipping(recentlyViewedCodeSnippets, computeTokens, opts);
 
@@ -108,13 +115,110 @@ function collectRecentDocuments(
 	return result;
 }
 
-function historyEntryToCodeSnippet(d: IXtabHistoryEntry): { id: DocumentId; content: StringText; visibleRanges?: readonly OffsetRange[] } {
+interface GroupedDocumentEntries {
+	readonly docId: DocumentId;
+	readonly entries: IXtabHistoryEntry[];
+}
+
+/**
+ * Collect last `nDocuments` unique documents from xtab history, excluding the active document.
+ * Unlike {@link collectRecentDocuments}, this returns *all* entries per document (not just the latest),
+ * so that multiple edit locations within a single document can be used as focal ranges.
+ * Returns groups from most to least recently active document.
+ */
+function collectRecentDocumentsGrouped(
+	xtabHistory: readonly IXtabHistoryEntry[],
+	activeDocId: DocumentId,
+	includeViewedFiles: boolean,
+	nDocuments: number,
+): GroupedDocumentEntries[] {
+	const docOrder: DocumentId[] = [];
+	const docEntries = new Map<DocumentId, IXtabHistoryEntry[]>();
+
+	for (let i = xtabHistory.length - 1; i >= 0; --i) {
+		const entry = xtabHistory[i];
+
+		if (!includeViewedFiles && entry.kind === 'visibleRanges') {
+			continue;
+		}
+
+		if (entry.docId === activeDocId) {
+			continue;
+		}
+
+		const existing = docEntries.get(entry.docId);
+		if (existing) {
+			existing.push(entry);
+		} else {
+			if (docOrder.length >= nDocuments) {
+				continue; // already have enough unique docs, skip entries for new docs
+			}
+			docOrder.push(entry.docId);
+			docEntries.set(entry.docId, [entry]);
+		}
+	}
+
+	return docOrder.map(docId => ({ docId, entries: docEntries.get(docId)! }));
+}
+
+type RecentCodeSnippet = {
+	readonly id: DocumentId;
+	readonly content: StringText;
+	readonly focalRanges?: readonly OffsetRange[];
+	readonly editEntryCount?: number;
+};
+
+/**
+ * Convert a single history entry to a code snippet.
+ * When `clippingStrategy` is `AroundEditRange` or `Proportional`, edit entries get `focalRanges`
+ * derived from the edit's replacement ranges in the post-edit document.
+ */
+function historyEntryToCodeSnippet(d: IXtabHistoryEntry, clippingStrategy: RecentFileClippingStrategy): RecentCodeSnippet {
+	if (d.kind === 'edit') {
+		const content = d.edit.edit.applyOnText(d.edit.base); // FIXME@ulugbekna: I don't like this being computed afresh
+		const useFocalRanges = clippingStrategy !== RecentFileClippingStrategy.TopToBottom;
+		return {
+			id: d.docId,
+			content,
+			focalRanges: useFocalRanges ? d.edit.edit.getNewRanges() : undefined,
+			editEntryCount: 1,
+		};
+	}
 	return {
 		id: d.docId,
-		content: d.kind === 'edit'
-			? d.edit.edit.applyOnText(d.edit.base) // FIXME@ulugbekna: I don't like this being computed afresh
-			: d.documentContent,
-		visibleRanges: d.kind === 'visibleRanges' ? d.visibleRanges : undefined, // is set only if the entry was a 'visibleRanges' entry
+		content: d.documentContent,
+		focalRanges: d.visibleRanges,
+	};
+}
+
+/**
+ * Convert a group of history entries (all for the same document) into a single code snippet.
+ * Merges focal ranges from all edit entries so clipping can center on all edit locations.
+ */
+function historyEntriesToCodeSnippet(entries: IXtabHistoryEntry[]): RecentCodeSnippet {
+	// Use the most recent entry's content as the base
+	const mostRecent = entries[0];
+	const content = mostRecent.kind === 'edit'
+		? mostRecent.edit.edit.applyOnText(mostRecent.edit.base)
+		: mostRecent.documentContent;
+
+	// Collect focal ranges from all edit entries
+	const allFocalRanges: OffsetRange[] = [];
+	let editCount = 0;
+	for (const entry of entries) {
+		if (entry.kind === 'edit') {
+			allFocalRanges.push(...entry.edit.edit.getNewRanges());
+			editCount++;
+		} else {
+			allFocalRanges.push(...entry.visibleRanges);
+		}
+	}
+
+	return {
+		id: mostRecent.docId,
+		content,
+		focalRanges: allFocalRanges.length > 0 ? allFocalRanges : undefined,
+		editEntryCount: Math.max(editCount, 1),
 	};
 }
 
@@ -187,12 +291,13 @@ function clipFullDocument(
 }
 
 /**
- * Clip a file around its visible ranges by expanding pages outward until budget is exhausted.
+ * Clip a file around its focal ranges (visible ranges or edit locations)
+ * by expanding pages outward until budget is exhausted.
  *
  * @returns The remaining token budget after clipping, or `undefined` if nothing fit into the budget.
  */
-function clipAroundVisibleRanges(
-	document: { id: DocumentId; content: StringText; visibleRanges: readonly OffsetRange[] },
+function clipAroundFocalRanges(
+	document: { id: DocumentId; content: StringText; focalRanges: readonly OffsetRange[] },
 	pageSize: number,
 	totalLineCount: number,
 	tokenBudget: number,
@@ -200,8 +305,8 @@ function clipAroundVisibleRanges(
 	includeLineNumbers: xtabPromptOptions.IncludeLineNumbersOption,
 	result: { snippets: string[]; docsInPrompt: Set<DocumentId> },
 ): number | undefined {
-	const startOffset = Math.min(...document.visibleRanges.map(range => range.start));
-	const endOffset = Math.max(...document.visibleRanges.map(range => range.endExclusive - 1));
+	const startOffset = Math.min(...document.focalRanges.map(range => range.start));
+	const endOffset = Math.max(...document.focalRanges.map(range => range.endExclusive - 1));
 	const contentTransform = document.content.getTransformer();
 	const startPos = contentTransform.getPosition(startOffset);
 	const endPos = contentTransform.getPosition(endOffset);
@@ -232,7 +337,7 @@ function clipAroundVisibleRanges(
  * @param recentlyViewedCodeSnippets List of recently viewed code snippets from most to least recent
  */
 export function buildCodeSnippetsUsingPagedClipping(
-	recentlyViewedCodeSnippets: { id: DocumentId; content: StringText; visibleRanges?: readonly OffsetRange[] }[],
+	recentlyViewedCodeSnippets: RecentCodeSnippet[],
 	computeTokens: (s: string) => number,
 	opts: PromptOptions,
 ): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
@@ -241,6 +346,26 @@ export function buildCodeSnippetsUsingPagedClipping(
 	if (pageSize === undefined) {
 		throw illegalArgument('Page size must be defined');
 	}
+
+	const clippingStrategy = opts.recentlyViewedDocuments.clippingStrategy;
+
+	if (clippingStrategy === RecentFileClippingStrategy.Proportional) {
+		return buildCodeSnippetsWithProportionalBudget(recentlyViewedCodeSnippets, computeTokens, opts, pageSize);
+	}
+
+	return buildCodeSnippetsGreedy(recentlyViewedCodeSnippets, computeTokens, opts, pageSize, clippingStrategy);
+}
+
+/**
+ * Greedy (most-recent-first) code snippet building. Used for `TopToBottom` and `AroundEditRange` strategies.
+ */
+function buildCodeSnippetsGreedy(
+	recentlyViewedCodeSnippets: RecentCodeSnippet[],
+	computeTokens: (s: string) => number,
+	opts: PromptOptions,
+	pageSize: number,
+	clippingStrategy: RecentFileClippingStrategy,
+): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
 
 	const result: { snippets: string[]; docsInPrompt: Set<DocumentId> } = {
 		snippets: [],
@@ -253,18 +378,82 @@ export function buildCodeSnippetsUsingPagedClipping(
 	for (const file of recentlyViewedCodeSnippets) {
 		const lines = file.content.getLines();
 
-		// TODO@ulugbekna: we don't count in tokens for code snippet header
-		if (file.visibleRanges === undefined) {
-			const pages = batchArrayElements(lines, pageSize);
-			maxTokenBudget = clipFullDocument(file, pages, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result);
-		} else {
-			// join visible ranges by taking a union, convert to lines, map those lines to pages,
-			// expand pages above and below as long as the new pages fit into the budget
-			const budgetLeft = clipAroundVisibleRanges(file as { id: DocumentId; content: StringText; visibleRanges: readonly OffsetRange[] }, pageSize, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result);
+		// When strategy is AroundEditRange and we have focalRanges (from edits or visible ranges),
+		// center the clip around those ranges instead of truncating from top.
+		const useFocalRanges = clippingStrategy !== RecentFileClippingStrategy.TopToBottom && file.focalRanges !== undefined;
+
+		if (useFocalRanges) {
+			const budgetLeft = clipAroundFocalRanges(
+				file as { id: DocumentId; content: StringText; focalRanges: readonly OffsetRange[] },
+				pageSize, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result
+			);
 			if (budgetLeft === undefined) {
 				break;
 			}
 			maxTokenBudget = budgetLeft;
+		} else {
+			const pages = batchArrayElements(lines, pageSize);
+			maxTokenBudget = clipFullDocument(file, pages, lines.length, maxTokenBudget, computeTokens, includeLineNumbers, result);
+		}
+	}
+
+	return { snippets: result.snippets.reverse(), docsInPrompt: result.docsInPrompt };
+}
+
+/**
+ * Proportional budget allocation: distribute tokens across files based on edit location count,
+ * then clip each file centered on its focal ranges.
+ */
+function buildCodeSnippetsWithProportionalBudget(
+	recentlyViewedCodeSnippets: RecentCodeSnippet[],
+	computeTokens: (s: string) => number,
+	opts: PromptOptions,
+	pageSize: number,
+): { snippets: string[]; docsInPrompt: Set<DocumentId> } {
+
+	const result: { snippets: string[]; docsInPrompt: Set<DocumentId> } = {
+		snippets: [],
+		docsInPrompt: new Set<DocumentId>(),
+	};
+
+	const totalBudget = opts.recentlyViewedDocuments.maxTokens;
+	const includeLineNumbers = opts.recentlyViewedDocuments.includeLineNumbers;
+
+	if (recentlyViewedCodeSnippets.length === 0) {
+		return { snippets: [], docsInPrompt: new Set() };
+	}
+
+	// Compute weights per file based on edit entry count
+	const weights = recentlyViewedCodeSnippets.map(f => f.editEntryCount ?? 1);
+	const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+	// Per-file minimum: enough for at least 1 page
+	const minPerFile = Math.floor(totalBudget / (recentlyViewedCodeSnippets.length * 4));
+	// Per-file maximum: no more than 60% of total budget
+	const maxPerFile = Math.floor(totalBudget * 0.6);
+
+	// Pre-compute per-file budgets
+	const fileBudgets = weights.map(w => {
+		const raw = Math.floor(totalBudget * (w / totalWeight));
+		return Math.max(minPerFile, Math.min(maxPerFile, raw));
+	});
+
+	let unspentBudget = 0;
+
+	for (let i = 0; i < recentlyViewedCodeSnippets.length; i++) {
+		const file = recentlyViewedCodeSnippets[i];
+		const lines = file.content.getLines();
+		const effectiveBudget = fileBudgets[i] + unspentBudget;
+
+		if (file.focalRanges !== undefined && file.focalRanges.length > 0) {
+			const budgetLeft = clipAroundFocalRanges(
+				file as { id: DocumentId; content: StringText; focalRanges: readonly OffsetRange[] },
+				pageSize, lines.length, effectiveBudget, computeTokens, includeLineNumbers, result
+			);
+			unspentBudget = budgetLeft ?? effectiveBudget;
+		} else {
+			const pages = batchArrayElements(lines, pageSize);
+			unspentBudget = clipFullDocument(file, pages, lines.length, effectiveBudget, computeTokens, includeLineNumbers, result);
 		}
 	}
 
