@@ -53,7 +53,7 @@ export class ToolsContribution extends Disposable {
 			vscode.window.showInformationMessage(l10n.t('Tool groups have been reset. They will be regenerated on the next agent request.'));
 		}));
 
-		this._register(vscode.commands.registerCommand('github.copilot.chat.tools.memory.viewMemory', async () => {
+		this._register(vscode.commands.registerCommand('github.copilot.chat.tools.memory.showMemories', async () => {
 			const globalStorageUri = this.extensionContext.globalStorageUri;
 			const storageUri = this.extensionContext.storageUri;
 
@@ -70,7 +70,7 @@ export class ToolsContribution extends Disposable {
 					const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.from(userMemoryUri));
 					const fileEntries = entries.filter(([name, type]) => type === vscode.FileType.File && !name.startsWith('.'));
 					if (fileEntries.length > 0) {
-						items.push({ label: 'memory/', kind: vscode.QuickPickItemKind.Separator });
+						items.push({ label: '/memories', kind: vscode.QuickPickItemKind.Separator });
 						for (const [name] of fileEntries) {
 							items.push({
 								label: `$(file) ${name}`,
@@ -86,7 +86,6 @@ export class ToolsContribution extends Disposable {
 
 			// Collect session-scoped memories from storageUri/memory-tool/memories/<sessionId>/
 			const sessionResource = vscode.window.activeChatPanelSessionResource;
-			console.log('Active chat session resource:', sessionResource?.toString());
 			if (storageUri && sessionResource) {
 				const sessionId = extractSessionId(sessionResource.toString());
 				const sessionMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories', sessionId);
@@ -94,7 +93,7 @@ export class ToolsContribution extends Disposable {
 					const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.from(sessionMemoryUri));
 					const fileEntries = entries.filter(([name, type]) => type === vscode.FileType.File && !name.startsWith('.'));
 					if (fileEntries.length > 0) {
-						items.push({ label: `memory/${sessionId}/`, kind: vscode.QuickPickItemKind.Separator });
+						items.push({ label: '/memories/session', kind: vscode.QuickPickItemKind.Separator });
 						for (const [name] of fileEntries) {
 							items.push({
 								label: `$(file) ${name}`,
@@ -120,6 +119,59 @@ export class ToolsContribution extends Disposable {
 
 			if (selected?.fileUri) {
 				await vscode.commands.executeCommand('vscode.open', vscode.Uri.from(selected.fileUri));
+			}
+		}));
+
+		this._register(vscode.commands.registerCommand('github.copilot.chat.tools.memory.clearMemories', async () => {
+			const confirm = await vscode.window.showWarningMessage(
+				l10n.t('Are you sure you want to clear all memories? This cannot be undone.'),
+				{ modal: true },
+				l10n.t('Clear All'),
+			);
+			if (confirm !== l10n.t('Clear All')) {
+				return;
+			}
+
+			const globalStorageUri = this.extensionContext.globalStorageUri;
+			const storageUri = this.extensionContext.storageUri;
+			let hasError = false;
+
+			// Clear user-scoped memories
+			if (globalStorageUri) {
+				const userMemoryUri = URI.joinPath(globalStorageUri, 'memory-tool/memories');
+				try {
+					await vscode.workspace.fs.stat(vscode.Uri.from(userMemoryUri));
+					await vscode.workspace.fs.delete(vscode.Uri.from(userMemoryUri), { recursive: true });
+				} catch (e) {
+					// If stat fails, directory doesn't exist — that's fine.
+					// If delete fails, it's a real error.
+					if (e instanceof vscode.FileSystemError && e.code === 'FileNotFound') {
+						// Nothing to delete
+					} else if (e instanceof vscode.FileSystemError) {
+						hasError = true;
+					}
+				}
+			}
+
+			// Clear all session memories
+			if (storageUri) {
+				const sessionMemoryUri = URI.joinPath(storageUri, 'memory-tool/memories');
+				try {
+					await vscode.workspace.fs.stat(vscode.Uri.from(sessionMemoryUri));
+					await vscode.workspace.fs.delete(vscode.Uri.from(sessionMemoryUri), { recursive: true });
+				} catch (e) {
+					if (e instanceof vscode.FileSystemError && e.code === 'FileNotFound') {
+						// Nothing to delete
+					} else if (e instanceof vscode.FileSystemError) {
+						hasError = true;
+					}
+				}
+			}
+
+			if (hasError) {
+				vscode.window.showErrorMessage(l10n.t('Some memories could not be cleared. Please try again.'));
+			} else {
+				vscode.window.showInformationMessage(l10n.t('All memories have been cleared.'));
 			}
 		}));
 

@@ -2501,8 +2501,13 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.chat.tools.memory.viewMemory",
-				"title": "%github.copilot.command.viewMemory%",
+				"command": "github.copilot.chat.tools.memory.showMemories",
+				"title": "%github.copilot.command.showMemories%",
+				"category": "Chat"
+			},
+			{
+				"command": "github.copilot.chat.tools.memory.clearMemories",
+				"title": "%github.copilot.command.clearMemories%",
 				"category": "Chat"
 			},
 			{
