@@ -155,6 +155,7 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) {
 		super();
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
@@ -164,6 +165,10 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 			.catch((error) => {
 				this.logService.error('[CopilotCLIModels] Failed to fetch available models', error);
 			});
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
 	}
 	async resolveModel(modelId: string): Promise<string | undefined> {
 		const models = await this.getModels();
@@ -187,6 +192,10 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	}
 
 	public async getModels(): Promise<CopilotCLIModelInfo[]> {
+		if (!this._authenticationService.anyGitHubSession) {
+			return [];
+		}
+
 		// No need to query sdk multiple times, cache the result, this cannot change during a vscode session.
 		return this._availableModels.value;
 	}
