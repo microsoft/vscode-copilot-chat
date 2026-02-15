@@ -132,7 +132,6 @@ export interface CopilotCLIModelInfo {
 	readonly maxOutputTokens?: number;
 	readonly maxContextWindowTokens: number;
 	readonly supportsVision: boolean;
-	readonly preview?: boolean;
 }
 
 export interface ICopilotCLIModels {
@@ -204,8 +203,7 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 				maxOutputTokens: model.capabilities.limits.max_output_tokens,
 				maxContextWindowTokens: model.capabilities.limits.max_context_window_tokens,
 				supportsVision: model.capabilities.supports.vision,
-				preview: model.preview,
-			}));
+			} satisfies CopilotCLIModelInfo));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
