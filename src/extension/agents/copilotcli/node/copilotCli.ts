@@ -217,7 +217,7 @@ export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 				return this._provideLanguageModelChatInfo();
 			},
 			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
-				throw new Error('Chat responses are not yet supported for the copilotcli provider.');
+				// Implemented via chat participants.
 			},
 			provideTokenCount: async (_model, _text, _token) => {
 				// Token counting is not currently supported for the copilotcli provider.
