@@ -11,7 +11,8 @@ import { splitLines } from '../../../../util/vs/base/common/strings';
 import { Position } from '../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
-import { buildCodeSnippetsUsingPagedClipping, constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { constructTaggedFile, createTaggedCurrentFileContentUsingPagedClipping, expandRangeToPageRange } from '../../common/promptCrafting';
+import { buildCodeSnippetsUsingPagedClipping } from '../../common/recentFilesForPrompt';
 import { CurrentDocument } from '../../common/xtabCurrentDocument';
 
 function nLines(n: number): StringText {
