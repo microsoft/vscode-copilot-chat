@@ -3778,6 +3778,15 @@
 							"detailed"
 						]
 					},
+					"github.copilot.chat.responsesApiContextManagement.enabled": {
+						"type": "boolean",
+						"default": true,
+						"markdownDescription": "%github.copilot.config.responsesApiContextManagement.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.anthropic.tools.websearch.enabled": {
 						"type": "boolean",
 						"default": false,
