@@ -18,7 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
-import { ChatCompletion, FinishedCompletionReason, openAIContextManagementCompactionType, OpenAIContextManagementResponse, TokenLogProb } from '../../networking/common/openai';
+import { ChatCompletion, FinishedCompletionReason, modelsWithoutResponsesContextManagement, openAIContextManagementCompactionType, OpenAIContextManagementResponse, TokenLogProb } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -33,7 +33,6 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
 	// compaction supported for all the models but works well for codex models and any future models after 5.3
-	const modelsWithoutContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
 
 	const body: IEndpointBody = {
 		model,
@@ -56,7 +55,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 		text: verbosity ? { verbosity } : undefined,
 	};
 
-	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelsWithoutContextManagement.has(endpoint.family);
+	const contextManagementEnabled = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiContextManagementEnabled, expService) && !modelsWithoutResponsesContextManagement.has(endpoint.family);
 	if (contextManagementEnabled) {
 		body.context_management = [{
 			'type': openAIContextManagementCompactionType,

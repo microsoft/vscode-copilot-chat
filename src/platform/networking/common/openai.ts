@@ -89,6 +89,8 @@ export interface APIErrorResponse {
 
 export const openAIContextManagementCompactionType = 'compaction';
 
+export const modelsWithoutResponsesContextManagement = new Set(['gpt-5', 'gpt-5.1', 'gpt-5.2']);
+
 
 
 export interface OpenAIContextManagement {
