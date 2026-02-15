@@ -98,7 +98,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'user.message', data: { content: 'Hello', attachments: [] } },
 				{ type: 'assistant.message', data: { content: '<pr_metadata uri="https://example.com/pr/1" title="Fix&amp;Improve" description="Desc" author="Alice" linkTag="PR#1"/>This is the PR body.' } }
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			expect(turns).toHaveLength(2); // request + response
 			expect(turns[0]).toBeInstanceOf(ChatRequestTurn2);
 			expect(turns[1]).toBeInstanceOf(ChatResponseTurn2);
@@ -136,7 +136,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'tool.execution_start', data: { toolName: 'bash', toolCallId: 'bash-1', arguments: { command: 'echo hi', description: 'Echo' } } },
 				{ type: 'tool.execution_complete', data: { toolName: 'bash', toolCallId: 'bash-1', success: true } }
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			expect(turns).toHaveLength(2); // request + response
 			const responseTurn = turns[1] as ChatResponseTurn2;
 			const responseParts: any = (responseTurn as any).response;
@@ -160,7 +160,7 @@ describe('CopilotCLITools', () => {
 					}
 				},
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			expect(turns).toHaveLength(1);
 			const requestTurn = turns[0] as ChatRequestTurn2;
 			const refs = requestTurn.references;
@@ -180,7 +180,7 @@ describe('CopilotCLITools', () => {
 					}
 				},
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			expect(turns).toHaveLength(1);
 			const requestTurn = turns[0] as ChatRequestTurn2;
 			const refs = requestTurn.references;
@@ -203,7 +203,7 @@ describe('CopilotCLITools', () => {
 					}
 				},
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			const requestTurn = turns[0] as ChatRequestTurn2;
 			const refs = requestTurn.references;
 			// Only app.ts should remain (instruction files are filtered out)
@@ -228,7 +228,7 @@ describe('CopilotCLITools', () => {
 					}
 				},
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			const requestTurn = turns[0] as ChatRequestTurn2;
 			// Both attachments are added because deduplications checks against
 			// prompt-extracted references (existingReferences), not against other attachments
@@ -498,7 +498,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'tool.execution_start', data: { toolName: 'report_intent', toolCallId: 'ri-1', arguments: {} } },
 				{ type: 'tool.execution_complete', data: { toolName: 'report_intent', toolCallId: 'ri-1', success: true } }
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			expect(turns).toHaveLength(1); // Only user turn, no response parts because no assistant/tool parts were added
 		});
 
@@ -508,7 +508,7 @@ describe('CopilotCLITools', () => {
 				{ type: 'user.message', data: { content: 'Follow up', attachments: [] } },
 				{ type: 'assistant.message', data: { content: 'Response 2' } }
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			// Expect: first assistant message buffered until user msg -> becomes response turn, then user request, then second assistant -> another response
 			expect(turns.filter(t => t instanceof ChatResponseTurn2)).toHaveLength(2);
 			expect(turns.filter(t => t instanceof ChatRequestTurn2)).toHaveLength(1);
@@ -518,7 +518,7 @@ describe('CopilotCLITools', () => {
 			const events: any[] = [
 				{ type: 'assistant.message', data: { content: '<pr_metadata uri="u" title="t" description="d" author="a" linkTag="l"/>' } }
 			];
-			const turns = buildChatHistoryFromEvents('', events, getVSCodeRequestId, delegationSummary, logger);
+			const turns = buildChatHistoryFromEvents('', undefined, events, getVSCodeRequestId, delegationSummary, logger);
 			// Single response turn with ONLY PR part (no markdown text)
 			const responseTurns = turns.filter(t => t instanceof ChatResponseTurn2) as ChatResponseTurn2[];
 			expect(responseTurns).toHaveLength(1);

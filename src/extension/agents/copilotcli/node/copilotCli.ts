@@ -6,6 +6,7 @@
 import type { SessionOptions, SweCustomAgent } from '@github/copilot/sdk';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import type * as vscode from 'vscode';
 import type { Uri } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -127,6 +128,11 @@ export interface CopilotCLIModelInfo {
 	readonly id: string;
 	readonly name: string;
 	readonly multiplier?: number;
+	readonly maxInputTokens?: number;
+	readonly maxOutputTokens?: number;
+	readonly maxContextWindowTokens: number;
+	readonly supportsVision: boolean;
+	readonly preview?: boolean;
 }
 
 export interface ICopilotCLIModels {
@@ -135,20 +141,23 @@ export interface ICopilotCLIModels {
 	getDefaultModel(): Promise<string | undefined>;
 	setDefaultModel(modelId: string | undefined): Promise<void>;
 	getModels(): Promise<CopilotCLIModelInfo[]>;
+	registerLanguageModelChatProvider(lm: typeof vscode['lm']): void;
 }
 
 export const ICopilotCLISDK = createServiceIdentifier<ICopilotCLISDK>('ICopilotCLISDK');
 
 export const ICopilotCLIModels = createServiceIdentifier<ICopilotCLIModels>('ICopilotCLIModels');
 
-export class CopilotCLIModels implements ICopilotCLIModels {
+export class CopilotCLIModels extends Disposable implements ICopilotCLIModels {
 	declare _serviceBrand: undefined;
 	private readonly _availableModels: Lazy<Promise<CopilotCLIModelInfo[]>>;
+	private readonly _onDidChange = this._register(new Emitter<void>());
 	constructor(
 		@ICopilotCLISDK private readonly copilotCLISDK: ICopilotCLISDK,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ILogService private readonly logService: ILogService,
 	) {
+		super();
 		this._availableModels = new Lazy<Promise<CopilotCLIModelInfo[]>>(() => this._getAvailableModels());
 		// Eagerly fetch available models so that they're ready when needed.
 		this._availableModels.value.catch((error) => {
@@ -185,11 +194,64 @@ export class CopilotCLIModels implements ICopilotCLIModels {
 		const [{ getAvailableModels }, authInfo] = await Promise.all([this.copilotCLISDK.getPackage(), this.copilotCLISDK.getAuthInfo()]);
 		try {
 			const models = await getAvailableModels(authInfo);
-			return models.map(model => ({ id: model.id, name: model.name, multiplier: model.billing?.multiplier }));
+			return models.map(model => ({
+				id: model.id,
+				name: model.name,
+				multiplier: model.billing?.multiplier,
+				maxInputTokens: model.capabilities.limits.max_prompt_tokens,
+				maxOutputTokens: model.capabilities.limits.max_output_tokens,
+				maxContextWindowTokens: model.capabilities.limits.max_context_window_tokens,
+				supportsVision: model.capabilities.supports.vision,
+				preview: model.preview,
+			}));
 		} catch (ex) {
 			this.logService.error(`[CopilotCLISession] Failed to fetch models`, ex);
 			return [];
 		}
+	}
+
+	public registerLanguageModelChatProvider(lm: typeof vscode['lm']): void {
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
+			provideLanguageModelChatInformation: async (_options, _token) => {
+				return this._provideLanguageModelChatInfo();
+			},
+			provideLanguageModelChatResponse: async (_model, _messages, _options, _progress, _token) => {
+				// TODO: Implement chat response using the Copilot CLI SDK session-based API.
+				throw new Error('Chat responses are not yet supported for the copilotcli provider.');
+			},
+			provideTokenCount: async (_model, _text, _token) => {
+				// TODO: Implement token counting when the Copilot CLI SDK exposes a public tokenizer API.
+				return 0;
+			}
+		};
+		this._register(lm.registerLanguageModelChatProvider('copilotcli', provider));
+
+		this._onDidChange.fire();
+
+	}
+
+	private async _provideLanguageModelChatInfo(): Promise<vscode.LanguageModelChatInformation[]> {
+		const models = await this.getModels();
+		return models.map((model, index) => {
+			const multiplier = model.multiplier === undefined ? undefined : `${model.multiplier}x`;
+			return {
+				id: model.id,
+				name: model.name,
+				family: model.id,
+				version: '',
+				maxInputTokens: model.maxInputTokens ?? model.maxContextWindowTokens,
+				maxOutputTokens: model.maxOutputTokens ?? 0,
+				multiplier,
+				multiplierNumeric: model.multiplier,
+				isUserSelectable: true,
+				capabilities: {
+					imageInput: model.supportsVision
+				},
+				targetChatSessionType: 'copilotcli',
+				isDefault: index === 0 // SDK guarantees the first item is the default model
+			};
+		});
 	}
 }
 

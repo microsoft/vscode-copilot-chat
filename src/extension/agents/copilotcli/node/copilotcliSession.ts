@@ -62,7 +62,7 @@ export interface ICopilotCLISession extends IDisposable {
 	addUserMessage(content: string): void;
 	addUserAssistantMessage(content: string): void;
 	getSelectedModelId(): Promise<string | undefined>;
-	getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[];
+	getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]>;
 }
 
 export class CopilotCLISession extends DisposableStore implements ICopilotCLISession {
@@ -402,12 +402,13 @@ export class CopilotCLISession extends DisposableStore implements ICopilotCLISes
 		return this._sdkSession.getSelectedModel();
 	}
 
-	public getChatHistory(): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+	public async getChatHistory(): Promise<(ChatRequestTurn2 | ChatResponseTurn2)[]> {
 		const events = this._sdkSession.getEvents();
 		const getVSCodeRequestId = (sdkRequestId: string) => {
 			return this.copilotCLISDK.getRequestId(sdkRequestId);
 		};
-		return buildChatHistoryFromEvents(this.sessionId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
+		const modelId = await this.getSelectedModelId();
+		return buildChatHistoryFromEvents(this.sessionId, modelId, events, getVSCodeRequestId, this._delegationSummaryService, this.logService, this.options.workingDirectory);
 	}
 
 	private async requestPermission(
